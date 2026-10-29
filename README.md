@@ -56,7 +56,7 @@ Goose source tree at the same commit as the compiler.
 | Directory | Contents |
 |---|---|
 | `src/skein.goose` | the command line |
-| `src/syntax/` | the tokens and the syntax tree (`tree.goose`) |
+| `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
 
 ## Why Skein
 
