@@ -91,6 +91,14 @@ fn next_code(t: i64) -> i64 {
     return k;
 }
 
+// True when the next token after comment `t` that is no comment and no end
+// of line starts a table row.
+fn next_row(t: i64) -> bool {
+    var k = t + 1;
+    while k < syntax::tokens.len && (is_comment(k) || kind(k) == syntax::TK_NL) { k++; }
+    return kind(k) == syntax::TK_INDENT;
+}
+
 // The precedence of an operator of kind `k` (spec §7.1), else 0.
 fn op_prec(k: i64) -> i64 {
     match k {
@@ -572,9 +580,18 @@ recursive fn statement(i0: i64, ind: i64, sep_comma: bool, add_comma: bool) -> i
         }
     }
     if first == syntax::KW_TABLE {
-        // The rows: one line each, one step in (spec §3, `tabledecl`).
-        while kind(i) == syntax::TK_INDENT || kind(i) == syntax::TK_NL {
+        // The rows: one line each, one step in (spec §3, `tabledecl`). A
+        // comment line before a row goes one step in too.
+        while kind(i) == syntax::TK_INDENT || kind(i) == syntax::TK_NL || (is_comment(i) && next_row(i)) {
             if kind(i) == syntax::TK_NL { i++; continue; }
+            if is_comment(i) {
+                write_indent(INDENT);
+                out.append(token_text(i));
+                out.push('\n');
+                last_tok = i;
+                i++;
+                continue;
+            }
             i++;
             let seg = pool.len;
             var comment = -1;

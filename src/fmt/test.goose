@@ -46,6 +46,9 @@ fn test_spaces() {
     expect_fmt("table",
         str(HEAD, "table g {y: Length in m, u: Real}:\n  1.0,2\n\t0.5 ,  -3\n\nlet a: Real = 1\n"),
         str(HEAD, "table g{y: Length in m, u: Real}:\n    1.0, 2\n    0.5, -3\n\nlet a: Real = 1\n"));
+    expect_fmt("comment between table rows",
+        str(HEAD, "table g{y: Length in m, u: Real}:\n 1.0, 2\n // mid\n// low\n 0.5, -3\n// after\nlet a: Real = 1\n"),
+        str(HEAD, "table g{y: Length in m, u: Real}:\n    1.0, 2\n    // mid\n    // low\n    0.5, -3\n\n// after\nlet a: Real = 1\n"));
 }
 
 fn test_blank_lines() {
