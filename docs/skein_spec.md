@@ -305,7 +305,9 @@ Notes on the grammar:
 - `|` and `&` are geometry union and intersection. `||` and `&&` are the
   Boolean operators. The two pairs have the same precedence.
 - An argument may be a list, for example `harmonic(freq: [f0])`. A
-  function takes no list [`type_mismatch`].
+  function takes no list literal `[...]` [`type_mismatch`]. A table
+  column (§5.6) stays a valid function argument, for example
+  `interp(t.col1, t.col2, x)`.
 - An argument list and a study list may end with a comma. `skein fmt`
   writes a list that does not fit on one line with one item on each line
   and a comma after each item (§3.2).
