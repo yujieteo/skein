@@ -88,16 +88,19 @@ change local, so that the diff of a small change is small (spec §3.2).
 1. Indentation is 4 spaces. Skein has no tabs.
 2. A line is at most 100 characters. A longer argument list or study list
    gets one item on each line, indented by 4 spaces, with a comma after
-   each item, also after the last. A longer expression breaks before a
-   binary operator. Thus a new item adds one line and changes no other.
+   each item, also after the last. A longer expression breaks after a
+   binary operator (spec §2.2). Thus a new item adds one line and changes
+   no other.
 3. One space goes on each side of `=`, `==`, `!=`, `<`, `<=`, `>`, `>=`,
    `+`, `-`, `|`, `&`, `||`, `&&`, and after `:` and `,`.
 4. No space goes around `*`, `/` and `^`. Thus `2*mu*eps` and `kg/m^3`
    look as in a textbook.
 5. One space goes between a number and its unit: `210 GPa`, `(0, 0, 1) mm`.
 6. The header is one line. The `use` lines come after it.
-7. One blank line goes between two top-level items. A run of `let`
-   lines, or of `bc` lines, has no blank lines in it.
+7. One blank line goes between two top-level items. A run of `bc` lines
+   has no blank lines in it. In a run of `let` lines, `fmt` keeps one blank
+   line that the author wrote between two lines. `fmt` collapses two or
+   more blank lines to one.
 8. In a block, the statements keep their order. `fmt` never reorders items,
    because order carries meaning (declaration before use, step order).
 9. `fmt` never aligns columns, in a table or anywhere else. A table row is

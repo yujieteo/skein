@@ -142,6 +142,7 @@ let rho: Density = 1000 kg/m^3
 let h: HeatTransfer = 25 W/(m^2*K)
 let p0: Vector<Length> = (40, 0, 20) mm
 let T0: Temperature = 20 degC
+let T_sink: Temperature = -5 degC  // 268.15 K
 ```
 
 Units have SI prefixes: `mm`, `kN`, `MPa`, `GPa`, `ms`. `degC` is valid only
@@ -325,6 +326,7 @@ bc tip: sigma*n = (0, -2, 0) MPa      // natural: traction
 bc wall: dot(q, n) = h*(T - T_inf)    // natural: convection (Robin)
 bc inlet: v = ((2 m/s)*(1 - (y/R)^2), 0)
 bc corner: p = 0                      // a point
+bc load_pt: sigma*n = (0, 0, -1) kN   // a point force
 ```
 
 A `bc` outside the steps applies in all steps. A `bc` inside a step applies
@@ -369,6 +371,7 @@ step preload: static(ramp: 5) {
 
 step free: modal(count: 12) {
     output u
+    report f1 = eigenvalue(1)
 }
 
 step heat_up: transient(end: 1 h, dt: 30 s, scheme: bdf2) {
@@ -379,9 +382,14 @@ step heat_up: transient(end: 1 h, dt: 30 s, scheme: bdf2) {
 ```
 
 The procedures are `static`, `transient`, `modal`, `buckling` and
-`harmonic(freq:)`, which uses `Complex` unknowns. `transient(adapt: { rtol:
+`harmonic(freq: [f])`, which takes a list and uses `Complex` unknowns.
+`transient(adapt: { rtol:
 1e-4, atol: 1e-8 })` with `scheme: bdf` changes the time step and the order
 to keep the error below the limits. Steps run in the order of the file.
+
+`re`, `imag`, `abs`, `arg` and `conj` take the parts of a `Complex` value.
+`eigenvalue(k)` is the frequency of mode `k` of a `modal` step, or the load
+factor of a `buckling` step.
 
 Spec: [§14](skein_spec.md#14-steps).
 
@@ -684,3 +692,6 @@ report      scales      solve       solves      state       step
 study       symmetry    table       template    tol         tolerance
 true        use         where       within
 ```
+
+A keyword can be a name only before the `:` of a setting, a named argument
+or a record entry: `mesh: m`, `step: "load"`.
