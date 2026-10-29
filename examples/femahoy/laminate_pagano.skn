@@ -1,4 +1,5 @@
 // femahoy: validation/cases/laminate-pagano/job.inp
+// blocked-by: G3 G18
 // The thick square [0/90/0] plate of Pagano (1970), a/h = 4, simply supported,
 // with the load q0*sin(pi*x/a)*sin(pi*y/a) on the top face. 1/4 of the plate,
 // 3D layers of quadratic hexahedra. The references are the exact 3D solution

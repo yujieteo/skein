@@ -1,4 +1,5 @@
 // femahoy: validation/cases/grid-cantilever/beam/grid.toml
+// blocked-by: G18
 // A steel cantilever 100 x 10 x 10 mm with a shear force of 100 N on its free end.
 // The tip deflection is checked against the Timoshenko beam, -0.191933 mm. The bending
 // stress at x = 51.25 mm is checked against the Saint-Venant solution, +-29.25 MPa.

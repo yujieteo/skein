@@ -1,4 +1,5 @@
 // femahoy: validation/cases/grid-free-block-modes-ccx/block/grid.toml
+// blocked-by: G18
 // A free steel block 60 x 40 x 10 mm with no support: its 6 rigid modes and its first
 // 6 elastic modes. The reference is CalculiX 2.23 with C3D20 elements: modes 7 to 12 at
 // 11961.42, 13530.06, 25595.73, 28841.65, 31574.5 and 31633.88 Hz, within 0.5 %.

@@ -1,4 +1,5 @@
 // femahoy: validation/cases/grid-heated-block-stress-ccx/block/grid.toml
+// blocked-by: G19
 // The plate and the heated block of grid-heated-block-ccx, with the thermal stress of the
 // steady temperature. A point at the centre of the bottom holds u.z, so the plate is free
 // to bend. The displacements are checked against CalculiX 2.23 with C3D20 elements.

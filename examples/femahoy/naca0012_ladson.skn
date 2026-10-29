@@ -1,4 +1,5 @@
 // femahoy: validation/cases/naca0012-ladson/a4.04/system/controlDict
+// blocked-by: G10 G24
 // NACA 0012 at Re = 6 million, incompressible and steady, fully turbulent with the
 // Spalart-Allmaras model, at 3 angles of attack. Reference: Ladson (1988), NASA TM-4074,
 // Table IX: cl 0.4316, cd 0.00823 at 4.04 deg. cd 0.00809 at -0.05 deg.

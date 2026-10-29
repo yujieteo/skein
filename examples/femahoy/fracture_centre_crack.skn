@@ -1,4 +1,5 @@
 // femahoy: validation/cases/fracture-centre-crack/job.inp
+// blocked-by: G14 G20
 // 1/4 of a steel plate of 100 x 300 mm with a centre crack of 50 mm, under a
 // tension of 100 MPa. Plane strain, quadratic triangles. K_I comes from the
 // crack opening at r = L/4 and r = L (Shih et al. 1976). The reference is

@@ -1,4 +1,5 @@
 // femahoy: validation/cases/grid-constrained-block/block/grid.toml
+// blocked-by: G18
 // An orthotropic block held by rollers on all 6 faces and heated from 20 degC to
 // 120 degC. The strain is 0, so the stress is uniform: -84.302009777, -72.650733297
 // and -50.027159153 MPa in x, y and z (Jones 1999, section 2.5).

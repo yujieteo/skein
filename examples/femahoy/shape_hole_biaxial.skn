@@ -1,4 +1,5 @@
 // femahoy: validation/cases/shape-hole-biaxial/L40/optimize.toml
+// blocked-by: G10 G24 G25
 // The hole of least stress concentration in a plate under the remote stresses sx = 1 and
 // sy = 0.5, no units. A Nelder-Mead study changes the ratio and the power of a superellipse
 // hole. Reference: the ellipse a/b = 2 (power 2), with the peak von Mises stress 1.5.

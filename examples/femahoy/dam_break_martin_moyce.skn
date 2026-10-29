@@ -1,4 +1,5 @@
 // femahoy: validation/cases/dam-break-martin-moyce/sph/case.lmp
+// blocked-by: G11
 // Dam break: a water column of width a = 2.25 in and height 2a falls on a dry floor. Weakly
 // compressible water (Tait), in Lagrangian form on the start shape, with particles (RKPM).
 // Reference: the times T = t*sqrt(2*g/a) at Z = x/a = 2.11, 3.00, 3.89: 1.83, 2.51, 3.11.

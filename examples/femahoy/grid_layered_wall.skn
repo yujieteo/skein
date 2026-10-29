@@ -1,4 +1,5 @@
 // femahoy: validation/cases/grid-layered-wall/wall/grid.toml
+// blocked-by: G19
 // A building wall of plaster, insulation and brick, with a convection on
 // each side. Steady heat conduction, 3D, linear hexahedra. The reference
 // is the thermal circuit of resistances in series.

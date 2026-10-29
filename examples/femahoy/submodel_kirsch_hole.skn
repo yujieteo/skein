@@ -1,4 +1,5 @@
 // femahoy: validation/cases/submodel-kirsch-hole/job.inp
+// blocked-by: G19
 // The submodel of submodel_kirsch_hole_global.skn: the ring 10 <= r <= 20 mm
 // about the hole, with a fine mesh. The cut r = 20 mm takes the displacement
 // of the global model. The reference is the Kirsch sxx at the integration
