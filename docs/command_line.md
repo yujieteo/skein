@@ -98,9 +98,9 @@ change local, so that the diff of a small change is small (spec §3.2).
 5. One space goes between a number and its unit: `210 GPa`, `(0, 0, 1) mm`.
 6. The header is one line. The `use` lines come after it.
 7. One blank line goes between two top-level items. A run of `bc` lines
-   has no blank lines in it. In a run of `let` lines, `fmt` keeps one blank
-   line that the author wrote between two lines. `fmt` collapses two or
-   more blank lines to one.
+   has no blank lines in it. In a run of `let` and `param` lines, `fmt`
+   keeps one blank line that the author wrote between two lines. `fmt`
+   collapses two or more blank lines to one.
 8. In a block, the statements keep their order. `fmt` never reorders items,
    because order carries meaning (declaration before use, step order).
 9. `fmt` never aligns columns, in a table or anywhere else. A table row is
