@@ -115,7 +115,7 @@ The core choices that each section tests:
 | Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh. Each case runs, with no reuse of similar cases (G2.3). |
 | Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | adjoint gradients from the SIR, phase 5 (G3.3). `Dual<D>` gives forward-mode derivatives before that (spec §5.1). |
 | Uncertainty quantification | `study … sample` with `lhs` or `sobol` | no statistics of the results in the tool | the table is TOON. Other tools compute the statistics (G3.4). |
-| General PDEs with no physics | `units nondim` (§6.5) | no dimension checks | accepted cost, the check report states it |
+| General PDEs with no physics | a `nondim` model (§6.5) | no dimension checks | accepted cost, the check report states it |
 
 ---
 
@@ -243,11 +243,11 @@ mostly in fluids, think in dimensionless groups. The spec keeps both:
 | vary Re, not ρ, U, L, μ | `param Re: Real` and a dimensional `let mu = rho*U*D/Re` | §21.1 |
 | the solver in scaled variables | a `scales` line, required in each model with dimensions (G2.2) | §21.2 |
 | know the groups of a model | `check --groups`, Buckingham π | §21.3 |
-| a model with no physical units at all | `units nondim` | §6.5 |
+| a model with no physical units at all | a `nondim` model, for example `model m: 2d, nondim` | §6.5 |
 
 Costs:
 
-- `units nondim` removes all dimension checks. It is a deliberate choice in
+- A `nondim` model has no dimension checks. It is a deliberate choice in
   the header, and the report says so.
 - The π basis is not unique. The tool prefers the `scales` as repeated
   variables and names known forms, but a user can see a group in a

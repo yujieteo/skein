@@ -71,7 +71,7 @@ in the file stays in the review.
 
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
-| `type_mismatch` | §5.7 | the type of the value is not the declared type | `let n: Int = 2.5` | the type of the value |
+| `type_mismatch` | §5.7 | the type of the value is not the declared type | `let count: Int = 2.5` | the type of the value |
 | `unit_mismatch` | §6.1 | a sum, comparison or equation joins two dimensions | `E + rho` | the two dimensions, and the unit that would make them equal |
 | `rank_mismatch` | §7.2 | a sum or an equation joins two ranks | `div(sigma) = 0 Pa` | the rank of each side |
 | `ambiguous_product` | §7.2 | `*` between two vectors | `v*n` | `dot(v, n)` |
@@ -148,7 +148,7 @@ in the file stays in the review.
 | `scales_incomplete` | §21.2 | the scales do not make a dimension that the model uses | `scales D, U` in a model with a density | the missing base dimension |
 | `scales_missing` | §21.2 | a model with dimensions has no `scales` line | | a `scales` line from the sizes of the model, for example `scales L, E` |
 | `symmetry_map` | §12.6 | the transformation of a `symmetry` item does not map `low` onto `high` | `n: 24` on a sector of 30 degrees | the angle of the sector |
-| `nondim_unit` | §6.5 | a literal has a unit in a `units nondim` model | `units nondim` and `1 m` | remove the unit |
+| `nondim_unit` | §6.5 | a literal has a unit in a `nondim` model | `model m: 2d, nondim` and `1 m` | remove the unit |
 | `process_setting` | §22.2 | a setting does not belong to the process | `draft:` in `cnc_mill` | the valid settings |
 
 ---

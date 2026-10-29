@@ -264,7 +264,7 @@ A `physics` block declares its unknowns in `solves` and states its
 equations in strong form:
 
 ```skein
-physics heat on part solves T: Temperature = 293 K {
+physics thermal on part solves T: Temperature = 293 K {
     material steel
     let q: Vector<HeatFlux> = -k*grad(T)
     eq rho*c*ddt(T) + div(q) = Q
@@ -342,7 +342,7 @@ method flow: cg { mesh: m, order: { v: 2, p: 1 } }
 method flow: fv { mesh: m, gradient: least_squares, flux: linear_upwind, pv_coupling: rhie_chow }
 method wave: dg { mesh: m, order: 3, flux: upwind }
 method solid: rkpm { points: c, basis: linear, support: 2.5, integrate: scni, bc: nitsche }
-method heat: gfd { points: c, stencil: 12 }
+method thermal: gfd { points: c, stencil: 12 }
 ```
 
 A block may hold its settings on one line, with commas, or on separate

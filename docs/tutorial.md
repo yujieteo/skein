@@ -128,7 +128,7 @@ Each declaration states its type. Skein does no type inference:
 
 ```skein
 let L: Length = 200 mm
-let n: Int = 10
+let count: Int = 10
 let ratio: Real = 0.3
 let bar: Solid = box((0, 0, 0) mm, (L, 10 mm, 10 mm))
 ```
@@ -262,7 +262,7 @@ let sigma: Tensor2<Pressure> = E/(1 + nu)*(eps + nu/(1 - 2*nu)*tr(eps)*I)
 Heat conduction has the same shape:
 
 ```skein
-physics heat on part solves T: Temperature = 293 K {
+physics thermal on part solves T: Temperature = 293 K {
     material steel
     let q: Vector<HeatFlux> = -k*grad(T)
     eq rho*c*ddt(T) + div(q) = 0

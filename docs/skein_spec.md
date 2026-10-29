@@ -614,7 +614,7 @@ never units, so `1 m + 1 mm` is valid and is 1.001 m.
 
 ### 6.5 Unit systems
 
-The `units` line names the unit system of the model:
+The `unitsys` part of the header names the unit system of the model:
 
 | Name | Length | Mass | Time | Force | Stress | Temperature |
 |---|---|---|---|---|---|---|
@@ -622,8 +622,8 @@ The `units` line names the unit system of the model:
 | `mm_N_MPa_s` | mm | t | s | N | MPa | K |
 | `mm_kg_ms` | mm | kg | ms | kN | GPa | K |
 
-A user system gives the base units: `units { length: mm, mass: t, time: s,
-temperature: K }`.
+A user system gives the base units in the header: `model m: 3d, { length:
+mm, mass: t, time: s, temperature: K }`.
 
 The unit system does not change the meaning of the source, because each
 literal carries its unit. It sets the units of the output files and of the
@@ -634,8 +634,9 @@ The `scales` line (§21.2), not the unit system, sets the size of the
 numbers in the solver. Each model with dimensions has one
 [`scales_missing`].
 
-`units nondim` declares a model with no dimensions. Each quantity has type
-`Real`, and a literal with a unit is an error [`nondim_unit`]. Use it for
+The header `model m: 2d, nondim` declares a model with no dimensions. Each
+quantity has type `Real`, and a literal with a unit is an error
+[`nondim_unit`]. Use it for
 a PDE that has no physical units, for example a model problem from a
 textbook in dimensionless form. The dimension checks then give no
 protection, so the `check` report says `units: nondim` at its top.
@@ -872,7 +873,7 @@ fill distance and the separation ratio.
 ### 10.1 Unknown fields
 
 ```skein
-physics heat on part solves T: Temperature = 293 K {
+physics thermal on part solves T: Temperature = 293 K {
 ```
 
 The `solves` list of a physics declares its unknowns. Each unknown has a
@@ -928,7 +929,7 @@ physics solid on beam solves u: Vector<Length> {
 Two physics blocks couple when one uses a field that the other solves:
 
 ```skein
-physics heat on part solves T: Temperature = 293 K { … }
+physics thermal on part solves T: Temperature = 293 K { … }
 physics solid on part solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
@@ -1221,7 +1222,7 @@ the end of the step before it. The first step starts from the initial value
 of each unknown: the expression after `=` in `solves`, or zero.
 
 ```skein
-physics heat on part solves T: Temperature = 293 K { … }
+physics thermal on part solves T: Temperature = 293 K { … }
 ```
 
 ### 14.2 Procedures
@@ -1828,8 +1829,8 @@ scales D, U, rho
 ```
 
 Each model with dimensions has one `scales` line [`scales_missing`]. A
-`units nondim` model has none. Reason: an LLM writes a scales line as
-easily as a `units` name, and the line makes the size of each unknown
+`nondim` model has none. Reason: an LLM writes a scales line as
+easily as a unit system name, and the line makes the size of each unknown
 explicit.
 
 The `scales` line names reference values. Their dimensions must be
