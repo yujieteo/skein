@@ -547,14 +547,15 @@ luminous intensity J. The checker does arithmetic on these vectors:
 
 - `a*b` adds the exponents, `a/b` subtracts them, `a^k` multiplies them by
   `k`. `k` must be an integer constant, except when `a` is `Real`. Then `k`
-  may be any `Real` expression.
+  may be any constant `Real`, not a varying value (§7.6) [`not_constant`].
+  A function parameter is constant when each call gives it a constant.
 - `a + b`, `a - b`, `a == b` and the other comparisons need equal
   dimensions [`unit_mismatch`].
 - `sqrt(a)` halves the exponents. Each exponent must be even
   [`unit_fractional`].
 - `exp`, `ln`, `sin`, `cos`, `tan`, `tanh` take `Real` or `Angle`
   [`unit_transcendental`]. `atan` takes `Real`. `atan2(y, x)` takes two
-  values of one dimension. Both give an `Angle`.
+  values of one dimension [`unit_mismatch`]. Both give an `Angle`.
 - `grad`, `div` and `curl` divide by L. `ddt` divides by T. `ddt2` divides
   by T².
 
@@ -1327,11 +1328,14 @@ a scalar or a vector to the run log in TOON. Functions for `report`:
 `reaction(r)`, `max(f, r)`, `min(f, r)`, `integral(f, r)`, `mean(f, r)`,
 `eigenvalue(k)`.
 
-`eigenvalue(k: Int)` is the eigenvalue of mode `k` of a `modal` step, a
-`Frequency`, or of a `buckling` step, a `Real` load factor. Mode 1 is the
-lowest. In a `report`, the step is the step of the report. In an `expect`,
-the step is the last `modal` or `buckling` step. A use in another place, or
-with no such step, is an error [`eigenvalue_step`].
+`eigenvalue(k: Int)` is the eigenvalue of mode `k` of a `modal` step, or
+of a `buckling` step. For a `modal` step, it is the natural frequency
+f = ω/(2π) in Hz, a `Frequency`. For a `buckling` step, it is a `Real` load
+factor. Mode 1 is the lowest. In a `report`, the step is the step of the
+report. In an `expect`, the step is the last `modal` or `buckling` step. A
+use in another place, or with no such step, is an error
+[`eigenvalue_step`]. A `k` outside `1..count` of the step is also an error
+[`eigenvalue_step`].
 
 `report cd = expr` gives the value a name. A study (§20) uses the name as
 the column of its results table. A report with no name gets its source

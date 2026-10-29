@@ -388,8 +388,8 @@ The procedures are `static`, `transient`, `modal`, `buckling` and
 to keep the error below the limits. Steps run in the order of the file.
 
 `re`, `imag`, `abs`, `arg` and `conj` take the parts of a `Complex` value.
-`eigenvalue(k)` is the frequency of mode `k` of a `modal` step, or the load
-factor of a `buckling` step.
+`eigenvalue(k)` is the natural frequency f = ω/(2π) in Hz of mode `k` of a
+`modal` step, or the load factor of a `buckling` step.
 
 Spec: [§14](skein_spec.md#14-steps).
 

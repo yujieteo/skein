@@ -136,7 +136,7 @@ in the file stays in the review.
 | `results_missing` | §15.1 | the file or the step of a `results` does not exist | | the steps in that file |
 | `submodel_outside` | §15.2 | the cut region is not inside the global field region | | the bounding box of the global region |
 | `expect_form` | §15.3 | the two sides of an `expect` are not comparable | a field and a point value | `at` |
-| `eigenvalue_step` | §14.5 | `eigenvalue(k)` is not in a `report` or an `expect`, or has no `modal` or `buckling` step | `report eigenvalue(1)` in a `static` step | a `modal` or `buckling` step |
+| `eigenvalue_step` | §14.5 | `eigenvalue(k)` is not in a `report` or an `expect`, has no `modal` or `buckling` step, or `k` is outside `1..count` of the step | `report eigenvalue(1)` in a `static` step, `report eigenvalue(13)` in `modal(count: 12)` | a `modal` or `buckling` step, or a `k` in `1..count` |
 
 ### 2.9 Parameters, scales, studies and manufacture
 
