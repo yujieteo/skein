@@ -97,7 +97,7 @@ recursive fn note_fluxes(n: i64, k: i64) {
         let callee = nd.first;
         let arg = syntax::nodes[callee].next;
         if syntax::nodes[callee].kind == syntax::N_NAME && tok_text(syntax::nodes[callee].tok) == "div" && arg >= 0 {
-            fluxes.push(Flux { phys: cur_phys, name: key(node_text(syntax::nodes[arg].first)), unknown: k });
+            fluxes.push(Flux { phys: cur_phys, node: syntax::nodes[arg].first, unknown: k });
         }
     }
     var c = nd.first;
@@ -405,9 +405,9 @@ fn unknown_of(n: i64) -> i64 {
 
 // The unknown of the flux `f` (an expression), or -1.
 fn flux_unknown(f: i64) -> i64 {
-    let text = node_text(f);
+    let text = norm_text(f);
     for fl in fluxes {
-        if fl.name == text { return fl.unknown; }
+        if norm_text(fl.node) == text { return fl.unknown; }
     }
     return -1;
 }
@@ -480,11 +480,11 @@ fn check_bc(n: i64) {
               str("give a part of the boundary, for example boundary(", node_text(region), ")"));
     }
     for b in bcs {
-        if b.step != cur_step || b.unknown != unknown || b.comp != comp { continue; }
-        if node_text(b.region) != node_text(region) { continue; }
+        if b.step != cur_step || b.unknown != unknown || !same_region(b.region, region) { continue; }
+        if b.comp.len > 0 && comp.len > 0 && b.comp != comp { continue; }
         let other = syntax::nodes[b.node];
         let orhs = syntax::nodes[syntax::nodes[other.first].next].next;
-        if b.natural != natural || (!natural && node_text(orhs) != node_text(rhs)) {
+        if b.natural != natural || (!natural && !same_value(orhs, b.comp, rhs, comp)) {
             error(k.tok, "bc_conflict",
                   str("this bc and the bc on line ", syntax::tokens[other.tok].line, " fight on '", node_text(region), "'"),
                   "remove one of the two lines");
@@ -493,39 +493,103 @@ fn check_bc(n: i64) {
     bcs.push(Bc { step: cur_step, region: region, unknown: unknown, comp: comp, natural: natural, node: n });
 }
 
+// The components of a vector, in the order of its literal (spec §5.2).
+let COMPONENTS = ["x", "y", "z"];
+
+fn same_region(a: i64, b: i64) -> bool { norm_text(a) == norm_text(b) }
+
+// True when the right side `a` of a bc on component `ca` and the right
+// side `b` of a bc on component `cb` ("" for all components) give one
+// value on the components that they share.
+fn same_value(a: i64, ca: u8[:], b: i64, cb: u8[:]) -> bool {
+    let va, oka = rhs_value(a, cb);
+    let vb, okb = rhs_value(b, ca);
+    if oka && okb { return va == vb; }
+    return norm_text(a) == norm_text(b);
+}
+
+// The constant value in SI of component `comp` of the right side `rhs`
+// ("" for all of it), and true when it is a constant.
+fn rhs_value(rhs: i64, comp: u8[:]) -> f64, bool {
+    guard comp.len > 0 && syntax::nodes[rhs].kind == syntax::N_VECTOR else { return const_value(rhs); };
+    let unit = syntax::child_of_kind(rhs, syntax::N_UNIT);
+    var i = 0;
+    var c = syntax::nodes[rhs].first;
+    while c >= 0 && i < COMPONENTS.len {
+        if syntax::nodes[c].kind != syntax::N_UNIT {
+            if COMPONENTS[i] == comp {
+                var v, ok = const_value(c);
+                if unit >= 0 && is_bare(c) {
+                    var affine = 0;
+                    let d, s = unit_value(unit, affine);
+                    v *= s;
+                }
+                return v, ok;
+            }
+            i++;
+        }
+        c = syntax::nodes[c].next;
+    }
+    return 0.0, false;
+}
+
 // --- the free boundary report (command_line.md §6.2) -------------------------------------
 
+// True when a bc on unknown `u` before bc `i` has the region of bc `i`.
+fn seen_before(u: i64, i: i64) -> bool {
+    for j in i {
+        if bcs[j].unknown == u && same_region(bcs[j].region, bcs[i].region) { return true; }
+    }
+    return false;
+}
+
+// True when a bc on unknown `u` and component `comp` ("" for all) has the region `region`.
+fn has_bc(u: i64, region: i64, comp: u8[:]) -> bool {
+    for b in bcs {
+        if b.unknown == u && b.comp == comp && same_region(b.region, region) { return true; }
+    }
+    return false;
+}
+
+fn add_free(psym: i64, field: u8[:], region: u8[:], condition: u8[:]) {
+    var f = Free { physics: [], field: [], region: [], condition: [] };
+    let name = tok_text(syms[psym].tok);
+    f.physics.append(name[..min(name.len, 64)]);
+    f.field.append(field[..min(field.len, 64)]);
+    f.region.append(region[..min(region.len, 512)]);
+    f.condition.append(condition[..min(condition.len, 256)]);
+    free.push(f);
+}
+
+// A region with a bc on some components of an unknown gets the natural
+// condition on each other component (spec §12.3).
 fn free_boundary() {
     for p in physics {
         if p.region < 0 { continue; }
         for j in p.count {
             let u = p.first + j;
-            var flux: Name = [];
+            var flux = -1;
             for fl in fluxes {
-                if fl.unknown == u { flux = fl.name; break; }
+                if fl.unknown == u { flux = fl.node; break; }
             }
-            if flux.len == 0 { continue; }
-            var f = Free { physics: [], field: [], region: [], condition: [] };
-            f.physics.append(tok_text(syms[p.sym].tok));
-            f.field.append(tok_text(syms[u].tok));
+            if flux < 0 { continue; }
+            let name = tok_text(syms[u].tok);
+            let ftext = node_text(flux);
             var region: u8[>..] = str("boundary(", node_text(p.region), ")");
-            var seen: Name[>..] = [];
-            for b in bcs {
-                if b.unknown != u { continue; }
-                let t = node_text(b.region);
-                var dup = false;
-                for s in seen {
-                    if s == t { dup = true; }
-                }
-                if dup { continue; }
-                seen.push(key(t));
+            for b, i in bcs {
+                if b.unknown != u || seen_before(u, i) { continue; }
                 region.append(" - ");
-                region.append(t);
+                region.append(node_text(b.region));
             }
-            f.region.append(region[..min(region.len, 512)]);
-            let cond = str(flux, "*n = 0");
-            f.condition.append(cond[..min(cond.len, 256)]);
-            free.push(f);
+            add_free(p.sym, name, region, str(ftext, "*n = 0"));
+            for b, i in bcs {
+                if b.unknown != u || b.comp.len == 0 || seen_before(u, i) || has_bc(u, b.region, "") { continue; }
+                for c in COMPONENTS[..space] {
+                    if !has_bc(u, b.region, c) {
+                        add_free(p.sym, str(name, ".", c), node_text(b.region), str("(", ftext, "*n).", c, " = 0"));
+                    }
+                }
+            }
         }
     }
 }
@@ -640,7 +704,7 @@ fn method_missing() {
         for s in syms {
             if s.kind != S_MESH { continue; }
             all++;
-            if node_text(syntax::nodes[s.node].first) == node_text(p.region) { same++; }
+            if same_region(syntax::nodes[s.node].first, p.region) { same++; }
         }
         if same == 1 || (same == 0 && all == 1) { continue; }
         let name = tok_text(syms[p.sym].tok);

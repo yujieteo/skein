@@ -68,8 +68,6 @@ let S_STATE = 10;
 let S_SYMMETRY = 11;
 let S_STEP = 12;
 let S_EXPECT = 13;
-let S_TEMPLATE = 14;
-let S_PLET = 15;      // a `let` of a physics block or of a template
 
 struct Sym {
     kind: i64,
@@ -123,7 +121,7 @@ struct PhysMat { phys: i64, mat: i64 }
 var phys_mats: PhysMat[>..];
 // The fluxes: `div(F)` in equation `k` of a physics makes `F*n` a natural
 // condition for unknown `k` (spec §12.1).
-struct Flux { phys: i64, name: Name, unknown: i64 }
+struct Flux { phys: i64, node: i64, unknown: i64 }
 var fluxes: Flux[>..];
 // The pairs (physics, property name) that already have a `material_prop_*` error.
 struct PropSeen { phys: i64, name: Name }
@@ -236,6 +234,15 @@ fn node_text(n: i64) -> const u8[:] {
         }
     }
     return src[a..b];
+}
+
+// The text of node `n` with no white space, to compare two expressions.
+fn norm_text(n: i64) -> u8[>..] {
+    var out: u8[>..] = [];
+    for c in node_text(n) {
+        if c != ' ' && c != '\t' && c != '\r' && c != '\n' { out.push(c); }
+    }
+    return out;
 }
 
 recursive fn span(n: i64) -> i64, i64 {

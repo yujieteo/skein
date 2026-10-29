@@ -147,14 +147,20 @@ fn name_ty(tok: i64) -> Ty {
         }
     }
     let s = visible.get(key(name));
-    if s {
-        let sym = syms[s];
-        if sym.kind == S_UNKNOWN && cur_phys >= 0 { return sym.ty; }
-        return sym.ty;
-    }
-    // A property outside a physics: in a `bc`, `output`, `report` or `expect`.
+    if s { return syms[s].ty; }
     for p in props {
-        if tok_text(p.tok) == name { return p.ty; }
+        if tok_text(p.tok) != name { continue; }
+        if cur_phys >= 0 {
+            if !prop_reported(cur_phys, name) {
+                error(tok, "material_prop_missing",
+                      str("the physics uses the property '", name, "', but no material of it gives it"),
+                      str("add '", name, "' to each material of the physics"));
+            }
+            return p.ty;
+        }
+        // A property outside a physics: in an `output`, `report` or `expect`.
+        if cur_step >= 0 || in_expect { return p.ty; }
+        break;
     }
     if setting_mode { return kind_ty(K_WORD); }
     unknown_name(tok);
@@ -517,7 +523,7 @@ fn vector_join(tok: i64, acc: Ty, c: Ty, i: i64) -> Ty {
 }
 
 fn vector_size(tok: i64, count: i64, rank: i64) {
-    if rank == 0 && count != space && !(count == 3 && space == 3) {
+    if rank == 0 && count != space {
         error(tok, "type_mismatch", str("a vector of ", count, " components in a ", space, "D model"),
               str("give ", space, " components"));
     }
@@ -606,24 +612,23 @@ recursive fn expr_ty(n: i64) -> Ty {
         syntax::N_BOOL => { return kind_ty(K_BOOL); },
         syntax::N_NAME => { return name_ty(k.tok); },
         syntax::N_VECTOR => {
+            let unit = syntax::child_of_kind(n, syntax::N_UNIT);
+            var ut = any_ty();
+            if unit >= 0 {
+                let t, f = unit_ty(unit);
+                ut = t;
+            }
             var acc = any_ty();
             var count = 0;
-            var unit = -1;
             var c = k.first;
             while c >= 0 {
-                if syntax::nodes[c].kind == syntax::N_UNIT {
-                    unit = c;
-                } else {
-                    var ct = expr_ty(c);
-                    if syntax::nodes[c].kind == syntax::N_NUMBER && syntax::child_of_kind(c, syntax::N_UNIT) < 0 {
-                        ct = bare_in_unit(ct, -1);
-                    }
+                if syntax::nodes[c].kind != syntax::N_UNIT {
+                    let ct = if unit >= 0 && is_bare(c) { ut } else { expr_ty(c) };
                     acc = if count == 0 { ct } else { vector_join(first_tok(c), acc, ct, count) };
                     count++;
                 }
                 c = syntax::nodes[c].next;
             }
-            if unit >= 0 { acc = vector_unit(n, unit); }
             if is_any(acc) { return acc; }
             vector_size(k.tok, count, acc.rank);
             acc.rank = acc.rank + 1;
@@ -764,40 +769,12 @@ fn bare_in_unit(t: Ty, unit: i64) -> Ty {
     return r;
 }
 
-// The type of the vector literal `n` with the unit `unit` after it: the unit
-// applies to each bare number in it (spec §6.4).
-recursive fn vector_unit(n: i64, unit: i64) -> Ty {
-    let ut, s = unit_ty(unit);
-    var acc = any_ty();
-    var count = 0;
-    var c = syntax::nodes[n].first;
-    while c >= 0 {
-        if syntax::nodes[c].kind != syntax::N_UNIT {
-            var ct = ut;
-            if !is_bare(c) { ct = expr_ty_flat(c); }
-            acc = if count == 0 { ct } else { vector_join(first_tok(c), acc, ct, count) };
-            count++;
-        }
-        c = syntax::nodes[c].next;
-    }
-    return acc;
-}
-
 // True for a number with no unit, or `-` and one.
 recursive fn is_bare(n: i64) -> bool {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_NUMBER { return syntax::child_of_kind(n, syntax::N_UNIT) < 0; }
     if k.kind == syntax::N_UNARY { return is_bare(k.first); }
     return false;
-}
-
-// The type of a component that is not a bare number. The checker already
-// reported its errors, so this reads it again without the error list.
-recursive fn expr_ty_flat(n: i64) -> Ty {
-    let before = diags.len;
-    let t = expr_ty(n);
-    diags.resize(before);
-    return t;
 }
 
 // --- assignability (spec §5.7) ---------------------------------------------------------

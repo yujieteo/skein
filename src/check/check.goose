@@ -103,13 +103,28 @@ fn sort_diags() {
 
 // --- output (docs/command_line.md §6) -------------------------------------------------------
 
-// `s` in double quotes, with `"` and `\` escaped (TOON and JSON).
+let HEX = "0123456789abcdef";
+
+// `s` in double quotes, with `"`, `\` and the control bytes escaped (TOON and JSON).
 fn quoted(out: u8[>..]&, s: u8[:]) {
     out.push('"');
     for c in s {
-        if c == '"' || c == '\\' { out.push('\\'); }
-        if c == '\n' { out.append("\\n"); continue; }
-        out.push(c);
+        if c == '"' || c == '\\' {
+            out.push('\\');
+            out.push(c);
+        } else if c == '\n' {
+            out.append("\\n");
+        } else if c == '\t' {
+            out.append("\\t");
+        } else if c == '\r' {
+            out.append("\\r");
+        } else if c < 0x20 {
+            out.append("\\u00");
+            out.push(HEX[c / 16]);
+            out.push(HEX[c % 16]);
+        } else {
+            out.push(c);
+        }
     }
     out.push('"');
 }

@@ -54,6 +54,28 @@ fn expect_id(id: u8[:], src: u8[:]) {
     print("FAIL ", id, ": got [", got, "]");
 }
 
+// The free boundary report of `src`, one "field,region,condition" per line.
+fn free_rows(src: u8[:]) -> u8[>..] {
+    check::check_text("t.skn", src);
+    var out: u8[>..] = [];
+    for f in check::free {
+        out.append(f.field);
+        out.push(',');
+        out.append(f.region);
+        out.push(',');
+        out.append(f.condition);
+        out.push('\n');
+    }
+    return out;
+}
+
+fn expect_free(what: u8[:], src: u8[:], want: u8[:]) {
+    let got = free_rows(src);
+    if got == want { return; }
+    failures++;
+    print("FAIL ", what, ": got [", got, "]");
+}
+
 // `src` gives no diagnostic.
 fn expect_clean(what: u8[:], src: u8[:]) {
     let got = ids(src);
@@ -90,6 +112,7 @@ fn test_types() {
     expect_clean("G7 re, imag, arg, conj", str(H, "let w: Complex<Real> = 1 + 2*im\nlet a: Real = re(w) + imag(w) + abs(w)\nlet b: Angle = arg(conj(w))\n"));
     expect_clean("G12 atan, atan2", str(H, "let a: Angle = atan(0.5) + atan2(1 m, 2 m)\n"));
     expect_clean("G29 a negative degC", str(H, "let a: Temperature = -5 degC\n"));
+    expect_clean("a vector with a unit, a number and a name", str(H, "let h: Length = 1 m\nlet p: Vector<Length> = (0.5, h, 0) m\n"));
     expect_clean("G30 a real exponent", str(H, "param q: Real = 3.0\nlet a: Real = 0.5^(2/q)\n"));
 }
 
@@ -99,6 +122,8 @@ fn test_physics() {
     expect_id("eq_count", str(elastic, "physics s on b solves u: Vector<Length>, q: Pressure {\n    material steel\n    eq div(hooke(E, nu, strain(u))) = 0\n}\n"));
     expect_id("material_cover", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel, steel\n}\n"));
     expect_id("material_prop_missing", str(elastic, "material soft {\n    E: Pressure = 1 GPa\n    nu: Real = 0.3\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel on f, soft on b - f\n    let w: Density = rho\n}\n"));
+    expect_id("material_prop_missing", str(elastic, "material soft {\n    E: Pressure = 1 GPa\n    nu: Real = 0.3\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material soft\n    let w: Density = rho\n}\n"));
+    expect_id("unknown_name", str(elastic, "let w: Density = rho\n"));
     expect_id("material_prop_type", str(elastic, "material soft {\n    E: Pressure = 1 GPa\n    nu: Length = 1 m\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel on f, soft on b - f\n}\n"));
     expect_id("assumption_unknown", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plain_stress\n}\n"));
     expect_id("assumption_conflict", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume finite_strain\n}\n"));
@@ -113,6 +138,14 @@ fn test_conditions() {
     expect_id("bc_off_boundary", str(elastic, "bc b: u = 0\n"));
     expect_clean("G16 a point force", str(elastic, "let tip: Point = point((1, 1, 1) m)\nbc tip: sigma*n = (0, 0, -1) kN\n"));
     expect_clean("a bc on a face", str(elastic, "bc f: u = 0\nbc f: u.x = 0 m\n"));
+    expect_clean("a vector and a component bc that agree", str(elastic, "bc f: u = (0, 1, 0) mm\nbc f: u.x = 0 m\n"));
+    expect_id("bc_conflict", str(elastic, "bc f: u.x = 0 m\nbc f: sigma*n = (0, 0, 1) MPa\n"));
+    expect_id("bc_conflict", str(elastic, "bc f: u = (1, 0, 0) mm\nbc f: u.x = 0 m\n"));
+    expect_id("bc_conflict", str(elastic, "bc boundary(b, x == 1 m): u = 0\nbc boundary(b,x==1 m): sigma*n = (0, 0, 1) MPa\n"));
+    let heat = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial cu {\n    k: Conductivity = 400 W/(m*K)\n}\nmesh m1 on b { size: 0.1 m }\n");
+    expect_clean("a flux with other spaces", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T) + k * grad(T) + k * grad(T) + k * grad(T) + k * grad(T)) = 0 W/m^3\n}\nbc f: dot(k*grad(T) + k*grad(T) + k*grad(T) + k*grad(T) + k*grad(T), n) = 0 W/m^2\n"));
+    expect_free("a symmetry plane", str(elastic, "let sym: Surface = boundary(b, y == 0 m)\nbc f: u = 0\nbc sym: u.y = 0 m\n"),
+                "u,boundary(b) - f - sym,sigma*n = 0\nu.x,sym,(sigma*n).x = 0\nu.z,sym,(sigma*n).z = 0\n");
     expect_id("method_missing", str(H, SOLID, "\nmesh m2 on b { size: 0.2 m }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n"));
     expect_id("method_setting", str(elastic, "method s: cg {\n    points: m1\n}\n"));
     expect_id("method_physics", str(H, SOLID, "\npoints cloud on b { spacing: 0.1 m }\nphysics s on b solves u: Vector<Length> {\n    material steel\n    state a: Real = 0\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))\n    plastic {\n        yield: von_mises(sigma) - 200 MPa\n        strain: a\n    }\n    eq div(sigma) = 0\n}\nmethod s: gfd {\n    points: cloud\n}\n"));
@@ -128,6 +161,7 @@ fn test_steps() {
     expect_id("not_constant", str(elastic, "step go: transient(end: t, dt: 1 s) {\n    bc f: u = 0\n}\n"));
     expect_clean("G9 a list of frequencies", str(elastic, "step go: harmonic(freq: [10, 20] Hz) {\n    bc f: u = 0\n}\n"));
     expect_clean("G6 an eigenvalue", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 10 Hz within 1%\n"));
+    expect_clean("an eigenvalue with no units", "model m: 3d, nondim\nlet b: Solid = box((0, 0, 0), (1, 1, 1))\nlet f: Surface = boundary(b, x == 0)\nmaterial steel {\n    E: Pressure = 1000\n    nu: Real = 0.3\n    rho: Density = 1\n}\nmesh m1 on b { size: 0.1 }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nstep go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 2.5 within 1%\n");
     expect_id("type_mismatch", str(elastic, "step go: static {\n    bc f: u = 0\n    report eigenvalue(1)\n}\n"));
     expect_id("allow_reason", str(H, "allow rigid_body: \"\"\n"));
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));
@@ -147,6 +181,24 @@ fn test_studies() {
     expect_id("scales_dependent", "model m: 3d, SI\nlet a: Length = 1 m\nscales a, 2*a\n");
     expect_id("scales_incomplete", "model m: 3d, SI\nlet a: Length = 1 m\nlet r: Density = 1 kg/m^3\nscales a\n");
     expect_id("process_setting", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nmanufacture b: cnc_mill {\n    draft: 1 deg\n}\n"));
+}
+
+// The JSON report holds no raw control byte, also for a tab in the model.
+fn test_output() {
+    check::check_text("t.skn", str(H, SOLID, "\nbc f: sigma *\t2 = 0\n"));
+    var out: u8[>..] = [];
+    check::write_json(out);
+    for c in out[..out.len - 1] {
+        if c < 0x20 {
+            failures++;
+            print("FAIL a tab in JSON: got [", out, "]");
+            return;
+        }
+    }
+    if find(out[..], "\\t") < 0 {
+        failures++;
+        print("FAIL a tab in JSON: got [", out, "]");
+    }
 }
 
 // Each model passes `check`, except a femahoy model with a `// blocked-by:` mark.
@@ -178,6 +230,7 @@ fn main() {
     test_conditions();
     test_steps();
     test_studies();
+    test_output();
     test_corpus("samples");
     test_corpus("examples/femahoy");
     if failures > 0 {

@@ -354,7 +354,7 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
                   "give the number of the mode, for example eigenvalue(1)");
         }
         let proc = if in_expect { last_proc } else { cur_proc };
-        if proc == "modal" { return num_ty([0, 0, -1, 0, 0, 0, 0], 0); }
+        if proc == "modal" { return num_ty(dim_pow(TIME, -1), 0); }
         if proc == "buckling" { return base_ty(B_REAL); }
         error(tok, "type_mismatch", "eigenvalue needs a modal or a buckling step",
               "use eigenvalue in a step with modal or buckling, or in an expect after one");
