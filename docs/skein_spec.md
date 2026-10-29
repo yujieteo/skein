@@ -163,8 +163,9 @@ of a built-in function or constant is an error [`duplicate_name`] (§4).
 ### 2.6 Unit names
 
 The lexer reads a **unit expression** (§6.3) in these places: after a
-number literal, after a vector literal, after the `]` of a study list, and
-after the keyword `in` in a table column. After each other `in`, an
+number literal, after a vector literal, after the `]` of a study list,
+after the keyword `in` in a table column, and after the `:` of a field in
+the header unit system. After each other `in`, an
 expression follows. In the unit places, an identifier is a unit name, not
 a variable. Thus `L` in `let L: Length = 2 L` is a variable in the first
 place and the litre in the second place.
