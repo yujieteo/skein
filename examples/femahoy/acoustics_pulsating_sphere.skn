@@ -43,7 +43,8 @@ method acoustic: cg {
 }
 
 // The time factor is exp(im*omega*t), as in femahoy. n points out of the air.
-step tone: harmonic(freq: f0) {
+// gap G9: a procedure argument cannot be a list, also a list of one frequency.
+step tone: harmonic(freq: [f0]) {
     bc src: dot(grad(p), n) = im*omega*rho_air*u_s
     bc outer_face: dot(grad(p), n) = -(im*kw + 1/r_o)*p
     // the 3 symmetry planes: the default natural condition dot(grad(p), n) = 0

@@ -18,8 +18,13 @@ let uf1: Solid = box((0, 0, 2.00) mm, (19.5, 12.2, 2.04) mm)
 let die: Solid = box((0, 0, 2.04) mm, (19.5, 12.2, 2.73) mm)
 let emc: Solid = box((0, 0, 2.00) mm, (20.5, 13.75, 2.73) mm) - (uf1 | die)
 let module: Solid = box((0, 0, 1.81) mm, (20.5, 13.75, 2.73) mm)
-// The UF2 fillet: 0.9 mm wide on the substrate, 0.92 mm high, mitred corners.
-let fil: Solid = move(loft(rect((0, 0) mm, (21.4, 14.65) mm), rect((0, 0) mm, (20.5, 13.75) mm), 0.92 mm), (0, 0, 1.81) mm) - module
+// The UF2 fillet: 0.9 mm wide on the substrate, 0.92 mm high, mitred corners. Each sloped
+// face is the face x == 0 or y == 0 of a box, turned by atan(0.9/0.92) = 44.37 deg to lean
+// in over the module.
+let slope: Angle = 44.37 deg
+let cut_x: Solid = move(rotate(box((-30, -1, -30) mm, (0, 30, 30) mm), (0, -1, 0), slope), (21.4, 0, 1.81) mm)
+let cut_y: Solid = move(rotate(box((-1, -30, -30) mm, (30, 0, 30) mm), (1, 0, 0), slope), (0, 14.65, 1.81) mm)
+let fil: Solid = (box((0, 0, 1.81) mm, (21.4, 14.65, 2.73) mm) & cut_x & cut_y) - module
 let adh: Solid = box((24.3, 0, 1.81) mm, (27.5, 27.5, 1.87) mm) | box((0, 20.1, 1.81) mm, (27.5, 27.5, 1.87) mm)
 let frm: Solid = box((24.3, 0, 1.87) mm, (27.5, 27.5, 2.745) mm) | box((0, 20.1, 1.87) mm, (27.5, 27.5, 2.745) mm)
 let package: Solid = sub | module | fil | adh | frm

@@ -47,7 +47,7 @@ method eddy: cg { mesh: m, order: 1 }
 bc walls: Az = 0
 
 // gap G9: a procedure argument cannot be a list. femahoy also solves 1 kHz, 10 kHz and 100 kHz.
-step skin: harmonic(freq: f0) {
+step skin: harmonic(freq: [f0]) {
     output Az, J
 }
 

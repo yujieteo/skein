@@ -55,7 +55,7 @@ physics eddy on box_air solves Az: Complex<Power*Time/(Current*Length)> {
 method eddy: cg { mesh: m, order: 1 }
 
 // gap G9: a procedure argument cannot be a list. femahoy also solves 1 kHz and 10 kHz.
-step proximity: harmonic(freq: f0) {
+step proximity: harmonic(freq: [f0]) {
     output Az, J
 }
 

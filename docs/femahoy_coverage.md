@@ -45,7 +45,7 @@ comment.
 | G6 | The frequency of mode k (`FREQ`) and the buckling factor of mode k (`BUCKLE`). | `validation/cases/frequency-cantilever/check.toml:9`, `validation/cases/buckling-column/check.toml:7`, `validation/cases/grid-free-block-modes-ccx/check.toml:13`, `validation/cases/grid-cavity-te101/check.toml:10` | `modal` and `buckling` give eigenpairs (§14.2), but no expression names an eigenvalue (§14.5, Appendix A). | A built-in `eigenvalue(k: Int)`, for `report` and `expect`: a `Frequency` after `modal`, a `Real` load factor after `buckling`. |
 | G7 | The real part, the imaginary part, the magnitude and the phase of a complex result (S-parameters, impedance, R and L of a line). | `validation/cases/grid-waveguide-te10/check.toml:10`, `validation/cases/line-bars-getdp/check.toml:11`, `validation/cases/acoustics-pulsating-sphere/check.toml:17`, `validation/cases/team7-eddy-current/50hz/case.pro:89` | §5.1 defines `Complex<D>` and `im`, but Appendix A has no function that takes a part of a complex value. | Add `re`, `imag`, `arg` and `conj` to Appendix A, and accept `Complex` in `abs`. |
 | G8 | The angular frequency of the step in a load or a wall impedance: a base acceleration, a surface impedance of copper. | `validation/cases/random-vibration-cantilever/job.inp:27`, `validation/cases/grid-cavity-te101/cavity/grid.toml:20` | No built-in name gives the frequency of a `harmonic` or `modal` step (§14.2, Appendix A). | A built-in constant `omega`, the angular frequency of the current `harmonic` frequency or `modal` eigenvalue. |
-| G9 | Many frequencies in one harmonic step, or a band of N points. | `validation/cases/line-wire-skin/wire/grid.toml:27`, `validation/cases/line-bars-getdp/bars/grid.toml:35`, `validation/cases/random-vibration-cantilever/job.inp:24` | `harmonic(freq:)` needs a list (§14.2), but a procedure argument is an `expr` (§3), and `expr` has no list. | Let a procedure argument be a `list` (§3), as in a study. |
+| G9 | The frequencies of a harmonic step: one frequency, many frequencies, or a band of N points. | `validation/cases/line-wire-skin/wire/grid.toml:27`, `validation/cases/line-bars-getdp/bars/grid.toml:35`, `validation/cases/random-vibration-cantilever/job.inp:24` | `harmonic(freq:)` needs a list (§14.2), but a procedure argument is an `expr` (§3), and `expr` has no list. | Let a procedure argument be a `list` (§3), as in a study. |
 | G10 | A check after an earlier step, a check for each case of a parameter sweep, and a check of the optimum of a shape loop. | `validation/cases/hyperelastic-tube/check.toml:18`, `validation/cases/cavity-devahldavis/check.toml:40`, `validation/cases/naca0012-ladson/check.toml:19`, `validation/cases/shape-hole-biaxial/check.toml:23` | §15.3 runs each `expect` once, after the last step, with the default `param` values. | Let `expect` stand in a `step` (checked at the end of the step) and in a `study` block (checked for each case, and for the best case of `minimize`). |
 | G11 | The time at which a value gets to a level: the front of a dam break. | `validation/cases/dam-break-vof/check.toml:19`, `validation/cases/dam-break-martin-moyce/check.toml:17` | Reports give values at the end of a step only (§14.5, §15.3). | A report function `when(expr, value)`: the first time at which `expr` gets to `value`. |
 | G12 | An angle from a ratio: the shock angle. | `validation/cases/wedge-oblique-shock/check.toml:19` | Appendix A has `tan` but no inverse. The model checks `tan(beta)`. | Add `atan` and `atan2` to Appendix A. |
@@ -74,6 +74,7 @@ result, or the mesh or the solve is less efficient.
 | G27 | A tree gauge for edge elements in a region with no conductor. | `validation/cases/team7-eddy-current/50hz/case.pro:36` | `family: nedelec` has no gauge setting (§13). | A method setting `gauge: tree`. |
 | G28 | A material property that is a function of the unknown of the physics that uses it: a conductivity of T. | `validation/cases/grid-radiating-fin-ccx/fin/grid.toml:9` | §10.2 allows a property of a temperature field, but §3.1 needs each name before its use, and the `material` comes before the `physics` that declares `T`. The model puts the property in a physics `let`. | In §3.1, let a material property name an unknown of a physics that assigns the material. |
 | G29 | A temperature below 0 °C, for example a sink at -5 °C. | `validation/cases/grid-layered-wall/wall/grid.toml:49` | `-` is a unary operator (§2.4) and `5 degC` is 278.15 K (§6.3), so `-5 degC` is -278.15 K. The model gives the values in K. | A `-` directly before a literal with `degC` is part of the literal. |
+| G30 | A power with an exponent that is not an integer constant: the Ogden terms with alpha = 1.3, 5.0 and -2.0, the points of a superellipse hole. | `validation/cases/hyperelastic-tube/job.inp:12`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:15` | §6.1 needs an integer constant `k` in `a^k`. The models write `jac^(-al/3)` and `cos(k*dth)^(2/power)`. | In §6.1, let `k` be any `Real` expression when `a` is `Real`. |
 
 ### Points that the spec does not make clear
 
@@ -97,13 +98,6 @@ models chose one meaning, and the spec must confirm it.
   give an absolute tolerance in K.
 - The literal `2.3e-6/K` does not parse as a unit, because a unit
   expression starts with a unit name (§6.3). The models write `2.3e-6 K^-1`.
-- `harmonic(freq: f0)` with one value is in many models. §14.2 asks for a
-  list, but the grammar has no list argument (gap G9).
-- §6.1 needs an integer constant `k` in `a^k`. Three models use an exponent
-  that is not an integer on a `Real` base, for example `jac^(-al/3)`.
-  `unit_fractional` (checks.md) reports only a fractional dimension.
-- `extrude` and `loft` take a 2D `Surface`, but §8.1 says that `rect` is
-  for 2D only. Two `3d` models give a `rect` to `extrude` or `loft`.
 - A `report` name is not in the namespace (§4). Some models use the same
   name for a `report` and an `expect`, which gives two study columns with
   one name (§20.6).
@@ -129,13 +123,13 @@ the feature. The model of a case has the same name, with `_` in place of
 | Box, plate, bar, slab, layer | most cases | `box`, `rect` | [§8.1](skein_spec.md#81-distance-functions) |
 | Hole, tube, rod, ball, spherical shell | grid-lame-cylinder, plasticity-sphere, contact-hertz, acoustics-pulsating-sphere | `cylinder`, `circle`, `sphere`, `-`, `&` | [§8.1](skein_spec.md#81-distance-functions), [§8.4](skein_spec.md#84-region-algebra) |
 | A quarter or an eighth of a symmetric part | submodel-kirsch-hole, plasticity-sphere, warpage-2p5d-frame | `&` with a `box`, and roller `bc` lines | [§8.4](skein_spec.md#84-region-algebra), [§12.1](skein_spec.md#121-form) |
-| Fillets, lofts, moved and extruded parts | warpage-2p5d-frame, team7-eddy-current | `fillet`, `loft`, `move`, `extrude` | [§8.1](skein_spec.md#81-distance-functions) |
+| A sloped fillet, a coil with round corners | warpage-2p5d-frame, team7-eddy-current | `&` with a turned `box`, a union of `box` and `cylinder` with `pattern` | [§8.1](skein_spec.md#81-distance-functions) |
 | Polygon footprints of the grid solver | grid-kirsch-hole, grid-plate-hole-ccx | `polygon`, `box`, or the true circle | [§8.1](skein_spec.md#81-distance-functions) |
 | Grid parts with `priority` over other parts | grid-fibre-composite-cell, grid-waveguide-dielectric | `-` and `material a on r1, b on r2` | [§8.4](skein_spec.md#84-region-algebra), [§10.3](skein_spec.md#103-physics) |
 | Node sets, element sets and surfaces (`*NSET`, `*ELSET`, `*SURFACE`), face sets of the grid solver | each case | `boundary(g, s)` with a condition of `x`, `y`, `z`, or with a shape | [§8.2](skein_spec.md#82-regions) |
 | A point (a node set of 1 node, a probe) | grid-lame-cylinder, warpage-2p5d-frame, grid-heated-block-stress-ccx | `point(p)` of type `Point` | [§8.3](skein_spec.md#83-lower-dimension-entities) |
 | A curved shell surface | scordelis-lo-roof | `boundary(cylinder(...), ...)` of type `Surface` | [§8.3](skein_spec.md#83-lower-dimension-entities), gap [G3](#gaps-that-block-a-case) |
-| Spline airfoils, a superellipse hole | naca0012-ladson, naca23012-flap, shape-hole-biaxial | `polygon` through the points | gap [G24](#gaps-that-change-the-discretization-or-the-physics) |
+| Spline airfoils, a superellipse hole | naca0012-ladson, naca23012-flap, shape-hole-biaxial | `polygon` through the points | gaps [G24](#gaps-that-change-the-discretization-or-the-physics) and [G30](#gaps-that-change-the-discretization-or-the-physics) |
 | A solid from a density field | topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
 
 ### Elements and meshes
@@ -171,7 +165,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | `*ELASTIC, TYPE=ENGINEERING CONSTANTS`, `*ORIENTATION`, orthotropic grid materials | laminate-pagano, grid-constrained-block | the orthotropic law in full with `outer`, one material for each ply | [§7.2](skein_spec.md#72-arithmetic-on-tensors), [§10.2](skein_spec.md#102-material) |
 | `*EXPANSION` with a reference temperature | warpage-2p5d-frame, warpage-thick-copper, grid-bimetal-strip, grid-constrained-block, grid-heated-block-stress-ccx, grid-plate-hole-stress-ccx | `alpha: Expansion` and `strain(u) - alpha*(T - T0)*I` | [§10.4](skein_spec.md#104-coupling) |
 | `*PLASTIC` (J2, linear hardening) | plasticity-sphere, taylor-bar-impact | `state`, `plastic { yield: von_mises(sigma) - ..., strain, hardening }` | [§10.6](skein_spec.md#106-inelastic-materials), gap [G22](#gaps-that-change-the-discretization-or-the-physics) |
-| `*HYPERELASTIC` (Ogden) | hyperelastic-tube | a strain energy `W` and `S = 2*diff(W, C)` | [§10.6](skein_spec.md#106-inelastic-materials) |
+| `*HYPERELASTIC` (Ogden) | hyperelastic-tube | a strain energy `W` and `S = 2*diff(W, C)` | [§10.6](skein_spec.md#106-inelastic-materials), gap [G30](#gaps-that-change-the-discretization-or-the-physics) |
 | St. Venant-Kirchhoff under `NLGEOM` | turek-hron-fsi1, buckling-column | `assume finite_strain` and `hooke` of the Green-Lagrange strain | [§11.1](skein_spec.md#111-assumption-table) |
 | `*CONDUCTIVITY`, `*SPECIFIC HEAT`, grid heat materials | heat-fin, grid-cooling-slab and the other heat cases | `k: Conductivity`, `cp: SpecificHeat`, `q = fourier(k, T)` | [§6.2](skein_spec.md#62-named-dimension-types), [§10.2](skein_spec.md#102-material) |
 | A conductivity table of the temperature | grid-radiating-fin-ccx, grid-conductivity-slab | `table` and `interp(..., T)` in a physics `let` | [§5.6](skein_spec.md#56-tables), Appendix [A](skein_spec.md#appendix-a-built-in-names), gap [G28](#gaps-that-change-the-discretization-or-the-physics) |
@@ -200,7 +194,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A transient heat step (backward Euler) | grid-cooling-slab | `transient(end, dt, scheme: backward_euler)` | [§14.2](skein_spec.md#142-procedures) |
 | `*MODEL CHANGE, REMOVE` and `ADD=STRAIN FREE` | birth-death-column | `death r` and `birth r` | [§14.3](skein_spec.md#143-birth-and-death) |
 | `*STEADY STATE DYNAMICS` with modal damping | random-vibration-cantilever | none | gap [G2](#gaps-that-block-a-case) |
-| One frequency of an electromagnetic or acoustic problem | grid-waveguide-*, acoustics-pulsating-sphere, team7-eddy-current, line-wire-skin, line-bars-getdp | `harmonic(freq: f)` with `Complex` unknowns | [§5.1](skein_spec.md#51-scalar-types), [§14.2](skein_spec.md#142-procedures) |
+| One frequency of an electromagnetic or acoustic problem | grid-waveguide-*, acoustics-pulsating-sphere, team7-eddy-current, line-wire-skin, line-bars-getdp | `harmonic(freq: [f])` with `Complex` unknowns | [§5.1](skein_spec.md#51-scalar-types), [§14.2](skein_spec.md#142-procedures), gap [G9](#gaps-that-remove-a-check) |
 | Many frequencies in one step | line-wire-skin, line-bars-getdp, random-vibration-cantilever | none | gap [G9](#gaps-that-remove-a-check) |
 | DC conduction and electrostatic steps | grid-resistor-bar, grid-holm-spot, grid-coax-capacitor, line-coax, line-stripline | a potential physics `eq div(J) = 0` in a `static` step | [§10.3](skein_spec.md#103-physics), [§14.2](skein_spec.md#142-procedures) |
 | Joule heat as the source of a heat step | grid-joule-bar | 2 coupled physics | [§10.4](skein_spec.md#104-coupling) |

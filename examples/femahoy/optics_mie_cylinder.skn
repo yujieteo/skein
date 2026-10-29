@@ -46,7 +46,8 @@ method em: cg {
     order: 2
 }
 
-step tone: harmonic(freq: f0) {
+// gap G9: a procedure argument cannot be a list, also a list of one frequency.
+step tone: harmonic(freq: [f0]) {
     // gap G26: no PML. The first-order absorbing condition of Bayliss and Turkel for the
     // outgoing scattered wave stands for the PML of femahoy.
     bc outer_face: dot(grad(es), n) = -(im*k0 + 1/(2*r_o))*es

@@ -18,6 +18,7 @@ let hb: Real = 1/sqrt(ratio)
 let dth: Real = pi/120
 
 /// Point k of the superellipse |x/ha|^power + |y/hb|^power = 1, at the angle k*dth.
+// gap G30: the exponent 2/power is not an integer constant (§6.1).
 fn rim(k: Real) -> Vector<Real> = (ha*cos(k*dth)^(2/power), hb*sin(k*dth)^(2/power))
 
 // gap G24: no smooth implicit or spline region. The hole is a polygon through the 61 points of mesh.geo.

@@ -61,7 +61,8 @@ method em: cg {
     family: nedelec
 }
 
-step tone: harmonic(freq: f0) {
+// gap G9: a procedure argument cannot be a list, also a list of one frequency.
+step tone: harmonic(freq: [f0]) {
     // The strip is a perfect conductor with no thickness: no tangential E on it.
     bc strip: ef.x = 0
     bc strip: ef.z = 0

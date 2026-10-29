@@ -20,8 +20,9 @@ let bh: Length = 50 mm
 scales 294 mm, 1/omega, 100*gauss, turns
 
 let plate: Solid = box((0, 0, 0) mm, (294, 294, 19) mm) - box((18, 18, -1) mm, (126, 126, 20) mm)
-let coil_sec: Surface = fillet(rect((94, 0) mm, (294, 200) mm), 50 mm) - fillet(rect((119, 25) mm, (269, 175) mm), 25 mm)
-let coil: Solid = move(extrude(coil_sec, 100 mm), (0, 0, 49) mm)
+/// The square of half side bh round (xc, yc), grown by r with round corners, from z = 49 mm to 149 mm.
+fn stadium(r: Length) -> Solid = box((xc - bh - r, yc - bh, 49 mm), (xc + bh + r, yc + bh, 149 mm)) | box((xc - bh, yc - bh - r, 49 mm), (xc + bh, yc + bh + r, 149 mm)) | pattern(pattern(cylinder((xc - bh, yc - bh, 49 mm), (0, 0, 1), r, 100 mm), (2*bh, 0 mm, 0 mm), 2), (0 mm, 2*bh, 0 mm), 2)
+let coil: Solid = stadium(50 mm) - stadium(25 mm)
 let world: Solid = sphere((147, 147, 74) mm, 0.45 m)
 let air: Solid = world - plate - coil
 let outer_face: Surface = boundary(world)
@@ -72,7 +73,8 @@ method em: cg {
     family: nedelec
 }
 
-step ac: harmonic(freq: f0) {
+// gap G9: a procedure argument cannot be a list, also a list of one frequency.
+step ac: harmonic(freq: [f0]) {
     // gap G26: no infinite region. femahoy maps a shell from 0.35 m to 0.45 m to infinity.
     // Here a = 0 on the sphere of 0.45 m.
     bc outer_face: a = 0

@@ -64,7 +64,8 @@ bc step_face: E.y = 0
 bc port_in: Hs*n = im*beta1/mu0*(E - dot(E, n)*n) - 2*im*beta1/mu0*e1
 bc port_out: Hs*n = im*beta2/mu0*(E - dot(E, n)*n)
 
-step response: harmonic(freq: f0) {
+// gap G9: a procedure argument cannot be a list, also a list of one frequency.
+step response: harmonic(freq: [f0]) {
     output E
 }
 
