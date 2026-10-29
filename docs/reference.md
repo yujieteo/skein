@@ -587,8 +587,7 @@ scales D, U, rho
 
 `scales` names the reference values of the scaled equations. The source
 stays dimensional. `skein check --groups` prints the dimensionless groups
-of the model, with the known names such as `Re`, `Pr` and `Ma`. Cases of a
-study with equal groups are similar, and only the first one runs.
+of the model, with the known names such as `Re`, `Pr` and `Ma`.
 
 Spec: [§21](skein_spec.md#21-dimensional-analysis-and-scaling).
 
@@ -611,7 +610,7 @@ tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
 `skein verify --dfm` checks the part against its process: wall thickness,
 draft, undercuts, inner radii, holes, overhangs and bends. A `tolerance`
 item checks a stack-up of `tol` values. `skein export` writes the part as
-STL, 3MF or STEP.
+STL or STEP.
 
 Spec: [§22](skein_spec.md#22-manufacture).
 

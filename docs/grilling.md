@@ -177,11 +177,13 @@ well scaled. Make `scales` a lint suggestion for flow models, not a rule.
 **G2.3** Reuse the solution of a similar case in a study (equal π groups)?
 
 - A. Yes, on by default, marked `similar_to` in the table.
-- B. Off by default.
+- B. No. Each case runs (the spec today).
 
-Recommended: **A**. Reason: a sweep of Re at fixed geometry is the most
-common flow study, and each similar case saves a full solve. The similarity
-test includes every input, so it is conservative.
+Recommended: **B**. Reason: the similarity test must include each
+dimensional constant of the SIR, also the literals in geometry, `bc` values
+and step arguments. A missed constant gives a wrong result with no error.
+For example, a fixed channel with a varied cylinder diameter changes the
+blockage ratio. Add the reuse later only with that full test.
 
 ---
 

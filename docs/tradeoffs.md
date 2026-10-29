@@ -39,7 +39,7 @@ confirms or changes this ranking in [grilling.md round 0](grilling.md#round-0-th
 | 2 | Units, static analysis and verification by default | protected | a type on each declaration, a unit on each literal | the checker, about a third of the front end | small | the post-solve checks cost a few percent of a solve | 1 (checks), 2 (verification) |
 | 3 | LLM- and AXI-native syntax and output | protected | it shapes all syntax: types only at declarations, TOON, ids with fixes | small: the fix strategies and the TOON writer | none | none | 1 |
 | 4 | Parameters, studies and concurrency | layered, high value | `param`, `study`, `report name =` | the study runner and the dependency analysis | small | memory grows with the number of workers | 1 (`param` in `check`), 2 (studies) |
-| 5 | Dimensional analysis: groups, scales, similarity | layered | `scales`, `units nondim` | the π basis and the scaled SIR | small | scaled solves are equal or faster | 1 (`check --groups`), 3 (scaled SIR, similarity) |
+| 5 | Dimensional analysis: groups and scales | layered | `scales`, `units nondim` | the π basis and the scaled SIR | small | scaled solves are equal or faster | 1 (`check --groups`), 3 (scaled SIR) |
 | 6 | Web output: the tool chain and the viewer in the browser | layered, depends on Goose | none | the browser shell and the viewer | a second target | the browser limits memory | 4 |
 | 7 | Power of Ten reliability | layered, mostly free | none: most rules hold by construction | tests and emitter checks | small | none | 2 onwards, as tests |
 | 8 | Parametric parts and text-to-CAD | layered | `tol`, more geometry operations | export writers. A B-rep kernel for exact STEP. | medium for exact STEP | none for simulation | 2 (STL), 4 (tessellated STEP), 5 (exact STEP) |
@@ -104,7 +104,7 @@ The core choices that each section tests:
 | Phase field, reaction-diffusion | C1, `transient` | fourth-order terms (Cahn-Hilliard) need a mixed form or C1 elements | accepted. Write the mixed form with two unknowns. |
 | Free surface (level set, VOF) | a level set is a PDE | reinitialization is a process, not an equation | **Gap.** Question G4.7. |
 | Meshless (large deformation, fracture) | `rkpm`, `gfd` | fragmentation needs particle methods with contact. That is closer to DEM, which is not a PDE. | out of scope for v1 |
-| Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh and §20.7 reuses similar cases |
+| Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh |
 | Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | **Gap** for gradients. Proposal: adjoints from the SIR, phase 5. Question G3.3. |
 | Uncertainty quantification | `study … sample` with `lhs` or `sobol` | no statistics of the results in the tool | the table is TOON. Compute the statistics outside, or add `mean`, `std` and quantiles to the study output. Question G3.4. |
 | General PDEs with no physics | `units nondim` (§6.5) | no dimension checks | accepted cost, the check report states it |
@@ -221,7 +221,6 @@ enforced by tests and by the emitter.
 | only `param` can change (§20.1) | a reviewer finds each input. The dependency analysis is exact. | a user must mark a value `param` before a study can vary it |
 | Go-style workers over typed queues (§20.3) | no shared memory, so no data races. A failed case does not stop the study. The same design works on native threads and Web Workers. | each worker holds its own copy of the shared mesh. Memory grows with the number of workers. §20.5 limits the workers by memory. |
 | parallel cases before parallel assembly (§20.5) | cases scale almost perfectly | one large case on a machine with many threads gets threads only when it is alone |
-| similar cases reused (§20.7) | a sweep of Re with a fixed geometry runs each Re once, also when density and speed change together | the similarity test must include each input. A missed input gives a wrong reuse. The test includes all constants and mesh sizes, so it is conservative. |
 
 ---
 
@@ -236,7 +235,6 @@ mostly in fluids, think in dimensionless groups. The spec keeps both:
 | the solver in scaled variables | `scales D, U, rho` | §21.2 |
 | know the groups of a model | `check --groups`, Buckingham π | §21.3 |
 | a model with no physical units at all | `units nondim` | §6.5 |
-| reuse a solution for similar cases | similarity by the π groups | §20.7 |
 
 Costs:
 

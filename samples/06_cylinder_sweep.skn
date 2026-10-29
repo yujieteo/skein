@@ -1,7 +1,6 @@
 // Steady 2D flow past a cylinder, swept over the Reynolds number. The
 // study varies Re, the model computes the viscosity that gives it, and
-// each case reports the drag coefficient. The three cases are not similar
-// (different Re), so each case runs.
+// each case reports the drag coefficient.
 
 model cylinder_sweep
 space 2d
@@ -47,6 +46,7 @@ physics flow on fluid_dom solves v, p {
 method flow: cg {
     mesh: m
     order: { v: 2, p: 1 }
+    stabilize: supg
 }
 
 step steady: static {

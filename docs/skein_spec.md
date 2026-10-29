@@ -159,9 +159,11 @@ but the checker reports [`shadows_builtin`] as a lint.
 
 ### 2.6 Unit names
 
-After a number literal, after a vector literal and after the keyword `in`,
-the lexer reads a **unit expression** (§6.3). In those places an identifier
-is a unit name, not a variable. Thus `L` in `let L: Length = 2 L` is a
+The lexer reads a **unit expression** (§6.3) in these places: after a
+number literal, after a vector literal, after the `]` of a study list, and
+after the keyword `in` in a table column. After each other `in`, an
+expression follows. In the unit places, an identifier is a unit name, not
+a variable. Thus `L` in `let L: Length = 2 L` is a
 variable in the first place and the litre in the second place.
 
 ---
@@ -297,8 +299,8 @@ and it puts each error at the line of the use.
 
 ## 4. Names and scope
 
-A model has **one namespace**. These declarations add a name to it: `let`,
-`table`, `material`, `mesh`, `points`, `field`, `physics`, the `let`
+A model has **one namespace**. These declarations add a name to it:
+`param`, `let`, `table`, `material`, `mesh`, `points`, `field`, `physics`, the `let`
 statements inside a `physics` block, `step` and `expect`. Two declarations
 with one name are an error [`duplicate_name`].
 
@@ -313,7 +315,7 @@ These names have a smaller scope:
 | A column of a table, `t.col` | everywhere after the table |
 | A field of a `Results` value, `r.u` | everywhere after the `let` |
 | `x`, `y`, `z`, `t` (coordinates and time) | every expression that the solver evaluates at a point |
-| `n` (outward unit normal) | `bc` expressions on a boundary |
+| `n` (outward unit normal) | `bc` expressions on a boundary, and the argument `f` of each `integral(f, r)` over a boundary region `r` in `output`, `report` and `expect` |
 | `I` (identity tensor) | everywhere |
 
 When two materials on the regions of one physics give a property, the
@@ -1602,15 +1604,6 @@ One column for each varied parameter, each named report and each `expect`.
 `verify` is `pass` when each verification check of the case passes.
 `--format json` gives the same records as JSON.
 
-### 20.7 Similar cases
-
-Two cases are **similar** when they have equal dimensionless groups (§21.3)
-for all inputs of the model, the mesh sizes included. Similar cases have the
-same solution in scaled variables. By default, the study runs the first case
-of each similar set and computes the others from it by the scales. The
-table marks such a case `similar_to: <case>`. `dedupe: none` in the study
-block turns this off.
-
 ---
 
 ## 21. Dimensional analysis and scaling
@@ -1695,8 +1688,7 @@ The known forms:
 | `Bi` | hL/k_solid | | `Fo` | αt/L² |
 | `Da` | k_p/L² | | `Ec` | U²/(c_p ΔT) |
 
-The groups drive three things: the similar-case reuse of §20.7, the lint
-rules that need a Reynolds or Peclet number (`stabilization_missing`), and
+The groups drive two things: the lint rules that need a Reynolds or Peclet number (`stabilization_missing`), and
 the report that a person reads to judge the regime of the model.
 
 ### 21.4 What stays dimensional
@@ -1819,7 +1811,7 @@ skein export housing.skn --geometry housing --format stl
 
 | Format | Contents | Phase |
 |---|---|---|
-| `stl`, `3mf` | a triangulated surface from the mesher, at the size of `--size` | 2 |
+| `stl` | a triangulated surface from the mesher, at the size of `--size` | 2 |
 | `step` | AP242 with tessellated geometry from the mesher | 4 |
 | `step` with exact surfaces | a boundary representation of the CSG tree | 5, see the [tradeoffs](tradeoffs.md#4-parametric-parts-text-to-cad-and-export) |
 

@@ -34,7 +34,7 @@ verification.
 | `skein verify convergence model.skn` | the convergence study (checks.md §4.3) |
 | `skein build model.skn` | writes the Goose source and builds a native executable or a WebAssembly module |
 | `skein run model.skn` | builds and runs the model, with all verification |
-| `skein export model.skn` | writes the geometry of a part to STL, 3MF or STEP (§7.1) |
+| `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) |
 | `skein view model.skn` | opens the results in the WebGL viewer |
 | `skein lsp` | serves an editor over the Language Server Protocol |
 | `skein help [command]` | prints help |
@@ -129,13 +129,13 @@ skein verify samples/01_cantilever.skn --dfm
 |---|---|---|
 | `--from <step>` | `run` | restart from the state at the end of the step before `<step>` (spec §14.7) |
 | `--target native\|wasm` | `run`, `build` | native executable (default) or WebAssembly |
-| `--threads n` | `run` | worker threads for assembly and solvers. Default: all hardware threads. |
+| `--threads n` | `run` | worker threads for assembly and solvers. Default: all hardware threads. With `--study`, the default is `max(1, H / k)` for `H` hardware threads and `k` jobs (spec §20.5). |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
 | `--dfm` | `verify` | run the DFM checks of the `manufacture` items ([checks.md §4.2a](checks.md#42a-design-for-manufacture)) |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
 | `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
-| `--jobs k` | `run --study` | cases that run at the same time. Default: the number of hardware threads divided by `--threads`. |
+| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 `run` writes the results to `.skein/results/<model>/<step>.vtu` (one file
@@ -243,7 +243,7 @@ no solve.
 | Option | Meaning |
 |---|---|
 | `--geometry <name>` | the geometry to write. Required. |
-| `--format stl\|3mf\|step` | STL and 3MF are triangle meshes (phase 2). STEP is tessellated in phase 4 and exact in phase 5. |
+| `--format stl\|step` | STL is a triangle mesh (phase 2). STEP is tessellated in phase 4 and exact in phase 5. |
 | `--size length` | the size of the triangles. Default: the mesh size of the model. |
 
 `export` writes geometry only. Skein does not import a mesh or a CAD file
