@@ -96,6 +96,15 @@ fn end_statement() {
 
 fn skip_newlines() { while at(TK_NL) { advance(); } }
 
+// True when the cursor is at a line that starts in column 1 with the keyword
+// of an item. Such a line always starts a new item, as in the lexer.
+fn at_item() -> bool {
+    starts_item(kind()) && tokens[tok()].col == 1 && kind_at(1) != TK_COLON
+}
+
+// True while the cursor is inside the body of a `{` bracket.
+fn in_body() -> bool { !at(TK_RBRACE) && !at(TK_EOF) && !at_item() }
+
 // A node of kind `k` at token `t` with the children `a` and `b`.
 fn node2(k: i64, t: i64, a: i64, b: i64) -> i64 {
     let n = node(k, t);
@@ -283,7 +292,7 @@ recursive fn primary() -> i64 {
             advance();
             let r = node(N_RECORD, t);
             accept(TK_NL);
-            while !at(TK_RBRACE) {
+            while in_body() {
                 let name = label("a field name");
                 let a = node(N_ARG, name);
                 nodes[a].aux = name;
@@ -333,9 +342,11 @@ recursive fn power() -> i64 {
 recursive fn unary() -> i64 {
     if at(TK_MINUS) || at(TK_BANG) {
         let t = advance();
+        let next = tok();
         let e = unary();
         // `-5 degC` is one literal, -5 °C, and not -(5 degC).
-        if tokens[t].kind == TK_MINUS && nodes[e].kind == N_NUMBER && nodes[e].aux < 0 {
+        if tokens[t].kind == TK_MINUS && nodes[e].kind == N_NUMBER && nodes[e].tok == next &&
+                tokens[next].start == tokens[t].start + tokens[t].len {
             let u = child_of_kind(e, N_UNIT);
             if u >= 0 && nodes[nodes[u].first].kind == N_UNIT_NAME && text(nodes[u].tok) == "degC" {
                 nodes[e].aux = t;
@@ -400,21 +411,22 @@ recursive fn expr() -> i64 {
 
 // --- blocks and procedures ---------------------------------------------------------
 
-// The value of a setting: an expression, a range or a study list (spec §3,
-// `study`).
-fn setting_value() -> i64 {
-    if at(TK_LBRACKET) { return list(); }
+// The value of a setting: an expression or, with `lists`, also a study list
+// or a range (spec §3, `study`).
+fn setting_value(lists: bool) -> i64 {
+    if lists && at(TK_LBRACKET) { return list(); }
     let v = expr();
-    if !at(TK_DOTDOT) { return v; }
+    if !lists || !at(TK_DOTDOT) { return v; }
     let t = advance();
     return node2(N_RANGE, t, v, expr());
 }
 
-// A block: `{`, entries on separate lines or with commas, `}`.
-fn parse_block() -> i64 {
+// A block: `{`, entries on separate lines or with commas, `}`. With
+// `lists`, the block of a study, an entry can be a list or a range.
+fn parse_block(lists: bool) -> i64 {
     let b = node(N_BLOCK, expect(TK_LBRACE, "'{'"));
     accept(TK_NL);
-    while !at(TK_RBRACE) {
+    while in_body() {
         if at(KW_REFINE) || at(KW_LAYERS) {
             let t = advance();
             let region = expr();
@@ -422,7 +434,7 @@ fn parse_block() -> i64 {
             add(b, node2(if tokens[t].kind == KW_REFINE { N_REFINE } else { N_LAYERS }, t, region, expr()));
         } else {
             let name = label("a setting name");
-            add(b, node1(N_SETTING, name, setting_value()));
+            add(b, node1(N_SETTING, name, setting_value(lists)));
         }
         if !accept(TK_COMMA) && !at(TK_NL) { break; }
         accept(TK_NL);
@@ -552,7 +564,7 @@ fn material_decl() -> i64 {
     let n = node(N_MATERIAL, expect_ident("a material name"));
     expect(TK_LBRACE, "'{'");
     accept(TK_NL);
-    while !at(TK_RBRACE) && !at(TK_EOF) {
+    while in_body() {
         let p = typed_name(N_PROP, "a property name");
         expect(TK_ASSIGN, "'='");
         add(p, expr());
@@ -570,7 +582,7 @@ fn discretization(k: i64) -> i64 {
     let n = node(k, expect_ident("a name"));
     expect(KW_ON, "'on'");
     add(n, expr());
-    add(n, parse_block());
+    add(n, parse_block(false));
     end_statement();
     return n;
 }
@@ -638,7 +650,7 @@ fn physics_statement() -> i64 {
         },
         KW_PLASTIC => {
             advance();
-            return node1(N_PLASTIC, t, parse_block());
+            return node1(N_PLASTIC, t, parse_block(false));
         },
         _ => {
             return fail_expected("a statement of a physics block",
@@ -651,7 +663,7 @@ fn physics_statement() -> i64 {
 fn physics_body(n: i64) {
     expect(TK_LBRACE, "'{'");
     accept(TK_NL);
-    while !at(TK_RBRACE) && !at(TK_EOF) {
+    while in_body() {
         add(n, physics_statement());
         end_statement();
     }
@@ -701,7 +713,7 @@ fn method_decl() -> i64 {
     let n = node(N_METHOD, expect_ident("the name of a physics"));
     expect(TK_COLON, "':'");
     nodes[n].aux = expect_ident("a method kind, for example 'cg'");
-    add(n, parse_block());
+    add(n, parse_block(false));
     end_statement();
     return n;
 }
@@ -725,7 +737,7 @@ fn pair_decl(k: i64) -> i64 {
     add(n, expr());
     expect(TK_COMMA, "','");
     add(n, expr());
-    add(n, parse_block());
+    add(n, parse_block(false));
     end_statement();
     return n;
 }
@@ -736,7 +748,7 @@ fn procedure_decl(k: i64) -> i64 {
     let n = node(k, expect_ident("a name"));
     expect(TK_COLON, "':'");
     add(n, procedure());
-    add(n, parse_block());
+    add(n, parse_block(k == N_STUDY));
     end_statement();
     return n;
 }
@@ -763,8 +775,8 @@ fn step_statement() -> i64 {
         KW_RELEASE => { advance(); return node1(N_RELEASE, t, expr()); },
         KW_BIRTH => { return active_set(N_BIRTH); },
         KW_DEATH => { return active_set(N_DEATH); },
-        KW_SOLVE => { advance(); return node1(N_SOLVE, t, parse_block()); },
-        KW_ADAPT => { advance(); return node1(N_ADAPT, t, parse_block()); },
+        KW_SOLVE => { advance(); return node1(N_SOLVE, t, parse_block(false)); },
+        KW_ADAPT => { advance(); return node1(N_ADAPT, t, parse_block(false)); },
         KW_OUTPUT => {
             advance();
             let n = node(N_OUTPUT, t);
@@ -807,7 +819,7 @@ fn step_decl() -> i64 {
     add(n, procedure());
     expect(TK_LBRACE, "'{'");
     accept(TK_NL);
-    while !at(TK_RBRACE) && !at(TK_EOF) {
+    while in_body() {
         add(n, step_statement());
         end_statement();
     }
@@ -853,7 +865,7 @@ fn manufacture_decl() -> i64 {
     add(n, expr());
     expect(TK_COLON, "':'");
     add(n, procedure());
-    add(n, parse_block());
+    add(n, parse_block(false));
     end_statement();
     return n;
 }
@@ -867,7 +879,7 @@ fn tolerance_decl() -> i64 {
     add(n, expr());
     expect(TK_DOTDOT, "'..'");
     add(n, expr());
-    if at(TK_LBRACE) { add(n, parse_block()); }
+    if at(TK_LBRACE) { add(n, parse_block(false)); }
     end_statement();
     return n;
 }
@@ -922,13 +934,11 @@ fn parse_item(first: bool) -> i64 {
 }
 
 // Moves to the next line that starts at column 1 with the keyword of an
-// item, or to the end of the file.
-fn recover() {
-    loop {
-        if at(TK_EOF) { return; }
-        let t = advance();
-        if tokens[t].kind == TK_NL && starts_item(kind()) && tokens[tok()].col == 1 { return; }
-    }
+// item, or to the end of the file. It moves past the token at `start`, where
+// the failed item started.
+fn recover(start: i64) {
+    if pos == start { advance(); }
+    while !at(TK_EOF) && !at_item() { advance(); }
 }
 
 // Parses file `f`, which `lex` has read. It gives the N_PROGRAM node.
@@ -950,7 +960,7 @@ fn parse(f: i64) -> i64 {
         if n > 0 {
             add(prog, n);
         } else if n < 0 || pos == start {
-            recover();
+            recover(start);
         }
         first = false;
         skip_newlines();

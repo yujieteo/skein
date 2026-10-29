@@ -134,6 +134,9 @@ fn test_parse() {
         "(table \"t\" (column \"x\" (type \"Length\") (unit \"mm\" (unit_name \"mm\"))) (column \"y\" (type \"Real\")) (row \"1\" (number \"1\") (number \"2\")) (row \"3\" (number \"3\") (number \"4\")))\n(let \"b\" (type \"Real\") (number \"1\"))");
     expect_item("study s: sample(n: 4) {\n    D: [1, 2] mm\n    H: 1 m..2 m\n}",
         "(study \"s\" (proc \"sample\" (arg \"n\" aux=\"n\" (number \"4\"))) (block \"{\" (setting \"D\" (list \"[\" (number \"1\") (number \"2\") (unit \"mm\" (unit_name \"mm\")))) (setting \"H\" (range \"..\" (number \"1\" (unit \"m\" (unit_name \"m\"))) (number \"2\" (unit \"m\" (unit_name \"m\")))))))");
+    // A comment line in a table is no row.
+    expect_item("table t { x: Real }:\n    1\n    // Ghia et al.\n// note\n    2\n",
+        "(table \"t\" (column \"x\" (type \"Real\")) (row \"1\" (number \"1\")) (row \"2\" (number \"2\")))");
     // A procedure argument can be a list (femahoy gap G9).
     expect_item("step f: harmonic(freq: [50] Hz) {\n    output u\n}",
         "(step \"f\" (proc \"harmonic\" (arg \"freq\" aux=\"freq\" (list \"[\" (number \"50\") (unit \"Hz\" (unit_name \"Hz\"))))) (output \"output\" (name \"u\")))");
@@ -143,6 +146,10 @@ fn test_parse() {
     // `-` before a `degC` literal is part of the literal (femahoy gap G29).
     expect_item("let T: Temperature = -5 degC",
         "(let \"T\" (type \"Temperature\") (number \"5\" aux=\"-\" (unit \"degC\" (unit_name \"degC\"))))");
+    expect_item("let T: Temperature = -(5 degC)",
+        "(let \"T\" (type \"Temperature\") (unary \"-\" (number \"5\" (unit \"degC\" (unit_name \"degC\")))))");
+    expect_item("let T: Temperature = - 5 degC",
+        "(let \"T\" (type \"Temperature\") (unary \"-\" (number \"5\" (unit \"degC\" (unit_name \"degC\")))))");
     expect_item("let T: Temperature = -5 K",
         "(let \"T\" (type \"Temperature\") (unary \"-\" (number \"5\" (unit \"K\" (unit_name \"K\")))))");
     // An exponent can be any expression (femahoy gap G30).
@@ -176,8 +183,13 @@ fn test_errors() {
     // A list is only a study entry or a procedure argument.
     expect_errors("model m: 3d, SI\nlet a: Real = [1, 2]\n", "syntax 2:15\n");
     expect_errors("model m: 3d, SI\nlet a: Real = f([1, 2])\n", "syntax 2:17\n");
+    expect_errors("model m: 3d, SI\nmesh m on x { size: [1, 2] mm }\n", "syntax 2:21\n");
+    expect_errors("model m: 3d, SI\nmesh m on x { size: 1 mm..2 mm }\n", "syntax 2:25\n");
     // An open bracket does not hide the next item.
     expect_errors("model m: 3d, SI\nlet a: Real = (1, 2\nlet b: Real = 3\nlet c: Real =\n", "syntax 2:20\nsyntax 5:1\n");
+    expect_errors("model m: 3d, SI\nmaterial s {\n    E: Pressure = 1 Pa\nlet b: Real = c d e\n", "syntax 4:1\nsyntax 4:17\n");
+    expect_errors("model m: 3d, SI\nmesh m on x {\n    size: 1 mm\nlet b: Real = c d e\n", "syntax 4:1\nsyntax 4:17\n");
+    expect_errors("model m: 3d, SI\nlet r: R = {\n    a: 1\nlet b: Real = c d e\n", "syntax 4:1\nsyntax 4:17\n");
     expect_errors("model m: 3d, SI\nphysics p solves u: Length {\n    eq div(u = 0\n}\nlet z: Real = 1\n", "syntax 3:14\n");
 }
 

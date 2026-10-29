@@ -130,10 +130,12 @@ fn lex(f: i64) {
         if at_line_start {
             at_line_start = false;
             if in_table {
-                // A row starts with a space or a tab. A blank line is no row.
+                // A row starts with a space or a tab. A blank line or a
+                // comment line is no row.
                 var k = i;
                 while k < text.len && (text[k] == ' ' || text[k] == '\t' || text[k] == '\r') { k++; }
-                let blank = k >= text.len || text[k] == '\n';
+                let blank = k >= text.len || text[k] == '\n' ||
+                    (text[k] == '/' && k + 1 < text.len && text[k + 1] == '/');
                 if !blank {
                     if k > i { emit(TK_INDENT, k, 0); i = k; continue; }
                     in_table = false;
