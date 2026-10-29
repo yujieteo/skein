@@ -163,8 +163,8 @@ The lexer reads a **unit expression** (§6.3) in these places: after a
 number literal, after a vector literal, after the `]` of a study list, and
 after the keyword `in` in a table column. After each other `in`, an
 expression follows. In the unit places, an identifier is a unit name, not
-a variable. Thus `L` in `let L: Length = 2 L` is a
-variable in the first place and the litre in the second place.
+a variable. Thus `L` in `let L: Length = 2 L` is a variable in the first
+place and the litre in the second place.
 
 ---
 
@@ -300,9 +300,9 @@ and it puts each error at the line of the use.
 ## 4. Names and scope
 
 A model has **one namespace**. These declarations add a name to it:
-`param`, `let`, `table`, `material`, `mesh`, `points`, `field`, `physics`, the `let`
-statements inside a `physics` block, `step` and `expect`. Two declarations
-with one name are an error [`duplicate_name`].
+`param`, `let`, `table`, `material`, `mesh`, `points`, `field`, `physics`,
+the `let` statements inside a `physics` block, `step` and `expect`. Two
+declarations with one name are an error [`duplicate_name`].
 
 Reason: one namespace lets a step write `sigma*n` for the stress that a
 physics block declares, with no prefix.
@@ -1688,8 +1688,9 @@ The known forms:
 | `Bi` | hL/k_solid | | `Fo` | αt/L² |
 | `Da` | k_p/L² | | `Ec` | U²/(c_p ΔT) |
 
-The groups drive two things: the lint rules that need a Reynolds or Peclet number (`stabilization_missing`), and
-the report that a person reads to judge the regime of the model.
+The groups drive two things: the lint rules that need a Reynolds or
+Peclet number (`stabilization_missing`), and the report that a person
+reads to judge the regime of the model.
 
 ### 21.4 What stays dimensional
 
