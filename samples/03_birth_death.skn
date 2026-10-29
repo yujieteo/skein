@@ -1,0 +1,74 @@
+// Staged construction with element birth and death. A soil embankment is
+// built in three lifts on a foundation under gravity, with a temporary
+// berm at its right toe. Each lift is born strain-free on the deformed
+// shape of the steps before it. The last step kills the berm, which models
+// its excavation. 2D plane strain, linear elastic, quadratic triangles
+// (the default method).
+
+model embankment: 2d, SI
+
+let g: Acceleration = 9.81 m/s^2
+
+scales 6 m, 25 MPa, 1800 kg/m^3
+
+let ground: Surface = rect((-30, -10) m, (30, 0) m)
+let lift1: Surface = polygon((-12, 0) m, (12, 0) m, (10, 2) m, (-10, 2) m)
+let lift2: Surface = polygon((-10, 2) m, (10, 2) m, (8, 4) m, (-8, 4) m)
+let lift3: Surface = polygon((-8, 4) m, (8, 4) m, (6, 6) m, (-6, 6) m)
+let berm: Surface = polygon((12, 0) m, (14, 0) m, (10, 2) m)
+let body: Surface = ground | lift1 | lift2 | lift3 | berm
+
+let base: Curve = boundary(body, y == -10 m)
+let sides: Curve = boundary(body, abs(x) == 30 m)
+
+material clay {
+    E: Pressure = 40 MPa
+    nu: Real = 0.3
+    rho: Density = 1900 kg/m^3
+}
+
+material fill {
+    E: Pressure = 25 MPa
+    nu: Real = 0.3
+    rho: Density = 1800 kg/m^3
+}
+
+mesh m on body {
+    size: 1 m
+    cell: tri
+    refine lift1 | lift2 | lift3 | berm: 0.5 m
+}
+
+physics soil on body: linear_elastic(b: rho*(0, -g)) solves u: Vector<Length> {
+    material clay on ground, fill on lift1 | lift2 | lift3 | berm
+    assume plane_strain
+}
+
+bc base: u = 0
+bc sides: u.x = 0
+
+step geostatic: static {
+    death lift1, lift2, lift3, berm
+    output u, sigma
+}
+
+step lift_1: static {
+    birth lift1, berm
+    output u, sigma
+}
+
+step lift_2: static {
+    birth lift2
+    output u, sigma
+}
+
+step lift_3: static {
+    birth lift3
+    output u, sigma
+}
+
+step excavate: static {
+    death berm
+    output u, sigma
+    report reaction(base)
+}

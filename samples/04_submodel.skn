@@ -1,0 +1,39 @@
+// A submodel of the hole in sample 01. The local block around the hole
+// gets a fine mesh. Its cut faces take the displacement of the global
+// solution, interpolated from the global mesh. The checker confirms that
+// the block lies inside the global body and that the field types match.
+
+model cantilever_hole: 3d, mm_N_MPa_s
+
+let global: Results = results("01_cantilever.skn", step: "load")
+
+let W: Length = 20 mm
+let r: Length = 6 mm
+
+scales r, 100 MPa
+
+let bore: Solid = cylinder((40, 0, 20) mm, (0, 1, 0), r, W)
+let block: Solid = box((25, 0, 5) mm, (55, 20, 35) mm) - bore
+let cut: Surface = boundary(block, abs(x - 40 mm) == 15 mm || abs(z - 20 mm) == 15 mm)
+let hole: Surface = boundary(block, bore)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+mesh m on block {
+    size: 1.5 mm
+    cell: tet
+    refine hole: 0.25 mm
+}
+
+physics solid on block: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+step load: static {
+    bc cut: u = global.u
+    output u, sigma, von_mises(sigma)
+    report max(von_mises(sigma), hole)
+}
