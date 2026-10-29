@@ -56,9 +56,12 @@ The parser is recursive descent, one function for each production of spec
 keyword of the top level, and it continues. Thus one `check` reports the
 errors of each item.
 
-The AST keeps each comment with the token after it. `fmt` prints the AST
-with the comments, by the rules of [command_line.md §3.1](command_line.md#31-format-rules).
-The test of `fmt` is a round trip: format, parse, format again, and compare.
+`fmt` works on the tokens, so that the comments and the parentheses stay.
+The AST gives the role of each token. `fmt` applies the rules of
+[command_line.md §3.1](command_line.md#31-format-rules), then parses its
+output and compares the AST and the comments with those of the input
+(`src/fmt/fmt.goose`). The test of `fmt` formats a model, formats the
+result again, and compares the two.
 
 ---
 
