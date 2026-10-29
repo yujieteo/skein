@@ -27,7 +27,7 @@ fn main() {
     }
     if command == "check" || command == "fmt" {
         write_stderr(str("skein: ", command, " is not implemented yet\n"));
-        exit(3);
+        exit(1);
     }
     write_stderr(str("skein: unknown command '", command, "'\n", USAGE, "\n"));
     exit(2);

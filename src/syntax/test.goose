@@ -18,7 +18,7 @@ fn expect_int(what: u8[:], got: i64, want: i64) {
     print("FAIL ", what, ": got ", got, ", want ", want);
 }
 
-// Adds a token for `text`, which must be the next text of the last file.
+// Adds a token of kind `kind` at bytes `start` to `start + len` of the last file.
 fn tok(kind: i64, start: i64, len: i64) -> i64 {
     syntax::tokens.push(syntax::Token { kind: kind, start: start, len: len, line: 1, col: start + 1, file: 0 });
     return syntax::tokens.len - 1;

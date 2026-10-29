@@ -352,8 +352,8 @@ fn child_of_kind(n: i64, kind: i64) -> i64 {
 }
 
 // Writes node `n` and its children as one S-expression, for example
-// `(let "L" (type "Length") (number "200" (unit (unit_name "mm"))))`. The
-// tests of the parser compare these.
+// `(let "L" (type "Length") (number "200" (unit "mm" (unit_name "mm"))))`.
+// The tests of the parser compare these.
 recursive fn dump(n: i64, out: u8[>..]&) {
     let k = nodes[n];
     out.push('(');
