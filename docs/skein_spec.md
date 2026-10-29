@@ -22,6 +22,9 @@
 - [17. Lowering by method](#17-lowering-by-method)
 - [18. Code generation to Goose](#18-code-generation-to-goose)
 - [19. Static semantics checklist](#19-static-semantics-checklist)
+- [20. Parameters and studies](#20-parameters-and-studies)
+- [21. Dimensional analysis and scaling](#21-dimensional-analysis-and-scaling)
+- [22. Manufacture](#22-manufacture)
 - [Appendix A. Built-in names](#appendix-a-built-in-names)
 - [Appendix B. References](#appendix-b-references)
 
@@ -48,6 +51,7 @@ model contains all of these parts, in one language:
 | Part | Keyword | Section |
 |---|---|---|
 | Header: name, space dimension, unit system | `model`, `space`, `units` | §3 |
+| Inputs that a study or the command line can change | `param` | §20 |
 | Constants, geometry, regions, results of other models | `let` | §5, §8, §15 |
 | Tables of data | `table` | §5.6 |
 | Materials | `material` | §10.2 |
@@ -58,6 +62,9 @@ model contains all of these parts, in one language:
 | Boundary conditions and loads | `bc` | §12 |
 | The analysis sequence | `step` | §14 |
 | Checks on the results | `expect` | §15.3 |
+| Reference scales for the solver | `scales` | §21 |
+| Parameter studies | `study` | §20 |
+| Manufacturing process and tolerances | `manufacture`, `tolerance` | §22 |
 | Turned-off checks, each with a reason | `allow` | [checks.md](checks.md) |
 
 Four rules shape the whole language.
@@ -136,11 +143,14 @@ A number has no sign. A minus sign before a number is the unary operator.
 ### 2.5 Keywords
 
 ```
-adapt     allow     assume    at        bc        birth     contact   death
-eq        every     expect    false     field     in        interface layers
-let       material  mesh      method    model     on        output    physics
-plastic   points    refine    release   report    solve     solves    space
-state     step      table     true      units     where     within
+adapt       allow       assume      at          bc          birth
+contact     death       eq          every       expect      false
+field       in          interface   layers      let         manufacture
+material    mesh        method      model       on          output
+param       physics     plastic     points      refine      release
+report      scales      solve       solves      space       state
+step        study       table       tol         tolerance   true
+units       where       within
 ```
 
 A keyword is not an identifier. The names of types, units, built-in
@@ -166,14 +176,21 @@ quotes.
 program     = header { item } ;
 header      = "model" ident NL "space" ("1d" | "2d" | "3d" | "axi") NL
               "units" unitsys NL ;
-unitsys     = ident | "{" unitfield { "," unitfield } "}" ;
+unitsys     = ident | "nondim" | "{" unitfield { "," unitfield } "}" ;
 unitfield   = ident ":" unitexpr ;
 
-item        = letdecl | tabledecl | material | meshdecl | pointsdecl
+item        = paramdecl | letdecl | tabledecl | material | meshdecl | pointsdecl
             | fielddecl | physics | method | bcdecl | contact | interface
-            | step | expect | allow ;
+            | step | expect | allow | scales | study | manufacture | tolerance ;
 
+paramdecl   = "param" ident ":" type "=" expr [ "tol" expr ] [ "in" expr ".." expr ] NL ;
+manufacture = "manufacture" region ":" procedure block NL ;  (* entry = setting *)
+tolerance   = "tolerance" ident ":" expr "in" expr ".." expr [ block ] NL ;
 letdecl     = "let" ident ":" type "=" expr NL ;
+scales      = "scales" expr { "," expr } NL ;
+study       = "study" ident ":" procedure block NL ;  (* entry = ident ":" ( list | range ) | setting *)
+list        = "[" expr { "," expr } "]" [ unitexpr ] ;
+range       = expr ".." expr ;
 tabledecl   = "table" ident "{" column { "," column } "}" ":" NL
               { INDENT row NL } ;
 column      = ident ":" type [ "in" unitexpr ] ;
@@ -216,7 +233,7 @@ stepstmt    = bcdecl | "release" region
             | "death" region { "," region } [ "where" expr ]
             | "solve" block | "adapt" block
             | "output" expr { "," expr } [ "every" expr ]
-            | "report" expr { "," expr } ;
+            | "report" [ ident "=" ] expr { "," [ ident "=" ] expr } ;
 
 expect      = "expect" ident ":" addexpr "==" addexpr "within" expr NL ;
 allow       = "allow" ident ":" string NL ;
@@ -496,6 +513,15 @@ literal carries its unit. It sets two things:
 
 Reason: a declared system keeps the numbers of the solver well scaled, and
 it lets a user read results in the units of the drawing.
+
+A `scales` line (§21.2) replaces item 1: the solver then works in the
+variables that the scales make dimensionless.
+
+`units nondim` declares a model with no dimensions. Each quantity has type
+`Real`, and a literal with a unit is an error [`nondim_unit`]. Use it for
+a PDE that has no physical units, for example a model problem from a
+textbook in dimensionless form. The dimension checks then give no
+protection, so the `check` report says `units: nondim` at its top.
 
 ### 6.6 What Skein leaves out
 
@@ -1109,6 +1135,14 @@ file at the end of the step, or each `every k` time steps. `report e` prints
 a scalar or a vector to the run log in TOON. Functions for `report`:
 `reaction(r)`, `max(f, r)`, `min(f, r)`, `integral(f, r)`, `mean(f, r)`.
 
+`report cd = expr` gives the value a name. A study (§20) uses the name as
+the column of its results table. A report with no name gets its source
+text as the column name.
+
+`integral(f, r)` has the dimension of `f` times `Length^k`, where `k` is
+the topological dimension of `r`. In `space 2d` with no thickness, a force
+on a curve is thus `Force/Length`, the force per unit depth.
+
 ### 14.6 Mesh adaptivity
 
 ```skein
@@ -1429,8 +1463,368 @@ the diagnostic in brackets. The full list with the fixes is in
 9. Steps: procedures valid, constant arguments, birth and death regions
    (§14).
 10. Results and expectations: files exist, types match (§15).
-11. `allow` names a check that exists, with a reason that is not empty
+11. Parameters, scales and studies (§20, §21), manufacture and tolerance
+    items (§22).
+12. `allow` names a check that exists, with a reason that is not empty
     [`allow_reason`].
+
+---
+
+## 20. Parameters and studies
+
+### 20.1 `param`
+
+```skein
+param Re: Real = 100 in 1..1000
+param D: Length = 0.1 m
+```
+
+A `param` is a `let` whose value can change from outside the file: from a
+`study` (§20.2) or from `skein run --set Re=200`. It has these rules:
+
+- The type is required, as for each declaration.
+- The value must be a constant (§7.6) [`not_constant`].
+- `in lo..hi` is an optional closed range. The default value, each `--set`
+  value and each study value must be in it [`param_range`].
+- A `--set` value is a literal of the parameter type, with its unit:
+  `--set D=0.2m`. The checker type-checks it as source text.
+- Only a `param` can change. A `let` is fixed. Thus a reviewer finds all the
+  inputs of a model in its `param` lines.
+
+Reason: a study must know which values may change, and the compiler must
+know which parts of the model depend on them (§20.4).
+
+### 20.2 `study`
+
+```skein
+study re_sweep: grid {
+    Re: [10, 20, 40]
+    D: [0.1, 0.2] m
+}
+```
+
+A study runs the model many times with different parameter values. Each
+run is a **case**. The procedure after the colon makes the cases:
+
+| Procedure | Entries | Cases |
+|---|---|---|
+| `grid` | a list for each parameter | the Cartesian product of the lists |
+| `zip` | lists of one length | case `i` takes value `i` of each list |
+| `sample(n: Int, method: lhs \| sobol, seed: Int)` | a range `lo..hi` for each parameter | `n` points in the box of the ranges |
+| `minimize(objective, method: nelder_mead \| bobyqa, max_cases: Int)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
+
+- Each entry names a `param` [`study_param`]. Each value has the type of the
+  parameter [`type_mismatch`] and is in its range [`param_range`].
+- A study does not change the steps. Each case runs all the steps.
+- A model may hold many studies. `skein run model.skn` runs the model once,
+  with the defaults. `skein run model.skn --study re_sweep` runs the study.
+- `minimize` is gradient-free. Gradients by adjoint are in the roadmap
+  (phase 5). `objective` names a scalar `report` of the last step
+  [`study_objective`].
+
+### 20.3 How cases run: Go-style concurrency
+
+The study runner follows the model of Go: independent tasks that talk only
+over typed channels.
+
+```
+             cases (typed queue)                 results (typed queue)
+ scheduler ──────────────────────> worker 1 ─┐
+           ──────────────────────> worker 2 ─┼──────────────────────> collector ──> table
+           ──────────────────────> worker k ─┘
+```
+
+- The scheduler puts one **case record** for each case on a queue: the case
+  number and the parameter values, as a flat value.
+- Each worker takes a case, runs the whole model, and puts one **result
+  record** on the result queue: the case number, the named reports, the
+  `expect` results, the verification results, the run time and the status.
+- The collector writes the records into one table, in case order, as they
+  arrive.
+
+On the native target, a worker is a Goose `thread_fn` started with
+`thread_spawn_contained`, and the queues are Goose `qput` and `qget`.
+Goose threads share no memory, so cases cannot interfere. A contained
+worker that aborts ends only its own case. The study continues, and the
+table gives that case the status `failed` and the abort message.
+
+In the browser, a worker is a Web Worker that runs the WebAssembly module.
+`postMessage` is the queue. The records are the same flat values.
+
+`minimize` uses the same queues. Its scheduler puts a batch of cases, waits
+for their results, and chooses the next batch.
+
+### 20.4 Dependency analysis and reuse
+
+A model has no mutable state, so the compiler knows the exact set of
+declarations that each parameter reaches. It sorts the work of a case into
+stages: geometry, mesh, assembly of the parts that do not depend on the
+solution, and solve. A stage runs again only when a parameter that reaches
+it changes.
+
+| Parameter reaches | Each case does again |
+|---|---|
+| a material property or a load only | assembly and solve. The mesh is shared. |
+| a size of the geometry or of the mesh | mesh, assembly and solve |
+| only `expect` or `report` expressions | nothing but the post-processing |
+
+A shared mesh is read-only. On the native target, each worker gets a copy
+of it in its own data stacks. `skein check --study re_sweep` prints the
+stages that each parameter reaches, so the user sees the cost before the
+run.
+
+### 20.5 Threads for a case and threads for a study
+
+A machine has `H` hardware threads. A study with `k` workers gives each case
+`max(1, H / k)` threads for assembly and solves. The default `k` is
+`min(H, number of cases)`. `--jobs k` sets it. Reason: cases are
+independent, so parallel cases scale better than parallel assembly in one
+case. But a study with fewer cases than threads still uses all threads.
+
+The memory of one case times `k` must fit the target. The runner estimates
+the memory of a case from the mesh size before it starts the workers, and
+lowers `k` if necessary. It reports the value that it chose.
+
+### 20.6 The results table
+
+The study writes `.skein/studies/<model>/<study>.toon` and prints the same
+table:
+
+```toon
+study: re_sweep
+cases[3]{case,Re,status,verify,cd,time_s}:
+  1,10,ok,pass,2.81,4.2
+  2,20,ok,pass,2.05,4.6
+  3,40,ok,pass,1.54,5.1
+```
+
+One column for each varied parameter, each named report and each `expect`.
+`verify` is `pass` when each verification check of the case passes.
+`--format json` gives the same records as JSON.
+
+### 20.7 Similar cases
+
+Two cases are **similar** when they have equal dimensionless groups (§21.3)
+for all inputs of the model, the mesh sizes included. Similar cases have the
+same solution in scaled variables. By default, the study runs the first case
+of each similar set and computes the others from it by the scales. The
+table marks such a case `similar_to: <case>`. `dedupe: none` in the study
+block turns this off.
+
+---
+
+## 21. Dimensional analysis and scaling
+
+Strict dimensions stay in force. This section adds the tools that engineers
+use with dimensionless numbers: named groups, scaled equations and the
+Buckingham π theorem. They work on the dimensional model and do not replace
+it.
+
+### 21.1 Dimensionless groups
+
+A dimensionless group is an expression of type `Real`. A model states it as
+a `param` or a `let`:
+
+```skein
+param Re: Real = 100
+let mu: DynViscosity = rho*U*D/Re
+```
+
+This is the usual pattern for flow: the study varies `Re`, and the model
+computes the dimensional value that gives it. The checker confirms that
+`rho*U*D/Re` has the dimension `DynViscosity`.
+
+### 21.2 `scales`
+
+```skein
+scales D, U, rho
+```
+
+The `scales` line names reference values. Their dimensions must be
+independent [`scales_dependent`], and together they must make each
+dimension in the model [`scales_incomplete`]. The example spans length (D),
+time (D/U) and mass (rho·D³), which is enough for incompressible flow
+without heat.
+
+With `scales`, the compiler writes each equation of the SIR in scaled
+variables: each quantity `q` becomes `q* = q / q_ref`, where `q_ref` is the
+product of powers of the scales with the dimension of `q`. The solver works
+on the scaled system. Each input is dimensional in the source, and each
+output, report and `expect` is dimensional again after the solve.
+
+The scaled equations show the groups directly. For the cavity of sample 02
+with `scales a, U, rho`, the momentum equation becomes
+`ddt(v*) + grad(v*)*v* + grad(p*) − (1/Re)*lap(v*) = 0`, and the
+`check --groups` report prints `Re = rho*U*a/mu`.
+
+Without `scales`, the compiler takes the base units of the unit system as
+the scales (§6.5). Reason for a `scales` line: the base units are often far
+from the sizes of the problem, for example `m` and `s` for a micro-channel,
+and scaled variables near 1 make the solver tolerances meaningful.
+
+### 21.3 The π groups of a model
+
+`skein check --groups` applies the Buckingham π theorem to the model. Its
+steps:
+
+1. Take the constant inputs: each `param`, each constant `let` of a
+   quantity, each material property, each mesh size.
+2. Build the dimension matrix: one column for each input, one row for each
+   base dimension.
+3. Compute an integer basis of the null space. Each basis vector is a group:
+   a product of powers of inputs with no dimension. Prefer the `scales` as
+   the repeated variables.
+4. Name the groups that match a known form.
+
+```toon
+groups[3]{name,expr,value}:
+  Re,"rho*U*a/mu",100
+  h_a,"m.size/a",0.0156
+  h_lid,"m.refine(lid)/a",0.0078
+```
+
+The known forms:
+
+| Name | Form | | Name | Form |
+|---|---|---|---|---|
+| `Re` | ρUL/μ | | `Pe` | UL/α |
+| `Pr` | μc_p/k | | `Nu` | hL/k |
+| `Ma` | U/c | | `Gr` | gβΔT L³/ν² |
+| `Ra` | Gr·Pr | | `Fr` | U/√(gL) |
+| `St` | fL/U | | `We` | ρU²L/σ |
+| `Bi` | hL/k_solid | | `Fo` | αt/L² |
+| `Da` | k_p/L² | | `Ec` | U²/(c_p ΔT) |
+
+The groups drive three things: the similar-case reuse of §20.7, the lint
+rules that need a Reynolds or Peclet number (`stabilization_missing`), and
+the report that a person reads to judge the regime of the model.
+
+### 21.4 What stays dimensional
+
+- Source text: each quantity has its dimension and each literal its unit.
+  `scales` does not change the type of any declaration.
+- Boundary conditions, materials and outputs: dimensional.
+- Only the SIR and the generated code use scaled variables.
+
+Reason: dimensions find mistakes in the source, where the user writes. The
+scaled form helps the solver, where the user does not write.
+
+---
+
+## 22. Manufacture
+
+Skein is a simulation language first. But the geometry of a model is a
+parametric part, and the same parameters drive the part, the simulation
+and the studies. This section adds three things that use that fact: the
+manufacturing process of a part, its checks, and tolerance stack-ups. It
+also says how the part leaves Skein for manufacture.
+
+### 22.1 Parametric parts
+
+A part is a geometry value built from `param` values (§8, §20):
+
+```skein
+param t_wall: Length = 2 mm tol 0.1 mm in 1 mm..5 mm
+param r_fil: Length = 1.5 mm
+param d_hole: Length = 6 mm tol 0.02 mm
+
+let outer: Solid = box((0, 0, 0) mm, (80, 40, 30) mm)
+let inner: Solid = move(box((0, 0, 0) mm, (80 mm - 2*t_wall, 40 mm - 2*t_wall, 30 mm)), (t_wall, t_wall, t_wall))
+let housing: Solid = fillet(outer - inner, r_fil) - cylinder((40, 20, 0) mm, (0, 0, 1), d_hole/2, t_wall)
+```
+
+This is the form that text-to-CAD tools produce from a sentence: a short
+script whose parameters have names. In Skein the script has types and
+units, so `check` finds a wall thickness in `Pressure` or a hole that the
+range of its parameter makes larger than the part.
+
+### 22.2 `manufacture`
+
+```skein
+manufacture housing: injection_mould {
+    pull: (0, 0, 1)
+    draft: 1 deg
+    min_wall: 1.2 mm
+    max_wall: 4 mm
+}
+```
+
+`manufacture r: process { … }` declares the process for region `r`. The
+processes and their settings:
+
+| Process | Settings |
+|---|---|
+| `cnc_mill` | `axes` (3 or 5), `tool_radius`, `max_depth_ratio`, `approach` (a list of directions for 3 axes) |
+| `injection_mould` | `pull`, `draft`, `min_wall`, `max_wall` |
+| `casting` | `pull`, `draft`, `min_wall` |
+| `sheet_metal` | `thickness`, `min_bend_radius`, `min_flange` |
+| `additive` | `build` (direction), `max_overhang`, `min_wall`, `min_hole` |
+| `turning` | `axis`, `tool_radius` |
+
+A setting that does not belong to the process is an error
+[`process_setting`].
+
+### 22.3 Design-for-manufacture checks
+
+`skein verify --dfm` runs these checks on each `manufacture` region. They
+are `verify` checks, so `allow` with a reason can turn one off. They need no
+solve, only the geometry.
+
+| Id | Test | Processes |
+|---|---|---|
+| `dfm_wall` | the local wall thickness is between `min_wall` and `max_wall` | all with `min_wall` |
+| `dfm_draft` | each face that the pull direction drags along has at least the `draft` angle | `injection_mould`, `casting` |
+| `dfm_undercut` | each surface is visible from the pull or approach directions | `injection_mould`, `casting`, `cnc_mill` |
+| `dfm_inner_radius` | each concave edge has a radius of at least `tool_radius` | `cnc_mill`, `turning` |
+| `dfm_hole` | each hole has a diameter of at least `min_hole`, and a depth of at most `max_depth_ratio` times the diameter | `additive`, `cnc_mill` |
+| `dfm_overhang` | each downward face is within `max_overhang` of the build direction | `additive` |
+| `dfm_bend` | each bend radius is at least `min_bend_radius`, each flange at least `min_flange` | `sheet_metal` |
+
+The checks work on the distance function. The local wall thickness is twice
+the radius of the largest ball inside the part at that point, which the
+distance function gives directly. Draft and overhang use the normal ∇φ.
+Undercuts and tool access use rays along the directions, on the distance
+function. Each check reports the worst place as a point, so the viewer can
+show it.
+
+Each check runs on the default parameter values, and on each case of a
+study. Thus a sweep of `t_wall` shows which cases cannot be made.
+
+### 22.4 Tolerances and stack-ups
+
+`tol` on a `param` gives a symmetric tolerance. A `tolerance` item states a
+stack-up:
+
+```skein
+param L: Length = 80 mm tol 0.1 mm
+param a: Length = 39.8 mm tol 0.05 mm
+param b: Length = 39.8 mm tol 0.05 mm
+let gap: Length = L - a - b
+
+tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
+```
+
+The compiler differentiates the expression with respect to each parameter
+that has a tolerance. It reports the nominal value and the range by the
+worst case (the sum of |∂f/∂p|·tol) and by root sum square. The check
+`dfm_stack` fails when the range of the chosen `method` (`worst_case` or
+`rss`) is not inside the limits. The expression must be a constant: it can
+use geometry and parameters, but not fields [`not_constant`].
+
+### 22.5 Export for manufacture
+
+```
+skein export housing.skn --geometry housing --format stl
+```
+
+| Format | Contents | Phase |
+|---|---|---|
+| `stl`, `3mf` | a triangulated surface from the mesher, at the size of `--size` | 2 |
+| `step` | AP242 with tessellated geometry from the mesher | 4 |
+| `step` with exact surfaces | a boundary representation of the CSG tree | 5, see the [tradeoffs](tradeoffs.md#4-parametric-parts-text-to-cad-and-export) |
+
+Skein exports geometry. It still does not import meshes or CAD files
+(decision 8).
 
 ---
 

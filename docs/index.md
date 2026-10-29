@@ -24,7 +24,7 @@ writes C for a native executable or for WebAssembly
   rules of `skein fmt`, and the TOON output.
 * [Checks](checks.md): the catalogue of errors, lint rules and verification
   checks, each with its id and its fix.
-* [Samples](../samples/README.md): five complete models.
+* [Samples](../samples/README.md): six complete models.
 
 ## The project
 
@@ -33,5 +33,9 @@ writes C for a native executable or for WebAssembly
 * [Roadmap](roadmap.md): the phases, their gates and the risks.
 * [Design decisions](decisions.md): the 17 decisions and where the
   documentation implements each one.
+* [Tradeoffs](tradeoffs.md): the goals in priority order, the design
+  against diverse workloads, and the gaps.
+* [Grilling](grilling.md): the design tree and the open questions, each
+  with a recommended answer.
 * [The LLM test](llm_test.md): how to measure whether an LLM writes Skein
   better than an Abaqus or APDL deck.

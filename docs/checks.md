@@ -137,6 +137,18 @@ in the file stays in the review.
 | `submodel_outside` | §15.2 | the cut region is not inside the global field region | | the bounding box of the global region |
 | `expect_form` | §15.3 | the two sides of an `expect` are not comparable | a field and a point value | `at` |
 
+### 2.9 Parameters, scales, studies and manufacture
+
+| Id | Spec | Rule | Example | Suggested fix |
+|---|---|---|---|---|
+| `param_range` | §20.1 | a default, `--set` or study value is outside the range of the parameter | `param Re: Real = 2000 in 1..1000` | the range |
+| `study_param` | §20.2 | a study varies a name that is not a `param` | `D: [0.1, 0.2] m` with `let D` | change `let` to `param` |
+| `study_objective` | §20.2 | `minimize` names no scalar `report` of the last step | `minimize(drag)` with no `report drag = …` | the named reports |
+| `scales_dependent` | §21.2 | two scales have dependent dimensions | `scales D, a` (both `Length`) | remove one |
+| `scales_incomplete` | §21.2 | the scales do not make a dimension that the model uses | `scales D, U` in a model with a density | the missing base dimension |
+| `nondim_unit` | §6.5 | a literal has a unit in a `units nondim` model | `units nondim` and `1 m` | remove the unit |
+| `process_setting` | §22.2 | a setting does not belong to the process | `draft:` in `cnc_mill` | the valid settings |
+
 ---
 
 ## 3. Lint rules
@@ -177,6 +189,23 @@ mesh or the assembled operator:
 | `points_quality` | the fill distance divided by the separation distance of each point cloud | at most 4 |
 | `material_admissible` | `E` > 0, −1 < `nu` < 0.5, `rho` > 0, `mu` > 0, `k` > 0, where the material gives them | the physical range |
 
+### 4.2a Design for manufacture
+
+`skein verify --dfm` runs these checks on each `manufacture` region (spec
+§22.3). They need the geometry only, so they run with no solve, and on each
+case of a study.
+
+| Id | Test | Limit |
+|---|---|---|
+| `dfm_wall` | local wall thickness | `min_wall` to `max_wall` |
+| `dfm_draft` | draft angle of each face along the pull direction | at least `draft` |
+| `dfm_undercut` | each surface is visible from a pull or approach direction | no hidden surface |
+| `dfm_inner_radius` | radius of each concave edge | at least `tool_radius` |
+| `dfm_hole` | hole diameter and depth ratio | `min_hole`, `max_depth_ratio` |
+| `dfm_overhang` | angle of each downward face to the build direction | at most `max_overhang` |
+| `dfm_bend` | bend radius and flange length | `min_bend_radius`, `min_flange` |
+| `dfm_stack` | the range of a `tolerance` stack-up by its `method` | inside the limits of the item |
+
 ### 4.2 After the solve
 
 | Id | Test | Limit |
@@ -215,3 +244,4 @@ These stop a run. `allow` cannot turn them off.
 | `mesh_failed` | the mesher could not mesh a region | the smallest feature and the size that it needs |
 | `solver_diverged` | the linear or the nonlinear solver did not converge | a smaller increment, `ramp`, or another preconditioner |
 | `out_of_memory` | the model does not fit the memory of the target | a coarser mesh, or the native target |
+| `case_failed` | one case of a study stopped. The study continues and the table gives the case this status with the message. | the message of the case |

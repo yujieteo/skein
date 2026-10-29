@@ -77,6 +77,13 @@ Skein changes these things:
 - **Written for LLMs.** Rust-like declarations, every type explicit, types
   only at declarations, compact TOON tables and output, and stable
   diagnostic ids with a fix.
+- **Studies and dimensionless groups.** A `param` and a `study` sweep a
+  model, with the cases on parallel workers. `skein check --groups` prints
+  `Re`, `Pr` and the other groups of the model.
+
+Simulation is the core. Parametric parts, export for manufacture and
+design-for-manufacture checks come later, and the
+[tradeoffs](docs/tradeoffs.md) rank all the goals.
 
 ## Documentation
 
@@ -89,6 +96,8 @@ Skein changes these things:
 * [Samples](samples/README.md)
 * [Roadmap](docs/roadmap.md)
 * [Design decisions](docs/decisions.md)
+* [Tradeoffs](docs/tradeoffs.md)
+* [Grilling questions](docs/grilling.md)
 * [The LLM test](docs/llm_test.md)
 
 ## License

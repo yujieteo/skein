@@ -12,7 +12,7 @@ table is empty.
 
 ## 1. Measures
 
-For each of the five samples, and for each language (Skein, and an Abaqus
+For each of samples 01 to 05, and for each language (Skein, and an Abaqus
 or APDL deck):
 
 | Measure | Definition |
@@ -31,7 +31,7 @@ seven items are right.
 **Clearly better** means both of these:
 
 - the Skein first-try pass rate is at least 20 percentage points higher than
-  the deck pass rate, summed over the five samples;
+  the deck pass rate, summed over samples 01 to 05;
 - the median Skein token count is at most 0.8 times the median deck token
   count.
 

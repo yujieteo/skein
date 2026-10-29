@@ -24,6 +24,24 @@ documentation that implement it.
 | 16 | Results in a WebGL viewer and as VTU for ParaView. | [implementation §9](implementation.md#9-results-and-the-viewer), [command_line.md §1](command_line.md#1-commands) |
 | 17 | A verification suite of manufactured solutions and published benchmarks, not tied to one company. | [implementation §10](implementation.md#10-testing-and-the-verification-suite) |
 
+## Later steers
+
+The captain added these goals on 2026-10-29, after the 17 decisions. The
+[tradeoffs](tradeoffs.md#0-the-goals-in-priority-order) rank them below the
+simulation core. The [grilling record](grilling.md) holds the open choices.
+
+| Steer | Where |
+|---|---|
+| Tradeoffs against diverse problems | [tradeoffs §2](tradeoffs.md#2-the-design-against-the-workloads), [§11](tradeoffs.md#11-summary-of-the-gaps) |
+| Parameter sweeps that run at the same time, in the style of Go | spec [§20](skein_spec.md#20-parameters-and-studies), [tradeoffs §7](tradeoffs.md#7-parameters-and-concurrency) |
+| Dimensionless work: groups, scales, Buckingham π | spec [§21](skein_spec.md#21-dimensional-analysis-and-scaling), [tradeoffs §8](tradeoffs.md#8-strict-dimensions-and-dimensionless-work) |
+| A grilling step with a design tree and recommended answers | [grilling.md](grilling.md) |
+| LLM-native, AXI-friendly, runs on the web | [tradeoffs §9](tradeoffs.md#9-llm-native-and-axi-friendly), [§10](tradeoffs.md#10-the-web) |
+| Parametric text-to-CAD, STEP and STL export, no mesh import | spec [§22.1](skein_spec.md#221-parametric-parts), [§22.5](skein_spec.md#225-export-for-manufacture), [tradeoffs §4](tradeoffs.md#4-parametric-parts-text-to-cad-and-export) |
+| DFM checks with the process in the file | spec [§22.2](skein_spec.md#222-manufacture) to [§22.4](skein_spec.md#224-tolerances-and-stack-ups), [checks.md §4.2a](checks.md#42a-design-for-manufacture) |
+| The Power of Ten rules for Skein and the generated Goose | [tradeoffs §6](tradeoffs.md#6-reliability-the-power-of-ten) |
+| Too many goals: rank them, with simulation as the core | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order), [grilling round 0](grilling.md#round-0-the-ranking-of-the-goals) |
+
 ## Choices made in the spec
 
 These choices are not in the 17 decisions. The spec gives a reason for each.

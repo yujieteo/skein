@@ -34,6 +34,7 @@ verification.
 | `skein verify convergence model.skn` | the convergence study (checks.md §4.3) |
 | `skein build model.skn` | writes the Goose source and builds a native executable or a WebAssembly module |
 | `skein run model.skn` | builds and runs the model, with all verification |
+| `skein export model.skn` | writes the geometry of a part to STL, 3MF or STEP (§7.1) |
 | `skein view model.skn` | opens the results in the WebGL viewer |
 | `skein lsp` | serves an editor over the Language Server Protocol |
 | `skein help [command]` | prints help |
@@ -57,6 +58,12 @@ in order. It continues after an error where it can, so that one run reports
 as many errors as possible. It also prints the parts of the boundary that
 get the default natural condition (spec §12.3), because a missing `bc` is
 the most common modelling fault.
+
+| Option | Meaning |
+|---|---|
+| `--groups` | print the dimensionless groups of the model (spec §21.3) |
+| `--study <name>` | check each case of the study, and print the stages that each parameter reaches (spec §20.4). No solve. |
+| `--set name=value` | give a `param` a value for this command (spec §20.1). The value has a unit and must be in the range of the `param`. |
 
 `check` needs no mesh, so it is fast. Its target is under 50 ms for each of
 the samples. Reason: an LLM runs `check` after each edit.
@@ -114,6 +121,8 @@ Rules that need the mesh, for example `bending_lock` and
 skein run samples/02_cavity.skn
 skein run samples/03_birth_death.skn --from lift_3
 skein verify convergence samples/05_meshless_plate.skn --levels 3
+skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
+skein verify samples/01_cantilever.skn --dfm
 ```
 
 | Option | Commands | Meaning |
@@ -123,10 +132,17 @@ skein verify convergence samples/05_meshless_plate.skn --levels 3
 | `--threads n` | `run` | worker threads for assembly and solvers. Default: all hardware threads. |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
+| `--dfm` | `verify` | run the DFM checks of the `manufacture` items ([checks.md §4.2a](checks.md#42a-design-for-manufacture)) |
+| `--study <name>` | `run` | run each case of the study (spec §20) |
+| `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
+| `--jobs k` | `run --study` | cases that run at the same time. Default: the number of hardware threads divided by `--threads`. |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 `run` writes the results to `.skein/results/<model>/<step>.vtu` (one file
 per output time) and the state to `.skein/state/<model>/<step>.sks`.
+`run --study` writes the results of each case under
+`.skein/studies/<model>/<study>/<case>/`, and the table of all cases to
+`.skein/studies/<model>/<study>.toon` (§6.5).
 
 ---
 
@@ -179,6 +195,21 @@ report[1]{step,expr,value}:
   load,"reaction(root)","(-0.0, 0.0, 2000.0) N"
 ```
 
+### 6.5 Studies
+
+`run --study` gives one record for each case (spec §20.6):
+
+```toon
+study: re_sweep
+cases[3]{case,Re,status,verify,cd,time_s}:
+  1,10,ok,pass,2.81,4.2
+  2,20,ok,pass,2.05,4.6
+  3,40,ok,pass,1.54,5.1
+```
+
+A case that fails gets the status `failed` and the diagnostic
+[`case_failed`](checks.md). The other cases continue.
+
 ---
 
 ## 7. Building
@@ -199,6 +230,24 @@ finds. For `wasm`, Goose writes C and `skein` compiles it with `emcc`.
 
 The WebAssembly target depends on Goose's plan for WebAssembly, which is a
 proposal and not yet a feature (spec §18.1).
+
+### 7.1 Export
+
+```
+skein export samples/01_cantilever.skn --geometry beam --format stl
+```
+
+`export` writes one `geometry` value as a part file (spec §22.5). It needs
+no solve.
+
+| Option | Meaning |
+|---|---|
+| `--geometry <name>` | the geometry to write. Required. |
+| `--format stl\|3mf\|step` | STL and 3MF are triangle meshes (phase 2). STEP is tessellated in phase 4 and exact in phase 5. |
+| `--size length` | the size of the triangles. Default: the mesh size of the model. |
+
+`export` writes geometry only. Skein does not import a mesh or a CAD file
+(decision 8).
 
 ---
 
@@ -223,6 +272,8 @@ proposal and not yet a feature (spec §18.1).
 | `.skein/build/` | generated Goose and C |
 | `.skein/results/<model>/` | VTU result files and the TOON run log |
 | `.skein/state/<model>/<step>.sks` | the state at the end of each step, for restarts and submodels |
+| `.skein/studies/<model>/<study>/` | one directory of results for each case |
+| `.skein/studies/<model>/<study>.toon` | the table of the study |
 
 ---
 

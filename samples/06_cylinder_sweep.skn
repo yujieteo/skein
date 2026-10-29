@@ -1,0 +1,65 @@
+// Steady 2D flow past a cylinder, swept over the Reynolds number. The
+// study varies Re, the model computes the viscosity that gives it, and
+// each case reports the drag coefficient. The three cases are not similar
+// (different Re), so each case runs.
+
+model cylinder_sweep
+space 2d
+units SI
+
+param Re: Real = 20 in 1..200
+let D: Length = 0.1 m
+let U: Velocity = 1 m/s
+let rho_f: Density = 1 kg/m^3
+
+scales D, U, rho_f
+
+let chan: Surface = rect((-2, -2) m, (6, 2) m)
+let hole: Surface = circle((0, 0) m, D/2)
+let fluid_dom: Surface = chan - hole
+let cyl: Curve = boundary(fluid_dom, hole)
+let inlet: Curve = boundary(chan, x == -2 m)
+let outlet: Curve = boundary(chan, x == 6 m)
+let sides: Curve = boundary(chan, abs(y) == 2 m)
+
+material fluid {
+    rho: Density = rho_f
+    mu: DynViscosity = rho_f*U*D/Re
+}
+
+mesh m on fluid_dom {
+    size: D
+    cell: tri
+    refine cyl: D/40
+}
+
+field v: Vector<Velocity> on fluid_dom
+field p: Pressure on fluid_dom
+
+physics flow on fluid_dom solves v, p {
+    material fluid
+    assume incompressible, newtonian, laminar
+    let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    eq rho*grad(v)*v - div(sigma) = 0
+    eq div(v) = 0
+}
+
+method flow: cg {
+    mesh: m
+    order: { v: 2, p: 1 }
+}
+
+step steady: static {
+    bc inlet: v = (U, 0)
+    bc sides: v.y = 0
+    bc cyl: v = 0
+    // outlet: the default natural condition sigma*n = 0
+    solve { nonlinear: newton, linear: gmres, precond: ilu0, rtol: 1e-8 }
+    output v, p
+    // n points out of the fluid, so the force on the cylinder is -sigma*n.
+    report cd = -integral((sigma*n).x, cyl)/(0.5*rho_f*U^2*D)
+}
+
+study re_sweep: grid {
+    Re: [10, 20, 40]
+}

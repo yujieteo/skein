@@ -28,6 +28,9 @@
 - [23. Contact](#23-contact)
 - [24. Mesh adaptivity](#24-mesh-adaptivity)
 - [25. ODEs](#25-odes)
+- [26. Parameters and studies](#26-parameters-and-studies)
+- [27. Scales and dimensionless groups](#27-scales-and-dimensionless-groups)
+- [28. Manufacture and tolerances](#28-manufacture-and-tolerances)
 - [Appendix A. Keywords](#appendix-a-keywords)
 
 </details>
@@ -549,12 +552,80 @@ Spec: [§10.5](skein_spec.md#105-odes-and-global-unknowns).
 
 ---
 
+## 26. Parameters and studies
+
+A `param` is a `let` that a study or `--set` can change. `in lo..hi` gives
+its range:
+
+```skein
+param Re: Real = 20 in 1..200
+
+study re_sweep: grid {
+    Re: [10, 20, 40]
+}
+```
+
+The procedures are `grid`, `zip`, `sample` and `minimize`. Each case runs
+all the steps. Cases run at the same time on worker threads. A named
+`report cd = …` gives a column of the results table.
+
+```
+skein run model.skn --study re_sweep --jobs 3
+skein run model.skn --set Re=50
+```
+
+Spec: [§20](skein_spec.md#20-parameters-and-studies).
+
+---
+
+## 27. Scales and dimensionless groups
+
+```skein
+let mu: DynViscosity = rho*U*D/Re
+scales D, U, rho
+```
+
+`scales` names the reference values of the scaled equations. The source
+stays dimensional. `skein check --groups` prints the dimensionless groups
+of the model, with the known names such as `Re`, `Pr` and `Ma`. Cases of a
+study with equal groups are similar, and only the first one runs.
+
+Spec: [§21](skein_spec.md#21-dimensional-analysis-and-scaling).
+
+---
+
+## 28. Manufacture and tolerances
+
+```skein
+param t_wall: Length = 2 mm tol 0.1 mm in 1 mm..5 mm
+
+manufacture housing: injection_mould {
+    pull: (0, 0, 1)
+    draft: 1 deg
+    min_wall: 1.2 mm
+}
+
+tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
+```
+
+`skein verify --dfm` checks the part against its process: wall thickness,
+draft, undercuts, inner radii, holes, overhangs and bends. A `tolerance`
+item checks a stack-up of `tol` values. `skein export` writes the part as
+STL, 3MF or STEP.
+
+Spec: [§22](skein_spec.md#22-manufacture).
+
+---
+
 ## Appendix A. Keywords
 
 ```
-adapt     allow     assume    at        bc        birth     contact   death
-eq        every     expect    false     field     in        interface layers
-let       material  mesh      method    model     on        output    physics
-plastic   points    refine    release   report    solve     solves    space
-state     step      table     true      units     where     within
+adapt       allow       assume      at          bc          birth
+contact     death       eq          every       expect      false
+field       in          interface   layers      let         manufacture
+material    mesh        method      model       on          output
+param       physics     plastic     points      refine      release
+report      scales      solve       solves      space       state
+step        study       table       tol         tolerance   true
+units       where       within
 ```

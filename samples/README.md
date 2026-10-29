@@ -1,6 +1,6 @@
 # Skein samples
 
-These five models show the main parts of the language. Read the
+These six models show the main parts of the language. Read the
 [tutorial](../docs/tutorial.md) first. The samples are the reference
 answers of the [LLM test](../docs/llm_test.md).
 
@@ -20,6 +20,7 @@ skein run 01_cantilever.skn
 | [03_birth_death](03_birth_death.skn) | An embankment built in three lifts and a berm removed: plane strain, gravity, three materials on one physics, top-level conditions, five steps with `birth` and `death`. |
 | [04_submodel](04_submodel.skn) | A submodel of the hole in sample 01: `results` from another model, cut-boundary displacements, a fine local mesh, a peak stress report. |
 | [05_meshless_plate](05_meshless_plate.skn) | A plate with a hole without a mesh: a point cloud, RKPM with stabilized nodal integration, Nitsche boundary conditions, plane stress with thickness, symmetry, and an `expect` against the Kirsch solution. |
+| [06_cylinder_sweep](06_cylinder_sweep.skn) | Flow past a cylinder swept over the Reynolds number: a `param` with a range, `scales`, a viscosity computed from `Re`, a named `report` of the drag coefficient, and a `grid` study that runs the cases at the same time (spec §20, §21). |
 
 The Ghia et al. values in sample 02 are from Table I of the paper, for
 Re = 100. Check them against the paper before you use them as a benchmark.

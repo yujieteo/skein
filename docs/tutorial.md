@@ -20,7 +20,8 @@
 - [15. Submodels](#15-submodels)
 - [16. Without a mesh](#16-without-a-mesh)
 - [17. Tables and expectations](#17-tables-and-expectations)
-- [18. Where to go next](#18-where-to-go-next)
+- [18. Sweeps and dimensionless groups](#18-sweeps-and-dimensionless-groups)
+- [19. Where to go next](#19-where-to-go-next)
 
 </details>
 
@@ -485,11 +486,51 @@ expect centreline: v.x at (a/2, ghia_u.y) == ghia_u.u within 0.02 m/s
 
 ---
 
-## 18. Where to go next
+## 18. Sweeps and dimensionless groups
+
+A `param` is an input that can change from outside the file. A `study`
+runs the model once for each value. [Sample 06](../samples/06_cylinder_sweep.skn)
+sweeps the Reynolds number of the flow past a cylinder:
+
+```skein
+param Re: Real = 20 in 1..200
+let mu: DynViscosity = rho_f*U*D/Re
+scales D, U, rho_f
+```
+
+The model states `Re`, and computes the viscosity that gives it. The
+checker confirms that `rho_f*U*D/Re` is a `DynViscosity`. `scales` tells
+the solver which values to divide by, so that the scaled unknowns are
+near 1.
+
+A named report gives the result of each case:
+
+```skein
+report cd = -integral((sigma*n).x, cyl)/(0.5*rho_f*U^2*D)
+
+study re_sweep: grid {
+    Re: [10, 20, 40]
+}
+```
+
+```
+skein check --groups 06_cylinder_sweep.skn
+skein run 06_cylinder_sweep.skn --study re_sweep
+```
+
+`check --groups` prints the dimensionless groups of the model. `run
+--study` runs the three cases at the same time and prints one table, with
+one row for each case and a column for `cd`.
+
+---
+
+## 19. Where to go next
 
 - [The language reference](reference.md): each construct, with an example.
 - [The specification](skein_spec.md): the exact rules, the grammar and the
   code generation.
 - [The check catalogue](checks.md): every error, lint rule and
   verification check.
-- [The samples](../samples/README.md): five complete models.
+- [The samples](../samples/README.md): six complete models.
+- [The tradeoffs](tradeoffs.md): the goals in priority order, and what
+  Skein does not do.
