@@ -384,7 +384,8 @@ step heat_up: transient(end: 1 h, dt: 30 s, scheme: bdf2) {
 The procedures are `static`, `transient`, `modal`, `buckling` and
 `harmonic(freq: [f])`, which takes a list and uses `Complex` unknowns.
 `transient(adapt: { rtol: 1e-4, atol: 1e-8 })` with `scheme: bdf` changes
-the time step and the order to keep the error below the limits. Steps run in the order of the file.
+the time step and the order to keep the error below the limits. Steps run
+in the order of the file.
 
 `re`, `imag`, `abs`, `arg` and `conj` take the parts of a `Complex` value.
 `eigenvalue(k)` is the natural frequency f = ω/(2π) in Hz of mode `k` of a

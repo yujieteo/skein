@@ -58,7 +58,7 @@ phase 1 closes the gap.
 | Gap | Femahoy feature | Evidence | Why the spec cannot state it | Smallest spec change | Phase |
 |---|---|---|---|---|---|
 | G9 | The frequencies of a harmonic step: one frequency, many frequencies, or a band of N points. A model with one frequency fails `check`. A case with many frequencies or a band also loses the checks at the other frequencies. | `validation/cases/line-wire-skin/wire/grid.toml:27`, `validation/cases/line-bars-getdp/bars/grid.toml:35`, `validation/cases/random-vibration-cantilever/job.inp:24` | `harmonic(freq:)` needs a list (§14.2), but a procedure argument is an `expr` (§3), and `expr` has no list. | Let a procedure argument be a `list` (§3), as in a study. | 1 |
-| G30 | A power with an exponent that is not an integer constant: the Ogden terms with alpha = 1.3, 5.0 and -2.0, the points of a superellipse hole. | `validation/cases/hyperelastic-tube/job.inp:12`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:15` | §6.1 needs an integer constant `k` in `a^k`. The models write `jac^(-al/3)` and `cos(k*dth)^(2/power)`. | In §6.1, let `k` be any `Real` expression when `a` is `Real`. | 1 |
+| G30 | A power with an exponent that is not an integer constant: the Ogden terms with alpha = 1.3, 5.0 and -2.0, the points of a superellipse hole. | `validation/cases/hyperelastic-tube/job.inp:12`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:15` | §6.1 needs an integer constant `k` in `a^k`. The models write `jac^(-al/3)` and `cos(k*dth)^(2/power)`. | In §6.1, let `k` be any constant `Real` when `a` is `Real`. | 1 |
 
 ### Gaps that remove a check
 
