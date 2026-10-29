@@ -125,6 +125,11 @@ the number of nodes of a cell and the number of quadrature points are
 constants for each kernel. This lets the C compiler vectorize them, and
 `simd fn` makes versions for the wider instruction sets.
 
+A kernel longer than 60 lines is split into functions by blocks of the cell
+matrix (spec §18.3). Each block function is straight-line code, and one
+short function calls them in order. A test measures each generated
+function.
+
 The plan is the part with loops. It is short and the same for each model,
 except the names of the kernels.
 
@@ -149,6 +154,10 @@ Goose threads share no memory. A worker gets a range of cells as a flat
 job, computes the cell matrices, and returns them in a flat result. The main
 program adds them into the matrix. This costs one copy for each cell
 matrix, and it needs no locks.
+
+In phase 3, one work-stealing task pool runs the cases of a study and the
+parallel parts of each case (spec §20.5). Each worker has a queue of
+tasks. An idle worker takes a task from the queue of another worker.
 
 ---
 
@@ -185,11 +194,10 @@ The browser runs the same Goose code, compiled to WebAssembly:
 | solve | yes, for models that fit the memory of the browser |
 | viewer | yes, WebGL |
 
-The browser target depends on Goose for WebAssembly. That is a proposal in
-the Goose repository today (spec §18.1). The front end needs little memory,
-so a small fixed partition of the data stacks is enough for it. The solver
-needs large partitions, so the browser limit on memory sets the size of the
-models that it can solve.
+The browser target compiles the C that Goose writes with `emcc`, as earlier
+Goose projects do (spec §18.1). The front end needs little memory. The
+solver needs much more, so the browser limit on memory sets the size of
+the models that it can solve.
 
 ---
 
@@ -212,7 +220,9 @@ The tests have three levels.
 
 1. **Front end.** Each error, lint rule and fix in [checks.md](checks.md)
    has a test file that must give exactly that diagnostic at that line and
-   column. Each sample must pass `check` and `fmt --check`.
+   column. Each sample must pass `check` and `fmt --check`. A `fmt` test
+   changes one value in each sample and checks that `fmt` then changes no
+   other line (spec §3.2).
 2. **Methods.** A manufactured solution for each method and each element
    order, with `skein verify convergence`. The test fails if the observed
    order is lower than the expected order by more than 0.3.

@@ -44,9 +44,9 @@ native executable or for WebAssembly.
 This is a complete model of a steel bar under tension:
 
 ```skein
-model bar
-space 3d
-units mm_N_MPa_s
+model bar: 3d, mm_N_MPa_s
+
+scales 10 mm, 100 MPa
 
 let bar: Solid = box((0, 0, 0) mm, (100, 10, 10) mm)
 let left: Surface = boundary(bar, x == 0 mm)
@@ -61,18 +61,11 @@ mesh m on bar {
     size: 2 mm
 }
 
-field u: Vector<Length> on bar
-
-physics solid on bar solves u {
+physics solid on bar solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
     eq div(sigma) = 0
-}
-
-method solid: cg {
-    mesh: m
-    order: 2
 }
 
 step pull: static {
@@ -91,6 +84,10 @@ Four things make Skein different from an Abaqus or APDL input deck:
   dimension. The literal gives the unit. The checker finds `E + rho` before
   the solve.
 - **There is no mesh file.** The model builds the geometry and meshes it.
+  With no `method` item, the solid gets the default method: continuous
+  Galerkin with quadratic cells.
+- **The solver works in scaled variables.** The `scales` line gives a
+  length and a stress of the problem, and the solver divides by them.
 - **Verification is on.** Each run checks the residual, the equilibrium of
   the reactions and the energy balance, and prints the result.
 
@@ -149,8 +146,13 @@ The checker computes the type of `div(sigma)`, a `Vector` of
 is zero of any type.
 
 A model has no variables that change. A `let` is a name for a value. A
-model also has no loops and no functions. The compiler makes the loops, in
-Goose.
+model also has no loops. A function is one expression:
+
+```skein
+fn lame_mu(E: Pressure, nu: Real) -> Pressure = E/(2*(1 + nu))
+```
+
+The compiler makes the loops, in Goose.
 
 ---
 
@@ -171,9 +173,10 @@ dimensions is not:
 let bad: Pressure = E + rho      // error unit_mismatch: Pressure + Density
 ```
 
-The `units` line in the header chooses the unit system of the solver and of
-the output, for example `mm_N_MPa_s`. It does not change the meaning of a
-literal, because each literal names its unit.
+The unit system in the header, for example `mm_N_MPa_s`, chooses the units
+of the output. It does not change the meaning of a literal, because each
+literal names its unit. The `scales` line chooses the values that the
+solver divides by. Each model with dimensions has one.
 
 ---
 
@@ -225,9 +228,7 @@ If a feature of the geometry is smaller than the local size, `skein lint
 A `physics` block states the equations, the materials and the unknowns:
 
 ```skein
-field u: Vector<Length> on beam
-
-physics solid on beam solves u {
+physics solid on beam solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
@@ -235,10 +236,21 @@ physics solid on beam solves u {
 }
 ```
 
-- `field` declares an unknown and its region.
-- `solves u` pairs the unknowns with the equations, one `eq` for each
-  unknown.
+- `solves u: Vector<Length>` declares the unknown, with its type, on the
+  region of the physics. It pairs the unknowns with the equations, one `eq`
+  for each unknown.
 - `material steel` gives `E` and `nu` to the equations.
+
+The standard library has this physics as a template, in Skein source. The
+next block means the same as the block above:
+
+```skein
+physics solid on beam: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+```
+
+`skein help std` prints the source of each template.
 
 You can write the law yourself. This is the same physics:
 
@@ -250,9 +262,7 @@ let sigma: Tensor2<Pressure> = E/(1 + nu)*(eps + nu/(1 - 2*nu)*tr(eps)*I)
 Heat conduction has the same shape:
 
 ```skein
-field T: Temperature on part = 293 K
-
-physics heat on part solves T {
+physics heat on part solves T: Temperature = 293 K {
     material steel
     let q: Vector<HeatFlux> = -k*grad(T)
     eq rho*c*ddt(T) + div(q) = 0
@@ -308,12 +318,14 @@ free_boundary[1]{physics,field,region,condition}:
 
 ## 10. Methods
 
-A `method` block chooses the numerical method of a physics:
+With no `method` item, a physics gets continuous Galerkin of order 2 on its
+mesh, Taylor-Hood cells for incompressible flow, and SUPG when the
+equations have convection. A `method` item chooses another method:
 
 ```skein
 method solid: cg {
     mesh: m
-    order: 2
+    order: 1
 }
 ```
 
@@ -378,7 +390,7 @@ The lid-driven cavity ([sample 02](../samples/02_cavity.skn)) has two
 unknowns, the velocity and the pressure:
 
 ```skein
-physics flow on cav solves v, p {
+physics flow on cav solves v: Vector<Velocity>, p: Pressure {
     material fluid
     assume incompressible, newtonian, laminar
     let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
@@ -393,7 +405,9 @@ method flow: cg {
 }
 ```
 
-Linear velocity with linear pressure is unstable in Galerkin form. Without
+The `method` item asks for linear velocity with linear pressure, which is
+cheaper than the default Taylor-Hood cells. That pair is unstable in
+Galerkin form. Without
 `stabilize`, `check` gives the error `inf_sup` and suggests `supg_pspg`.
 The compiler has the strong form, so it makes the SUPG and PSPG terms from
 the exact residual of the momentum equation.

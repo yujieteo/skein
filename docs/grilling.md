@@ -1,7 +1,9 @@
 # Skein design grilling
 
-This file holds the questions for the next design review with the captain.
-Firstmate puts them to the captain, one round at a time. Each question has a
+This file holds the questions of the design review with the captain.
+Firstmate put them to the captain, one round at a time. The captain
+answered all rounds on 2026-10-30. The [answers](#answers) are at the end,
+and the spec, the tradeoffs and the samples follow them. Each question has a
 recommended answer and the reason for it. The captain can accept the
 recommendation, choose another option, or give a new answer.
 
@@ -38,6 +40,7 @@ Skein
 ├── G3 Parameters, studies and concurrency
 │   ├── G3.1 only `param` can change
 │   ├── G3.2 parallel cases before parallel assembly
+│   ├── G3.2b a better method in the style of Go
 │   ├── G3.3 adjoint gradients
 │   └── G3.4 statistics in the study output
 ├── G4 Workload gaps
@@ -46,6 +49,7 @@ Skein
 │   ├── G4.3 shock capturing
 │   ├── G4.4 element families (H(curl), H(div))
 │   ├── G4.5 complex numbers
+│   ├── G4.5b other number systems and symmetry groups
 │   ├── G4.6 adaptive time steps
 │   └── G4.7 processes in a step (reinitialization)
 ├── G5 Parts and manufacture
@@ -206,6 +210,17 @@ before assembly in parallel?
 Recommended: **A**. Reason: independent cases scale almost perfectly. The
 runner still gives all threads to one case when it is alone.
 
+**G3.2b** (asked in round 4) The captain asked for a better method in the
+style of Go. Use one shared work-stealing task pool?
+
+- A. Yes, in phase 3. Cases first until then. Check whether Goose gives
+  atomics, and use a lock on each queue if it does not.
+- B. Keep the two levels of threads (cases, then assembly).
+
+Recommended: **A**. Reason: the Go scheduler gives each thread a queue and
+lets an idle thread take work from another. A study of a few large cases
+then keeps all threads busy.
+
 **G3.3** Add adjoint gradients for optimization?
 
 - A. Yes, in phase 5, from the SIR. Gradient-free `minimize` before that.
@@ -268,6 +283,18 @@ with nodal elements. The setting is small. The elements are phase 5.
 
 Recommended: **A**. Reason: acoustics and electromagnetics in the frequency
 domain are complex. Two real fields double the size of each model.
+
+**G4.5b** (asked in round 5) The captain asked for general representation
+theory, "Complex or Quaternions or whatever". Which number systems?
+
+- A. A closed list of the systems in practice: `Real`, `Complex`,
+  `Quaternion`, `Dual`.
+- B. User-defined number systems.
+
+Recommended: **A**. Reason: each system needs its own solver arithmetic.
+User systems would need user code in the solver. The captain added
+symmetry groups, also as a closed list: cyclic sectors, dihedral, and Bloch
+and Floquet periodic.
 
 **G4.6** Add adaptive time steps with error control?
 
@@ -373,6 +400,53 @@ branches, from one template each. The namespace is G1.3.
 
 ## Answers
 
-| Question | Answer | Date |
+The captain answered on 2026-10-30. The words of the captain are exact.
+Where an answer differs from the recommendation, the spec follows the
+answer.
+
+| Round | Words of the captain |
+|---|---|
+| 0 | "Q1. A. 1/3/ mix of 2 and 5 I realise dimensional analysis / units is very subtle. I want strong typing for real problems requiring dimensions, but yet I want dimensional analysis / parametric sweep when it counts. All other goals... Q3: A. Cut A." |
+| 1 | "No constraint sketches, A. B. A. B." |
+| 2 | "A. C (LLMs can easily write scales). B." |
+| 3 | "A. For Q2 are there better methods I like Go's concurrency model, but A. A. A." |
+| 4 | "A. A. A. A. A. For Q5 it should support general representation theory (Complex or Quaternions or whatever) but yes support complex numbers. Yes. B." |
+| 5 | "A for those in practice. Symmetry groups as well. Closd lists. A. B. No exact B-rep. A. For Q4." |
+| 6 | "Q0 correct. Make the candidate cuts now. Change the test and comparison should be total cost. LLM-native syntax is a good goal. Yes. A. No, we can convert the Goose to wasm similarly to our previous projects. Try to keep it less than 60 lines somehow tere should be some split up. I also want to minimize namespaces?" |
+| after | "It should also maximize for human readable diffs, right now LLMs generate huge diffs that are hard to read, 1000s of lines long. OK I think it is fine now. The spec is fine." |
+
+| Question | Answer | Where |
 |---|---|---|
-| | | |
+| G0.1 | A. Simulation is the core. | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order) |
+| G0.2 | Protected: the simulation core, LLM-native syntax, and one merged goal of units, static analysis and dimensional analysis, with parameter sweeps where they count. | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order) |
+| G0.3 | A. Units win over tokens. | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order) |
+| G0.4 | A. Cut DFM first, then CAD export beyond STL. | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order) |
+| G1.1 | A. Simulation first. No constraint sketches. | [tradeoffs §4](tradeoffs.md#4-parametric-parts-text-to-cad-and-export) |
+| G1.2 | B. Pure functions of one expression. | spec [§7.4](skein_spec.md#74-functions) |
+| G1.3 | A. One namespace for each model. | spec [§4](skein_spec.md#4-names-and-scope) |
+| G1.4 | B. `use` reads materials, params, lets and functions, in phase 2. | spec [§4.1](skein_spec.md#41-use-phase-2) |
+| G2.1 | A. `units nondim`, declared in the header. | spec [§6.5](skein_spec.md#65-unit-systems) |
+| G2.2 | C (an answer that the question did not list). A `scales` line is required in each model with dimensions. | spec [§21.2](skein_spec.md#212-scales) |
+| G2.3 | B. No reuse of similar cases. Each case runs. | [tradeoffs §8](tradeoffs.md#8-strict-dimensions-and-dimensionless-work) |
+| G3.1 | A. Only a `param` can change. | spec [§20.1](skein_spec.md#201-param) |
+| G3.2 | A, with G3.2b. | spec [§20.5](skein_spec.md#205-threads-for-a-case-and-threads-for-a-study) |
+| G3.2b | A. One work-stealing task pool in phase 3. Check Goose atomics, and use a lock on each queue if there are none. | spec [§20.5](skein_spec.md#205-threads-for-a-case-and-threads-for-a-study) |
+| G3.3 | A. Adjoint gradients in phase 5. Gradient-free `minimize` before. | [roadmap](roadmap.md) |
+| G3.4 | A. No statistics in the tool. | [tradeoffs §2](tradeoffs.md#2-the-design-against-the-workloads) |
+| G4.1 | A. Standard-library physics in Skein source. | spec [§4.2](skein_spec.md#42-the-standard-library) |
+| G4.2 | A. Radiation with view factors, phase 5. | [roadmap](roadmap.md) |
+| G4.3 | A. Limiters for `fv`, entropy viscosity for `dg`. | spec [§13](skein_spec.md#13-methods) |
+| G4.4 | A. Nédélec and Raviart-Thomas, phase 5. | spec [§13](skein_spec.md#13-methods) |
+| G4.5 | Complex numbers, in a design that generalizes (G4.5b). | spec [§5.1](skein_spec.md#51-scalar-types) |
+| G4.5b | A. The closed list `Real`, `Complex`, `Quaternion`, `Dual`. Symmetry groups too, also a closed list: cyclic, dihedral, Bloch and Floquet. | spec [§5.1](skein_spec.md#51-scalar-types), [§12.6](skein_spec.md#126-symmetry-groups) |
+| G4.6 | A. Adaptive time steps, variable-order BDF. | spec [§14.2](skein_spec.md#142-procedures) |
+| G4.7 | B. No `process` statement in v1. | [tradeoffs §2](tradeoffs.md#2-the-design-against-the-workloads) |
+| G5.1 | A. `shell`, `loft`, `pattern`. | spec [§8.1](skein_spec.md#81-distance-functions) |
+| G5.2 | B. No exact B-rep. STL and tessellated STEP only. | spec [§22.5](skein_spec.md#225-export-for-manufacture) |
+| G5.3 | A. Monte Carlo stack-ups through a `sample` study. | spec [§22.4](skein_spec.md#224-tolerances-and-stack-ups) |
+| G5.4 | Yes. The list of processes stays. | spec [§22.2](skein_spec.md#222-manufacture) |
+| G6.1 | B and C. Make the candidate cuts now, and compare the total cost. | [llm_test.md §6](llm_test.md#6-syntax-changes-made-before-the-test) |
+| G6.2 | A. `skein help --llm`. | [command_line.md §1](command_line.md#1-commands) |
+| G6.3 | No WebAssembly risk and no fallback: Goose writes C, and `emcc` compiles it, as in earlier Goose projects. | spec [§18.1](skein_spec.md#181-why-goose) |
+| G6.4 | No exception for kernels: split each generated function to at most 60 lines. One namespace stays, and the standard library and `use` files enter it with no prefix. This is the one deviation from the Power of Ten (rule 6). | [tradeoffs §6](tradeoffs.md#6-reliability-the-power-of-ten) |
+| after | Small human-readable diffs, under the LLM-native goal. | spec [§3.2](skein_spec.md#32-layout-for-small-diffs), [command_line.md §3.1](command_line.md#31-format-rules) |

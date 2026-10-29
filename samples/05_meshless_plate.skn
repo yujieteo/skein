@@ -4,14 +4,14 @@
 // modelled with symmetry. The peak hoop stress at the hole is checked
 // against the Kirsch solution for a wide plate, 3*S.
 
-model plate
-space 2d
-units mm_N_MPa_s
+model plate: 2d, mm_N_MPa_s
 
 let a: Length = 10 mm
 let b: Length = 100 mm
 let th: Length = 2 mm
 let S: Pressure = 100 MPa
+
+scales a, S
 
 let hole_disk: Surface = circle((0, 0) mm, a)
 let quarter: Surface = rect((0, 0) mm, (b, b)) - hole_disk
@@ -30,13 +30,9 @@ points c on quarter {
     refine hole: 0.4 mm
 }
 
-field u: Vector<Length> on quarter
-
-physics solid on quarter solves u {
+physics solid on quarter: linear_elastic solves u: Vector<Length> {
     material aluminium
-    assume small_strain, isotropic, plane_stress(th)
-    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
-    eq div(sigma) = 0
+    assume plane_stress(th)
 }
 
 method solid: rkpm {

@@ -50,16 +50,18 @@ model contains all of these parts, in one language:
 
 | Part | Keyword | Section |
 |---|---|---|
-| Header: name, space dimension, unit system | `model`, `space`, `units` | §3 |
+| Header: name, space dimension, unit system, on one line | `model` | §3 |
+| Library files and the standard library | `use` | §4.1, §4.2 |
 | Inputs that a study or the command line can change | `param` | §20 |
 | Constants, geometry, regions, results of other models | `let` | §5, §8, §15 |
+| Functions of one expression | `fn` | §7.4 |
 | Tables of data | `table` | §5.6 |
 | Materials | `material` | §10.2 |
 | Discretizations of a region | `mesh`, `points` | §9 |
-| Unknown fields | `field` | §10.1 |
-| Equations in strong form, with assumptions | `physics` | §10.3, §11 |
-| Numerical method for each physics | `method` | §13 |
+| Equations in strong form, with assumptions, and their unknowns | `physics … solves` | §10.1, §10.3, §11 |
+| Numerical method for each physics, with defaults | `method` | §13 |
 | Boundary conditions and loads | `bc` | §12 |
+| Symmetry groups: cyclic, dihedral, periodic | `symmetry` | §12.6 |
 | The analysis sequence | `step` | §14 |
 | Checks on the results | `expect` | §15.3 |
 | Reference scales for the solver | `scales` | §21 |
@@ -81,7 +83,8 @@ Four rules shape the whole language.
    finite-volume balance, or the collocation equations from it. The user
    never writes a weak form.
 4. **A program describes, it does not compute.** Skein has no loops, no
-   pointers, no allocation and no mutable variables. The compiler makes all
+   pointers, no allocation and no mutable variables. A function is one
+   expression (§7.4). The compiler makes all
    the loops, in Goose. Thus a Skein program cannot make a memory fault.
 
 ### 1.1 Pipeline
@@ -145,17 +148,17 @@ A number has no sign. A minus sign before a number is the unary operator.
 ```
 adapt       allow       assume      at          bc          birth
 contact     death       eq          every       expect      false
-field       in          interface   layers      let         manufacture
+fn          in          interface   layers      let         manufacture
 material    mesh        method      model       on          output
 param       physics     plastic     points      refine      release
-report      scales      solve       solves      space       state
-step        study       table       tol         tolerance   true
-units       where       within
+report      scales      solve       solves      state       step
+study       symmetry    table       template    tol         tolerance
+true        use         where       within
 ```
 
 A keyword is not an identifier. The names of types, units, built-in
-functions and assumptions are not keywords. A declaration can hide them,
-but the checker reports [`shadows_builtin`] as a lint.
+functions and assumptions are not keywords. But a declaration with the name
+of a built-in function or constant is an error [`duplicate_name`] (§4).
 
 ### 2.6 Unit names
 
@@ -176,14 +179,19 @@ quotes.
 
 ```ebnf
 program     = header { item } ;
-header      = "model" ident NL "space" ("1d" | "2d" | "3d" | "axi") NL
-              "units" unitsys NL ;
+header      = "model" ident ":" space "," unitsys NL ;
+space       = "1d" | "2d" | "3d" | "axi" ;
 unitsys     = ident | "nondim" | "{" unitfield { "," unitfield } "}" ;
 unitfield   = ident ":" unitexpr ;
 
-item        = paramdecl | letdecl | tabledecl | material | meshdecl | pointsdecl
-            | fielddecl | physics | method | bcdecl | contact | interface
-            | step | expect | allow | scales | study | manufacture | tolerance ;
+item        = usedecl | paramdecl | letdecl | fndecl | tabledecl | material
+            | meshdecl | pointsdecl | physics | method | bcdecl | contact
+            | interface | symmetry | step | expect | allow | scales | study
+            | manufacture | tolerance ;
+
+usedecl     = "use" string NL ;
+fndecl      = "fn" ident "(" fnparam { "," fnparam } [ "," ] ")" "->" type "=" expr NL ;
+fnparam     = ident ":" type ;
 
 paramdecl   = "param" ident ":" type "=" expr [ "tol" expr ] [ "in" expr ".." expr ] NL ;
 manufacture = "manufacture" region ":" procedure block NL ;  (* entry = setting *)
@@ -209,10 +217,12 @@ pointsdecl  = "points" ident "on" region block NL ;  (* entry = setting | refine
 refine      = "refine" region ":" expr ;
 layers      = "layers" region ":" expr ;
 
-fielddecl   = "field" ident ":" type [ "on" region ] [ "=" expr ] NL ;
-
-physics     = "physics" ident [ "on" region ] "solves" ident { "," ident }
-              "{" NL { physstmt NL } "}" NL ;
+physics     = "physics" ident [ "on" region ] [ ":" ident [ "(" [ args ] ")" ] ]
+              "solves" unknown { "," unknown } [ "{" NL { physstmt NL } "}" ] NL ;
+unknown     = ident ":" type [ "=" expr ] ;
+template    = "template" "physics" ident "(" [ tparam { "," tparam } ] ")"
+              "solves" unknown { "," unknown } "{" NL { physstmt NL } "}" NL ;
+tparam      = ident ":" type [ "=" expr ] ;      (* standard library only *)
 physstmt    = matassign | assume | letdecl | eqn | statedecl | plastic ;
 statedecl   = "state" ident ":" type "=" expr ;
 plastic     = "plastic" block ;                      (* entry = setting *)
@@ -227,6 +237,7 @@ bcdecl      = "bc" region ":" bctarget "=" expr NL ;
 bctarget    = expr ;
 contact     = "contact" ident ":" region "," region block NL ;
 interface   = "interface" ident ":" region "," region block NL ;
+symmetry    = "symmetry" ident ":" procedure block NL ;  (* entry = setting *)
 
 step        = "step" ident ":" procedure "{" NL { stepstmt NL } "}" NL ;
 procedure   = ident [ "(" [ namedargs ] ")" ] ;
@@ -242,8 +253,10 @@ allow       = "allow" ident ":" string NL ;
 
 region      = expr ;
 
-type        = qtype | "Vector" "<" qtype ">" | "Tensor2" "<" qtype ">"
-            | "Tensor4" "<" qtype ">" | ident ;
+type        = qtype | "Vector" "<" stype ">" | "Tensor2" "<" stype ">"
+            | "Tensor4" "<" stype ">" | numsys | ident ;
+stype       = qtype | numsys ;
+numsys      = ( "Complex" | "Quaternion" | "Dual" ) "<" qtype ">" ;
 qtype       = dimterm { ("*" | "/") dimterm } ;
 dimterm     = ident [ "^" ["-"] digits ] | "(" qtype ")" ;
 
@@ -259,7 +272,7 @@ postfix     = primary { "." ident | "(" [ args ] ")" | "at" primary } ;
 primary     = number [ unitexpr ] | percent | string | "true" | "false"
             | ident | "(" expr ")" | "(" expr "," expr { "," expr } ")" [ unitexpr ]
             | "{" namedargs "}" ;
-args        = arg { "," arg } ;
+args        = arg { "," arg } [ "," ] ;
 arg         = expr | ident ":" expr ;
 namedargs   = ident ":" expr { "," ident ":" expr } ;
 
@@ -277,41 +290,73 @@ Notes on the grammar:
   ([TOON](https://github.com/toon-format/toon)): values that a comma
   separates. Skein omits the TOON row count `[N]`. Reason: the count changes
   with each new row, and the checker finds a short row without it.
-- `1d`, `2d`, `3d` and `axi` are tokens only after `space`. Elsewhere `3d`
-  is a syntax error.
-- `space axi` is the axisymmetric space (§11.3). It is not an assumption,
+- The header is one line: `model cantilever: 3d, mm_N_MPa_s`. `1d`, `2d`,
+  `3d` and `axi` are tokens only in the header. Elsewhere `3d` is a syntax
+  error.
+- `axi` is the axisymmetric space (§11.3). It is not an assumption,
   because it changes the coordinates of every geometry function.
 - The grammar admits more than the type rules accept. For example, a
   `region` is any `expr`. §5 and §8 give the rules.
 - `|` and `&` are geometry union and intersection. `||` and `&&` are the
   Boolean operators. The two pairs have the same precedence.
+- An argument list and a study list may end with a comma. `skein fmt`
+  writes a list that does not fit on one line with one item on each line
+  and a comma after each item (§3.2).
 
 ### 3.1 Order of items
 
-The header comes first, in the order `model`, `space`, `units`. The items
-after it may come in any order, but a name must be declared before its first
+The header comes first. `use` lines come next. The items
+after them may come in any order, but a name must be declared before its first
 use [`use_before_decl`]. Steps run in the order of the file.
 
 Reason: declaration before use lets the checker resolve names in one pass,
 and it puts each error at the line of the use.
+
+### 3.2 Layout for small diffs
+
+A change to a model must give a small diff that a person can read. Skein
+text and `skein fmt` follow these rules (command_line.md §3.1):
+
+- One item, one statement or one block entry on each line. A table row is
+  one line.
+- No column alignment. `fmt` never adds spaces to line up values, so a
+  change to one value does not change the lines near it. This holds for
+  TOON tables too.
+- A list that does not fit on one line has one item on each line, with a
+  comma after each item. A new item then adds one line.
+- `fmt` keeps the order of items and never reflows a line that did not
+  change.
+
+Reason: LLMs write changes of thousands of lines that a person cannot
+review. With these rules, a change to one load, one step or one study
+parameter gives a diff of a few lines. The [LLM test](llm_test.md) measures
+it.
 
 ---
 
 ## 4. Names and scope
 
 A model has **one namespace**. These declarations add a name to it:
-`param`, `let`, `table`, `material`, `mesh`, `points`, `field`, `physics`,
-the `let` statements inside a `physics` block, `step` and `expect`. Two
-declarations with one name are an error [`duplicate_name`].
+`param`, `let`, `fn`, `table`, `material`, `mesh`, `points`, `physics`, the
+unknowns in `solves`, the `let` statements inside a `physics` block or a
+physics template, `symmetry`, `step` and `expect`. The built-in functions
+and constants (Appendix A), the standard library (§4.2) and the items of
+each `use` file (§4.1) are in the same namespace, with no prefix. Two
+declarations with one name are an error [`duplicate_name`], also when one
+of them comes from a `use` file or from the standard library.
 
 Reason: one namespace lets a step write `sigma*n` for the stress that a
-physics block declares, with no prefix.
+physics block declares, with no prefix. A prefix such as `std.` or
+`solid.` costs tokens on each use. The error on a clash keeps each name
+unambiguous. This is the one deviation from the Power of Ten (rule 6,
+smallest scope). The [tradeoffs](tradeoffs.md#6-reliability-the-power-of-ten)
+give the reason.
 
 These names have a smaller scope:
 
 | Name | Visible in |
 |---|---|
-| A material property, for example `E` | the physics blocks that assign the material, and the `output`, `report` and `bc` expressions that use those physics |
+| A material property, for example `E` | the physics blocks that assign the material, the template arguments of those physics, and the `output`, `report` and `bc` expressions that use those physics |
 | A column of a table, `t.col` | everywhere after the table |
 | A field of a `Results` value, `r.u` | everywhere after the `let` |
 | `x`, `y`, `z`, `t` (coordinates and time) | every expression that the solver evaluates at a point |
@@ -323,12 +368,69 @@ property must have the same type in both [`material_prop_type`]. When a
 physics uses a property, each material that the physics assigns must give
 it [`material_prop_missing`].
 
+### 4.1 `use` (phase 2)
+
+```skein
+use "materials.skn"
+```
+
+A `use` line reads a library file. A library file holds only `material`,
+`param`, `let` and `fn` items, with no header [`use_item`]. Its names enter
+the namespace of the model with no prefix. A library file cannot `use`
+another file. The path is relative to the model file.
+
+Reason: a team keeps one file of materials. A copy in each model drifts.
+Physics and steps stay in the model, so a reviewer reads one file for the
+analysis. One level of `use` keeps the set of files of a model small and
+free of cycles.
+
+### 4.2 The standard library
+
+The standard library holds physics templates and functions, written in
+Skein source that a user can read (`skein help std`). A template is a
+physics block with parameters:
+
+```skein
+template physics linear_elastic(b: Vector<Force/Volume> = 0) solves u: Vector<Length> {
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    eq div(sigma) + b = 0
+}
+```
+
+A model uses it by name after the colon of a `physics` item:
+
+```skein
+physics solid on beam: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+```
+
+The model names the unknowns, and their types must equal the types in the
+template [`type_mismatch`]. The `let` names of the template, here `sigma`,
+enter the namespace of the model. The block of the model may add `material`,
+`assume` and `let` statements. It may not add `eq` [`template_eq`]. Only
+the standard library declares templates in this version.
+
+| Template | Unknowns | Phase |
+|---|---|---|
+| `linear_elastic(b)` | `u` | 2 |
+| `heat(q_v)` | `T` | 2 |
+| `stokes(f)`, `navier_stokes(f)` | `v`, `p` | 3 |
+| `reissner_mindlin(t)` (shell), `timoshenko(A, I_y, I_z)` (beam) | `w`, `theta` | 5 |
+| `k_omega_sst` (turbulence) | `k`, `omega` | 5 |
+
+Reason: nobody writes a shell or a k-ω SST model from memory, and a
+template cuts the size of the common models. The source stays strong form,
+so a user can read it and copy it into a model to change it.
+
 ---
 
 ## 5. Types
 
-Skein has no type inference. Each `let`, `field`, material property and
-table column states its type. The checker compares the declared type with
+Skein has no type inference. Each `let`, `param`, `fn` parameter and
+result, unknown in `solves`, material property and table column states its
+type. The checker compares the declared type with
 the type of the expression and reports [`type_mismatch`] or
 [`unit_mismatch`] when they differ.
 
@@ -343,6 +445,22 @@ the type of the expression and reports [`type_mismatch`] or
 | `Bool` | `true` or `false` |
 | `Str` | a string, for file paths |
 
+Each quantity can also take a value in one of three other number systems.
+The list is closed: Skein has no user number systems.
+
+| Type | Values | Use |
+|---|---|---|
+| `Complex<D>` | `a + b*im` with `a`, `b` of dimension `D` | the `harmonic` procedure (§14.2): acoustics, electromagnetics, vibration |
+| `Quaternion<D>` | four components of dimension `D` | rotations in rigid-body ODEs and beams with large rotations |
+| `Dual<D>` | `a + b*dual_eps` with `dual_eps² = 0` | forward-mode derivatives, for example the sensitivity of a report to a `param` |
+
+A tensor takes a number system in its argument: `Vector<Complex<Velocity>>`.
+The built-in constants `im` and `dual_eps` are the units of the imaginary
+part and of the dual part.
+Reason: these four cover the number systems that engineering models use in
+practice. Each one needs its own solver arithmetic, so the list stays
+closed.
+
 ### 5.2 Tensor types
 
 | Type | Rank | Components |
@@ -352,7 +470,7 @@ the type of the expression and reports [`type_mismatch`] or
 | `Tensor2<D>` | 2 | `d × d` |
 | `Tensor4<D>` | 4 | `d × d × d × d` |
 
-`d` is the space dimension from the header (`space 2d` gives 2, `space axi`
+`d` is the space dimension from the header (a `2d` model gives 2, an `axi` model
 gives 2 for vectors and 3 for the hoop components of tensors, §11.3). All
 components of a tensor have the one dimension `D`. Components are `.x`,
 `.y`, `.z` for vectors and `.xx`, `.xy`, … for second-order tensors.
@@ -379,9 +497,9 @@ A declaration with the wrong geometry type is an error [`geometry_dim`].
 
 ### 5.5 Fields
 
-A `field` declaration gives the tensor type and the region of an unknown. A
-field without `on` has no region: it is a global unknown, for example the
-state of an ODE (§10.5).
+An unknown in `solves` (§10.1) has a tensor type and the region of its
+physics. An unknown of a physics with no region is a global unknown, for
+example the state of an ODE (§10.5).
 
 ### 5.6 Tables
 
@@ -405,6 +523,7 @@ only exceptions:
    bare number has type `Real`. `Real` and `Angle` accept `Int`. `Angle`
    accepts `Real`.
 3. `Int` converts to `Real` in arithmetic.
+4. `Complex<D>`, `Quaternion<D>` and `Dual<D>` accept a value of `D`.
 
 Reason for exception 1: `u = 0` is the most common boundary condition, and
 `u = (0, 0, 0) mm` adds tokens and gives no safety.
@@ -507,17 +626,13 @@ A user system gives the base units: `units { length: mm, mass: t, time: s,
 temperature: K }`.
 
 The unit system does not change the meaning of the source, because each
-literal carries its unit. It sets two things:
+literal carries its unit. It sets the units of the output files and of the
+numbers that the tools print. Reason: a user reads results in the units of
+the drawing.
 
-1. the scale of the numbers in the generated code, so that the solver works
-   with numbers near 1 for the model;
-2. the units of the output files and of the numbers that the tools print.
-
-Reason: a declared system keeps the numbers of the solver well scaled, and
-it lets a user read results in the units of the drawing.
-
-A `scales` line (§21.2) replaces item 1: the solver then works in the
-variables that the scales make dimensionless.
+The `scales` line (§21.2), not the unit system, sets the size of the
+numbers in the solver. Each model with dimensions has one
+[`scales_missing`].
 
 `units nondim` declares a model with no dimensions. Each quantity has type
 `Real`, and a literal with a unit is an error [`nondim_unit`]. Use it for
@@ -529,7 +644,8 @@ protection, so the `check` report says `units: nondim` at its top.
 
 - **No type aliases.** Reason: an alias puts one fact in two places, and an
   LLM must then find the alias to know the dimension.
-- **No unit-generic functions.** Users do not declare functions (§7.4).
+- **No unit-generic functions.** Each parameter of a function has one
+  fixed type (§7.4).
 
 ---
 
@@ -558,7 +674,7 @@ binary operators are left-associative. A comparison does not chain.
 |---|---|---|
 | `grad(f)` | rank r | rank r + 1. `grad(v)_ij = ∂v_i/∂x_j` |
 | `div(F)` | rank r ≥ 1 | rank r − 1. `div(A)_i = ∂A_ij/∂x_j` |
-| `curl(v)` | `Vector`, `space 3d` | `Vector` |
+| `curl(v)` | `Vector`, a `3d` model | `Vector` |
 | `lap(f)` | rank r | rank r. Equal to `div(grad(f))` |
 | `ddt(f)` | any | same rank. First time derivative |
 | `ddt2(f)` | any | same rank. Second time derivative |
@@ -570,10 +686,19 @@ replaces them with the time scheme of the step (§14.2).
 
 ### 7.4 Functions
 
-Users do not declare functions. Reason: physics needs closed-form
-constitutive laws, and the built-in functions (Appendix A) and `let`
-declarations cover them. A function body would need loops or recursion, and
-these would break rule 4 of §1.
+```skein
+fn lame_mu(E: Pressure, nu: Real) -> Pressure = E/(2*(1 + nu))
+```
+
+A function is one expression of its parameters and of the names declared
+above it. It has no statements, no loops and no recursion: a function may
+call only the functions declared above it [`use_before_decl`]. The result
+type is required, and the checker compares it with the type of the
+expression.
+
+Reason: a law that a model uses in many places is written once, which cuts
+the size of the model. One expression keeps rule 4 of §1 and rules 1 and 2
+of the Power of Ten by construction.
 
 ### 7.5 `at`
 
@@ -614,6 +739,9 @@ function, so that the mesher can find sharp edges (§9.2).
 | `sweep(s, path)` | `Solid` | `path` is a `Curve` |
 | `line(p0, p1)`, `arc(c, r, a0, a1)`, `spline(p…)` | `Curve` | |
 | `point(p)` | `Point` | |
+| `shell(a, t)` | same as `a` | a wall of constant thickness `t` inside the surface of `a`: `max(φa, −φa − t)` |
+| `loft(s1, s2, h)` | `Solid` | from 2D section `s1` at z = 0 to `s2` at z = `h` |
+| `pattern(a, v, n)`, `pattern_polar(a, axis, n)` | same as `a` | `n` copies of `a`, along `v` or about `axis` |
 | `nurbs(…)` | `Surface` or `Solid` | phase 5 (roadmap) |
 
 Operators and modifiers:
@@ -633,7 +761,7 @@ surface (§9.2).
 
 ### 8.2 Regions
 
-A **region** is a geometry value that a `field`, `physics`, `mesh`,
+A **region** is a geometry value that a `physics`, `mesh`,
 `points`, `bc` or `birth` statement names. The geometry types are the region
 types.
 
@@ -651,7 +779,7 @@ The result has dimension `dim(g) − 1`. An empty selection is an error
 
 ### 8.3 Lower-dimension entities
 
-A `Surface` in `space 3d`, or a `Curve` in `space 2d` or `space 3d`, can be
+A `Surface` in a `3d` model, or a `Curve` in a `2d` model or a `3d` model, can be
 a region of its own physics, for example a shell or a beam. Such a region
 must be the boundary of a solid region, or a geometry value that the
 `mesh` block embeds. The mesher makes the cells of the entity conform to
@@ -663,7 +791,7 @@ for example a point load or a pressure reference.
 Regions combine with `|`, `&` and `-`. The checker computes containment by
 the CSG tree: `a` is inside `b` if `a & b` equals `a` in the tree, or if a
 sampled test on the mesh shows it. A field, a physics, a `bc` or a
-`birth`/`death` statement must name a region inside the region of the field
+`birth`/`death` statement must name a region inside the region of the unknown
 [`region_outside`].
 
 ---
@@ -741,16 +869,19 @@ fill distance and the separation ratio.
 
 ## 10. Fields, materials and physics
 
-### 10.1 `field`
+### 10.1 Unknown fields
 
 ```skein
-field u: Vector<Length> on beam
+physics heat on part solves T: Temperature = 293 K {
 ```
 
-A field is an unknown of the model. Its type is a tensor type (§5.2). Its
-region is the set of points where it exists. The optional `= expr` is the
-initial value (§14.1). It may be varying. A field must have exactly one
-physics that solves it [`field_unsolved`], [`field_solved_twice`].
+The `solves` list of a physics declares its unknowns. Each unknown has a
+tensor type (§5.2). Its region is the region of the physics. The optional
+`= expr` is the initial value (§14.1). It may be varying. Each unknown has
+exactly one physics, the one that declares it.
+
+Reason: a separate `field` line repeated the name and the region of each
+unknown, and a model could declare a field that no physics solved.
 
 ### 10.2 `material`
 
@@ -769,7 +900,7 @@ for example a function of a temperature field.
 ### 10.3 `physics`
 
 ```skein
-physics solid on beam solves u {
+physics solid on beam solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
@@ -777,9 +908,11 @@ physics solid on beam solves u {
 }
 ```
 
-- `on r` is the region of the equations. It defaults to the region of the
-  first field in `solves`.
-- `solves u, p, …` lists the unknowns. The block must have one `eq` for each
+- `on r` is the region of the equations and of the unknowns. A physics
+  with no `on` has only global unknowns (§10.5).
+- `: template(args)` takes the statements from a standard-library template
+  (§4.2). The block is then optional.
+- `solves u: T, p: T, …` declares the unknowns. The block must have one `eq` for each
   unknown [`eq_count`]. Equation `k` pairs with unknown `k`: the test
   function of equation `k` is a variation of unknown `k` (§17.1).
 - `material` assigns materials to parts of the region. Each point of the
@@ -795,8 +928,8 @@ physics solid on beam solves u {
 Two physics blocks couple when one uses a field that the other solves:
 
 ```skein
-physics heat on part solves T { … }
-physics solid on part solves u {
+physics heat on part solves T: Temperature = 293 K { … }
+physics solid on part solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T - T0)*I)
@@ -810,12 +943,11 @@ in each step (`couple: staggered`).
 
 ### 10.5 ODEs and global unknowns
 
-A field without a region is a global unknown. A physics without `on` that
-solves only global unknowns is a system of ODEs:
+A physics without `on` solves only global unknowns. It is a system of
+ODEs:
 
 ```skein
-field q: Length
-physics oscillator solves q {
+physics oscillator solves q: Length {
     eq m*ddt2(q) + c*ddt(q) + k*q = 0
 }
 ```
@@ -886,8 +1018,8 @@ gives examples.
 | `finite_strain` | `strain(u)` is the Green-Lagrange strain `E = (FᵀF − I)/2`, `F = I + grad(u)`. `div` in the equation is on the reference shape, and the user writes the first Piola-Kirchhoff stress `F*S`. | `small_strain` |
 | `isotropic` | material tensors from `hooke` and `fourier` are isotropic | `orthotropic` |
 | `orthotropic(R)` | material axes are the columns of the rotation `R` | `isotropic` |
-| `plane_stress(t)` | `space 2d` only. σzz = σxz = σyz = 0. The compiler solves the constitutive law for εzz and removes it (§11.2). Thickness `t` multiplies volume and surface integrals. | `plane_strain`, `space 3d` |
-| `plane_strain(t)` | `space 2d` only. εzz = εxz = εyz = 0. `t` defaults to 1 of the length unit. | `plane_stress` |
+| `plane_stress(t)` | a `2d` model only. σzz = σxz = σyz = 0. The compiler solves the constitutive law for εzz and removes it (§11.2). Thickness `t` multiplies volume and surface integrals. | `plane_strain`, a `3d` model |
+| `plane_strain(t)` | a `2d` model only. εzz = εxz = εyz = 0. `t` defaults to 1 of the length unit. | `plane_stress` |
 | `incompressible` | the physics must have an equation `div(v) = 0`, or a pressure unknown that enforces `tr(strain(u)) = 0` | `compressible` |
 | `compressible` | density is a varying value or an unknown | `incompressible` |
 | `newtonian` | the fluid stress must be linear in `sym(grad(v))` | |
@@ -917,7 +1049,7 @@ For `hooke(E, nu, ε)` the result is the usual plane-stress law with E and
 
 ### 11.3 Axisymmetry
 
-`space axi` uses the coordinates (r, z) and the names `x` for r and `y` for
+an `axi` model uses the coordinates (r, z) and the names `x` for r and `y` for
 z. `grad`, `div`, `strain` and the volume integral include the hoop terms
 and the factor 2πr. A vector has two components. A `Tensor2` has the
 components rr, rz, zr, zz and θθ.
@@ -996,6 +1128,31 @@ The right side of an essential condition may be a field of a `Results`
 value (§15.1). The solver interpolates it at the nodes, or at the
 integration points for a weak condition.
 
+### 12.6 Symmetry groups
+
+```skein
+symmetry rotor: cyclic { n: 24, axis: (0, 0, 1), low: face_a, high: face_b }
+```
+
+A `symmetry` item solves one sector of a body that repeats. It ties the
+unknowns on the boundary `high` to the unknowns on `low`, through the
+transformation of the group. The list of groups is closed:
+
+| Group | Settings | Condition on `high` |
+|---|---|---|
+| `cyclic` | `n`, `axis`, `low`, `high`, `harmonic` (Int, default 0) | the value on `low`, rotated by 2π/n and multiplied by `exp(im*2*pi*harmonic/n)` |
+| `dihedral` | `n`, `axis`, `low`, `high` | `cyclic` plus a mirror plane on each side of the sector |
+| `bloch` | `period` (a vector), `low`, `high`, `k` (a wave vector) | the value on `low` multiplied by `exp(im*dot(k, period))` (Bloch and Floquet) |
+
+The checker tests that the transformation maps `low` onto `high`
+[`symmetry_map`]. A `harmonic` other than 0, or a `k` other than 0, needs
+`Complex` unknowns (§5.1). A `modal` step over the harmonics gives the
+modes of the full body.
+
+Reason: rotors, gears and periodic structures are common, and a sector
+model is many times smaller than the full body. A closed list of groups
+keeps each one testable.
+
 ---
 
 ## 13. Methods
@@ -1007,14 +1164,28 @@ method solid: cg {
 }
 ```
 
-`method p: kind { … }` gives the numerical method of physics `p`. Each
-physics must have one method [`method_missing`]. The kinds:
+`method p: kind { … }` gives the numerical method of physics `p`. A
+physics with no `method` item takes the defaults:
+
+- the kind `cg`, on the one mesh whose region holds the region of the
+  physics. With no such mesh, or with more than one, the default does not
+  apply [`method_missing`].
+- `order: 2` for each unknown, except a pressure that pairs with a
+  velocity under `incompressible`, which takes `order: 1` (Taylor-Hood);
+- `stabilize: supg` when the equations have a convection term, and `none`
+  when they do not.
+
+Reason: these defaults are the right choice for most solid, heat and
+laminar flow models, and they cut a block of 4 lines from each of them.
+`skein check` prints the method that it chose.
+
+The kinds:
 
 | Kind | Settings | Notes |
 |---|---|---|
-| `cg` | `mesh`, `order` (Int or a record per field), `stabilize`, `quadrature`, `couple` | continuous Galerkin FEM |
-| `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty` | interior penalty for second-order terms |
-| `fv` | `mesh`, `gradient` (`green_gauss`, `least_squares`), `flux` (`upwind`, `linear_upwind`, `central`), `pv_coupling` (`rhie_chow`) | cell-centred finite volume |
+| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature`, `couple` | continuous Galerkin FEM. `nedelec` (H(curl)) and `raviart_thomas` (H(div)) are phase 5. |
+| `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty`, `shock_capturing` (`none`, `entropy_viscosity`) | interior penalty for second-order terms |
+| `fv` | `mesh`, `gradient` (`green_gauss`, `least_squares`), `flux` (`upwind`, `linear_upwind`, `central`), `limiter` (`none`, `minmod`, `van_leer`, `venkatakrishnan`), `pv_coupling` (`rhie_chow`) | cell-centred finite volume |
 | `rkpm` | `points`, `basis` (`linear`, `quadratic`), `support` (Real, times the spacing), `integrate` (`scni`, `gauss`), `bc` (`nitsche`) | Galerkin meshless |
 | `gfd` | `points`, `stencil` (Int), `weight` | strong-form collocation |
 | `ode` | none | for a physics with only global unknowns (§10.5). The time scheme comes from the step. |
@@ -1047,10 +1218,10 @@ step heat_up: transient(end: 600 s, dt: 5 s, scheme: bdf2) {
 
 The steps run in the order of the file. Each step starts from the state at
 the end of the step before it. The first step starts from the initial value
-of each field: the expression after `=` in the `field` declaration, or zero.
+of each unknown: the expression after `=` in `solves`, or zero.
 
 ```skein
-field T: Temperature on part = 293 K
+physics heat on part solves T: Temperature = 293 K { … }
 ```
 
 ### 14.2 Procedures
@@ -1058,7 +1229,8 @@ field T: Temperature on part = 293 K
 | Procedure | Arguments | Meaning |
 |---|---|---|
 | `static` | `ramp` (Int, default 1) | `ddt` = 0. Nonlinear problems take `ramp` load increments. |
-| `transient` | `end`, `dt`, `scheme` | time stepping from the end time of the step before |
+| `transient` | `end`, `dt`, `scheme`, `adapt` | time stepping from the end time of the step before. `adapt: { rtol, atol }` changes `dt` to keep the estimated local error below the limits. `dt` is then the first step. |
+| `harmonic` | `freq` (a list of `Frequency`) | steady response to loads of the form `F·exp(im·ω·t)`. The unknowns and loads are `Complex` (§5.1). |
 | `modal` | `count`, `shift` | the `count` lowest eigenpairs of the linearized operator about the current state |
 | `buckling` | `count` | eigenpairs of the stiffness and the geometric stiffness of the current state |
 
@@ -1068,6 +1240,7 @@ Time schemes:
 |---|---|---|---|
 | `backward_euler` | 1 | implicit | |
 | `bdf2` | 2 | implicit | first-order in time (`ddt`) |
+| `bdf` | 1 to 5, variable | implicit | `adapt` with `ddt` (stiff ODEs) |
 | `crank_nicolson` | 2 | implicit | |
 | `generalized_alpha(rho_inf)` | 2 | implicit | second-order in time (`ddt2`) |
 | `ssprk3` | 3 | explicit | |
@@ -1142,7 +1315,7 @@ the column of its results table. A report with no name gets its source
 text as the column name.
 
 `integral(f, r)` has the dimension of `f` times `Length^k`, where `k` is
-the topological dimension of `r`. In `space 2d` with no thickness, a force
+the topological dimension of `r`. In a `2d` model with no thickness, a force
 on a curve is thus `Force/Length`, the force per unit depth.
 
 ### 14.6 Mesh adaptivity
@@ -1363,11 +1536,10 @@ becomes a Goose program, so the generated code is memory-safe too. The
 Goose compiler then writes C, and a C compiler makes a native executable or,
 with Emscripten (`emcc`), a WebAssembly module.
 
-Note: Goose on WebAssembly is a proposal in the Goose repository, not a
-feature (`docs/design/wasm.md` in Goose). Each Goose data stack needs
-reserved address space, and wasm32 has no reservation. The Skein browser
-target thus depends on the "fixed partitions" plan of that proposal. Phase
-1 does not need it. See the risks in the [roadmap](roadmap.md#risks).
+The WebAssembly target uses the C that Goose writes: `emcc` compiles that C
+to a WebAssembly module. Earlier projects of the author of Skein, beamdiag
+and goosestrike, already run in the browser in this way. Thus the browser
+target does not depend on a WebAssembly back end in Goose.
 
 ### 18.2 Files
 
@@ -1383,6 +1555,13 @@ target thus depends on the "fixed partitions" plan of that proposal. Phase
 The plan stores a mesh as flat arrays, which Goose keeps in data stacks with
 no pointers. A cell kernel is a `simd fn`. Assembly runs in worker threads
 over a colouring of the cells, so no two workers write one row.
+
+Each generated function has at most 60 lines (rule 4 of the Power of
+Ten). When the kernel of a cell is longer, the emitter splits it into
+functions by blocks of the cell matrix, one block for each pair of
+unknowns or of node groups, and one function calls them in order. Reason:
+a person can review a function of 60 lines, and a test checks the length
+of each generated function.
 
 This is the kernel that the compiler writes for the linear elastic
 tetrahedron of order 1. It is illustrative: the generated names and the
@@ -1438,6 +1617,7 @@ standard library uses for files and the clock.
 | multigrid | smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996) | 3 |
 | mesher | §9.2 | 2 |
 | output | VTU writer, TOON reports, state files | 2 |
+| tasks | the work-stealing task pool of §20.5 | 3 |
 
 ### 18.5 The compiler in Goose
 
@@ -1467,7 +1647,9 @@ the diagnostic in brackets. The full list with the fixes is in
 10. Results and expectations: files exist, types match (§15).
 11. Parameters, scales and studies (§20, §21), manufacture and tolerance
     items (§22).
-12. `allow` names a check that exists, with a reason that is not empty
+12. `use` files, functions, templates and symmetry groups (§4.1, §4.2,
+    §7.4, §12.6).
+13. `allow` names a check that exists, with a reason that is not empty
     [`allow_reason`].
 
 ---
@@ -1587,6 +1769,18 @@ The memory of one case times `k` must fit the target. The runner estimates
 the memory of a case from the mesh size before it starts the workers, and
 lowers `k` if necessary. It reports the value that it chose.
 
+**Phase 3: one work-stealing task pool.** Phase 2 runs cases first, as
+above. Phase 3 replaces the two levels of threads with one pool in the style
+of the Go scheduler. Each hardware thread is a worker with its own queue of
+tasks. A task is one case, or one part of the work in a case: a colour of
+the assembly, a block of a solver. A worker that has no task takes one
+from the queue of another worker. Thus a study with 3 large cases on 16
+threads keeps each thread busy, and the user sets no `--jobs`.
+
+The pool needs atomic operations for the queues. Before phase 3 starts,
+check whether Goose gives atomics. If it does not, each queue uses a lock,
+which costs more time for each task but gives the same results.
+
 ### 20.6 The results table
 
 The study writes `.skein/studies/<model>/<study>.toon` and prints the same
@@ -1633,6 +1827,11 @@ computes the dimensional value that gives it. The checker confirms that
 scales D, U, rho
 ```
 
+Each model with dimensions has one `scales` line [`scales_missing`]. A
+`units nondim` model has none. Reason: an LLM writes a scales line as
+easily as a `units` name, and the line makes the size of each unknown
+explicit.
+
 The `scales` line names reference values. Their dimensions must be
 independent [`scales_dependent`], and together they must make each
 dimension in the model [`scales_incomplete`]. The example spans length (D),
@@ -1650,10 +1849,10 @@ with `scales a, U, rho`, the momentum equation becomes
 `ddt(v*) + grad(v*)*v* + grad(p*) − (1/Re)*lap(v*) = 0`, and the
 `check --groups` report prints `Re = rho*U*a/mu`.
 
-Without `scales`, the compiler takes the base units of the unit system as
-the scales (§6.5). Reason for a `scales` line: the base units are often far
-from the sizes of the problem, for example `m` and `s` for a micro-channel,
-and scaled variables near 1 make the solver tolerances meaningful.
+Reason for scales from the model, not from the unit system: the base units
+are often far from the sizes of the problem, for example `m` and `s` for a
+micro-channel, and scaled variables near 1 make the solver tolerances
+meaningful.
 
 ### 21.3 The π groups of a model
 
@@ -1800,8 +1999,14 @@ tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
 The compiler differentiates the expression with respect to each parameter
 that has a tolerance. It reports the nominal value and the range by the
 worst case (the sum of |∂f/∂p|·tol) and by root sum square. The check
-`dfm_stack` fails when the range of the chosen `method` (`worst_case` or
-`rss`) is not inside the limits. The expression must be a constant: it can
+`dfm_stack` fails when the range of the chosen `method` (`worst_case`,
+`rss` or `monte_carlo`) is not inside the limits.
+
+`method: monte_carlo` is for a stack-up that is not linear, for example a
+gap that depends on an angle. It runs a `sample` study (§20.2) with each
+toleranced parameter uniform in its tolerance band, and takes the range of
+the expression over the samples. `samples: n` sets the number (default
+10000). The expression needs no solve, so the study is fast. The expression must be a constant: it can
 use geometry and parameters, but not fields [`not_constant`].
 
 ### 22.5 Export for manufacture
@@ -1814,9 +2019,10 @@ skein export housing.skn --geometry housing --format stl
 |---|---|---|
 | `stl` | a triangulated surface from the mesher, at the size of `--size` | 2 |
 | `step` | AP242 with tessellated geometry from the mesher | 4 |
-| `step` with exact surfaces | a boundary representation of the CSG tree | 5, see the [tradeoffs](tradeoffs.md#4-parametric-parts-text-to-cad-and-export) |
 
-Skein exports geometry. It still does not import meshes or CAD files
+Skein does not export exact surfaces (a B-rep). Reason: a B-rep kernel is a
+project of its own size, and Skein is a simulation language first. See the
+[tradeoffs](tradeoffs.md#4-parametric-parts-text-to-cad-and-export). Skein exports geometry. It still does not import meshes or CAD files
 (decision 8).
 
 ---
@@ -1844,7 +2050,12 @@ Skein exports geometry. It still does not import meshes or CAD files
 
 ### Constants
 
-`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`.
+`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `im` (imaginary unit),
+`dual_eps` (dual unit).
+
+### Standard library
+
+The physics templates of §4.2. `skein help std` prints their source.
 
 ---
 

@@ -5,9 +5,9 @@ compiles to [Goose](https://aardappel.github.io/goose/), and Goose compiles
 to C and WebAssembly.
 
 ```skein
-model cantilever
-space 3d
-units mm_N_MPa_s
+model cantilever: 3d, mm_N_MPa_s
+
+scales 40 mm, 2.5 MPa
 
 let beam: Solid = box((0, 0, 0) mm, (200, 20, 40) mm)
 let root: Surface = boundary(beam, x == 0 mm)
@@ -22,18 +22,11 @@ mesh m on beam {
     size: 5 mm
 }
 
-field u: Vector<Length> on beam
-
-physics solid on beam solves u {
+physics solid on beam solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
     eq div(sigma) = 0
-}
-
-method solid: cg {
-    mesh: m
-    order: 2
 }
 
 step load: static {
@@ -58,7 +51,8 @@ Skein changes these things:
 
 - **Physics in strong form.** You write `div(sigma) = 0` and the
   constitutive law, as in a textbook. The compiler derives the weak form,
-  the finite-volume balance or the meshless equations.
+  the finite-volume balance or the meshless equations. A standard library
+  of physics templates, in Skein source, covers the common physics.
 - **Named modelling assumptions.** `assume small_strain, plane_stress(2 mm)`
   has an exact meaning. The checker rejects assumptions that conflict.
 - **Units in the type system.** `E: Pressure = 210 GPa`. The checker rejects
@@ -74,12 +68,14 @@ Skein changes these things:
 - **Verification by default.** Each run checks the rigid-body modes, the
   mesh quality, the residual, the equilibrium, the energy balance and the
   conservation of mass, and prints the result.
-- **Written for LLMs.** Rust-like declarations, every type explicit, types
-  only at declarations, compact TOON tables and output, and stable
-  diagnostic ids with a fix.
-- **Studies and dimensionless groups.** A `param` and a `study` sweep a
-  model, with the cases on parallel workers. `skein check --groups` prints
-  `Re`, `Pr` and the other groups of the model.
+- **Written for LLMs, reviewed by people.** Rust-like declarations, every
+  type explicit, types only at declarations, compact TOON tables and
+  output, and stable diagnostic ids with a fix. One item on each line and
+  no column alignment, so a small change gives a small diff.
+- **Dimensions done right.** Each model has a `scales` line, and the
+  solver works in scaled variables. `skein check --groups` prints `Re`,
+  `Pr` and the other groups of the model. A `param` and a `study` sweep a
+  model, with the cases on parallel workers.
 
 Simulation is the core. Parametric parts, export for manufacture and
 design-for-manufacture checks come later, and the
@@ -97,7 +93,7 @@ design-for-manufacture checks come later, and the
 * [Roadmap](docs/roadmap.md)
 * [Design decisions](docs/decisions.md)
 * [Tradeoffs](docs/tradeoffs.md)
-* [Grilling questions](docs/grilling.md)
+* [Grilling questions and answers](docs/grilling.md)
 * [The LLM test](docs/llm_test.md)
 
 ## License

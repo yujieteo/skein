@@ -2,13 +2,14 @@
 // built in three lifts on a foundation under gravity, with a temporary
 // berm at its right toe. Each lift is born strain-free on the deformed
 // shape of the steps before it. The last step kills the berm, which models
-// its excavation. 2D plane strain, linear elastic, quadratic triangles.
+// its excavation. 2D plane strain, linear elastic, quadratic triangles
+// (the default method).
 
-model embankment
-space 2d
-units SI
+model embankment: 2d, SI
 
 let g: Acceleration = 9.81 m/s^2
+
+scales 6 m, 25 MPa, 1800 kg/m^3
 
 let ground: Surface = rect((-30, -10) m, (30, 0) m)
 let lift1: Surface = polygon((-12, 0) m, (12, 0) m, (10, 2) m, (-10, 2) m)
@@ -38,18 +39,9 @@ mesh m on body {
     refine lift1 | lift2 | lift3 | berm: 0.5 m
 }
 
-field u: Vector<Length> on body
-
-physics soil on body solves u {
+physics soil on body: linear_elastic(b: rho*(0, -g)) solves u: Vector<Length> {
     material clay on ground, fill on lift1 | lift2 | lift3 | berm
-    assume small_strain, isotropic, plane_strain
-    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
-    eq div(sigma) + rho*(0, -g) = 0
-}
-
-method soil: cg {
-    mesh: m
-    order: 2
+    assume plane_strain
 }
 
 bc base: u = 0

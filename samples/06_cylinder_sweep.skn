@@ -1,10 +1,9 @@
 // Steady 2D flow past a cylinder, swept over the Reynolds number. The
 // study varies Re, the model computes the viscosity that gives it, and
-// each case reports the drag coefficient.
+// each case reports the drag coefficient. The physics is in strong form,
+// and the method is the default: Taylor-Hood elements with SUPG.
 
-model cylinder_sweep
-space 2d
-units SI
+model cylinder_sweep: 2d, SI
 
 param Re: Real = 20 in 1..200
 let D: Length = 0.1 m
@@ -32,21 +31,12 @@ mesh m on fluid_dom {
     refine cyl: D/40
 }
 
-field v: Vector<Velocity> on fluid_dom
-field p: Pressure on fluid_dom
-
-physics flow on fluid_dom solves v, p {
+physics flow on fluid_dom solves v: Vector<Velocity>, p: Pressure {
     material fluid
     assume incompressible, newtonian, laminar
     let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
     eq rho*grad(v)*v - div(sigma) = 0
     eq div(v) = 0
-}
-
-method flow: cg {
-    mesh: m
-    order: { v: 2, p: 1 }
-    stabilize: supg
 }
 
 step steady: static {

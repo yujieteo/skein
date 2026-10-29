@@ -38,6 +38,8 @@ verification.
 | `skein view model.skn` | opens the results in the WebGL viewer |
 | `skein lsp` | serves an editor over the Language Server Protocol |
 | `skein help [command]` | prints help |
+| `skein help --llm` | prints the language card for an LLM: the grammar, the keywords, the standard library and one example, in about 2000 tokens |
+| `skein help std` | prints the Skein source of the standard library (spec §4.2) |
 
 Global options:
 
@@ -73,7 +75,8 @@ the samples. Reason: an LLM runs `check` after each edit.
 ## 3. Formatting
 
 `skein fmt` gives each model one layout. Two models with the same meaning
-and the same comments have the same text after `fmt`.
+and the same comments have the same text after `fmt`. The layout keeps each
+change local, so that the diff of a small change is small (spec §3.2).
 
 | Option | Meaning |
 |---|---|
@@ -83,23 +86,28 @@ and the same comments have the same text after `fmt`.
 ### 3.1 Format rules
 
 1. Indentation is 4 spaces. Skein has no tabs.
-2. A line is at most 100 characters. `fmt` breaks a longer line after a `,`
-   or before a binary operator, and indents the continuation by 4 spaces.
+2. A line is at most 100 characters. A longer argument list or study list
+   gets one item on each line, indented by 4 spaces, with a comma after
+   each item, also after the last. A longer expression breaks before a
+   binary operator. Thus a new item adds one line and changes no other.
 3. One space goes on each side of `=`, `==`, `!=`, `<`, `<=`, `>`, `>=`,
    `+`, `-`, `|`, `&`, `||`, `&&`, and after `:` and `,`.
 4. No space goes around `*`, `/` and `^`. Thus `2*mu*eps` and `kg/m^3`
    look as in a textbook.
 5. One space goes between a number and its unit: `210 GPa`, `(0, 0, 1) mm`.
-6. The header lines come first, with no blank line between them.
+6. The header is one line. The `use` lines come after it.
 7. One blank line goes between two top-level items. A run of `let`
    lines, or of `bc` lines, has no blank lines in it.
 8. In a block, the statements keep their order. `fmt` never reorders items,
    because order carries meaning (declaration before use, step order).
-9. In a table, `fmt` aligns the numbers of each column on the decimal
-   point.
+9. `fmt` never aligns columns, in a table or anywhere else. A table row is
+   its values with `, ` between them. Reason: alignment changes the nearby
+   lines when one value gets longer.
 10. A number keeps its digits. `fmt` does not change `1.0` to `1`.
 11. Comments keep their text and their line. A trailing comment gets 2
     spaces before `//`.
+12. `fmt` changes only the lines that break a rule. It does not reflow a
+    paragraph of a comment or a line that already obeys the rules.
 
 ---
 
@@ -220,7 +228,8 @@ skein build samples/01_cantilever.skn --target wasm
 
 `build` writes `.skein/build/<model>.goose`, then calls the Goose compiler.
 For `native`, Goose writes C and builds it with the C compiler that it
-finds. For `wasm`, Goose writes C and `skein` compiles it with `emcc`.
+finds. For `wasm`, Goose writes C and `skein` compiles it with `emcc`, in
+the same way as earlier Goose projects that run in the browser.
 
 | Option | Meaning |
 |---|---|
@@ -228,8 +237,7 @@ finds. For `wasm`, Goose writes C and `skein` compiles it with `emcc`.
 | `--emit c` | write the C and stop |
 | `--goose path` | the Goose compiler to use |
 
-The WebAssembly target depends on Goose's plan for WebAssembly, which is a
-proposal and not yet a feature (spec §18.1).
+The WebAssembly target compiles the C from Goose with emcc (spec §18.1).
 
 ### 7.1 Export
 

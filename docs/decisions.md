@@ -28,7 +28,8 @@ documentation that implement it.
 
 The captain added these goals on 2026-10-29, after the 17 decisions. The
 [tradeoffs](tradeoffs.md#0-the-goals-in-priority-order) rank them below the
-simulation core. The [grilling record](grilling.md) holds the open choices.
+simulation core. The [grilling record](grilling.md#answers) holds the
+answers of the captain from 2026-10-30.
 
 | Steer | Where |
 |---|---|
@@ -41,6 +42,8 @@ simulation core. The [grilling record](grilling.md) holds the open choices.
 | DFM checks with the process in the file | spec [§22.2](skein_spec.md#222-manufacture) to [§22.4](skein_spec.md#224-tolerances-and-stack-ups), [checks.md §4.2a](checks.md#42a-design-for-manufacture) |
 | The Power of Ten rules for Skein and the generated Goose | [tradeoffs §6](tradeoffs.md#6-reliability-the-power-of-ten) |
 | Too many goals: rank them, with simulation as the core | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order), [grilling round 0](grilling.md#round-0-the-ranking-of-the-goals) |
+| The grilling answers of 2026-10-30: three protected goals, required scales, a work-stealing pool, closed lists of number systems and symmetry groups, the token cuts | [grilling answers](grilling.md#answers), [tradeoffs §11](tradeoffs.md#11-summary-of-the-gaps) |
+| Small diffs that a person can read | spec [§3.2](skein_spec.md#32-layout-for-small-diffs), [command line §3](command_line.md#3-formatting), [LLM test §2.1](llm_test.md#21-edit-tasks) |
 
 ## Choices made in the spec
 
@@ -51,9 +54,9 @@ These choices are not in the 17 decisions. The spec gives a reason for each.
 | A newline ends a statement. No semicolons. | a semicolon costs one token on each line and tells the parser nothing | spec [§2.2](skein_spec.md#22-lines-and-statements) |
 | Tables omit the TOON row count `[N]` | the count changes with each new row, and the checker finds a short row without it | spec [§3](skein_spec.md#3-grammar) |
 | Declaration before use | one pass for names, and each error at the line of the use | spec [§3.1](skein_spec.md#31-order-of-items) |
-| One namespace per model | a step can use `sigma` from a physics block with no prefix | spec [§4](skein_spec.md#4-names-and-scope) |
+| One namespace per model, with std and `use` items in it | a step can use `sigma` from a physics block with no prefix, and a clash is a `duplicate_name` error | spec [§4](skein_spec.md#4-names-and-scope) |
 | `0` is zero of any type | `u = 0` is the most common condition | spec [§5.7](skein_spec.md#57-assignability) |
-| No type aliases and no user functions | an alias puts one fact in two places, and a function body needs loops | spec [§6.6](skein_spec.md#66-what-skein-leaves-out), [§7.4](skein_spec.md#74-functions) |
+| No type aliases, and functions of one expression only | an alias puts one fact in two places, and a function body with loops needs a second language | spec [§6.6](skein_spec.md#66-what-skein-leaves-out), [§7.4](skein_spec.md#74-functions) |
 | Diagnostic ids are names, not numbers | an LLM and a reviewer read `rigid_body` without a lookup | [checks.md](checks.md) |
 | `allow` needs a reason in the file, with no command-line switch | a switch lets an LLM turn off a check to make a run pass | [checks.md §1](checks.md#1-how-diagnostics-work) |
 | Dead cells leave the system, with no small stiffness factor | no ill conditioning from the dead cells | spec [§14.3](skein_spec.md#143-birth-and-death) |

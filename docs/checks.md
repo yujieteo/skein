@@ -61,10 +61,11 @@ in the file stays in the review.
 | `syntax` | §3 | the text does not match the grammar | `let E Pressure = 1 Pa` | the expected token, for example "insert `:`" |
 | `unknown_name` | §4 | a name is not declared | `hooke(E, nu, strain(v))` with no `v` | the nearest declared name |
 | `use_before_decl` | §3.1 | a name is used above its declaration | `bc tip: …` above `let tip` | move the declaration up |
-| `duplicate_name` | §4 | two declarations have one name | two `let sigma` | rename one |
+| `duplicate_name` | §4 | two declarations have one name, also a name from the standard library, a `use` file or Appendix A | two `let sigma`, or `let t` (time) | rename one |
+| `use_item` | §4.1 | a `use` file holds an item other than `material`, `param`, `let` or `fn`, or a `use` line | a `physics` in a library file | move the item to the model |
 | `unknown_unit` | §6.3 | a unit name does not exist | `5 mms` | the nearest unit name |
 | `table_row_width` | §5.6 | a table row has the wrong number of values | 3 values for 2 columns | the column list |
-| `header_order` | §3 | `model`, `space`, `units` are missing or not first | | the header template |
+| `header_order` | §3 | the header line is missing or not first | | `model name: 3d, SI` |
 
 ### 2.2 Types and units
 
@@ -84,7 +85,7 @@ in the file stays in the review.
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
 | `geometry_dim` | §5.3 | the geometry type does not match the dimension | `let s: Solid = rect(…)` | the type that matches |
-| `geometry_space` | §8.1 | a 2D function in `space 3d`, or the reverse | `circle` in 3D | `cylinder` or `sphere` |
+| `geometry_space` | §8.1 | a 2D function in a `3d` model, or the reverse | `circle` in 3D | `cylinder` or `sphere` |
 | `empty_region` | §8.2 | a selection has no points | `boundary(beam, x == 300 mm)` with `L = 200 mm` | the bounding box of the geometry |
 | `region_outside` | §8.4 | a region is not inside the region of its field | `bc` on a face of another body | the region of the field |
 
@@ -92,8 +93,7 @@ in the file stays in the review.
 
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
-| `field_unsolved` | §10.1 | no physics solves a field | `field T` with no `solves T` | add the field to a `solves` list |
-| `field_solved_twice` | §10.1 | two physics solve one field | | remove it from one `solves` list |
+| `template_eq` | §4.2 | a physics that uses a template adds an `eq` | `physics s on b: linear_elastic solves u: … { eq … }` | write the physics in full, from the source of the template |
 | `eq_count` | §10.3 | the number of `eq` lines is not the number of unknowns | `solves v, p` with one `eq` | the missing equation's unknown |
 | `material_cover` | §10.3 | a point of the region has no material, or two | | the uncovered region |
 | `material_prop_missing` | §4 | a physics uses a property that one of its materials lacks | `rho` used, `steel` has no `rho` | the material to change |
@@ -106,7 +106,7 @@ in the file stays in the review.
 | `assumption_unknown` | §11.1 | an assumption name does not exist | `assume plain_stress` | `plane_stress` |
 | `assumption_conflict` | §11.1 | two assumptions conflict | `small_strain, finite_strain` | remove one |
 | `assumption_invalid` | §11.1 | the condition of an assumption fails | `newtonian` with a stress nonlinear in the rate of strain | the term that breaks it |
-| `assumption_space` | §11.1 | an assumption needs another space | `plane_stress` in `space 3d` | `space 2d` |
+| `assumption_space` | §11.1 | an assumption needs another space | `plane_stress` in a `3d` model | a `2d` model |
 
 ### 2.6 Boundary conditions
 
@@ -120,7 +120,7 @@ in the file stays in the review.
 
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
-| `method_missing` | §13 | a physics has no method | | a `method` template for the physics |
+| `method_missing` | §13 | a physics has no `method`, and the default cannot choose one mesh | two meshes on the region | a `method` item that names the mesh |
 | `method_setting` | §13 | a setting does not belong to the method kind | `points:` in `cg` | the valid settings |
 | `method_physics` | §13 | the method cannot discretize the physics | `gfd` with a `plastic` block | a method that can |
 | `inf_sup` | §13 | an unstable velocity-pressure pair with no stabilization | `order: { v: 1, p: 1 }`, `stabilize: none` | `stabilize: supg_pspg` or `order: { v: 2, p: 1 }` |
@@ -146,6 +146,8 @@ in the file stays in the review.
 | `study_objective` | §20.2 | `minimize` names no scalar `report` of the last step | `minimize(drag)` with no `report drag = …` | the named reports |
 | `scales_dependent` | §21.2 | two scales have dependent dimensions | `scales D, a` (both `Length`) | remove one |
 | `scales_incomplete` | §21.2 | the scales do not make a dimension that the model uses | `scales D, U` in a model with a density | the missing base dimension |
+| `scales_missing` | §21.2 | a model with dimensions has no `scales` line | | a `scales` line from the sizes of the model, for example `scales L, E` |
+| `symmetry_map` | §12.6 | the transformation of a `symmetry` item does not map `low` onto `high` | `n: 24` on a sector of 30 degrees | the angle of the sector |
 | `nondim_unit` | §6.5 | a literal has a unit in a `units nondim` model | `units nondim` and `1 m` | remove the unit |
 | `process_setting` | §22.2 | a setting does not belong to the process | `draft:` in `cnc_mill` | the valid settings |
 
@@ -159,14 +161,13 @@ in the file stays in the review.
 |---|---|---|---|
 | `unused_let` | a `let` has no use | dead text costs review time and tokens | remove it |
 | `unused_material` | a material is not assigned | the user probably forgot to assign it | assign it or remove it |
-| `unused_field` | a field is solved but never output, reported or used | the solve costs time for nothing | output it or remove it |
+| `unused_field` | an unknown is solved but never output, reported or used | the solve costs time for nothing | output it or remove it |
 | `load_no_cells` | a `bc` names a region with no active cells in that step | the load does nothing, for example on a dead region | move the `bc` to a later step |
 | `bending_lock` | order-1 triangles or tetrahedra in a solid with a thickness under 4 cells in a bending load | linear simplices are too stiff in bending | `order: 2` or a finer mesh |
 | `volumetric_lock` | an order-1 displacement method with `nu` > 0.49 and no pressure unknown | the solution locks and is too stiff | `order: 2` or a mixed form |
 | `dt_unstable` | an explicit scheme with `dt` above the estimated stable limit (CFL for flow, the highest frequency for solids) | the run diverges | the estimated limit |
 | `stabilization_missing` | `stabilize: none` where the cell Peclet or Reynolds number is above 1 | the solution oscillates | `stabilize: supg` or a finer mesh |
 | `mesh_feature_small` | a feature of the geometry is smaller than the local mesh size | the mesh does not resolve it | a `refine` with the feature size |
-| `shadows_builtin` | a declaration hides a built-in name | readers and LLMs expect the built-in | rename it |
 
 ---
 

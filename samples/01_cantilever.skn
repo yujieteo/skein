@@ -1,16 +1,16 @@
 // A steel cantilever with a lightening hole near the root, under an end
-// load. Linear static, 3D, quadratic tetrahedra. Sample 04 is a submodel
-// of the region around the hole.
+// load. Linear static, 3D, quadratic tetrahedra (the default method).
+// Sample 04 is a submodel of the region around the hole.
 
-model cantilever
-space 3d
-units mm_N_MPa_s
+model cantilever: 3d, mm_N_MPa_s
 
 let L: Length = 200 mm
 let W: Length = 20 mm
 let H: Length = 40 mm
 let r: Length = 6 mm
 let P: Force = 2 kN
+
+scales H, P/(W*H)
 
 let bore: Solid = cylinder((40, 0, 20) mm, (0, 1, 0), r, W)
 let beam: Solid = box((0, 0, 0) mm, (L, W, H)) - bore
@@ -29,18 +29,8 @@ mesh m on beam {
     refine hole: 1 mm
 }
 
-field u: Vector<Length> on beam
-
-physics solid on beam solves u {
+physics solid on beam: linear_elastic solves u: Vector<Length> {
     material steel
-    assume small_strain, isotropic
-    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
-    eq div(sigma) = 0
-}
-
-method solid: cg {
-    mesh: m
-    order: 2
 }
 
 step load: static {

@@ -21,43 +21,50 @@
 Skein must handle a wide range of engineering simulation work with one
 language. Each design choice helps some workloads and costs others. This
 document tests the choices against the workloads and records each cost. The
-open questions go to the captain in [grilling.md](grilling.md).
+captain answered the questions of [grilling.md](grilling.md) on 2026-10-30,
+and this document follows the answers.
 
 ---
 
 ## 0. The goals, in priority order
 
 Skein has too many goals to build them all at once. This table ranks them.
-Simulation is the core. A goal above the line is **protected**: no later
-goal may weaken it. A goal below the line is **layered**: it builds on the
-core, it comes later, and it can be cut if it costs too much. The captain
-confirms or changes this ranking in [grilling.md round 0](grilling.md#round-0-the-ranking-of-the-goals).
+Simulation is the core. A **protected** goal is one that no other goal may
+weaken. A **layered** goal builds on the core, comes later, and can be cut
+if it costs too much. The captain set this ranking in
+[grilling.md round 0](grilling.md#round-0-the-ranking-of-the-goals).
 
 | Rank | Goal | Class | Syntax cost | Compiler size | Build time | Runtime cost | Phase |
 |---|---|---|---|---|---|---|---|
 | 1 | Simulation core: strong-form physics, methods, mesher, solvers | protected | the base language | the largest part: lowering, methods, mesher, solvers | the most | none extra, it is the work | 2 to 5 |
-| 2 | Units, static analysis and verification by default | protected | a type on each declaration, a unit on each literal | the checker, about a third of the front end | small | the post-solve checks cost a few percent of a solve | 1 (checks), 2 (verification) |
-| 3 | LLM- and AXI-native syntax and output | protected | it shapes all syntax: types only at declarations, TOON, ids with fixes | small: the fix strategies and the TOON writer | none | none | 1 |
-| 4 | Parameters, studies and concurrency | layered, high value | `param`, `study`, `report name =` | the study runner and the dependency analysis | small | memory grows with the number of workers | 1 (`param` in `check`), 2 (studies) |
-| 5 | Dimensional analysis: groups and scales | layered | `scales`, `units nondim` | the π basis and the scaled SIR | small | scaled solves are equal or faster | 1 (`check --groups`), 3 (scaled SIR) |
-| 6 | Web output: the tool chain and the viewer in the browser | layered, depends on Goose | none | the browser shell and the viewer | a second target | the browser limits memory | 4 |
-| 7 | Power of Ten reliability | layered, mostly free | none: most rules hold by construction | tests and emitter checks | small | none | 2 onwards, as tests |
-| 8 | Parametric parts and text-to-CAD | layered | `tol`, more geometry operations | export writers. A B-rep kernel for exact STEP. | medium for exact STEP | none for simulation | 2 (STL), 4 (tessellated STEP), 5 (exact STEP) |
-| 9 | Design for manufacture | layered, can be cut | `manufacture`, `tolerance` | the DFM checks on distance functions | small | geometry checks only, fast | 5 |
+| 2 | Dimensions done right: strict units, static analysis and verification by default, with dimensional analysis and parameter sweeps where they count | protected | a type on each declaration, a unit on each literal, a `scales` line, `param` and `study` | the checker (about a third of the front end), the π basis, the scaled SIR, the study runner | small | the post-solve checks cost a few percent of a solve. Scaled solves are equal or faster. | 1 (checks, `param`, `check --groups`), 2 (verification, cases-first studies), 3 (scaled SIR) |
+| 3 | LLM- and AXI-native syntax and output, with small human-readable diffs | protected | it shapes all syntax: types only at declarations, TOON, ids with fixes, one item on each line, no alignment | small: the fix strategies, the TOON writer, the language card | none | none | 1 |
+| 4 | Concurrency: one work-stealing task pool | layered, high value | none | the task pool in the runtime | small | memory grows with the number of cases in flight | 3 |
+| 5 | Web output: the tool chain and the viewer in the browser | layered | none | the browser shell and the viewer | a second target: Goose to C, then `emcc` | the browser limits memory | 4 |
+| 6 | Power of Ten reliability | layered, mostly free | none: most rules hold by construction | tests, emitter checks, the kernel splitter | small | none | 2 onwards, as tests |
+| 7 | Parametric parts and text-to-CAD | layered | `tol`, `shell`, `loft`, `pattern` | the STL and tessellated STEP writers. No B-rep kernel. | small | none for simulation | 2 (STL), 4 (tessellated STEP) |
+| 8 | Design for manufacture | layered, first to cut | `manufacture`, `tolerance` | the DFM checks on distance functions | small | geometry checks only, fast | 5 |
+
+Rank 2 merges the units, the static analysis and the dimensional analysis
+into one goal. Reason, in the words of the captain: dimensional analysis
+and units are subtle, and they need "strong typing for real problems
+requiring dimensions, but yet … dimensional analysis / parametric sweep
+when it counts".
 
 Rules that follow from the ranking:
 
 - A layered goal may add syntax, but it must not change the meaning of a
-  model that does not use it. A model with no `study`, `scales`,
-  `manufacture` or `tolerance` item is the same model as before.
+  model that does not use it. A model with no `manufacture` or `tolerance`
+  item is the same model as before.
 - When two goals conflict, the higher rank wins. Example: a geometry
   operation that the mesher cannot mesh with good cells is not added for
-  text-to-CAD (rank 8 against rank 1).
+  text-to-CAD (rank 7 against rank 1).
 - The LLM-native goal (rank 3) is protected because it is the reason for
   the language, but it does not overrule correctness: units stay strict
-  (rank 2) even when they cost tokens.
-- Ranks 8 and 9 are the first to cut if the schedule is late. Rank 7 costs
-  almost nothing, so it stays.
+  (rank 2) even when they cost tokens (G0.3).
+- If the schedule is late, cut DFM (rank 8) first, then the tessellated
+  STEP export (rank 7). STL export stays. Rank 6 costs almost nothing, so
+  it stays.
 
 ---
 
@@ -74,8 +81,8 @@ The core choices that each section tests:
 |---|---|
 | C1. Physics in strong form, weak form derived | §10, §17 |
 | C2. Every type explicit, every quantity with a dimension | §5, §6 |
-| C3. Declarative: no loops, no functions, no mutable state | §1, §7.4 |
-| C4. One model per file, one namespace | §1, §4 |
+| C3. Declarative: no loops, no mutable state, functions of one expression only | §1, §7.4 |
+| C4. One model per file plus `use` libraries, one namespace | §1, §4 |
 | C5. Geometry from distance functions, built-in mesher, no mesh import | §8, §9 |
 | C6. Method-neutral SIR, methods chosen per physics | §13, §16 |
 | C7. Code generation to Goose, all solvers in Goose | §18 |
@@ -85,28 +92,29 @@ The core choices that each section tests:
 
 ## 2. The design against the workloads
 
-| Workload | What works | Cost or gap | Fix in the spec, or proposal |
+| Workload | What works | Cost or gap | What the spec does |
 |---|---|---|---|
-| Linear structures (static, modal, buckling) | C1 with `hooke`, `cg`, all procedures | none of note | — |
+| Linear structures (static, modal, buckling) | C1 with `hooke`, `cg`, all procedures, the `linear_elastic` template | none of note | — |
+| Rotors and periodic structures | `symmetry` with `cyclic`, `dihedral` or `bloch` (spec §12.6) | a closed list of groups | accepted. The list covers the common cases (G4.5b). |
 | Nonlinear structures (plasticity, hyperelasticity, large deformation) | `plastic`, `diff(W, C)`, `finite_strain` (§10.6) | a user law with many state variables needs a return map that the compiler must derive. A general return map for any yield function is hard. | phase 5. Start with von Mises and Drucker-Prager, and give a clear error for a law the compiler cannot map. |
-| Shells and beams | lower-dimension regions (§8.3) | the strong form of a shell (Reissner-Mindlin, Kirchhoff-Love) is long. Users do not write it from memory. | **Gap.** Proposal: standard-library physics for shells and beams, written in Skein. Question G4.1. |
+| Shells and beams | lower-dimension regions (§8.3) | the strong form of a shell (Reissner-Mindlin, Kirchhoff-Love) is long. Users do not write it from memory. | standard-library templates `reissner_mindlin` and `timoshenko`, in Skein source (spec §4.2, G4.1), phase 5 |
 | Contact | `contact` (§12.4) | not a PDE: an inequality. It does not fit the strong form, so it is a separate item. | accepted cost |
-| Heat transfer | C1 with `fourier`, `transient` | radiation between surfaces needs view factors, a non-local term | **Gap.** Proposal: `radiation` item, phase 5. Question G4.2. |
+| Heat transfer | C1 with `fourier`, `transient` | radiation between surfaces needs view factors, a non-local term | a `radiation` item with view factors, phase 5 (G4.2) |
 | Incompressible CFD | `supg_pspg`, `vms`, `fv` with Rhie-Chow | none of note for laminar flow | — |
-| Turbulent CFD | `turbulent(model)` assumption | RANS models add equations with wall functions. LES needs `vms`. Each model is many lines. | standard-library physics for k-ω SST and Spalart-Allmaras. Question G4.1. |
-| Compressible CFD with shocks | `dg`, `fv` with Roe flux | shocks need limiters or artificial viscosity, and the spec has no setting for them | **Gap.** Proposal: `limiter` (`minmod`, `barth_jespersen`) for `fv`, and `shock_capturing` (entropy viscosity) for `dg`. Question G4.3. |
+| Turbulent CFD | `turbulent(model)` assumption | RANS models add equations with wall functions. LES needs `vms`. Each model is many lines. | the standard-library template `k_omega_sst` (spec §4.2, G4.1), phase 5 |
+| Compressible CFD with shocks | `dg`, `fv` with Roe flux | shocks need limiters or artificial viscosity, and the spec has no setting for them | `limiter` for `fv` and `shock_capturing: entropy_viscosity` for `dg` (spec §13, G4.3) |
 | Multiphysics (thermal-structural) | two physics that share fields (§10.4), `monolithic` or `staggered` | none of note | — |
 | FSI | `interface` with ALE (§10.7) | mesh motion and large deformation of the fluid mesh are hard to make robust | phase 5, accepted cost |
-| Electromagnetics | `curl` exists | `curl curl` problems need H(curl) (Nédélec) elements. The method table has no element family setting. Time-harmonic problems need complex numbers. | **Gap.** Proposal: `family: nedelec` in `cg`, and a `Complex<D>` type. Questions G4.4 and G4.5. |
-| Acoustics (Helmholtz) | the equation is easy to write | frequency domain needs complex numbers and absorbing boundaries | **Gap.** Same `Complex<D>` proposal. Question G4.5. |
-| Porous media (Darcy, consolidation) | mixed forms with two unknowns | a mixed Darcy form needs H(div) (Raviart-Thomas) elements | **Gap.** Same element family proposal. Question G4.4. |
-| ODE systems (control, lumped models, chemistry) | global unknowns (§10.5), `ode` method | stiff chemistry needs adaptive implicit time steps with error control. The spec has fixed `dt` only. | **Gap.** Proposal: `transient(adapt: { rtol, atol })` with BDF of variable order. Question G4.6. |
+| Electromagnetics | `curl` exists | `curl curl` problems need H(curl) (Nédélec) elements. The method table has no element family setting. Time-harmonic problems need complex numbers. | `family: nedelec` in `cg`, phase 5 (G4.4). `Complex<D>` and the `harmonic` procedure (spec §5.1, §14.2, G4.5). |
+| Acoustics (Helmholtz) | the equation is easy to write | frequency domain needs complex numbers and absorbing boundaries | `Complex<D>` and `harmonic` (G4.5) |
+| Porous media (Darcy, consolidation) | mixed forms with two unknowns | a mixed Darcy form needs H(div) (Raviart-Thomas) elements | `family: raviart_thomas`, phase 5 (G4.4) |
+| ODE systems (control, lumped models, chemistry) | global unknowns (§10.5), `ode` method | stiff chemistry needs adaptive implicit time steps with error control. The spec has fixed `dt` only. | `transient(adapt: { rtol, atol })` with `scheme: bdf` of variable order (spec §14.2, G4.6) |
 | Phase field, reaction-diffusion | C1, `transient` | fourth-order terms (Cahn-Hilliard) need a mixed form or C1 elements | accepted. Write the mixed form with two unknowns. |
-| Free surface (level set, VOF) | a level set is a PDE | reinitialization is a process, not an equation | **Gap.** Question G4.7. |
+| Free surface (level set, VOF) | a level set is a PDE | reinitialization is a process, not an equation | out of scope for v1. No `process` statement until a real model shows which processes are necessary (G4.7). |
 | Meshless (large deformation, fracture) | `rkpm`, `gfd` | fragmentation needs particle methods with contact. That is closer to DEM, which is not a PDE. | out of scope for v1 |
-| Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh |
-| Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | **Gap** for gradients. Proposal: adjoints from the SIR, phase 5. Question G3.3. |
-| Uncertainty quantification | `study … sample` with `lhs` or `sobol` | no statistics of the results in the tool | the table is TOON. Compute the statistics outside, or add `mean`, `std` and quantiles to the study output. Question G3.4. |
+| Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh. Each case runs, with no reuse of similar cases (G2.3). |
+| Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | adjoint gradients from the SIR, phase 5 (G3.3). `Dual<D>` gives forward-mode derivatives before that (spec §5.1). |
+| Uncertainty quantification | `study … sample` with `lhs` or `sobol` | no statistics of the results in the tool | the table is TOON. Other tools compute the statistics (G3.4). |
 | General PDEs with no physics | `units nondim` (§6.5) | no dimension checks | accepted cost, the check report states it |
 
 ---
@@ -122,7 +130,7 @@ properties before any run:
 | dimensional consistency of each equation, condition and output | dimension algebra | §6 |
 | tensor ranks match | type rules | §7.2 |
 | each region exists and is inside its field | CSG tree and sampling | §8 |
-| each unknown has one physics and one equation | counts | §10 |
+| each unknown has one physics and one equation | the unknowns are declared in `solves`, and the equations are counted | §10 |
 | assumptions do not conflict | assumption table | §11 |
 | conditions do not conflict and are on the boundary | condition rules | §12 |
 | the method can discretize the physics, with a stable pair | method rules | §13 |
@@ -139,8 +147,9 @@ What static analysis cannot prove, and what Skein does instead:
 | the time step is stable for a nonlinear problem | `dt_unstable` lint is an estimate. The post-solve energy check finds growth. |
 | the model is the right model of the real part | `expect` against tests or benchmarks. This is validation, not verification. |
 
-Cost of C3: no user functions. A user who needs a helper for a long law
-must repeat it, or use the standard library. Question G1.2.
+Cost of C3: a function is one expression. A law that needs a loop or a
+local iteration must come from the standard library or the built-ins
+(G1.2).
 
 ---
 
@@ -164,8 +173,8 @@ What it costs:
 
 | Cost | Why | Proposal |
 |---|---|---|
-| distance-function CSG is weaker than a B-rep kernel for some features | sketches with constraints, lofts, shells of constant thickness, variable fillets and text are hard on distance functions | add `shell(s, t)` (an offset) and `loft` as distance functions. Keep constraint sketches out of v1. Question G5.1. |
-| exact STEP export needs a B-rep | a CSG tree of distance functions has no exact faces and edges | phase 4 exports STEP AP242 with tessellated geometry, which most CAM and inspection tools read. An exact B-rep for the analytic primitives (planes, cylinders, spheres, cones, tori) is phase 5. Question G5.2. |
+| distance-function CSG is weaker than a B-rep kernel for some features | sketches with constraints, variable fillets and text are hard on distance functions | `shell(a, t)`, `loft` and `pattern` are distance functions (spec §8.1). No constraint sketches (G1.1, G5.1). |
+| no exact STEP export | a CSG tree of distance functions has no exact faces and edges, and a B-rep kernel is a project of its own size | phase 4 exports STEP AP242 with tessellated geometry, which most CAM and inspection tools read. Skein has no exact B-rep (G5.2). |
 | no import of CAD | decision 8 | accepted. An LLM can rewrite a simple part as Skein. A complex existing part is out of scope. |
 
 ---
@@ -180,7 +189,7 @@ way as the other checks, and `allow` with a reason turns one off.
 |---|---|---|
 | checks on the distance function | wall thickness and draft come directly from φ and ∇φ, with no B-rep | the result has the accuracy of the sampling. Thin features near the size of the sample can hide. The checks sample at a fraction of `min_wall`. |
 | the process in the file | the checks know the rules, and a reviewer sees them | a part made by two processes (cast, then machined) needs two `manufacture` items on one region. The spec allows it. |
-| tolerance stack-ups by derivatives | exact sensitivities from the expression, worst case and RSS | linear only. A stack-up through a nonlinear geometry relation needs a sampling method. Proposal: `method: monte_carlo` with `study … sample`. Question G5.3. |
+| tolerance stack-ups by derivatives, and by sampling | exact sensitivities from the expression for worst case and RSS. `method: monte_carlo` runs a `sample` study for a stack-up that is not linear (G5.3). | a Monte Carlo stack-up needs many samples, but each one is an expression with no solve |
 | DFM on each study case | a sweep shows which designs cannot be made | the checks cost time for each case. They are geometry-only, so they are fast compared with a solve. |
 
 What the DFM checks do not cover: cost, cycle time, machine choice and
@@ -199,18 +208,18 @@ Goose code that the compiler writes and the runtime.
 | 1 | simple control flow, no goto, no recursion | **by construction**: no control flow at all | the emitter writes no `recursive fn`. The runtime has none either: the octree and AMG use loops over levels with a fixed maximum. A test fails if a `recursive` keyword is in the runtime or the output. |
 | 2 | a fixed upper bound on each loop | **by construction**: no loops | each loop is over an array whose length is fixed before the solve, or an iteration with a `max_iter` that always has a value (§14.4) |
 | 3 | no dynamic memory after initialization | **by construction**: no allocation | Goose has no heap. The runtime sizes each array after the mesh is made and before the solve. The solve does not grow an array. A test runs each sample with a check that no array grows after the start of the solve. |
-| 4 | functions of at most 60 lines | **by construction**: no functions | runtime functions obey it. Generated kernels are straight-line code and can be longer. This is a stated exception: they have no branches and come from one template each. |
+| 4 | functions of at most 60 lines | **by construction**: a function is one expression (spec §7.4) | runtime functions obey it. The emitter splits each long kernel into functions of at most 60 lines, by blocks of the cell matrix (spec §18.3). A test checks the length of each generated function (G6.4). |
 | 5 | at least 2 assertions per function | verification checks are on by default (checks.md) | each runtime function asserts its preconditions. Each kernel asserts its array sizes once at entry. |
-| 6 | data in the smallest scope | **partly**: one namespace per model (spec §4) is a deliberate exception. A model is short, and one namespace keeps `sigma` usable in a step. | Goose scopes free data at scope exit |
+| 6 | data in the smallest scope | **the one deviation**: one namespace per model (spec §4), and the standard library and the `use` files enter it with no prefix. Reason: a model is short, a prefix costs tokens on each use, and a clash of two names is a `check` error, so no name is ambiguous. | Goose scopes free data at scope exit |
 | 7 | check each return value | no calls that return status | each solver call returns a status that the plan checks. An unchecked status is a compile error in the emitter. |
 | 8 | limited preprocessor | **by construction**: none | Goose has no preprocessor |
 | 9 | limited pointers | **by construction**: none | Goose has no raw pointers. References are checked by the Goose compiler. |
 | 10 | all warnings on, static analysis clean | `skein check` and `skein lint` with no warnings on each sample and benchmark | the Goose compiler with `--debug` on the test suite, and `checkfree fn` on the hot kernels, which proves that no bounds check is left |
 
-Rules 1, 2, 3, 8 and 9 hold for Skein source by construction: the language
-cannot express a violation. Rule 4 has a stated exception for generated
-kernels, and rule 6 for the one namespace. Rules 5, 7 and 10 are
-enforced by tests and by the emitter.
+Rules 1, 2, 3, 4, 8 and 9 hold for Skein source by construction: the
+language cannot express a violation. Rule 6 is the one deviation, for the
+one namespace. Rules 5, 7 and 10 are enforced by tests and by the
+emitter.
 
 ---
 
@@ -220,7 +229,7 @@ enforced by tests and by the emitter.
 |---|---|---|
 | only `param` can change (§20.1) | a reviewer finds each input. The dependency analysis is exact. | a user must mark a value `param` before a study can vary it |
 | Go-style workers over typed queues (§20.3) | no shared memory, so no data races. A failed case does not stop the study. The same design works on native threads and Web Workers. | each worker holds its own copy of the shared mesh. Memory grows with the number of workers. §20.5 limits the workers by memory. |
-| parallel cases before parallel assembly (§20.5) | cases scale almost perfectly | one large case on a machine with many threads gets threads only when it is alone |
+| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. The pool keeps each thread busy also when the cases are few and large, with no `--jobs` from the user. | the pool needs atomic queues. If Goose has no atomics, a lock on each queue costs time for each task (G3.2b). |
 
 ---
 
@@ -232,7 +241,7 @@ mostly in fluids, think in dimensionless groups. The spec keeps both:
 | Need | How | Spec |
 |---|---|---|
 | vary Re, not ρ, U, L, μ | `param Re: Real` and a dimensional `let mu = rho*U*D/Re` | §21.1 |
-| the solver in scaled variables | `scales D, U, rho` | §21.2 |
+| the solver in scaled variables | a `scales` line, required in each model with dimensions (G2.2) | §21.2 |
 | know the groups of a model | `check --groups`, Buckingham π | §21.3 |
 | a model with no physical units at all | `units nondim` | §6.5 |
 
@@ -245,6 +254,11 @@ Costs:
   different form than the one in the textbook.
 - A compressible flow needs more scales (a temperature, a speed of sound).
   The `scales_incomplete` error lists the missing dimension.
+- Each model has one more line, the `scales` line. An LLM writes it easily,
+  and it makes the size of each unknown explicit.
+- A study runs each case, also when two cases have equal groups. A reuse of
+  similar cases needs every dimensional constant of the model in the test,
+  and a missed one gives a wrong result with no error (G2.3).
 
 ---
 
@@ -256,10 +270,14 @@ Costs:
 | TOON tables in source and output | fewer tokens than JSON for uniform rows | a second syntax inside the language |
 | stable ids with a fix in each diagnostic | an LLM repairs a model from the output alone | each new rule needs a fix strategy |
 | `allow` only in the file | an LLM cannot turn off a check from the command line to make a run pass | a user must edit the file |
-| strong form | an LLM knows textbook equations well | the reference answers are 1.4 to 2.9 times larger than APDL decks in bytes ([llm_test.md](llm_test.md) §5) |
+| strong form, with standard-library templates for the common physics | an LLM knows textbook equations well, and a template removes them from the common models | the reference answers are 1.2 to 2.6 times larger than the APDL decks in bytes after the cuts of G6.1 ([llm_test.md](llm_test.md) §5) |
+| one item on each line, no column alignment, a comma after each item of a long list (spec §3.2) | a change to one load, one step or one study parameter is a diff of a few lines that a person can review | `fmt` output is less compact than an aligned table, and rows of a TOON table do not line up |
+| `skein help --llm`, a language card of about 2000 tokens | the context of each LLM session is small | one more text to keep in step with the spec |
 
-The size cost is the largest open question. The [LLM test](llm_test.md)
-measures it in phase 1. Question G6.1.
+The size of the first answer stays larger than a deck. The captain chose
+total cost as the measure (G6.1): the tokens of all rounds until the model
+passes `check`. The [LLM test](llm_test.md) measures it in phase 1, with the
+diff size of three edit tasks.
 
 ---
 
@@ -267,21 +285,24 @@ measures it in phase 1. Question G6.1.
 
 | Choice | Gives | Costs |
 |---|---|---|
-| the whole tool chain in Goose, compiled to WebAssembly | `check`, `fmt`, the mesher, the solver and the viewer run in a browser with no server | Goose on WebAssembly is a proposal today (spec §18.1). The browser limits memory, so large 3D models run only on the native target. |
+| the whole tool chain in Goose. Goose writes C, and `emcc` compiles the C to WebAssembly, as in earlier Goose projects (spec §18.1). | `check`, `fmt`, the mesher, the solver and the viewer run in a browser with no server | the browser limits memory, so large 3D models run only on the native target |
 | studies on Web Workers | a study uses all cores of the machine in the browser | each worker loads the module and its memory |
 
 ---
 
 ## 11. Summary of the gaps
 
-| Gap | Workloads | Proposal | Question |
-|---|---|---|---|
-| standard-library physics | shells, beams, turbulence | physics templates in Skein source | G4.1 |
-| radiation | heat transfer | a `radiation` item | G4.2 |
-| shock capturing | compressible CFD | `limiter`, `shock_capturing` | G4.3 |
-| element families | electromagnetics, porous media | `family: nedelec \| raviart_thomas` | G4.4 |
-| complex numbers | electromagnetics, acoustics | `Complex<D>` and a `harmonic` procedure | G4.5 |
-| adaptive time steps | stiff ODEs | `transient(adapt:)` with variable-order BDF | G4.6 |
-| processes in a step | level-set reinitialization | a `process` statement in a step | G4.7 |
-| adjoint gradients | shape and topology optimization | adjoints from the SIR | G3.3 |
-| exact STEP | export for CAM | B-rep of the analytic primitives | G5.2 |
+The captain decided each gap on 2026-10-30 ([grilling.md](grilling.md#answers)).
+
+| Gap | Workloads | Decision | Phase | Question |
+|---|---|---|---|---|
+| standard-library physics | shells, beams, turbulence | physics templates in Skein source (spec §4.2) | 2 to 5 | G4.1 |
+| radiation | heat transfer | a `radiation` item with view factors | 5 | G4.2 |
+| shock capturing | compressible CFD | `limiter` for `fv`, entropy viscosity for `dg` | 4 | G4.3 |
+| element families | electromagnetics, porous media | `family: nedelec \| raviart_thomas` | 5 | G4.4 |
+| number systems | electromagnetics, acoustics, rotations, sensitivities | the closed list `Real`, `Complex`, `Quaternion`, `Dual`, and the `harmonic` procedure (spec §5.1) | 4 | G4.5, G4.5b |
+| symmetry groups | rotors, gears, periodic structures | the closed list `cyclic`, `dihedral`, `bloch` (spec §12.6) | 4 | G4.5b |
+| adaptive time steps | stiff ODEs | `transient(adapt:)` with variable-order BDF | 3 | G4.6 |
+| processes in a step | level-set reinitialization | out of scope for v1 | — | G4.7 |
+| adjoint gradients | shape and topology optimization | adjoints from the SIR | 5 | G3.3 |
+| exact STEP | export for CAM | no exact B-rep. STL and tessellated STEP only. | — | G5.2 |

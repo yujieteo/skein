@@ -31,6 +31,8 @@
 - [26. Parameters and studies](#26-parameters-and-studies)
 - [27. Scales and dimensionless groups](#27-scales-and-dimensionless-groups)
 - [28. Manufacture and tolerances](#28-manufacture-and-tolerances)
+- [29. Library files](#29-library-files)
+- [30. Symmetry groups](#30-symmetry-groups)
 - [Appendix A. Keywords](#appendix-a-keywords)
 
 </details>
@@ -62,20 +64,20 @@ Spec: [§2](skein_spec.md#2-lexical-structure).
 
 ## 2. The header
 
-Each model starts with three lines: the name, the space and the unit system.
+Each model starts with one line: the name, the space and the unit system.
 
 ```skein
-model bracket
-space 3d
-units mm_N_MPa_s
+model bracket: 3d, mm_N_MPa_s
 ```
 
 The spaces are `1d`, `2d`, `3d` and `axi` (axisymmetric). The unit systems
-are `SI`, `mm_N_MPa_s` and `mm_kg_ms`, or a record:
+are `SI`, `mm_N_MPa_s`, `mm_kg_ms` and `nondim`, or a record:
 
 ```skein
-units { length: mm, mass: t, time: s, temperature: K }
+model bracket: 3d, { length: mm, mass: t, time: s, temperature: K }
 ```
+
+`use` lines for library files come after the header (§29).
 
 Spec: [§3](skein_spec.md#3-grammar), [§6.5](skein_spec.md#65-unit-systems).
 
@@ -91,8 +93,16 @@ let modes: Int = 10
 let plate: Surface = rect((0, 0) mm, (L, 50 mm))
 ```
 
+`fn` declares a function of one expression. Its parameters and its result
+have types:
+
+```skein
+fn lame_mu(E: Pressure, nu: Real) -> Pressure = E/(2*(1 + nu))
+```
+
 A name must be declared above its first use. A model has one namespace, so
-two declarations with one name are an error.
+two declarations with one name are an error. This also holds for the names
+of the standard library, of `use` files and of the built-in functions.
 
 Spec: [§3.1](skein_spec.md#31-order-of-items), [§4](skein_spec.md#4-names-and-scope).
 
@@ -104,6 +114,7 @@ Spec: [§3.1](skein_spec.md#31-order-of-items), [§4](skein_spec.md#4-names-and-
 |---|---|
 | scalar quantities | `Length`, `Pressure`, … or a dimension expression such as `Force/Length` |
 | other scalars | `Real`, `Angle`, `Int`, `Bool`, `Str` |
+| number systems | `Complex<D>`, `Quaternion<D>`, `Dual<D>`. The list is closed. |
 | tensors | `Vector<D>`, `Tensor2<D>`, `Tensor4<D>` |
 | geometry | `Solid`, `Surface`, `Curve`, `Point` |
 | model | `Mesh`, `Points`, `Results` |
@@ -114,7 +125,7 @@ let C: Tensor4<Pressure> = elasticity(E, nu)
 let k_spring: Force/Length = 2 kN/mm
 ```
 
-A tensor has the space dimension: a `Vector` has 3 components in `space 3d`.
+A tensor has the space dimension: a `Vector` has 3 components in a `3d` model.
 Components are `v.x`, `v.y`, `v.z` and `A.xx`, `A.xy`, ….
 
 Spec: [§5](skein_spec.md#5-types).
@@ -249,24 +260,35 @@ Spec: [§10.2](skein_spec.md#102-material).
 
 ## 10. Fields and physics
 
-A `field` is an unknown. A `physics` block states its equations in strong
-form:
+A `physics` block declares its unknowns in `solves` and states its
+equations in strong form:
 
 ```skein
-field T: Temperature on part = 293 K
-
-physics heat on part solves T {
+physics heat on part solves T: Temperature = 293 K {
     material steel
     let q: Vector<HeatFlux> = -k*grad(T)
     eq rho*c*ddt(T) + div(q) = Q
 }
 ```
 
-One `eq` goes with each unknown in `solves`, in the same order. The `let`
+The value after `=` is the initial value. One `eq` goes with each unknown
+in `solves`, in the same order. The `let`
 lines inside the block are visible in the rest of the model, for example in
 a `bc` or an `output`.
 
-Spec: [§10](skein_spec.md#10-fields-materials-and-physics).
+A physics can take its statements from a standard-library template:
+
+```skein
+physics solid on beam: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_strain
+}
+```
+
+The block may add `material`, `assume` and `let`, but not `eq`. `skein help
+std` prints the source of each template.
+
+Spec: [§10](skein_spec.md#10-fields-materials-and-physics), [§4.2](skein_spec.md#42-the-standard-library).
 
 ---
 
@@ -325,7 +347,12 @@ method heat: gfd { points: c, stencil: 12 }
 
 A block may hold its settings on one line, with commas, or on separate
 lines. `stabilize` adds residual-based terms for flow: `supg`, `supg_pspg`,
-`supg_pspg_lsic` or `vms`.
+`supg_pspg_lsic` or `vms`. `limiter` (for `fv`) and `shock_capturing:
+entropy_viscosity` (for `dg`) capture shocks.
+
+A physics with no `method` item gets `cg` on its mesh, `order: 2`,
+Taylor-Hood cells for incompressible flow, and `supg` when the equations
+have convection.
 
 Spec: [§13](skein_spec.md#13-methods), [§17](skein_spec.md#17-lowering-by-method).
 
@@ -351,8 +378,10 @@ step heat_up: transient(end: 1 h, dt: 30 s, scheme: bdf2) {
 }
 ```
 
-The procedures are `static`, `transient`, `modal` and `buckling`. Steps run
-in the order of the file.
+The procedures are `static`, `transient`, `modal`, `buckling` and
+`harmonic(freq:)`, which uses `Complex` unknowns. `transient(adapt: { rtol:
+1e-4, atol: 1e-8 })` with `scheme: bdf` changes the time step and the order
+to keep the error below the limits. Steps run in the order of the file.
 
 Spec: [§14](skein_spec.md#14-steps).
 
@@ -455,7 +484,7 @@ Spec: [checks.md §1](checks.md#1-how-diagnostics-work).
 ## 21. Inelastic materials
 
 ```skein
-physics solid on bar solves u {
+physics solid on bar solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     state eps_p: Tensor2<Real> = 0
@@ -482,7 +511,7 @@ Spec: [§10.6](skein_spec.md#106-inelastic-materials).
 Two physics blocks couple when one uses the field of the other:
 
 ```skein
-physics solid on part solves u {
+physics solid on part solves u: Vector<Length> {
     material steel
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T - T0)*I)
@@ -531,13 +560,10 @@ Spec: [§14.6](skein_spec.md#146-mesh-adaptivity).
 
 ## 25. ODEs
 
-A field with no region is a global unknown. A physics with no region is a
-system of ODEs:
+A physics with no region solves global unknowns. It is a system of ODEs:
 
 ```skein
-field q: Length = 1 mm
-
-physics oscillator solves q {
+physics oscillator solves q: Length = 1 mm {
     eq m*ddt2(q) + c*ddt(q) + k*q = 0
 }
 
@@ -585,8 +611,8 @@ let mu: DynViscosity = rho*U*D/Re
 scales D, U, rho
 ```
 
-`scales` names the reference values of the scaled equations. The source
-stays dimensional. `skein check --groups` prints the dimensionless groups
+`scales` names the reference values of the scaled equations. Each model
+with dimensions has one. The source stays dimensional. `skein check --groups` prints the dimensionless groups
 of the model, with the known names such as `Re`, `Pr` and `Ma`.
 
 Spec: [§21](skein_spec.md#21-dimensional-analysis-and-scaling).
@@ -609,10 +635,40 @@ tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
 
 `skein verify --dfm` checks the part against its process: wall thickness,
 draft, undercuts, inner radii, holes, overhangs and bends. A `tolerance`
-item checks a stack-up of `tol` values. `skein export` writes the part as
-STL or STEP.
+item checks a stack-up of `tol` values, by `worst_case`, `rss` or
+`monte_carlo`. `skein export` writes the part as STL or tessellated STEP.
+`shell`, `loft` and `pattern` make the common features of a housing or a
+bracket.
 
-Spec: [§22](skein_spec.md#22-manufacture).
+Spec: [§22](skein_spec.md#22-manufacture), [§8.1](skein_spec.md#81-distance-functions).
+
+---
+
+## 29. Library files
+
+```skein
+use "materials.skn"
+```
+
+A library file holds only `material`, `param`, `let` and `fn` items. Its
+names enter the namespace of the model with no prefix. A library file
+cannot `use` another file. Phase 2.
+
+Spec: [§4.1](skein_spec.md#41-use-phase-2).
+
+---
+
+## 30. Symmetry groups
+
+```skein
+symmetry rotor: cyclic { n: 24, axis: (0, 0, 1), low: face_a, high: face_b }
+```
+
+A `symmetry` item solves one sector of a body that repeats. The groups are
+`cyclic`, `dihedral` and `bloch` (periodic, with a wave vector `k`). The
+list is closed.
+
+Spec: [§12.6](skein_spec.md#126-symmetry-groups).
 
 ---
 
@@ -621,10 +677,10 @@ Spec: [§22](skein_spec.md#22-manufacture).
 ```
 adapt       allow       assume      at          bc          birth
 contact     death       eq          every       expect      false
-field       in          interface   layers      let         manufacture
+fn          in          interface   layers      let         manufacture
 material    mesh        method      model       on          output
 param       physics     plastic     points      refine      release
-report      scales      solve       solves      space       state
-step        study       table       tol         tolerance   true
-units       where       within
+report      scales      solve       solves      state       step
+study       symmetry    table       template    tol         tolerance
+true        use         where       within
 ```

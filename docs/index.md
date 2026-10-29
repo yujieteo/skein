@@ -35,7 +35,7 @@ writes C for a native executable or for WebAssembly
   documentation implements each one.
 * [Tradeoffs](tradeoffs.md): the goals in priority order, the design
   against diverse workloads, and the gaps.
-* [Grilling](grilling.md): the design tree and the open questions, each
-  with a recommended answer.
+* [Grilling](grilling.md): the design tree, the questions and the answers
+  of the captain.
 * [The LLM test](llm_test.md): how to measure whether an LLM writes Skein
   better than an Abaqus or APDL deck.

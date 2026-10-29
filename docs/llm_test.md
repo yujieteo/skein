@@ -2,7 +2,9 @@
 
 Skein must be easy for an LLM to write. This test measures it. It is the
 gate of phase 1 in the [roadmap](roadmap.md): if Skein is not clearly better
-than an Abaqus or APDL deck on both measures, the syntax changes.
+than an Abaqus or APDL deck on both measures, the syntax changes. The test
+also measures the size of the diff of small edits, because a person must
+review each change that an LLM makes.
 
 **Status:** the protocol and the reference decks are ready. The test has not
 run, because it needs `skein check`, which phase 1 builds. The results
@@ -17,8 +19,10 @@ or APDL deck):
 
 | Measure | Definition |
 |---|---|
-| first-try pass rate | the fraction of attempts whose first answer passes the checker with no error |
-| tokens | the output tokens of the answer, counted with the tokenizer of the model under test. Only the model text counts, not the explanation around it. |
+| pass rate | the fraction of attempts that pass the checker with no error within 5 rounds |
+| total cost | the input and output tokens of all rounds of an attempt, until it passes or until round 5, counted with the tokenizer of the model under test. For Skein, the language card counts in each round. |
+| repair rounds | the number of rounds after the first, until the answer passes |
+| first-try pass rate | recorded, not part of the gate |
 
 The checker for Skein is `skein check`. The checker for a deck is the
 solver's own syntax check when a licence is available (`abaqus datacheck`,
@@ -30,13 +34,16 @@ seven items are right.
 
 **Clearly better** means both of these:
 
-- the Skein first-try pass rate is at least 20 percentage points higher than
-  the deck pass rate, summed over samples 01 to 05;
-- the median Skein token count is at most 0.8 times the median deck token
-  count.
+- the Skein pass rate is at least 20 percentage points higher than the deck
+  pass rate, summed over samples 01 to 05;
+- the median Skein total cost is at most 0.8 times the median deck total
+  cost.
 
-Reason for the limits: smaller differences are inside the noise of 5
-attempts for each sample.
+Reason for total cost and not the size of the first answer: a Skein answer
+holds the equations, the units and the checks, so it is larger. But an
+error in a deck often shows only in the solver, after many rounds. The cost
+that a user pays is the cost of all the rounds. Reason for the limits:
+smaller differences are inside the noise of 5 attempts for each sample.
 
 ---
 
@@ -44,20 +51,38 @@ attempts for each sample.
 
 1. Use a fresh model session for each attempt, with no memory of earlier
    attempts.
-2. For Skein, give the model the [tutorial](tutorial.md) and the
-   [reference](reference.md) in the context. Do not give it the samples.
-   For a deck, give no documentation, because the model knows APDL and
-   Abaqus from its training.
+2. For Skein, give the model the language card of `skein help --llm` in the
+   context (about 2000 tokens: the grammar, the keywords, the standard
+   library and one example). Do not give it the samples. For a deck, give
+   no documentation, because the model knows APDL and Abaqus from its
+   training.
 3. Give the one-line request of §3, then "Write the complete Skein model."
    or "Write the complete APDL input deck." (Abaqus for the cavity).
-4. Take the first answer. Do not correct it and do not ask again.
-5. Run the checker on the answer, and count the tokens.
+4. Run the checker on the answer. If it fails, give the model the checker
+   output and "Fix the model." This is one repair round. Stop when the
+   answer passes or after round 5.
+5. Count the tokens of all rounds.
 6. Do 5 attempts for each sample and each language: 50 attempts in total.
 7. Record the model id and the date.
 
-The context tokens of the Skein documentation are not in the token measure,
-because they are the same for each answer. Record them in the results, so
-that a reader can compare the total cost.
+For a deck without a licence, the feedback of a repair round is the list of
+the items that the person found wrong.
+
+### 2.1 Edit tasks
+
+A person must read each change that an LLM makes. So the test also gives
+three edit tasks on the reference answer of sample 01, in each language:
+
+| Task | Request |
+|---|---|
+| E1 | change the end load from 2 kN to 3 kN |
+| E2 | add a second static step that adds a 500 N load in y on the tip |
+| E3 | make the hole radius a sweep parameter with the values 4, 6 and 8 mm |
+
+Record the number of changed lines (added plus removed, from `git diff
+--numstat`) for each answer that passes. The [layout rules](skein_spec.md#32-layout-for-small-diffs)
+aim at 1 line for E1, at most 6 for E2 and at most 3 for E3. These numbers
+are a record, not a gate, until a first run shows what a deck needs.
 
 ---
 
@@ -96,42 +121,48 @@ APDL manuals. They are not run, because no licence was available.
 
 This is not the test, because a person wrote both answers. But it shows a
 risk early. The byte counts of the reference answers, without comments and
-blank lines:
+blank lines, before and after the syntax changes of §6:
 
-| # | Skein (bytes) | Deck (bytes) | Skein / deck |
-|---|---|---|---|
-| 01 | 920 | 405 | 2.3 |
-| 02 | 1236 | 914 | 1.4 |
-| 03 | 1543 | 1049 | 1.5 |
-| 04 | 921 | 505 | 1.8 |
-| 05 | 1067 | 374 | 2.9 |
+| # | Skein before (bytes) | Skein after (bytes) | Deck (bytes) | Skein after / deck |
+|---|---|---|---|---|
+| 01 | 920 | 766 | 405 | 1.9 |
+| 02 | 1236 | 1055 | 914 | 1.2 |
+| 03 | 1543 | 1416 | 1049 | 1.3 |
+| 04 | 921 | 766 | 505 | 1.5 |
+| 05 | 1067 | 960 | 374 | 2.6 |
 
-The Skein answers are 1.4 to 2.9 times longer in bytes. Bytes are not
-tokens, and the APDL commands with many commas can use more tokens for
-each byte. But the token measure will probably fail if the syntax stays as
-it is. Some of the extra length is content that the decks do not have: the
-equations, the units, and the checks (`expect`, `report`).
+The changes cut the Skein answers by 8 to 17 percent. They are still 1.2 to
+2.6 times longer than the decks in bytes. The required `scales` line adds
+one line to each model. Thus the first answer of Skein stays larger, and
+the gate compares the total cost (§1).
+Bytes are not tokens, and the APDL commands with many commas can use more
+tokens for each byte. Some of the extra length is content that the decks do
+not have: the equations, the units, the scales and the checks (`expect`,
+`report`).
 
-## 6. Syntax changes to try if the test fails
+## 6. Syntax changes made before the test
 
-Try these in sequence, and run the test again after each one:
+The captain chose to make these changes before phase 1 (grilling G6.1):
 
-1. **Declare the field in `solves`.** `physics solid on beam solves u:
-   Vector<Length> {` removes the `field` line.
-2. **Physics templates in a standard library.** `physics solid: elastic(steel)
-   on beam solves u` for the common physics. The strong form stays
-   available for new physics.
-3. **Defaults for `method`.** `cg` with order 2 for solids and Taylor-Hood
-   for flow when the model has no `method` block.
-4. **A shorter header.** `model cantilever 3d mm_N_MPa_s` on one line.
+1. **The unknowns in `solves`.** `physics solid on beam solves u:
+   Vector<Length> {` replaces the `field` line (spec §10.1).
+2. **Physics templates in a standard library.** `physics solid on beam:
+   linear_elastic solves u: Vector<Length>` for the common physics (spec §4.2).
+   The strong form stays available for new physics.
+3. **Defaults for `method`.** `cg` with order 2, Taylor-Hood for
+   incompressible flow, and SUPG when the equations have convection (spec
+   §13).
+4. **A one-line header.** `model cantilever: 3d, mm_N_MPa_s` (spec §3).
+5. **Functions of one expression** (spec §7.4). The samples do not need
+   them, so they do not change the numbers of §5.
 
 Each change removes text that an LLM must write, but each change also adds
-a rule to learn. The test decides.
+a rule to learn. The test decides whether the syntax changes again.
 
 ---
 
 ## 7. Results
 
-| Date | Model | # | Language | Pass rate | Median tokens |
-|---|---|---|---|---|---|
-| | | | | | |
+| Date | Model | # | Language | Pass rate | Median total cost | Median repair rounds | Diff lines E1, E2, E3 |
+|---|---|---|---|---|---|---|---|
+| | | | | | | | |

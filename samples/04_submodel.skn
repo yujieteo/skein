@@ -3,14 +3,14 @@
 // solution, interpolated from the global mesh. The checker confirms that
 // the block lies inside the global body and that the field types match.
 
-model cantilever_hole
-space 3d
-units mm_N_MPa_s
+model cantilever_hole: 3d, mm_N_MPa_s
 
 let global: Results = results("01_cantilever.skn", step: "load")
 
 let W: Length = 20 mm
 let r: Length = 6 mm
+
+scales r, 100 MPa
 
 let bore: Solid = cylinder((40, 0, 20) mm, (0, 1, 0), r, W)
 let block: Solid = box((25, 0, 5) mm, (55, 20, 35) mm) - bore
@@ -28,18 +28,8 @@ mesh m on block {
     refine hole: 0.25 mm
 }
 
-field u: Vector<Length> on block
-
-physics solid on block solves u {
+physics solid on block: linear_elastic solves u: Vector<Length> {
     material steel
-    assume small_strain, isotropic
-    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
-    eq div(sigma) = 0
-}
-
-method solid: cg {
-    mesh: m
-    order: 2
 }
 
 step load: static {
