@@ -1,0 +1,37 @@
+! Reference deck for LLM test 05 (written for this test, not run).
+! Quarter plate 100 x 100 mm with a 10 mm radius hole, 2 mm thick, 100 MPa
+! tension in x. APDL has no RKPM, so this deck uses FEM for the same physical
+! model. Plane stress with thickness. Units: mm, N, MPa.
+/PREP7
+ET,1,PLANE183
+KEYOPT,1,3,3                 ! plane stress with thickness
+R,1,2
+MP,EX,1,70000
+MP,PRXY,1,0.33
+RECTNG,0,100,0,100
+CYL4,0,0,10
+ASBA,1,2
+ESIZE,2
+LSEL,S,RADIUS,,10
+LESIZE,ALL,0.4
+ALLSEL
+AMESH,ALL
+NSEL,S,LOC,X,0
+D,ALL,UX,0
+NSEL,S,LOC,Y,0
+D,ALL,UY,0
+ALLSEL
+LSEL,S,LOC,X,100
+SFL,ALL,PRES,-100            ! negative pressure: tension
+ALLSEL
+FINISH
+/SOLU
+ANTYPE,STATIC
+SOLVE
+FINISH
+/POST1
+NSEL,S,LOC,X,0
+NSEL,R,LOC,Y,10
+PRNSOL,S,COMP                ! expect SX near 300 MPa
+ALLSEL
+FINISH

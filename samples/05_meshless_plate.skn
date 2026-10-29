@@ -1,0 +1,57 @@
+// A plate with a central hole under uniaxial tension, solved without a
+// mesh. Reproducing kernel particles (RKPM) cover the plate, and the
+// boundary conditions use Nitsche's method. A quarter of the plate is
+// modelled with symmetry. The peak hoop stress at the hole is checked
+// against the Kirsch solution for a wide plate, 3*S.
+
+model plate
+space 2d
+units mm_N_MPa_s
+
+let a: Length = 10 mm
+let b: Length = 100 mm
+let th: Length = 2 mm
+let S: Pressure = 100 MPa
+
+let hole_disk: Surface = circle((0, 0) mm, a)
+let quarter: Surface = rect((0, 0) mm, (b, b)) - hole_disk
+let left: Curve = boundary(quarter, x == 0 mm)
+let bottom: Curve = boundary(quarter, y == 0 mm)
+let right: Curve = boundary(quarter, x == b)
+let hole: Curve = boundary(quarter, hole_disk)
+
+material aluminium {
+    E: Pressure = 70 GPa
+    nu: Real = 0.33
+}
+
+points c on quarter {
+    spacing: 2 mm
+    refine hole: 0.4 mm
+}
+
+field u: Vector<Length> on quarter
+
+physics solid on quarter solves u {
+    material aluminium
+    assume small_strain, isotropic, plane_stress(th)
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    eq div(sigma) = 0
+}
+
+method solid: rkpm {
+    points: c
+    basis: linear
+    support: 2.5
+    integrate: scni
+    bc: nitsche
+}
+
+step pull: static {
+    bc left: u.x = 0
+    bc bottom: u.y = 0
+    bc right: sigma*n = (S, 0)
+    output u, sigma
+}
+
+expect kirsch: sigma.xx at (0 mm, a) == 3*S within 5%

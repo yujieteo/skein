@@ -1,0 +1,56 @@
+** Reference deck for LLM test 02 (written for this test, not run).
+** Lid-driven cavity, Re = 100, 1 m square, Abaqus/CFD. Abaqus/CFD needs 3D
+** cells, so the mesh is one cell thick with zero normal velocity on both faces.
+** Abaqus/CFD is transient: the step runs to a steady state.
+*HEADING
+Lid-driven cavity Re 100
+*NODE
+1, 0., 0., 0.
+65, 1., 0., 0.
+6401, 0., 1., 0.
+6465, 1., 1., 0.
+*NGEN, NSET=B0
+1, 65, 1
+*NGEN, NSET=T0
+6401, 6465, 1
+*NFILL, NSET=F0
+B0, T0, 64, 100
+*NCOPY, OLD SET=F0, NEW SET=F1, CHANGE NUMBER=10000, SHIFT
+0., 0., 0.01
+*ELEMENT, TYPE=FC3D8, ELSET=FLUID
+1, 1, 2, 102, 101, 10001, 10002, 10102, 10101
+*ELGEN, ELSET=FLUID
+1, 64, 1, 1, 64, 100, 100
+*NSET, NSET=LID, GENERATE
+6401, 6465, 1
+10401, 10465, 1
+*NSET, NSET=WALLS, GENERATE
+1, 65, 1
+10001, 10065, 1
+1, 6301, 100
+65, 6365, 100
+10001, 16301, 100
+10065, 16365, 100
+*NSET, NSET=CORNER
+1
+*SOLID SECTION, ELSET=FLUID, MATERIAL=FLUID
+*MATERIAL, NAME=FLUID
+*DENSITY
+1.0
+*VISCOSITY
+0.01
+*STEP, INC=100000
+*CFD, INCOMPRESSIBLE NAVIER STOKES
+, 50.
+*FLUID BOUNDARY
+LID, V1, 1.0
+LID, V2, 0.0
+WALLS, V1, 0.0
+WALLS, V2, 0.0
+F0, V3, 0.0
+F1, V3, 0.0
+CORNER, P, 0.0
+*OUTPUT, FIELD, NUMBER INTERVAL=10
+*NODE OUTPUT
+V, PRESSURE
+*END STEP
