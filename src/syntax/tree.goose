@@ -147,6 +147,17 @@ fn keyword_kind(word: u8[:]) -> i64 {
     return TK_IDENT;
 }
 
+// True for the keywords that start an item (spec §3, `item`).
+fn starts_item(kind: i64) -> bool {
+    match kind {
+        KW_MODEL, KW_USE, KW_PARAM, KW_LET, KW_FN, KW_TABLE, KW_MATERIAL, KW_MESH => true,
+        KW_POINTS, KW_PHYSICS, KW_TEMPLATE, KW_METHOD, KW_BC, KW_CONTACT, KW_INTERFACE => true,
+        KW_SYMMETRY, KW_STEP, KW_EXPECT, KW_ALLOW, KW_SCALES, KW_STUDY, KW_MANUFACTURE => true,
+        KW_TOLERANCE => true,
+        _ => false,
+    }
+}
+
 // --- nodes -------------------------------------------------------------------
 
 struct Node {
@@ -226,7 +237,7 @@ let N_BLOCK = 60;        // tok: `{`. N_SETTING*, N_REFINE*, N_LAYERS* in source
 let N_SETTING = 61;      // tok: name. value: an expression, N_LIST or N_RANGE
 let N_REFINE = 62;       // tok: `refine`. region, value
 let N_LAYERS = 63;       // tok: `layers`. region, value
-let N_PROC = 64;         // tok: procedure name. N_ARG*
+let N_PROC = 64;         // tok: procedure name. N_ARG*, and the value of an N_ARG can be N_LIST
 let N_LIST = 65;         // tok: `[`. items, [N_UNIT]
 let N_RANGE = 66;        // tok: `..`. low, high
 
@@ -245,7 +256,7 @@ let N_UNIT_DIV = 83;     // tok: `/`. left, right
 let N_UNIT_POW = 84;     // tok: `^`, aux: the exponent. base
 
 // Expressions (spec §3, `expr`). Parentheses make no node.
-let N_NUMBER = 90;       // tok: TK_NUMBER. [N_UNIT]
+let N_NUMBER = 90;       // tok: TK_NUMBER, aux: the `-` of a negative `degC` literal or -1. [N_UNIT]
 let N_PERCENT = 91;      // tok: TK_PERCENT
 let N_STRING = 92;       // tok: TK_STRING
 let N_BOOL = 93;         // tok: `true` or `false`
@@ -292,12 +303,24 @@ var files: File[>..];
 var tokens: Token[>..];
 var nodes: Node[>..];
 
+// An error of the lexer or the parser. `id` is a stable id from
+// docs/checks.md §2.1: `syntax` or `header_order`.
+struct Error {
+    id: u8[..32],
+    tok: i64,          // the token where the error is
+    msg: u8[..512],
+    fix: u8[..512],    // never empty
+}
+
+var errors: Error[>..];
+
 // Empties all the tables, for a new run.
 fn reset() {
     source.clear();
     files.clear();
     tokens.clear();
     nodes.clear();
+    errors.clear();
 }
 
 // Appends the text of a file to `source`, and gives its index in `files`.
@@ -307,6 +330,15 @@ fn add_file(path: u8[:], text: u8[:]) -> i64 {
     files.push(f);
     source.append(text);
     return files.len - 1;
+}
+
+// Records an error at token `tok`.
+fn error_at(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
+    var e = Error { id: [], tok: tok, msg: [], fix: [] };
+    e.id.append(id[..min(id.len, 32)]);
+    e.msg.append(msg[..min(msg.len, 512)]);
+    e.fix.append(fix[..min(fix.len, 512)]);
+    errors.push(e);
 }
 
 // The text of token `t`.
