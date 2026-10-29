@@ -1,0 +1,96 @@
+// femahoy: validation/cases/warpage-2p5d-frame/job.inp
+// 1/4 of a 2.5D package with a metal frame (Tsai, Wang and Liu 2021). It
+// cools from the stress-free 140 degC to 60 degC. Linear thermoelastic, 3D,
+// quadratic tetrahedra. The reference is the moire warpage of the substrate
+// corner: -0.162 mm, within 13 %.
+
+model warpage_2p5d_frame: 3d, mm_N_MPa_s
+
+let T_free: Temperature = 140 degC
+let T_use: Temperature = 60 degC
+
+scales 2.73 mm, 20000 MPa, 80 K
+
+let sub: Solid = box((0, 0, 0) mm, (27.5, 27.5, 1.81) mm)
+let uf2: Solid = box((0, 0, 1.81) mm, (20.5, 13.75, 1.91) mm)
+let interposer: Solid = box((0, 0, 1.91) mm, (20.5, 13.75, 2.00) mm)
+let uf1: Solid = box((0, 0, 2.00) mm, (19.5, 12.2, 2.04) mm)
+let die: Solid = box((0, 0, 2.04) mm, (19.5, 12.2, 2.73) mm)
+let emc: Solid = box((0, 0, 2.00) mm, (20.5, 13.75, 2.73) mm) - (uf1 | die)
+let module: Solid = box((0, 0, 1.81) mm, (20.5, 13.75, 2.73) mm)
+// The UF2 fillet: 0.9 mm wide on the substrate, 0.92 mm high, mitred corners.
+let fil: Solid = move(loft(rect((0, 0) mm, (21.4, 14.65) mm), rect((0, 0) mm, (20.5, 13.75) mm), 0.92 mm), (0, 0, 1.81) mm) - module
+let adh: Solid = box((24.3, 0, 1.81) mm, (27.5, 27.5, 1.87) mm) | box((0, 20.1, 1.81) mm, (27.5, 27.5, 1.87) mm)
+let frm: Solid = box((24.3, 0, 1.87) mm, (27.5, 27.5, 2.745) mm) | box((0, 20.1, 1.87) mm, (27.5, 27.5, 2.745) mm)
+let package: Solid = sub | module | fil | adh | frm
+
+let sym_x: Surface = boundary(package, x == 0 mm)
+let sym_y: Surface = boundary(package, y == 0 mm)
+let origin: Point = point((0, 0, 0) mm)
+
+// Table 1 of the paper. EMC and underfills below Tg, adhesive above Tg.
+material silicon {
+    E: Pressure = 169000 MPa
+    nu: Real = 0.28
+    alpha: Expansion = 2.3e-6 K^-1
+}
+
+// Table 1 gives nu = 0.69. An isotropic nu must be below 0.5.
+material mould {
+    E: Pressure = 23000 MPa
+    nu: Real = 0.3
+    alpha: Expansion = 10.8e-6 K^-1
+}
+
+material underfill1 {
+    E: Pressure = 7200 MPa
+    nu: Real = 0.28
+    alpha: Expansion = 28e-6 K^-1
+}
+
+material underfill2 {
+    E: Pressure = 7600 MPa
+    nu: Real = 0.28
+    alpha: Expansion = 29e-6 K^-1
+}
+
+material substrate {
+    E: Pressure = 20000 MPa
+    nu: Real = 0.42
+    alpha: Expansion = 13.2e-6 K^-1
+}
+
+material frame_metal {
+    E: Pressure = 117000 MPa
+    nu: Real = 0.3
+    alpha: Expansion = 16.9e-6 K^-1
+}
+
+material glue {
+    E: Pressure = 20 MPa
+    nu: Real = 0.3
+    alpha: Expansion = 170e-6 K^-1
+}
+
+// gap G19: femahoy uses a C3D20R tensor grid through each layer.
+mesh m on package {
+    size: 1 mm
+    cell: tet
+    refine uf2 | interposer | uf1 | adh: 0.04 mm
+}
+
+physics solid on package solves u: Vector<Length> {
+    material substrate on sub, underfill2 on uf2 | fil, silicon on interposer | die, underfill1 on uf1, mould on emc, glue on adh, frame_metal on frm
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T_use - T_free)*I)
+    eq div(sigma) = 0
+}
+
+step cool: static {
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc origin: u.z = 0
+    output u, sigma
+}
+
+expect warpage: u.z at (27.5, 27.5, 0) mm == -0.162 mm within 13%

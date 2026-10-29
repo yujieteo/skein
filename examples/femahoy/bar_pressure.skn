@@ -1,0 +1,47 @@
+// femahoy: validation/cases/bar-pressure/job.inp
+// A steel bar of 100 x 20 x 10 mm with symmetry supports, pulled by a
+// pressure of -100 MPa on its end face. Linear static, 3D, quadratic
+// tetrahedra (the default method). The exact solution is linear: sxx =
+// 100 MPa, reaction -20000 N, end displacement 100/210000*100 mm.
+
+model bar_pressure: 3d, mm_N_MPa_s
+
+let L: Length = 100 mm
+let W: Length = 20 mm
+let H: Length = 10 mm
+let p: Pressure = -100 MPa
+
+scales H, 100 MPa
+
+let bar: Solid = box((0, 0, 0) mm, (L, W, H))
+let support: Surface = boundary(bar, x == 0 mm)
+let sym_y: Surface = boundary(bar, y == 0 mm)
+let sym_z: Surface = boundary(bar, z == 0 mm)
+let load: Surface = boundary(bar, x == L)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+}
+
+mesh m on bar {
+    size: 8 mm
+    cell: tet
+}
+
+physics solid on bar: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+step load_step: static {
+    bc support: u.x = 0
+    bc sym_y: u.y = 0
+    bc sym_z: u.z = 0
+    // A negative pressure pulls the face.
+    bc load: sigma*n = -p*n
+    output u, sigma
+}
+
+expect s_xx: mean(sigma.xx, bar) == 100 MPa within 0.0001%
+expect rf_x: reaction(support).x == -20000 N within 0.0001%
+expect u_x_tip: mean(u.x, load) == 0.047619047619 mm within 0.0001%

@@ -1,0 +1,70 @@
+// femahoy: validation/cases/grid-waveguide-dielectric/guide/grid.toml
+// A WR-90 waveguide 30 mm long with a PTFE section (eps_r 2.2) from z = 10 mm to 20 mm, at 10 GHz.
+// The reference is the exact TE10 answer of transmission line theory:
+// S11 = 0.075518 - 0.187732 im, S21 = 0.908557 + 0.365483 im.
+
+model waveguide_dielectric: 3d, mm_N_MPa_s
+
+let a: Length = 22.86 mm
+let b: Length = 10.16 mm
+let Lg: Length = 30 mm
+let f0: Frequency = 10 GHz
+let E0: Power/(Current*Length) = 1 V/m
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+
+scales a, 1 V, 1 mA, 1/f0
+
+// The ports are in air: the propagation constant and the mode shape of TE10 in air.
+let beta: Length^-1 = sqrt((2*pi*f0)^2*mu0*eps0 - (pi/a)^2)
+let e10: Vector<Power/(Current*Length)> = (0, E0*sin(pi*x/a), 0)
+
+let guide: Solid = box((0, 0, 0) mm, (a, b, Lg))
+let section: Solid = box((0, 0, 10) mm, (a, b, 20 mm))
+let port_in: Surface = boundary(guide, z == 0 mm)
+let port_out: Surface = boundary(guide, z == Lg)
+let xwalls: Surface = boundary(guide, x == 0 mm || x == a)
+let ywalls: Surface = boundary(guide, y == 0 mm || y == b)
+
+material air {
+    eps: Current^2*Time/(Power*Length) = eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+material ptfe {
+    eps: Current^2*Time/(Power*Length) = 2.2*eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+mesh m on guide {
+    size: 1.5 mm
+    cell: tet
+}
+
+// curl(curl(E)/mu) is written as div(Hs). Hs*n is n x (curl(E)/mu), the natural term of a port.
+physics wave on guide solves E: Vector<Complex<Power/(Current*Length)>> {
+    material air on guide - section, ptfe on section
+    let Hs: Tensor2<Complex<Current/(Length*Time)>> = -2*skew(grad(E))/mu
+    eq div(Hs) + eps*ddt2(E) = 0
+}
+
+method wave: cg { mesh: m, order: 1, family: nedelec }
+
+// The walls are perfect conductors: the tangential components of E are zero.
+bc xwalls: E.y = 0
+bc xwalls: E.z = 0
+bc ywalls: E.x = 0
+bc ywalls: E.z = 0
+
+// First-order TE10 port conditions. Port 1 has the incident wave e10.
+bc port_in: Hs*n = im*beta/mu0*(E - dot(E, n)*n) - 2*im*beta/mu0*e10
+bc port_out: Hs*n = im*beta/mu0*(E - dot(E, n)*n)
+
+step response: harmonic(freq: f0) {
+    output E
+}
+
+// gap G7: no real() and imag() of a Complex value. femahoy tests each part within 0.012.
+// Here the test is on the complex difference.
+expect s11: integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1 == 0.075518 - 0.187732*im within 0.012
+expect s21: integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out) == 0.908557 + 0.365483*im within 0.012

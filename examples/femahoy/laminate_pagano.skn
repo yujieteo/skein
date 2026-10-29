@@ -1,0 +1,105 @@
+// femahoy: validation/cases/laminate-pagano/job.inp
+// The thick square [0/90/0] plate of Pagano (1970), a/h = 4, simply supported,
+// with the load q0*sin(pi*x/a)*sin(pi*y/a) on the top face. 1/4 of the plate,
+// 3D layers of quadratic hexahedra. The references are the exact 3D solution
+// at the femahoy points (pagano.py), within 0.5 %.
+
+model laminate_pagano: 3d, mm_N_MPa_s
+
+// gap G3: the THIN plate (a/h = 100) uses composite S8R shells. Skein
+// cannot state a layered shell, so this model has only the THICK plate.
+
+let a: Length = 100 mm
+let h: Length = 25 mm
+let q0: Pressure = 1 MPa
+let E_L: Pressure = 175000 MPa
+let E_T: Pressure = 7000 MPa
+let G_LT: Pressure = 3500 MPa
+let G_TT: Pressure = 1400 MPa
+let nu_p: Real = 0.25
+
+scales h, E_T
+
+let plate: Solid = box((0 mm, 0 mm, -h/2), (a/2, a/2, h/2))
+let ply_bot: Solid = box((0 mm, 0 mm, -h/2), (a/2, a/2, -h/6))
+let core: Solid = box((0 mm, 0 mm, -h/6), (a/2, a/2, h/6))
+let ply_top: Solid = box((0 mm, 0 mm, h/6), (a/2, a/2, h/2))
+let ss_x: Surface = boundary(plate, x == 0 mm)
+let ss_y: Surface = boundary(plate, y == 0 mm)
+let sym_x: Surface = boundary(plate, x == a/2)
+let sym_y: Surface = boundary(plate, y == a/2)
+let top: Surface = boundary(plate, z == h/2)
+// The femahoy element of the core at the edge x = 0, next to y = a/2.
+let edge_cell: Solid = box((0 mm, 7*a/16, -h/18), (a/16, a/2, h/18))
+
+// The engineering constants in the x, y, z axes. The fibre is on x at 0 deg.
+material ply0 {
+    Ex: Pressure = E_L
+    Ey: Pressure = E_T
+    Ez: Pressure = E_T
+    nxy: Real = nu_p
+    nxz: Real = nu_p
+    nyz: Real = nu_p
+    Gxy: Pressure = G_LT
+    Gxz: Pressure = G_LT
+    Gyz: Pressure = G_TT
+}
+
+// The fibre is on y at 90 deg.
+material ply90 {
+    Ex: Pressure = E_T
+    Ey: Pressure = E_L
+    Ez: Pressure = E_T
+    nxy: Real = nu_p*E_T/E_L
+    nxz: Real = nu_p
+    nyz: Real = nu_p
+    Gxy: Pressure = G_LT
+    Gxz: Pressure = G_TT
+    Gyz: Pressure = G_LT
+}
+
+// size h/9 puts 3 cells in each ply. gap G18: femahoy uses C3D20R.
+mesh m on plate {
+    size: h/9
+    cell: hex
+}
+
+// The orthotropic law, written out: hooke takes only E and nu.
+physics solid on plate solves u: Vector<Length> {
+    material ply0 on ply_bot | ply_top, ply90 on core
+    assume small_strain
+    let D_o: Real = 1 - nxy^2*Ey/Ex - nyz^2*Ez/Ey - nxz^2*Ez/Ex - 2*nxy*nyz*nxz*Ez/Ex
+    let C11: Pressure = Ex*(1 - nyz^2*Ez/Ey)/D_o
+    let C22: Pressure = Ey*(1 - nxz^2*Ez/Ex)/D_o
+    let C33: Pressure = Ez*(1 - nxy^2*Ey/Ex)/D_o
+    let C12: Pressure = (nxy*Ey + nxz*nyz*Ez)/D_o
+    let C13: Pressure = Ez*(nxz + nxy*nyz)/D_o
+    let C23: Pressure = Ez*(nyz + nxy*nxz*Ey/Ex)/D_o
+    let ex: Vector<Real> = (1, 0, 0)
+    let ey: Vector<Real> = (0, 1, 0)
+    let ez: Vector<Real> = (0, 0, 1)
+    let eps: Tensor2<Real> = strain(u)
+    let sigma: Tensor2<Pressure> = (C11*eps.xx + C12*eps.yy + C13*eps.zz)*outer(ex, ex) +
+        (C12*eps.xx + C22*eps.yy + C23*eps.zz)*outer(ey, ey) +
+        (C13*eps.xx + C23*eps.yy + C33*eps.zz)*outer(ez, ez) +
+        2*Gxy*eps.xy*(outer(ex, ey) + outer(ey, ex)) +
+        2*Gxz*eps.xz*(outer(ex, ez) + outer(ez, ex)) +
+        2*Gyz*eps.yz*(outer(ey, ez) + outer(ez, ey))
+    eq div(sigma) = 0
+}
+
+step load: static {
+    // Simple support of Pagano on x = 0 and y = 0, symmetry on x = a/2 and y = a/2.
+    bc ss_x: u.y = 0
+    bc ss_x: u.z = 0
+    bc ss_y: u.x = 0
+    bc ss_y: u.z = 0
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc top: sigma*n = (0, 0, -q0*sin(pi*x/a)*sin(pi*y/a))
+    output u, sigma
+}
+
+expect w_thick: u.z at (a/2, a/2, 0 mm) == -0.0183398 mm within 0.5%
+expect sx_thick: sigma.xx at (48.679, 48.679, -11.913) mm == 10.3419 MPa within 0.5%
+expect txz_thick: mean(sigma.xz, edge_cell) == -1.01034 MPa within 0.5%

@@ -1,0 +1,55 @@
+// femahoy: validation/cases/grid-lame-cylinder/tube/grid.toml
+// A thick tube with open ends under an internal pressure of 100 MPa.
+// Linear static, 3D, quadratic tetrahedra (the default method). The
+// reference is the Lame solution of the radial displacement and the hoop
+// stress.
+
+model lame_cylinder: 3d, mm_N_MPa_s
+
+let a: Length = 10 mm
+let b: Length = 20 mm
+let hgt: Length = 2 mm
+let p: Pressure = 100 MPa
+
+scales a, p
+
+let bore: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), a, hgt)
+let tube: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), b, hgt) - bore
+let inner: Surface = boundary(tube, bore)
+let bottom: Surface = boundary(tube, z == 0 mm)
+// 3 points on the bottom edge stop the rigid motion in the plane x y.
+// The solution is symmetric, so they take no force.
+let pt_east: Point = point((b, 0 mm, 0 mm))
+let pt_west: Point = point((-b, 0 mm, 0 mm))
+let pt_north: Point = point((0 mm, b, 0 mm))
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+mesh m on tube {
+    size: 2.5 mm
+    cell: tet
+}
+
+physics solid on tube: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+step press: static {
+    bc inner: sigma*n = -p*n
+    bc bottom: u.z = 0
+    bc pt_east: u.y = 0
+    bc pt_west: u.y = 0
+    bc pt_north: u.x = 0
+    output u, sigma
+}
+
+expect inner_ux: u.x at (10, 0, 1) mm == 9.365079e-3 mm within 1%
+// The hoop stress of the inner wall is read 0.5 mm inside the wall.
+expect wall_hoop: sigma.yy at (10.5, 0, 1) mm == 154.2706 MPa within 1%
+expect middle_uy: u.y at (0, 15, 1) mm == 7.169312e-3 mm within 1%
+expect middle_hoop: sigma.xx at (0, 15, 1) mm == 92.59259 MPa within 1%
+expect outer_uy: u.y at (0, 20, 1) mm == 6.349206e-3 mm within 1%
+expect outer_hoop: sigma.xx at (0, 20, 1) mm == 66.66667 MPa within 1%

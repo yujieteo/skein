@@ -1,0 +1,89 @@
+// femahoy: validation/cases/wedge-oblique-shock/mach2.5/system/controlDict
+// Inviscid perfect gas (gamma = 1.4) at Mach 2.5 over a wedge of 15 deg. The free stream has
+// p = 1 Pa, T = 1 K, rho = 1.4 kg/m^3, a speed of sound of 1 m/s. Reference: the oblique shock
+// relations (NPARC "Supersonic wedge", Table 2): beta 36.94490 deg, M2 1.873526, p2 2.4675 Pa.
+
+model wedge_oblique_shock: 2d, SI
+
+let gam: Real = 1.4
+let r_gas: SpecificHeat = (1 J/(kg*K))/1.4
+let p1: Pressure = 1 Pa
+let rho1: Density = 1.4 kg/m^3
+let u1: Velocity = 2.5 m/s
+let theta: Angle = 15 deg
+let len: Length = 1 m
+
+scales len, 1 m/s, rho1, 1 K
+
+let box_all: Surface = rect((-0.5, 0) m, (len, len))
+let wedge: Surface = polygon((0, 0) m, (len, 0 m), (len, len*tan(theta)))
+let fluid: Surface = box_all - wedge
+let inlet: Curve = boundary(fluid, x == -0.5 m)
+let top: Curve = boundary(fluid, y == len)
+let outlet: Curve = boundary(fluid, x == len)
+let ramp: Curve = boundary(fluid, wedge)
+let sym_line: Curve = boundary(fluid, y == 0 m && x < 0 m)
+// The cells aft of the wedge tip, for the shock angle.
+let aft: Surface = fluid & rect((0, 0) m, (len, len))
+// The region behind the shock: 0.25 m < x, y < x/2, above the wedge.
+let behind: Surface = polygon((0.25 m, 0.25 m*tan(theta)), (len, len*tan(theta)), (len, len/2), (0.25 m, 0.125 m))
+
+material gas {
+    gamma: Real = gam
+}
+
+// femahoy uses 2 blocks of quads. quad needs a rect, thus tri here.
+mesh m on fluid {
+    size: 0.01 m
+    cell: tri
+}
+
+// The Euler equations in conservation form: density, momentum and total energy.
+physics flow on fluid solves rho: Density = rho1, mom: Vector<Density*Velocity> = (rho1*u1, 0), e_t: Energy/Volume = p1/(gam - 1) + 0.5*rho1*u1^2 {
+    material gas
+    assume compressible
+    let p: Pressure = (gamma - 1)*(e_t - 0.5*dot(mom, mom)/rho)
+    let f_m: Tensor2<Pressure> = outer(mom, mom)/rho + p*I
+    let f_e: Vector<HeatFlux> = (e_t + p)*mom/rho
+    eq ddt(rho) + div(mom) = 0
+    eq ddt(mom) + div(f_m) = 0
+    eq ddt(e_t) + div(f_e) = 0
+}
+
+method flow: fv {
+    mesh: m
+    gradient: green_gauss
+    flux: upwind
+    limiter: van_leer
+}
+
+step march: transient(end: 2 s, dt: 0.6 ms, scheme: ssprk3) {
+    bc inlet: rho = rho1
+    bc inlet: mom = (rho1*u1, 0)
+    bc inlet: e_t = p1/(gam - 1) + 0.5*rho1*u1^2
+    bc top: rho = rho1
+    bc top: mom = (rho1*u1, 0)
+    bc top: e_t = p1/(gam - 1) + 0.5*rho1*u1^2
+    // The wedge and the symmetry line: slip walls, no mass and no energy through them.
+    bc ramp | sym_line: dot(mom, n) = 0
+    bc ramp | sym_line: f_m*n = p*n
+    bc ramp | sym_line: dot(f_e, n) = 0
+    // The supersonic outlet: each flux comes from the state inside.
+    bc outlet: dot(mom, n) = dot(mom, n)
+    bc outlet: f_m*n = f_m*n
+    bc outlet: dot(f_e, n) = dot(f_e, n)
+    output rho, mom, e_t, p
+    report beta_tan = tan(theta) + 2*integral((p - p1)/(2.4675 Pa - p1), aft)/len^2
+    report mach2 = mean(norm(mom)/rho/sqrt(gam*p/rho), behind)
+    report p2 = mean(p, behind)
+    report t2 = mean(p/(rho*r_gas), behind)
+    report rho2 = mean(rho, behind)
+}
+
+// gap G12: no inverse tangent. The check of beta = 36.94490 deg within 0.25% is on tan(beta),
+// with the tolerance 0.25%*beta/(sin(beta)*cos(beta)) = 0.336%.
+expect shock_angle: tan(theta) + 2*integral((p - p1)/(2.4675 Pa - p1), aft)/len^2 == tan(36.94490 deg) within 0.336%
+expect mach2: mean(norm(mom)/rho/sqrt(gam*p/rho), behind) == 1.873526 within 0.25%
+expect pressure_ratio: mean(p, behind) == 2.4675 Pa within 0.25%
+expect temperature_ratio: mean(p/(rho*r_gas), behind) == 1.321958 K within 0.25%
+expect density2: mean(rho, behind) == 2.613168 kg/m^3 within 0.25%

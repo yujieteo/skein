@@ -1,0 +1,52 @@
+// femahoy: validation/cases/grid-radiation-slab/slab/grid.toml
+// A slab at 1000 K on 1 face. The other face radiates to large
+// surroundings at 300 K. Steady nonlinear heat conduction, 3D, linear
+// hexahedra. The reference is the root of the energy balance of the face.
+
+model radiation_slab: 3d, SI
+
+let w: Length = 0.01 m
+let L: Length = 0.1 m
+let T_hot: Temperature = 1000 K
+let T_amb: Temperature = 300 K
+let sb: Power/(Area*Temperature^4) = 5.670374419e-8 W/(m^2*K^4)
+
+scales L, 700 K, 1000 W/m^2
+
+let slab: Solid = box((0, 0, 0) m, (w, w, L))
+let hot: Surface = boundary(slab, z == 0 m)
+let radiating: Surface = boundary(slab, z == L)
+
+material solid_mat {
+    k: Conductivity = 10 W/(m*K)
+    eps: Real = 0.8
+}
+
+mesh m on slab {
+    size: 0.01 m
+    cell: hex
+}
+
+// The initial value is the start of the Newton iteration.
+physics thermal on slab solves T: Temperature = 300 K {
+    material solid_mat
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = 0
+}
+
+method thermal: cg {
+    mesh: m
+    order: 1
+}
+
+step steady: static {
+    bc hot: T = T_hot
+    bc radiating: dot(q, n) = eps*sb*(T^4 - T_amb^4)
+    solve { nonlinear: newton, rtol: 1e-10 }
+    output T, q
+}
+
+expect face: T at (0.005, 0.005, 0.1) m == 809.185667706 K within 1e-6%
+expect middle: T at (0.005, 0.005, 0.05) m == 904.592833853 K within 1e-6%
+// The heat into the slab at the radiating face.
+expect radiation: -integral(dot(q, n), radiating) == -1.908143323 W within 1e-6%

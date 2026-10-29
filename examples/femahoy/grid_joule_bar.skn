@@ -1,0 +1,52 @@
+// femahoy: validation/cases/grid-joule-bar/bar/grid.toml
+// A steel bar 0.2 m long with 0.01 V across its ends. Its Joule heat flows out of the 2 ends at
+// 20 degC. The peak temperature is T0 + q*L^2/(8*k) = 20.25 degC and the current is 5 A.
+
+model joule_bar: 3d, SI
+
+let L: Length = 0.2 m
+let V0: Power/Current = 0.01 V
+
+scales L, V0, 5 A, 1 K
+
+let bar: Solid = box((0, 0, 0) m, (L, 0.01 m, 0.01 m))
+let left: Surface = boundary(bar, x == 0 m)
+let right: Surface = boundary(bar, x == L)
+
+material steel {
+    sigma_e: Current^2/(Power*Length) = 1.0e6 A/(V*m)
+    k: Conductivity = 50 W/(m*K)
+}
+
+mesh m on bar {
+    size: 0.01 m
+    cell: hex
+}
+
+physics elec on bar solves phi: Power/Current {
+    material steel
+    let J: Vector<Current/Area> = -sigma_e*grad(phi)
+    eq div(J) = 0
+}
+
+// The Joule power density dot(J, E), with E = -grad(phi), is the heat source.
+physics thermal on bar solves T: Temperature = 20 degC {
+    material steel
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = dot(J, -grad(phi))
+}
+
+method elec: cg { mesh: m, order: 1 }
+method thermal: cg { mesh: m, order: 1 }
+
+step heat_up: static {
+    bc left: phi = V0
+    bc right: phi = 0
+    bc left: T = 20 degC
+    bc right: T = 20 degC
+    // The 4 long sides take the default natural conditions: no current and adiabatic.
+    output phi, J, T
+}
+
+expect peak: T at (0.1, 0.005, 0.005) m == 20.25 degC within 2e-8 K
+expect current: -integral(dot(J, n), left) == 5 A within 1e-7%

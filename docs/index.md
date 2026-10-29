@@ -31,6 +31,8 @@ gives the phases.
 * [Implementation notes](implementation.md): how the compiler, the runtime
   and the mesher will work.
 * [Roadmap](roadmap.md): the phases, their gates and the risks.
+* [Femahoy coverage](femahoy_coverage.md): the femahoy cases as Skein
+  models, the construct for each femahoy feature, and the spec gaps.
 * [Design decisions](decisions.md): the 17 decisions and where the
   documentation implements each one.
 * [Tradeoffs](tradeoffs.md): the goals in priority order, the design

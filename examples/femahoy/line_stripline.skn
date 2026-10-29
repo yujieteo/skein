@@ -1,0 +1,66 @@
+// femahoy: validation/cases/line-stripline/strip/grid.toml
+// Quasi-TEM cross-section of a stripline: a strip 1 mm wide and 0.2 um thick between 2 ground
+// planes 2 mm apart, eps_r 2.2. The reference is the exact zero-thickness answer of Cohn:
+// Z0 = 67.7115445059 ohm, C = 7.30681172969e-11 F/m, L = 3.35006595745e-7 H/m.
+
+model stripline: 2d, SI
+
+let w: Length = 1 mm
+let hb: Length = 1 mm
+let V1: Power/Current = 1 V
+let A1: Power*Time/(Current*Length) = 1 V*s/m
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+let c0: Velocity = 299792458 m/s
+
+scales hb, V1, 1 A, 1 ns
+
+let strip: Surface = rect((-w/2, -0.1 um), (w/2, 0.1 um))
+let dielectric: Surface = rect((-20 mm, -hb), (20 mm, hb)) - strip
+let outline: Curve = boundary(dielectric, strip)
+let tips: Curve = boundary(dielectric, abs(x) == w/2)
+let ground: Curve = boundary(dielectric, abs(y) == hb)
+// The sides x = -20 mm and x = 20 mm are magnetic walls: the default natural condition.
+
+material dielectric_2_2 {
+    eps: Current^2*Time/(Power*Length) = 2.2*eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+// The field is singular at the edges of the strip. The cells there are about the thickness.
+mesh m on dielectric {
+    size: 0.1 mm
+    cell: tri
+    grade: 1.05
+    refine tips: 0.2 um
+}
+
+physics electrostatic on dielectric solves phi: Power/Current {
+    material dielectric_2_2
+    let D: Vector<Current*Time/Area> = -eps*grad(phi)
+    eq div(D) = 0
+}
+
+// Hr is the magnetic field H turned by 90 deg.
+physics magnetic on dielectric solves Az: Power*Time/(Current*Length) {
+    material dielectric_2_2
+    let Hr: Vector<Current/Length> = grad(Az)/mu
+    eq div(Hr) = 0
+}
+
+method electrostatic: cg { mesh: m, order: 1 }
+method magnetic: cg { mesh: m, order: 1 }
+
+// femahoy solves at 1 GHz. A line of perfect conductors has the same C and L at each frequency.
+step quasi_tem: static {
+    bc outline: phi = V1
+    bc ground: phi = 0
+    bc outline: Az = A1
+    bc ground: Az = 0
+    output phi, Az
+}
+
+expect z0: sqrt((A1/integral(dot(Hr, n), outline))/(-integral(dot(D, n), outline)/V1)) == 67.7115445059 V/A within 0.1%
+expect c: -integral(dot(D, n), outline)/V1 == 7.30681172969e-11 C/(V*m) within 0.1%
+expect l: A1/integral(dot(Hr, n), outline) == 3.35006595745e-7 V*s/(A*m) within 0.1%
+expect eps_eff: (A1/integral(dot(Hr, n), outline))*(-integral(dot(D, n), outline)/V1)*c0^2 == 2.2 within 0.1%

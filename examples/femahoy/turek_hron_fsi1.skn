@@ -1,0 +1,93 @@
+// femahoy: validation/cases/turek-hron-fsi1/fsi1/precice-config.xml
+// Turek and Hron FSI1: an elastic flag behind a cylinder in a laminar channel flow (Re = 20)
+// bends to a steady shape. One model holds the fluid, the flag and their interface.
+// References: drag 14.295 N/m, lift 0.7638 N/m, point A ux = 0.0227 mm, uy = 0.8209 mm.
+
+model turek_hron_fsi1: 2d, SI
+
+let H: Length = 0.41 m
+let D: Length = 0.1 m
+let U_mean: Velocity = 0.2 m/s
+let rho_f: Density = 1000 kg/m^3
+
+scales D, U_mean, rho_f
+
+let chan: Surface = rect((0, 0) m, (2.5 m, H))
+let cyl: Surface = circle((0.2, 0.2) m, D/2)
+let bar: Surface = rect((0.2, 0.19) m, (0.6, 0.21) m) - cyl
+let fluid_dom: Surface = chan - cyl - bar
+let inlet: Curve = boundary(fluid_dom, x == 0 m)
+let walls: Curve = boundary(fluid_dom, y == 0 m || y == H)
+let cyl_wall: Curve = boundary(fluid_dom, cyl)
+let wet_fluid: Curve = boundary(fluid_dom, bar)
+let root: Curve = boundary(bar, cyl)
+let wet_solid: Curve = boundary(bar) - root
+
+material water {
+    rho: Density = rho_f
+    mu: DynViscosity = 1 Pa*s
+}
+
+// St. Venant-Kirchhoff: hooke on the Green-Lagrange strain.
+material flag_svk {
+    E: Pressure = 1.4 MPa
+    nu: Real = 0.4
+}
+
+mesh mf on fluid_dom {
+    size: 0.02 m
+    cell: tri
+    refine cyl_wall | wet_fluid: 0.005 m
+}
+
+// gap G18, G19: quad cells need a rect region (ccx: C3D8I). The flag uses triangles.
+mesh ms on bar {
+    size: 0.005 m
+    cell: tri
+}
+
+physics flow on fluid_dom solves v: Vector<Velocity>, p: Pressure {
+    material water
+    assume incompressible, newtonian, laminar
+    let sigma_f: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    eq rho*grad(v)*v - div(sigma_f) = 0
+    eq div(v) = 0
+}
+
+physics flag on bar solves u: Vector<Length> {
+    material flag_svk
+    assume finite_strain, isotropic, plane_strain
+    let S: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    eq div(defgrad(u)*S) = 0
+}
+
+// The fluid velocity equals ddt(u) on the flag, and the tractions balance.
+interface fsi: wet_fluid, wet_solid {
+    mesh_motion: harmonic
+}
+
+method flow: fv {
+    mesh: mf
+    gradient: green_gauss
+    flux: linear_upwind
+    pv_coupling: rhie_chow
+}
+
+method flag: cg {
+    mesh: ms
+    order: 2
+}
+
+// FSI1 is steady. The outlet takes the default natural condition sigma_f*n = 0.
+step steady: static {
+    bc inlet: v = (6*U_mean*y*(H - y)/H^2, 0)
+    bc walls | cyl_wall: v = 0
+    bc root: u = 0
+    output v, p, u
+}
+
+// n points out of the fluid, so the force on the cylinder and the flag is -sigma_f*n.
+expect drag: -integral((sigma_f*n).x, cyl_wall | wet_fluid) == 14.295 N/m within 4%
+expect lift: -integral((sigma_f*n).y, cyl_wall | wet_fluid) == 0.7638 N/m within 4%
+expect ux_a: u.x at (0.6, 0.2) m == 0.0227 mm within 4%
+expect uy_a: u.y at (0.6, 0.2) m == 0.8209 mm within 4%

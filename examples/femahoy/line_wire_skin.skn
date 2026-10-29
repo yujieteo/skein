@@ -1,0 +1,55 @@
+// femahoy: validation/cases/line-wire-skin/wire/grid.toml
+// Skin effect in a round copper wire of radius 1 mm in a square box of perfect conductor walls.
+// The reference is the Bessel function answer R = 4.29286576531e-2 ohm/m at 1 MHz.
+
+model wire_skin: 2d, SI
+
+let a: Length = 1 mm
+let f0: Frequency = 1 MHz
+let E0: Power/(Current*Length) = 1 V/m
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+
+scales a, 1 V, 1 A, 1/f0
+
+let wire: Surface = circle((0, 0) m, a)
+let box_air: Surface = rect((-10, -10) mm, (10, 10) mm)
+let rim: Curve = boundary(wire)
+let walls: Curve = boundary(box_air, abs(x) == 10 mm || abs(y) == 10 mm)
+
+material copper {
+    sigma_e: Current^2/(Power*Length) = 5.8e7 A/(V*m)
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+material air {
+    sigma_e: Current^2/(Power*Length) = 0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+// The cells on the outline of the wire are a quarter of the skin depth at 1 MHz (66 um).
+mesh m on box_air {
+    size: 1 mm
+    cell: tri
+    refine rim: 16.5 um
+}
+
+// The voltage per length E0 drives the wire. The impedance per length is E0/integral(J, wire).
+physics eddy on box_air solves Az: Complex<Power*Time/(Current*Length)> {
+    material copper on wire, air on box_air - wire
+    let J: Complex<Current/Area> = sigma_e*(E0 - ddt(Az))
+    let Hr: Vector<Complex<Current/Length>> = grad(Az)/mu
+    eq -div(Hr) = J
+}
+
+method eddy: cg { mesh: m, order: 1 }
+
+// The box walls are perfect conductors and carry the return current.
+bc walls: Az = 0
+
+// gap G9: a procedure argument cannot be a list. femahoy also solves 1 kHz, 10 kHz and 100 kHz.
+step skin: harmonic(freq: f0) {
+    output Az, J
+}
+
+// gap G7: no real() of a Complex value. The check is
+// real(E0/integral(J, wire)) == 4.29286576531e-2 V/(A*m) within 0.4%.

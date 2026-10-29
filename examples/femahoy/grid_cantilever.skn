@@ -1,0 +1,45 @@
+// femahoy: validation/cases/grid-cantilever/beam/grid.toml
+// A steel cantilever 100 x 10 x 10 mm with a shear force of 100 N on its free end.
+// The tip deflection is checked against the Timoshenko beam, -0.191933 mm. The bending
+// stress at x = 51.25 mm is checked against the Saint-Venant solution, +-29.25 MPa.
+
+model grid_cantilever: 3d, mm_N_MPa_s
+
+let L: Length = 100 mm
+let b: Length = 10 mm
+let H: Length = 10 mm
+let s_tip: Pressure = 1 MPa
+
+scales H, s_tip
+
+let beam: Solid = box((0, 0, 0) mm, (L, b, H))
+let root: Surface = boundary(beam, x == 0 mm)
+let tip: Surface = boundary(beam, x == L)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+mesh m on beam {
+    size: 2.5 mm
+    cell: hex
+}
+
+physics solid on beam: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+// gap G18: no 8-node hex with incompatible modes. Order 2 replaces it.
+method solid: cg { mesh: m, order: 2 }
+
+step load: static {
+    bc root: u = 0
+    bc tip: sigma*n = (0, 0, -s_tip)
+    output u, sigma
+    report reaction(root)
+}
+
+expect tip_uz: u.z at (100, 5, 5) mm == -0.191933 mm within 1.5%
+expect top_sxx: sigma.xx at (51.25, 5, 10) mm == 29.25 MPa within 1.5%
+expect bottom_sxx: sigma.xx at (51.25, 5, 0) mm == -29.25 MPa within 1.5%

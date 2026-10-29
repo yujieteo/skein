@@ -1,0 +1,115 @@
+// femahoy: validation/cases/grid-fibre-composite-cell/round/grid.toml
+// 2 periodic unit cells of carbon fibres along z in epoxy: round fibres (f = 0.5) and
+// square fibres (f = 0.36, square/grid.toml). The conductivity across the round fibres
+// is checked against Rayleigh (1892): 0.5829156886 W/(m K). Along z, the means are exact.
+
+model fibre_composite_cell: 3d, SI
+
+let r_f: Length = 0.3989422804014327 m
+// Each cell problem solves the periodic fluctuation of T about a unit mean gradient.
+let Gm: Temperature/Length = 1 K/m
+let e1: Vector<Real> = (1.0, 0.0, 0.0)
+let e2: Vector<Real> = (0.0, 1.0, 0.0)
+let e3: Vector<Real> = (0.0, 0.0, 1.0)
+
+scales 1 m, 1 K, 1 W/(m*K), 1000 kg/m^3
+
+let round_cell: Solid = box((0, 0, 0) m, (1, 1, 0.05) m)
+let round_fibre: Solid = cylinder((0.5, 0.5, 0) m, (0, 0, 1), r_f, 0.05 m)
+let round_matrix: Solid = round_cell - round_fibre
+let rx0: Surface = boundary(round_cell, x == 0 m)
+let rx1: Surface = boundary(round_cell, x == 1 m)
+let ry0: Surface = boundary(round_cell, y == 0 m)
+let ry1: Surface = boundary(round_cell, y == 1 m)
+let rz0: Surface = boundary(round_cell, z == 0 m)
+let rz1: Surface = boundary(round_cell, z == 0.05 m)
+let r_pin: Point = point((0.02, 0.02, 0.025) m)
+
+// The square cell is 1 x 1 x 0.5 mm. It stands apart from the round cell.
+let sq_cell: Solid = box((2000, 0, 0) mm, (2001, 1, 0.5) mm)
+let sq_fibre: Solid = box((2000.2, 0.2, 0) mm, (2000.8, 0.8, 0.5) mm)
+let sq_matrix: Solid = sq_cell - sq_fibre
+let sz0: Surface = boundary(sq_cell, z == 0 mm)
+let sz1: Surface = boundary(sq_cell, z == 0.5 mm)
+let sx0: Surface = boundary(sq_cell, x == 2000 mm)
+let sx1: Surface = boundary(sq_cell, x == 2001 mm)
+let sy0: Surface = boundary(sq_cell, y == 0 mm)
+let sy1: Surface = boundary(sq_cell, y == 1 mm)
+let s_pin: Point = point((2000.1, 0.1, 0.25) mm)
+
+material epoxy {
+    k: Conductivity = 0.2 W/(m*K)
+    rho: Density = 1.2e-9 t/mm^3
+}
+
+material carbon {
+    k: Conductivity = 10 W/(m*K)
+    rho: Density = 1.8e-9 t/mm^3
+}
+
+mesh mesh_r on round_cell {
+    size: 0.02 m
+    cell: tet
+    grade: 1.2
+}
+
+mesh mesh_s on sq_cell {
+    size: 0.05 mm
+    cell: hex
+}
+
+// The sides of each cell are periodic.
+symmetry round_x: bloch { period: (1, 0, 0) m, low: rx0, high: rx1, k: 0 }
+symmetry round_y: bloch { period: (0, 1, 0) m, low: ry0, high: ry1, k: 0 }
+symmetry round_z: bloch { period: (0, 0, 0.05) m, low: rz0, high: rz1, k: 0 }
+symmetry square_x: bloch { period: (1, 0, 0) mm, low: sx0, high: sx1, k: 0 }
+symmetry square_y: bloch { period: (0, 1, 0) mm, low: sy0, high: sy1, k: 0 }
+symmetry square_z: bloch { period: (0, 0, 0.5) mm, low: sz0, high: sz1, k: 0 }
+
+physics round_kx on round_cell solves Tx: Temperature {
+    material epoxy on round_matrix, carbon on round_fibre
+    let qx: Vector<HeatFlux> = -k*(grad(Tx) + Gm*e1)
+    eq div(qx) = 0
+}
+
+physics round_ky on round_cell solves Ty: Temperature {
+    material epoxy on round_matrix, carbon on round_fibre
+    let qy: Vector<HeatFlux> = -k*(grad(Ty) + Gm*e2)
+    eq div(qy) = 0
+}
+
+physics round_kz on round_cell solves Tz: Temperature {
+    material epoxy on round_matrix, carbon on round_fibre
+    let qz: Vector<HeatFlux> = -k*(grad(Tz) + Gm*e3)
+    eq div(qz) = 0
+}
+
+physics square_kz on sq_cell solves Ts: Temperature {
+    material epoxy on sq_matrix, carbon on sq_fibre
+    let qs: Vector<HeatFlux> = -k*(grad(Ts) + Gm*e3)
+    let rho_s: Density = rho
+    eq div(qs) = 0
+}
+
+method round_kx: cg { mesh: mesh_r, order: 1 }
+method round_ky: cg { mesh: mesh_r, order: 1 }
+method round_kz: cg { mesh: mesh_r, order: 1 }
+method square_kz: cg { mesh: mesh_s, order: 1 }
+
+step cells: static {
+    // The fluctuation is periodic, so 1 point fixes its level.
+    bc r_pin: Tx = 0
+    bc r_pin: Ty = 0
+    bc r_pin: Tz = 0
+    bc s_pin: Ts = 0
+    output Tx, Ty, Tz, Ts
+}
+
+// The effective conductivity is the mean flux over the mean gradient.
+expect round_kxx: -mean(qx.x, round_cell)/Gm == 0.5829156886 W/(m*K) within 0.1%
+expect round_kyy: -mean(qy.y, round_cell)/Gm == 0.5829156886 W/(m*K) within 0.1%
+// femahoy uses f = 0.4997928030 of the polygon of the circle. The true circle gives 5.1 W/(m K).
+expect round_kzz: -mean(qz.z, round_cell)/Gm == 5.0979694697 W/(m*K) within 0.1%
+expect square_kzz: -mean(qs.z, sq_cell)/Gm == 3.728 mW/(mm*K) within 0.1%
+expect square_density: mean(rho_s, sq_cell) == 1.416e-9 t/mm^3 within 0.1%
+// gap G15: no effective stiffness of a periodic cell, so square_ez = 85040 MPa is not an expect line.

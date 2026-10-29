@@ -1,0 +1,55 @@
+// femahoy: validation/cases/dynamics-bar-step/job.inp
+// A steel bar of 200 x 10 x 10 mm, fixed at one end. A step force of 1000 N
+// pulls the free end from t = 0. Explicit dynamics to t = 2L/c, 3D, linear
+// hexahedra. The reference is the 1D wave theory (Graff 1975): the end is
+// at 2*F*L/(E*A) = 0.0190476 mm, within 3 %.
+
+model dynamics_bar_step: 3d, mm_N_MPa_s
+
+let L: Length = 200 mm
+let W: Length = 10 mm
+let F: Force = 1000 N
+let E_s: Pressure = 210000 MPa
+let rho_s: Density = 7.85e-9 t/mm^3
+let c_bar: Velocity = sqrt(E_s/rho_s)
+let t_wave: Time = 2*L/c_bar
+
+scales W, E_s, rho_s
+
+let bar: Solid = box((0, 0, 0) mm, (L, W, W))
+let fixed: Surface = boundary(bar, x == 0 mm)
+let end_face: Surface = boundary(bar, x == L)
+
+material steel {
+    E: Pressure = E_s
+    nu: Real = 0.3
+    rho: Density = rho_s
+}
+
+mesh m on bar {
+    size: 2.5 mm
+    cell: hex
+}
+
+physics solid on bar solves u: Vector<Length> {
+    material steel
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    eq rho*ddt2(u) - div(sigma) = 0
+}
+
+// gap G18: femahoy uses C3D8R (reduced integration).
+method solid: cg {
+    mesh: m
+    order: 1
+}
+
+bc fixed: u = 0
+
+// gap G21: ccx takes its own stable increment. Skein needs a fixed dt.
+step pull: transient(end: t_wave, dt: t_wave/800, scheme: central_difference) {
+    bc end_face: sigma*n = F/(W*W)*n
+    output u every 100
+}
+
+expect u_end: mean(u.x, end_face) == 2*F*L/(E_s*W*W) within 3%

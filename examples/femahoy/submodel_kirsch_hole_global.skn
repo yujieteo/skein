@@ -1,0 +1,57 @@
+// femahoy: validation/cases/submodel-kirsch-hole/global.inp
+// The coarse global model of the submodel submodel_kirsch_hole.skn: 1/4 of
+// a steel plate of 100 x 100 mm with a hole of radius 10 mm, plane strain.
+// The outer edges get the Kirsch displacement of an infinite plate under a
+// tension of 100 MPa along x. Alone, this model gives the peak 4.5 % low.
+
+model submodel_kirsch_hole_global: 2d, mm_N_MPa_s
+
+let a: Length = 10 mm
+let w: Length = 50 mm
+let th: Length = 1 mm
+let S: Pressure = 100 MPa
+let E_s: Pressure = 210000 MPa
+let nu_s: Real = 0.3
+
+scales a, S
+
+let hole_disk: Surface = circle((0, 0) mm, a)
+let quarter: Surface = rect((0, 0) mm, (w, w)) - hole_disk
+let left: Curve = boundary(quarter, x == 0 mm)
+let bottom: Curve = boundary(quarter, y == 0 mm)
+let edge: Curve = boundary(quarter, x == w || y == w)
+let hole: Curve = boundary(quarter, hole_disk)
+
+// The Kirsch displacement in plane strain (Timoshenko and Goodier, art. 35).
+let r_k: Length = sqrt(x^2 + y^2)
+let c1: Real = x/r_k
+let s1: Real = y/r_k
+let c3: Real = 4*c1^3 - 3*c1
+let s3: Real = 3*s1 - 4*s1^3
+let mu_s: Pressure = E_s/(2*(1 + nu_s))
+let kap: Real = 3 - 4*nu_s
+let ux_k: Length = S*a/(8*mu_s)*((r_k/a)*(kap + 1)*c1 + 2*(a/r_k)*((1 + kap)*c1 + c3) - 2*(a/r_k)^3*c3)
+let uy_k: Length = S*a/(8*mu_s)*((r_k/a)*(kap - 3)*s1 + 2*(a/r_k)*((1 - kap)*s1 + s3) - 2*(a/r_k)^3*s3)
+
+material steel {
+    E: Pressure = E_s
+    nu: Real = nu_s
+}
+
+mesh m on quarter {
+    size: 8 mm
+    cell: tri
+    refine hole: 4 mm
+}
+
+physics solid on quarter: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_strain(th)
+}
+
+step load: static {
+    bc left: u.x = 0
+    bc bottom: u.y = 0
+    bc edge: u = (ux_k, uy_k)
+    output u, sigma
+}

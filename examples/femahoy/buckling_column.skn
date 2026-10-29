@@ -1,0 +1,50 @@
+// femahoy: validation/cases/buckling-column/job.inp
+// A steel column of 10 x 10 x 200 mm, fixed at the base and free at the top,
+// with a load of 1 N on the top face. Linear buckling, 3D, quadratic
+// tetrahedra. The reference is Timoshenko and Gere (1961), Art. 2.1:
+// P = pi^2*E*I/(4*L^2) = 10794.88 N, within 1 %.
+
+model buckling_column: 3d, mm_N_MPa_s
+
+let B: Length = 10 mm
+let L: Length = 200 mm
+let q: Pressure = 0.01 MPa
+
+scales B, 210000 MPa
+
+let column: Solid = box((0, 0, 0) mm, (B, B, L))
+let base: Surface = boundary(column, z == 0 mm)
+let top: Surface = boundary(column, z == L)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+}
+
+mesh m on column {
+    size: 5 mm
+    cell: tet
+}
+
+// The geometric stiffness needs the finite strain form of the equation.
+physics solid on column solves u: Vector<Length> {
+    material steel
+    assume finite_strain, isotropic
+    let S2: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    let P1: Tensor2<Pressure> = defgrad(u)*S2
+    eq div(P1) = 0
+}
+
+bc base: u = 0
+
+// 0.01 MPa on 10 x 10 mm is 1 N in -z. Thus the load factor is the force in N.
+step preload: static {
+    bc top: P1*n = -q*n
+}
+
+step buckle: buckling(count: 4) {
+    output u
+}
+
+// gap G6: no name for the load factor of mode 1. The check is
+// pi^2*E*(B^4/12)/(4*L^2)/(1 N) = 10794.88 within 1%.

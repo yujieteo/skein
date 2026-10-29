@@ -1,0 +1,108 @@
+// femahoy: validation/cases/birth-death-column/job.inp
+// A concrete column, 1 x 1 x 10 m, built in 10 lifts of 1 m under its own weight. Each lift
+// is born strain free on the deformed column. Reference: the lift theory gives
+// u_z = -0.0231516 mm at z = 5 m after the last lift.
+
+model birth_death_column: 3d, mm_N_MPa_s
+
+let a: Length = 1000 mm
+let h: Length = 1000 mm
+let g: Acceleration = 9810 mm/s^2
+let E_c: Pressure = 30000 MPa
+let rho_c: Density = 2400 kg/m^3
+
+scales h, E_c, rho_c
+
+let column: Solid = box((0, 0, 0) mm, (a, a, 10*h))
+let lift1: Solid = box((0, 0, 0) mm, (a, a, h))
+let lift2: Solid = box((0, 0, h), (a, a, 2*h))
+let lift3: Solid = box((0, 0, 2*h), (a, a, 3*h))
+let lift4: Solid = box((0, 0, 3*h), (a, a, 4*h))
+let lift5: Solid = box((0, 0, 4*h), (a, a, 5*h))
+let lift6: Solid = box((0, 0, 5*h), (a, a, 6*h))
+let lift7: Solid = box((0, 0, 6*h), (a, a, 7*h))
+let lift8: Solid = box((0, 0, 7*h), (a, a, 8*h))
+let lift9: Solid = box((0, 0, 8*h), (a, a, 9*h))
+let lift10: Solid = box((0, 0, 9*h), (a, a, 10*h))
+let base: Surface = boundary(column, z == 0 mm)
+
+material concrete {
+    E: Pressure = E_c
+    nu: Real = 0.0
+    rho: Density = rho_c
+}
+
+// One hexahedron for each lift, as the C3D8 mesh of job.inp.
+mesh m on column {
+    size: h
+    cell: hex
+}
+
+physics col on column: linear_elastic(b: rho*(0, 0, -g)) solves u: Vector<Length> {
+    material concrete
+}
+
+method col: cg {
+    mesh: m
+    order: 1
+}
+
+bc base: u = 0
+
+// Lift 1 only. The weight of a lift acts only when the lift is alive.
+step lift_1: static {
+    death lift2, lift3, lift4, lift5, lift6, lift7, lift8, lift9, lift10
+}
+
+step lift_2: static {
+    birth lift2
+}
+
+step lift_3: static {
+    birth lift3
+}
+
+step lift_4: static {
+    birth lift4
+}
+
+step lift_5: static {
+    birth lift5
+}
+
+step lift_6: static {
+    birth lift6
+}
+
+step lift_7: static {
+    birth lift7
+}
+
+step lift_8: static {
+    birth lift8
+}
+
+step lift_9: static {
+    birth lift9
+}
+
+table axis{zl: Length in mm}:
+    1000
+    2000
+    3000
+    4000
+    5000
+    6000
+    7000
+    8000
+    9000
+    10000
+
+step lift_10: static {
+    birth lift10
+    output u, sigma
+    // The settlement at the top of each lift, for the plot (node set AXIS).
+    report u.z at (0 mm, 0 mm, axis.zl)
+}
+
+expect u_mid: u.z at (0 mm, 0 mm, 5*h) == -0.0231516 mm within 0.01%

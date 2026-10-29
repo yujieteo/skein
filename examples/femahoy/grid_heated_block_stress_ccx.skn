@@ -1,0 +1,74 @@
+// femahoy: validation/cases/grid-heated-block-stress-ccx/block/grid.toml
+// The plate and the heated block of grid-heated-block-ccx, with the thermal stress of the
+// steady temperature. A point at the centre of the bottom holds u.z, so the plate is free
+// to bend. The displacements are checked against CalculiX 2.23 with C3D20 elements.
+
+model heated_block_stress: 3d, SI
+
+// The air temperature and the stress-free temperature.
+let T0: Temperature = 20 degC
+let h_c: HeatTransfer = 200 W/(m^2*K)
+
+scales 0.01 m, 10 K, 50 W/(m*K), 200 GPa
+
+// One quarter: x and y from 0.05 m. The planes x = 0.05 m and y = 0.05 m are planes of symmetry.
+let plate: Solid = box((0.05, 0.05, 0) m, (0.1, 0.1, 0.01) m)
+let block: Solid = box((0.05, 0.05, 0.01) m, (0.065, 0.065, 0.03) m)
+let part: Solid = plate | block
+let bottom: Surface = boundary(part, z == 0 m)
+let sym_x: Surface = boundary(part, x == 0.05 m)
+let sym_y: Surface = boundary(part, y == 0.05 m)
+let centre: Point = point((0.05, 0.05, 0) m)
+
+material steel {
+    k: Conductivity = 50 W/(m*K)
+    qv: Power/Volume = 0 W/m^3
+    E: Pressure = 200 GPa
+    nu: Real = 0.3
+    alpha: Expansion = 12e-6 K^-1
+}
+
+material copper {
+    k: Conductivity = 400 W/(m*K)
+    qv: Power/Volume = 2e6 W/m^3
+    E: Pressure = 110 GPa
+    nu: Real = 0.34
+    alpha: Expansion = 17e-6 K^-1
+}
+
+// gap G19: hex cells need 1 box, and the part is a union of 2 boxes. Thus the cells are tetrahedra.
+mesh m on part {
+    size: 0.00125 m
+    cell: tet
+}
+
+physics thermal on part solves T: Temperature {
+    material steel on plate, copper on block
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = qv
+}
+
+physics solid on part solves u: Vector<Length> {
+    material steel on plate, copper on block
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T - T0)*I)
+    eq div(sigma) = 0
+}
+
+// The stress does not change the temperature: a one-way coupling.
+method solid: cg { mesh: m, order: 2, couple: staggered }
+
+step load: static {
+    bc bottom: dot(q, n) = h_c*(T - T0)
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc centre: u.z = 0
+    output T, u, sigma
+}
+
+expect block_top_uz: u.z at (0.05, 0.05, 0.03) m == 1.278438e-5 m within 3%
+expect plate_corner_ux: u.x at (0.1, 0.1, 0) m == 1.028590e-5 m within 3%
+expect plate_corner_uz: u.z at (0.1, 0.1, 0) m == -7.164007e-6 m within 3%
+expect plate_edge_uz: u.z at (0.1, 0.05, 0) m == -4.803123e-6 m within 3%
+// The range of the normal displacement on the bottom face.
+expect bottom_range: max(u.z, bottom) - min(u.z, bottom) == 7.164007e-6 m within 3%

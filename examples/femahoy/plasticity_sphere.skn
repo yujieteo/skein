@@ -1,0 +1,57 @@
+// femahoy: validation/cases/plasticity-sphere/job.inp
+// A thick hollow steel sphere (a = 10 mm, b = 20 mm), elastic-perfectly plastic, under an
+// internal pressure of 300 MPa. One eighth of the sphere with 3 symmetry planes.
+// Reference (Hill 1950): u(b) = 0.00709845 mm.
+
+model plasticity_sphere: 3d, mm_N_MPa_s
+
+let a: Length = 10 mm
+let b: Length = 20 mm
+let p_in: Pressure = 300 MPa
+
+scales b, p_in
+
+let cavity: Solid = sphere((0, 0, 0) mm, a)
+let octant: Solid = (sphere((0, 0, 0) mm, b) - cavity) & box((0, 0, 0) mm, (b, b, b))
+let symx: Surface = boundary(octant, x == 0 mm)
+let symy: Surface = boundary(octant, y == 0 mm)
+let symz: Surface = boundary(octant, z == 0 mm)
+let inner: Surface = boundary(octant, cavity)
+
+// Von Mises yield, no hardening (Hk = 0).
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+    sy: Pressure = 250 MPa
+    Hk: Pressure = 0 MPa
+}
+
+mesh m on octant {
+    size: 3 mm
+    cell: tet
+}
+
+physics solid on octant solves u: Vector<Length> {
+    material steel
+    assume small_strain, isotropic
+    state eps_p: Tensor2<Real> = 0
+    state alpha: Real = 0
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - eps_p)
+    plastic {
+        yield: von_mises(sigma) - (sy + Hk*alpha)
+        strain: eps_p
+        hardening: alpha
+    }
+    eq div(sigma) = 0
+}
+
+bc symx: u.x = 0
+bc symy: u.y = 0
+bc symz: u.z = 0
+
+step pressure: static(ramp: 10) {
+    bc inner: sigma*n = -p_in*n
+    output u, sigma, alpha
+}
+
+expect u_outer: u.x at (b, 0 mm, 0 mm) == 0.00709845 mm within 1%

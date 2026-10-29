@@ -1,0 +1,54 @@
+// femahoy: validation/cases/grid-plate-hole-ccx/plate/grid.toml
+// A steel plate with a cooled round hole and a copper pad with a heat
+// source on its top. Steady heat conduction, 3D, linear tetrahedra. The
+// reference is CalculiX C3D10 on a gmsh mesh of the same problem.
+
+model plate_hole_heat: 3d, SI
+
+let r_hole: Length = 0.01 m
+let T_hole: Temperature = 20 degC
+
+scales 0.1 m, 20 K, 1e5 W/m^2
+
+let bore: Solid = cylinder((0.03, 0.03, 0) m, (0, 0, 1), r_hole, 0.01 m)
+let plate: Solid = box((0, 0, 0) m, (0.1, 0.06, 0.01) m) - bore
+let pad: Solid = box((0.06, 0.02, 0.01) m, (0.09, 0.04, 0.02) m)
+let body: Solid = plate | pad
+let hole: Surface = boundary(body, bore)
+
+// The source is a property of the pad material.
+material steel {
+    k: Conductivity = 50 W/(m*K)
+    q_v: Power/Volume = 0
+}
+
+material copper {
+    k: Conductivity = 400 W/(m*K)
+    q_v: Power/Volume = 2e6 W/m^3
+}
+
+mesh m on body {
+    size: 0.002 m
+    cell: tet
+}
+
+physics thermal on body solves T: Temperature = 293.15 K {
+    material steel on plate, copper on pad
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = q_v
+}
+
+method thermal: cg {
+    mesh: m
+    order: 1
+}
+
+step steady: static {
+    // The other faces have no bc, so they are adiabatic.
+    bc hole: T = T_hole
+    output T, q
+}
+
+expect pad_corner: T at (0.09, 0.04, 0.02) m == 35.88840 degC within 0.5 K
+expect plate_far: T at (0.1, 0, 0) m == 34.25052 degC within 0.5 K
+expect plate_near: T at (0, 0.06, 0.01) m == 20.90766 degC within 0.5 K

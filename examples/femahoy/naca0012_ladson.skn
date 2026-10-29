@@ -1,0 +1,195 @@
+// femahoy: validation/cases/naca0012-ladson/a4.04/system/controlDict
+// NACA 0012 at Re = 6 million, incompressible and steady, fully turbulent with the
+// Spalart-Allmaras model, at 3 angles of attack. Reference: Ladson (1988), NASA TM-4074,
+// Table IX: cl 0.4316, cd 0.00823 at 4.04 deg. cd 0.00809 at -0.05 deg.
+// cl 1.0707, cd 0.01201 at 10.12 deg.
+
+model naca0012_ladson: 2d, SI
+
+param aoa: Angle = 4.04 deg in -1 deg..12 deg
+let chord: Length = 1 m
+let U: Velocity = 1 m/s
+let rho_f: Density = 1 kg/m^3
+let nu_f: KinViscosity = (1 m^2/s)/6000000
+
+scales chord, U, rho_f
+
+// The free stream and the lift directions turn with the angle of attack.
+let e_d: Vector<Real> = (cos(aoa), sin(aoa))
+let e_l: Vector<Real> = (-sin(aoa), cos(aoa))
+
+// The Spalart-Allmaras constants of OpenFOAM.
+let sig_sa: Real = 0.66666
+let kap: Real = 0.41
+let cb1: Real = 0.1355
+let cb2: Real = 0.622
+let cw1: Real = cb1/kap^2 + (1 + cb2)/sig_sa
+let cw2: Real = 0.3
+let cw3: Real = 2
+let cv1: Real = 7.1
+let c_s: Real = 0.3
+
+// The TMR airfoil with a sharp trailing edge, 80 points with cosine spacing.
+// gap G24: no region with a smooth boundary. The polygon stands for the spline of femahoy.
+let foil: Surface = polygon(
+    (1, 0) m,
+    (0.998459, 0.000218) m,
+    (0.993844, 0.00087) m,
+    (0.986185, 0.001943) m,
+    (0.975528, 0.003419) m,
+    (0.96194, 0.005274) m,
+    (0.945503, 0.007476) m,
+    (0.92632, 0.009992) m,
+    (0.904508, 0.012784) m,
+    (0.880203, 0.015812) m,
+    (0.853553, 0.019034) m,
+    (0.824724, 0.022408) m,
+    (0.793893, 0.025891) m,
+    (0.761249, 0.02944) m,
+    (0.726995, 0.033009) m,
+    (0.691342, 0.036554) m,
+    (0.654508, 0.040027) m,
+    (0.616723, 0.043379) m,
+    (0.578217, 0.04656) m,
+    (0.53923, 0.049515) m,
+    (0.5, 0.05219) m,
+    (0.46077, 0.054529) m,
+    (0.421783, 0.056477) m,
+    (0.383277, 0.05798) m,
+    (0.345492, 0.058988) m,
+    (0.308658, 0.059456) m,
+    (0.273005, 0.059348) m,
+    (0.238751, 0.058635) m,
+    (0.206107, 0.057299) m,
+    (0.175276, 0.055335) m,
+    (0.146447, 0.052749) m,
+    (0.119797, 0.049558) m,
+    (0.095492, 0.04579) m,
+    (0.07368, 0.041482) m,
+    (0.054497, 0.036677) m,
+    (0.03806, 0.031423) m,
+    (0.024472, 0.025769) m,
+    (0.013815, 0.019761) m,
+    (0.006156, 0.013441) m,
+    (0.001541, 0.006846) m,
+    (0, 0) m,
+    (0.001541, -0.006846) m,
+    (0.006156, -0.013441) m,
+    (0.013815, -0.019761) m,
+    (0.024472, -0.025769) m,
+    (0.03806, -0.031423) m,
+    (0.054497, -0.036677) m,
+    (0.07368, -0.041482) m,
+    (0.095492, -0.04579) m,
+    (0.119797, -0.049558) m,
+    (0.146447, -0.052749) m,
+    (0.175276, -0.055335) m,
+    (0.206107, -0.057299) m,
+    (0.238751, -0.058635) m,
+    (0.273005, -0.059348) m,
+    (0.308658, -0.059456) m,
+    (0.345492, -0.058988) m,
+    (0.383277, -0.05798) m,
+    (0.421783, -0.056477) m,
+    (0.46077, -0.054529) m,
+    (0.5, -0.05219) m,
+    (0.53923, -0.049515) m,
+    (0.578217, -0.04656) m,
+    (0.616723, -0.043379) m,
+    (0.654508, -0.040027) m,
+    (0.691342, -0.036554) m,
+    (0.726995, -0.033009) m,
+    (0.761249, -0.02944) m,
+    (0.793893, -0.025891) m,
+    (0.824724, -0.022408) m,
+    (0.853553, -0.019034) m,
+    (0.880203, -0.015812) m,
+    (0.904508, -0.012784) m,
+    (0.92632, -0.009992) m,
+    (0.945503, -0.007476) m,
+    (0.96194, -0.005274) m,
+    (0.975528, -0.003419) m,
+    (0.986185, -0.001943) m,
+    (0.993844, -0.00087) m,
+    (0.998459, -0.000218) m,
+)
+let far: Surface = circle((0, 0) m, 500*chord) | rect((0 m, -500*chord), (500*chord, 500*chord))
+let fluid: Surface = far - foil
+let wall: Curve = boundary(fluid, foil)
+let outlet: Curve = boundary(far, x == 500*chord)
+let farfield: Curve = boundary(far, x < 500*chord)
+
+material air {
+    rho: Density = rho_f
+    nu: KinViscosity = nu_f
+}
+
+// The femahoy C-grid has a first cell height of 4 um and 64 cells across 1 chord.
+mesh m on fluid {
+    size: 20*chord
+    cell: tri
+    refine wall: 2 mm
+    layers wall: { first: 4 um, ratio: 1.18, count: 64 }
+}
+
+// The wall distance d, from the eikonal equation.
+physics walldist on fluid solves d: Length {
+    material air
+    eq norm(grad(d)) = 1
+}
+
+physics flow on fluid solves v: Vector<Velocity> = U*e_d, p: Pressure, nt: KinViscosity = 3*nu_f {
+    material air
+    assume incompressible
+    let chi: Real = nt/nu
+    let fv1: Real = chi^3/(chi^3 + cv1^3)
+    let fv2: Real = 1 - chi/(1 + chi*fv1)
+    let nut: KinViscosity = nt*fv1
+    let omg: Frequency = sqrt(2*ddot(skew(grad(v)), skew(grad(v))))
+    let s_t: Frequency = max(omg + fv2*nt/(kap^2*d^2), c_s*omg)
+    let r_sa: Real = min(nt/(s_t*kap^2*d^2), 10)
+    let g_sa: Real = r_sa + cw2*(r_sa^6 - r_sa)
+    let fw: Real = g_sa*exp(ln((1 + cw3^6)/(g_sa^6 + cw3^6))/6)
+    let sigma: Tensor2<Pressure> = -p*I + 2*rho*(nu + nut)*sym(grad(v))
+    let q_nt: Vector<KinViscosity*Velocity> = -(nu + nt)/sig_sa*grad(nt)
+    eq rho*grad(v)*v - div(sigma) = 0
+    eq div(v) = 0
+    eq dot(v, grad(nt)) + div(q_nt) - cb2/sig_sa*dot(grad(nt), grad(nt)) = cb1*s_t*nt - cw1*fw*(nt/d)^2
+}
+
+method walldist: cg {
+    mesh: m
+    order: 1
+}
+
+method flow: fv {
+    mesh: m
+    gradient: green_gauss
+    flux: linear_upwind
+    limiter: venkatakrishnan
+    pv_coupling: rhie_chow
+}
+
+step steady: static {
+    bc wall: d = 0
+    bc wall: v = 0
+    bc wall: nt = 0
+    // The free stream on the circle and on the 2 lines. The outlet has the default
+    // natural conditions: sigma*n = 0 and dot(q_nt, n) = 0.
+    bc farfield: v = U*e_d
+    bc farfield: nt = 3*nu_f
+    solve { nonlinear: newton }
+    output v, p, nt, d
+    // n points out of the fluid, so the force on the airfoil is -sigma*n.
+    report cl = -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord)
+    report cd = -integral(dot(sigma*n, e_d), wall)/(0.5*rho_f*U^2*chord)
+}
+
+study angles: grid {
+    aoa: [-0.05, 4.04, 10.12] deg
+}
+
+// The expectations hold for the default aoa = 4.04 deg. The tolerance is 4% + 0.0015.
+// gap G10: no expect for each study case. cd 0.00809 at -0.05 deg, cl 1.0707 and cd 0.01201 at 10.12 deg.
+expect cl_a4: -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord) == 0.4316 within 0.04*0.4316 + 0.0015
+expect cd_a4: -integral(dot(sigma*n, e_d), wall)/(0.5*rho_f*U^2*chord) == 0.00823 within 0.04*0.00823 + 0.0015

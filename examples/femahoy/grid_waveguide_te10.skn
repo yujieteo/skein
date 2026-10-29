@@ -1,0 +1,64 @@
+// femahoy: validation/cases/grid-waveguide-te10/guide/grid.toml
+// A WR-90 waveguide 30 mm long with a TE10 port at each end, at 10 GHz. The time factor is
+// exp(im*omega*t). The exact answer is S11 = 0 and S21 = exp(-im*beta*L), a phase of 88.008473 deg.
+
+model waveguide_te10: 3d, mm_N_MPa_s
+
+let a: Length = 22.86 mm
+let b: Length = 10.16 mm
+let Lg: Length = 30 mm
+let f0: Frequency = 10 GHz
+let E0: Power/(Current*Length) = 1 V/m
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+
+scales a, 1 V, 1 mA, 1/f0
+
+// The propagation constant of TE10 and the mode shape on a port face.
+let beta: Length^-1 = sqrt((2*pi*f0)^2*mu0*eps0 - (pi/a)^2)
+let e10: Vector<Power/(Current*Length)> = (0, E0*sin(pi*x/a), 0)
+
+let guide: Solid = box((0, 0, 0) mm, (a, b, Lg))
+let port_in: Surface = boundary(guide, z == 0 mm)
+let port_out: Surface = boundary(guide, z == Lg)
+let xwalls: Surface = boundary(guide, x == 0 mm || x == a)
+let ywalls: Surface = boundary(guide, y == 0 mm || y == b)
+
+material air {
+    eps: Current^2*Time/(Power*Length) = eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+mesh m on guide {
+    size: 2 mm
+    cell: tet
+}
+
+// curl(curl(E)/mu) is written as div(Hs). Hs*n is n x (curl(E)/mu), the natural term of a port.
+physics wave on guide solves E: Vector<Complex<Power/(Current*Length)>> {
+    material air
+    let Hs: Tensor2<Complex<Current/(Length*Time)>> = -2*skew(grad(E))/mu
+    eq div(Hs) + eps*ddt2(E) = 0
+}
+
+method wave: cg { mesh: m, order: 1, family: nedelec }
+
+// The walls are perfect conductors: the tangential components of E are zero.
+bc xwalls: E.y = 0
+bc xwalls: E.z = 0
+bc ywalls: E.x = 0
+bc ywalls: E.z = 0
+
+// First-order TE10 port conditions. Port 1 has the incident wave e10.
+bc port_in: Hs*n = im*beta/mu0*(E - dot(E, n)*n) - 2*im*beta/mu0*e10
+bc port_out: Hs*n = im*beta/mu0*(E - dot(E, n)*n)
+
+step response: harmonic(freq: f0) {
+    output E
+}
+
+// S11 and S21 are the projections of E on the TE10 mode of each port.
+expect s11: integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1 == 0 within 0.012
+// gap G7: no arg() of a Complex value. The complex test of S21 replaces the femahoy checks
+// of |S21| and of its phase, with the tolerance of |S21|.
+expect s21: integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out) == cos(88.008473 deg) + im*sin(88.008473 deg) within 0.013

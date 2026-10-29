@@ -1,0 +1,46 @@
+// femahoy: validation/cases/grid-coax-capacitor/coax/grid.toml
+// Electrostatics of a coaxial capacitor 20 mm long filled with PTFE, 1 V on the inner conductor.
+// The capacitance is C = 2*pi*eps0*eps_r*L/ln(b/a) = 2.8053061878e-12 F.
+
+model coax_capacitor: 3d, mm_N_MPa_s
+
+let a: Length = 1 mm
+let b: Length = 2.3 mm
+let Lc: Length = 20 mm
+let V0: Power/Current = 1 V
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+
+scales b, V0, eps0
+
+// The bore is longer than the dielectric, so it cuts no end face.
+let bore: Solid = cylinder((0, 0, -1) mm, (0, 0, 1), a, Lc + 2 mm)
+let dielectric: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), b, Lc) - bore
+let inner: Surface = boundary(dielectric, bore)
+let outer_face: Surface = boundary(dielectric, sqrt(x^2 + y^2) == b)
+
+material ptfe {
+    eps: Current^2*Time/(Power*Length) = 2.1*eps0
+}
+
+mesh m on dielectric {
+    size: 0.5 mm
+    cell: tet
+}
+
+physics electrostatic on dielectric solves phi: Power/Current {
+    material ptfe
+    let D: Vector<Current*Time/Area> = -eps*grad(phi)
+    eq div(D) = 0
+}
+
+method electrostatic: cg { mesh: m, order: 1 }
+
+step charge: static {
+    bc inner: phi = V0
+    bc outer_face: phi = 0
+    // The 2 end faces take the default natural condition: no charge.
+    output phi, D
+}
+
+// The charge on the inner conductor is the flux of D into the dielectric, against n.
+expect capacitance: -integral(dot(D, n), inner)/V0 == 2.8053061878e-12 C/V within 0.5%

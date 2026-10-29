@@ -1,0 +1,60 @@
+// femahoy: validation/cases/dam-break-martin-moyce/sph/case.lmp
+// Dam break: a water column of width a = 2.25 in and height 2a falls on a dry floor. Weakly
+// compressible water (Tait), in Lagrangian form on the start shape, with particles (RKPM).
+// Reference: the times T = t*sqrt(2*g/a) at Z = x/a = 2.11, 3.00, 3.89: 1.83, 2.51, 3.11.
+
+model dam_break_martin_moyce: 2d, SI
+
+let a: Length = 0.05715 m
+let g: Acceleration = 9.81 m/s^2
+let rho_0: Density = 1000 kg/m^3
+let c_0: Velocity = 20 m/s
+
+scales a, c_0, rho_0
+
+let column: Surface = rect((0, 0) m, (a, 2*a))
+let left: Curve = boundary(column, x == 0 m)
+let floor: Curve = boundary(column, y == 0 m)
+
+material tait_water {
+    rho: Density = rho_0
+    B: Pressure = rho_0*c_0^2/7
+}
+
+points c on column {
+    spacing: a/40
+}
+
+// x and y are the coordinates of the start shape. The start displacement gives the
+// hydrostatic density of the Tait law, to first order in g*a/c_0^2.
+physics water on column solves u: Vector<Length> = (0, -g*(2*a*y - y^2/2)/c_0^2) {
+    material tait_water
+    assume finite_strain
+    let F: Tensor2<Real> = defgrad(u)
+    let J: Real = det(F)
+    let p: Pressure = B*((1/J)^7 - 1)
+    // The Cauchy stress -p*I as the first Piola-Kirchhoff stress.
+    let P: Tensor2<Pressure> = -p*J*inv(transpose(F))
+    eq rho*ddt2(u) - div(P) = rho*(0, -g)
+}
+
+// The support is the kernel radius of femahoy, 3 times the spacing.
+method water: rkpm {
+    points: c
+    basis: linear
+    support: 3
+    integrate: scni
+    bc: nitsche
+}
+
+step collapse: transient(end: 0.17 s, dt: 5.36 us, scheme: central_difference) {
+    // The wall and the floor have no friction. The free surface has the default P*n = 0.
+    bc left: u.x = 0
+    bc floor: u.y = 0
+    output u, p every 4000
+    report front = max(x + u.x, column)
+}
+
+// gap G11: no time at which a report gets to a value. The checks need
+// T(Z) = sqrt(2*g/a)*(t(front == Z*a) - t(front == 1.44*a)) + 1.19 at Z = 2.11, 3.00, 3.89,
+// with 1.83, 2.51 and 3.11 within 7%.

@@ -1,0 +1,56 @@
+// femahoy: validation/cases/fracture-centre-crack/job.inp
+// 1/4 of a steel plate of 100 x 300 mm with a centre crack of 50 mm, under a
+// tension of 100 MPa. Plane strain, quadratic triangles. K_I comes from the
+// crack opening at r = L/4 and r = L (Shih et al. 1976). The reference is
+// the formula of Tada (1971): 1051.27 MPa*mm^0.5, within 0.5 %.
+
+model fracture_centre_crack: 2d, mm_N_MPa_s
+
+let a: Length = 25 mm
+let b: Length = 50 mm
+let h: Length = 150 mm
+let th: Length = 1 mm
+let S: Pressure = 100 MPa
+let L_q: Length = 0.5 mm
+let E_s: Pressure = 210000 MPa
+let nu_s: Real = 0.3
+let E_p: Pressure = E_s/(1 - nu_s^2)
+
+scales a, S
+
+let plate: Surface = rect((0, 0) mm, (b, h))
+let left: Curve = boundary(plate, x == 0 mm)
+let ligament: Curve = boundary(plate, y == 0 mm && x >= a)
+let top: Curve = boundary(plate, y == h)
+let tip: Point = point((a, 0 mm))
+// The crack face, y = 0 and x < a, has no bc: it is free.
+
+material steel {
+    E: Pressure = E_s
+    nu: Real = nu_s
+}
+
+// gap G20: femahoy puts quarter-point CPE6 cells at the tip, and CPE8 quads elsewhere.
+mesh m on plate {
+    size: 5 mm
+    cell: tri
+    refine tip: L_q/4
+}
+
+physics solid on plate: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_strain(th)
+}
+
+step pull: static {
+    bc left: u.x = 0
+    bc ligament: u.y = 0
+    bc top: sigma*n = S*n
+    output u, sigma
+}
+
+// gap G14: K_I has the dimension Pressure*Length^(1/2). The check divides it
+// by S*sqrt(pi*a) and compares the shape factor F(a/b) of Tada (1971).
+let ab: Real = a/b
+let f_tada: Real = (1 - 0.025*ab^2 + 0.06*ab^4)*sqrt(1/cos(pi*a/(2*b)))
+expect k_i: E_p/4*(4*(u.y at (a - L_q/4, 0 mm)) - u.y at (a - L_q, 0 mm))*sqrt(2/(L_q*a))/S == f_tada within 0.5%

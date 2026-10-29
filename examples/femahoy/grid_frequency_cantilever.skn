@@ -1,0 +1,38 @@
+// femahoy: validation/cases/grid-frequency-cantilever/beam/grid.toml
+// A steel beam 100 x 10 x 5 mm, clamped at x = 0: its first natural frequency. The
+// reference is the clamped-free beam of Blevins (1979), Table 8-1: 417.758 Hz, within 1 %.
+
+model frequency_cantilever: 3d, mm_N_MPa_s
+
+scales 5 mm, 210 GPa, 7.85e-9 t/mm^3
+
+let beam: Solid = box((0, 0, 0) mm, (100, 10, 5) mm)
+let root: Surface = boundary(beam, x == 0 mm)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+    rho: Density = 7.85e-9 t/mm^3
+}
+
+mesh m on beam {
+    size: 2.5 mm
+    cell: hex
+}
+
+physics solid on beam solves u: Vector<Length> {
+    material steel
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    eq rho*ddt2(u) - div(sigma) = 0
+}
+
+// gap G18: no 8-node hex with incompatible modes. Order 2 replaces it.
+method solid: cg { mesh: m, order: 2 }
+
+step mode_1: modal(count: 1) {
+    bc root: u = 0
+    output u
+}
+
+// gap G6: no name gives the frequency of mode 1, so f1 = 417.758 Hz is not an expect line.

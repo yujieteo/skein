@@ -1,0 +1,43 @@
+// femahoy: validation/cases/grid-conductivity-slab/slab/grid.toml
+// Steady conduction through a slab 1 m thick at 500 K and 300 K, with k = k0*(1 + beta*T).
+// The probes are checked against the exact profile of the Kirchhoff transform.
+
+model conductivity_slab: 3d, SI
+
+let Ls: Length = 1 m
+
+scales Ls, 200 K, 2 W/(m*K)
+
+let slab: Solid = box((0, 0, 0) m, (0.05 m, 0.05 m, Ls))
+let hot: Surface = boundary(slab, z == 0 m)
+let cold: Surface = boundary(slab, z == Ls)
+
+// femahoy gives k as a table (300 K, 3.2) and (500 K, 4.0). The table is exactly this line.
+material solid {
+    k0: Conductivity = 2 W/(m*K)
+    beta: Expansion = 0.002 K^-1
+}
+
+mesh m on slab {
+    size: 0.05 m
+    cell: hex
+}
+
+physics thermal on slab solves T: Temperature = 400 K {
+    material solid
+    let k: Conductivity = k0*(1 + beta*T)
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = 0
+}
+
+method thermal: cg { mesh: m, order: 1 }
+
+step steady: static {
+    bc hot: T = 500 K
+    bc cold: T = 300 K
+    output T
+}
+
+expect quarter: T at (0.025, 0.025, 0.25) m == 453.939201417 K within 0.01%
+expect middle: T at (0.025, 0.025, 0.5) m == 405.538513814 K within 0.01%
+expect cell_middle: T at (0.025, 0.025, 0.725) m == 359.651092013 K within 0.01%
