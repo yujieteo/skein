@@ -36,10 +36,27 @@ step load: static {
 }
 ```
 
-**Status:** this repository holds the specification only. No compiler
-exists yet. The [roadmap](docs/roadmap.md) gives the phases. Phase 1 is the
-front end: the parser, the type and unit checker, `skein fmt` and
-`skein check`.
+**Status:** this repository holds the specification and the start of the
+compiler. The compiler cannot check a model yet. The
+[roadmap](docs/roadmap.md) gives the phases. Phase 1 is the front end: the
+parser, the type and unit checker, `skein fmt` and `skein check`.
+
+## Building
+
+The compiler is written in [Goose](https://aardappel.github.io/goose/).
+Put `goose` on `PATH`, or set `GOOSE` to its path. If `goose` cannot find
+its standard library, set `GOOSE_STDLIB` to the `stdlib` directory of a
+Goose source tree at the same commit as the compiler.
+
+```
+./build.sh          # writes build/skein
+./build.sh test     # builds, then runs each src/<part>/test.goose
+```
+
+| Directory | Contents |
+|---|---|
+| `src/skein.goose` | the command line |
+| `src/syntax/` | the tokens and the syntax tree (`tree.goose`) |
 
 ## Why Skein
 

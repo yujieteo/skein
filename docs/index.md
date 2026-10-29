@@ -6,8 +6,8 @@ method, analysis steps and checks. The compiler writes Goose, and Goose
 writes C for a native executable or for WebAssembly
 ([what it is and why](../README.md)).
 
-**Status:** this is a specification. No compiler exists yet. The
-[roadmap](roadmap.md) gives the phases.
+**Status:** see the [README](../README.md). The [roadmap](roadmap.md)
+gives the phases.
 
 ## The language, in reading order
 
