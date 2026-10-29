@@ -131,7 +131,9 @@ let T0: Temperature = 20 degC
 ```
 
 Units have SI prefixes: `mm`, `kN`, `MPa`, `GPa`, `ms`. `degC` is valid only
-alone on a temperature. A bare number is `Real`. `0` is zero of any type.
+alone on a temperature. A bare number with no `.` and no exponent is `Int`.
+Each other bare number is `Real`. `Real` accepts `Int`. `0` is zero of any
+type.
 
 Spec: [§6](skein_spec.md#6-dimensions-and-units).
 

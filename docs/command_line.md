@@ -42,8 +42,7 @@ Global options:
 
 | Option | Meaning |
 |---|---|
-| `--format toon\|json\|text` | the output format (§6). Default `toon`. |
-| `--color auto\|always\|never` | colour in `text` output |
+| `--format toon\|json` | the output format (§6). Default `toon`. |
 
 ---
 
@@ -135,8 +134,7 @@ per output time) and the state to `.skein/state/<model>/<step>.sks`.
 
 The default output is [TOON](https://github.com/toon-format/toon). Reason:
 TOON uses fewer tokens than JSON for tables of uniform records, and an LLM
-reads it directly. `--format json` gives the same records as JSON, and
-`--format text` gives lines for a person.
+reads it directly. `--format json` gives the same records as JSON.
 
 ### 6.1 Diagnostics
 

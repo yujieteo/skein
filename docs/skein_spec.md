@@ -382,7 +382,9 @@ only exceptions:
 
 1. The literal `0` (with no unit) has every dimension and every tensor rank.
    It means zero of the expected type.
-2. A bare number has type `Real`. `Angle` accepts `Real`.
+2. A bare number with no `.` and no exponent has type `Int`. Each other
+   bare number has type `Real`. `Real` and `Angle` accept `Int`. `Angle`
+   accepts `Real`.
 3. `Int` converts to `Real` in arithmetic.
 
 Reason for exception 1: `u = 0` is the most common boundary condition, and
@@ -466,7 +468,8 @@ coefficients in `K`.
   each bare number in it.
 - `(L, W, H)` is a vector of expressions. All components must have the same
   dimension. A `0` component takes that dimension.
-- A bare number is `Real`.
+- A bare number with no `.` and no exponent is `Int`. Each other bare
+  number is `Real` (§5.7).
 
 The value of a literal is stored in SI. The checker compares dimensions,
 never units, so `1 m + 1 mm` is valid and is 1.001 m.
@@ -1065,6 +1068,13 @@ step burn: transient(end: 10 s, dt: 0.1 s) {
   deformed shape. The nodes of the new cells that touch active cells take the
   current values of those cells. The other new nodes take the values that
   the active nodes give by extrapolation along the boundary.
+- The compiler makes strain-free birth as follows. Under `small_strain`,
+  each born cell stores `eps_birth = strain(u)` at each integration point
+  at the start of its birth step. In the cells of `r`, the compiler then
+  replaces `strain(u)` with `strain(u) - eps_birth`. Under `finite_strain`,
+  each born cell stores `F_birth = defgrad(u)` at its birth. The compiler
+  then replaces `defgrad(u)` with `defgrad(u) * inv(F_birth)` in the cells
+  of `r`. Thus the stress of a born cell is zero at its birth.
 - `where cond` selects the cells of `r` where `cond` is true at the start of
   the step. `cond` may use the fields.
 - The mesh of the whole model, alive or dead, is made once, before the first
@@ -1190,8 +1200,11 @@ M(U) ∂ₜ U  +  N(U) ∂ₜ² U  +  div F(U, ∇U)  +  S(U, ∇U)  =  0
 ```
 
 - `F` is the flux: the sum of the terms in `div` in the source. The
-  lowering keeps a split `F = F_a(U) + F_d(U, ∇U)`: the advective part has
-  no derivative of an unknown, the diffusive part has.
+  lowering also keeps a split `F = F_a(U) + F_d(U, ∇U)`: the advective part
+  has no derivative of an unknown, the diffusive part has. Only the flux
+  choices of `dg` and `fv` and the stabilization (§17.2) use this split.
+  The natural conditions (§12.1) and the `cg` lowering (§17.1) use the full
+  flux `F`.
 - `S` holds all other terms, for example the body force and the convective
   term `grad(v)*v`.
 - `M` and `N` are the coefficients of the time derivatives.
@@ -1228,16 +1241,21 @@ symmetric if its linearization is self-adjoint. The defaults of `solve`
 For equation `k`, paired with unknown `u_k` and the test function `w`:
 
 1. Multiply the balance law by `w` and integrate over the region.
-2. Integrate `div F_d` by parts: `∫ w div F_d = −∫ grad(w) : F_d + ∮ w F_d·n`.
-3. Keep `div F_a` as it is. Reason: an advective flux has no derivative of
-   an unknown, and integration by parts brings no gain for `cg`.
-4. Replace the boundary term `∮ w F_d·n` with the natural conditions. Drop
+2. Integrate the full `div F` by parts when `F` holds a derivative of an
+   unknown, or when a `bc` states a natural condition on `F`:
+   `∫ w div F = −∫ grad(w) : F + ∮ w F·n`.
+3. Keep each other `div F` as it is. Reason: such a flux has no derivative
+   of an unknown and no natural condition, and integration by parts brings
+   no gain for `cg`.
+4. Replace the boundary term `∮ w F·n` with the natural conditions. Drop
    it where an essential condition holds, because `w` is zero there.
 
-The rule in step 2 is the one rule for all physics: the compiler integrates
-by parts the `div` of an expression that holds a derivative of an unknown.
-Thus `div(sigma)` with `sigma` from `grad(u)` goes by parts, and `div(v)` in
-the continuity equation does not.
+The rule in step 2 is the one rule for all physics. Thus `div(sigma)` with
+`sigma` from `grad(u)` goes by parts, and `div(v)` in the continuity
+equation does not. The full flux goes by parts, also its terms with no
+derivative. Thus the natural condition `sigma*n` includes the thermal term
+of `hooke(E, nu, strain(u) - alpha*(T - T0)*I)` and the pressure term `-p*I`
+of a flow stress.
 
 ### 17.2 Stabilization
 
@@ -1252,7 +1270,10 @@ forms exactly:
 | `vms` | the residual-based VMS terms of Bazilevs et al. (2007), with the fine-scale velocity `−τ_M R_M` |
 
 `τ_M = ((2/Δt)² + (2|v|/h)² + C_I (4ν/h²)²)^(−1/2)` and
-`τ_C = h²/(τ_M · tr(G))`, after Tezduyar (1992) and Shakib et al. (1991).
+`τ_C = 1/(τ_M · tr(G))`, after Tezduyar (1992), Shakib et al. (1991) and
+Bazilevs et al. (2007). `G = (∂ξ/∂x)ᵀ(∂ξ/∂x)` is the metric tensor of the
+cell, where `ξ` are the coordinates of the reference cell. `G` has the
+dimension `1/Length^2`, so `τ_C` has the dimension `Length^2/Time`.
 `R_M` is the residual of the momentum equation and `q` the pressure test
 function. In a `static` step, the `2/Δt` term is zero.
 

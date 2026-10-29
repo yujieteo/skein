@@ -7,8 +7,8 @@ phase starts only after the gate passes.
 |---|---|---|
 | 0 | this specification and the five samples | the captain approves the spec |
 | 1 | front end: lexer, parser, type and unit checker, `fmt`, `check`, diagnostics in TOON | the five samples pass `check` and `fmt --check`. Each error in [checks.md §2](checks.md#2-errors) has a test. The [LLM test](llm_test.md) passes. |
-| 2 | first solver build: `cg` for linear static and transient, the mesher (2D and 3D), CG, GMRES, ILU(0), Newton, VTU output, pre- and post-solve verification, `lint` | samples 01 and 03 run. The patch test and the plate with a hole pass. |
-| 3 | stabilized Stokes and Navier-Stokes (SUPG/PSPG), birth and death, submodels, AMG, LOBPCG for modal and buckling, restarts | samples 02 and 04 run. The cavity matches Ghia et al. within the `expect` limit. |
+| 2 | first solver build: `cg` for linear static and transient, the mesher (2D and 3D), CG, GMRES, ILU(0), Newton, VTU output, pre- and post-solve verification, `lint` | sample 01 runs. The patch test and the plate with a hole pass. |
+| 3 | stabilized Stokes and Navier-Stokes (SUPG/PSPG), birth and death, submodels, AMG, LOBPCG for modal and buckling, restarts | samples 02, 03 and 04 run. The cavity matches Ghia et al. within the `expect` limit. |
 | 4 | `fv`, then `dg`, then the meshless methods `rkpm` and `gfd`. `verify convergence`. The WebGL viewer. | sample 05 runs. Each method passes its manufactured solution test. |
 | 5 | plasticity, hyperelasticity, finite strain, contact, mesh adaptivity, FSI, turbulence, NURBS geometry | the benchmarks of [implementation.md §10](implementation.md#10-testing-and-the-verification-suite) pass |
 
@@ -27,7 +27,7 @@ Phase 1 delivers:
 3. the geometry types and the region rules that need no mesh (spec §8);
 4. the rules for fields, materials, physics, assumptions, conditions,
    methods and steps (spec §10 to §15), except the ones that need a mesh;
-5. `skein fmt` and `skein check`, with TOON, JSON and text output;
+5. `skein fmt` and `skein check`, with TOON and JSON output;
 6. a test for each error id.
 
 ## Risks
