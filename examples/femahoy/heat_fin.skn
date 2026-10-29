@@ -1,0 +1,44 @@
+// femahoy: validation/cases/heat-fin/job.inp
+// A steady aluminium pin fin, 100 mm long, 10 x 10 mm section. The base is at 100 degC. The
+// sides and the tip give heat to the air at 20 degC. Reference (Incropera et al. 2007,
+// Table 3.4, case A): the tip temperature 70.8757 degC.
+
+model heat_fin: 3d, mm_N_MPa_s
+
+let Lf: Length = 100 mm
+let k_al: Conductivity = 200 W/(m*K)
+let h_air: HeatTransfer = 50 W/(m^2*K)
+let T_air: Temperature = 20 degC
+let dT: Temperature = 80 K
+
+scales Lf, dT, k_al
+
+let fin: Solid = box((0, 0, 0) mm, (Lf, 10 mm, 10 mm))
+let base: Surface = boundary(fin, x == 0 mm)
+let tip: Surface = boundary(fin, x == Lf)
+let skin: Surface = boundary(fin, x > 0 mm)
+
+material alu {
+    k: Conductivity = k_al
+}
+
+mesh m on fin {
+    size: 5 mm
+    cell: tet
+}
+
+physics thermal on fin solves T: Temperature = 20 degC {
+    material alu
+    assume isotropic
+    let q: Vector<HeatFlux> = fourier(k, T)
+    eq div(q) = 0
+}
+
+bc base: T = 100 degC
+bc skin: dot(q, n) = h_air*(T - T_air)
+
+step steady: static {
+    output T
+}
+
+expect t_tip: mean(T, tip) == 70.8757 degC within 0.1 K

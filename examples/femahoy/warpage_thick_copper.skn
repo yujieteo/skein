@@ -1,0 +1,54 @@
+// femahoy: validation/cases/warpage-thick-copper/job.inp
+// blocked-by: G19
+// 1/4 of a wafer slice of 50 x 10 mm: 0.73 mm of silicon with 20 um of copper
+// (Calabretta et al. 2021). A uniform heating of 40 K bends it. Linear
+// thermoelastic, 3D, quadratic tetrahedra. The reference is the measured
+// rate 0.700 um/K: the end moves -0.028 mm, within 12 %.
+
+model warpage_thick_copper: 3d, mm_N_MPa_s
+
+let dT: Temperature = 40 K
+
+scales 0.75 mm, 120000 MPa, dT
+
+let si: Solid = box((0, 0, 0) mm, (25, 5, 0.73) mm)
+let cu: Solid = box((0, 0, 0.73) mm, (25, 5, 0.75) mm)
+let slice: Solid = si | cu
+let sym_x: Surface = boundary(slice, x == 0 mm)
+let sym_y: Surface = boundary(slice, y == 0 mm)
+let origin: Point = point((0, 0, 0) mm)
+
+material silicon {
+    E: Pressure = 120000 MPa
+    nu: Real = 0.28
+    alpha: Expansion = 2.5e-6 K^-1
+}
+
+material copper {
+    E: Pressure = 77500 MPa
+    nu: Real = 0.364
+    alpha: Expansion = 1.64e-5 K^-1
+}
+
+// gap G19: femahoy uses a C3D20R grid with 1 cell through the copper.
+mesh m on slice {
+    size: 0.5 mm
+    cell: tet
+    refine cu: 0.02 mm
+}
+
+physics solid on slice solves u: Vector<Length> {
+    material silicon on si, copper on cu
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*dT*I)
+    eq div(sigma) = 0
+}
+
+step heat_up: static {
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc origin: u.z = 0
+    output u, sigma
+}
+
+expect warpage: u.z at (25, 0, 0) mm == -(0.700 um/K)*dT within 12%

@@ -1,0 +1,47 @@
+// femahoy: validation/cases/grid-round-cantilever/bar/grid.toml
+// A steel bar of round section along x, clamped at x = 0, with a shear
+// traction of 1 MPa on its free end. Linear static, 3D, quadratic
+// tetrahedra (the default method). The reference is the Timoshenko beam
+// for the tip deflection and the Saint-Venant stress at the middle.
+
+model round_cantilever: 3d, mm_N_MPa_s
+
+let L: Length = 100 mm
+let R: Length = 5 mm
+let q: Pressure = 1 MPa
+
+scales R, q
+
+let bar: Solid = cylinder((0, 0, 0) mm, (1, 0, 0), R, L)
+let root: Surface = boundary(bar, x == 0 mm)
+let tip: Surface = boundary(bar, x == L)
+let mantle: Surface = boundary(bar, y^2 + z^2 == R^2)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+// femahoy puts 64 segments on the circle and max_cell 5 mm along x.
+mesh m on bar {
+    size: 5 mm
+    cell: tet
+    refine mantle: 0.5 mm
+}
+
+physics solid on bar: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+step bend: static {
+    bc root: u = 0
+    bc tip: sigma*n = (0, 0, -q)
+    output u, sigma
+    report reaction(root)
+}
+
+// The references use the area and the inertia of the 64-point polygon of
+// femahoy. The true circle is 0.32 % stiffer, inside the tolerance.
+expect tip_uz: u.z at (L, 0 mm, 0 mm) == -0.2557734 mm within 1.5%
+expect top_sxx: sigma.xx at (50, 0, 5) mm == 40.06431 MPa within 1.5%
+expect bottom_sxx: sigma.xx at (50, 0, -5) mm == -40.06431 MPa within 1.5%

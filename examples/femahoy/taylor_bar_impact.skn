@@ -1,0 +1,65 @@
+// femahoy: validation/cases/taylor-bar-impact/job.inp
+// blocked-by: G18 G19 G22
+// Taylor bar: a copper bar (radius 3.2 mm, length 32.4 mm) hits a rigid frictionless wall at
+// 227 m/s. Large strains, J2 plasticity with linear hardening, explicit time steps. A quarter
+// of the bar. References (DYNA3D) at 80 us: length 21.66 mm, mushroom radius 7.02 mm.
+
+model taylor_bar_impact: 3d, mm_N_MPa_s
+
+let R: Length = 3.2 mm
+let Lb: Length = 32.4 mm
+let V0: Velocity = 227 m/s
+let rho_cu: Density = 8930 kg/m^3
+
+scales R, V0, rho_cu
+
+let rod: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), R, Lb) & box((0, 0, 0) mm, (R, R, Lb))
+let symx: Surface = boundary(rod, x == 0 mm)
+let symy: Surface = boundary(rod, y == 0 mm)
+let wall: Surface = boundary(rod, z == 0 mm)
+let top: Surface = boundary(rod, z == Lb)
+
+// Yield stress 400 MPa, hardening modulus 100 MPa.
+material copper {
+    E: Pressure = 117 GPa
+    nu: Real = 0.35
+    rho: Density = rho_cu
+    sy: Pressure = 400 MPa
+    Hk: Pressure = 100 MPa
+}
+
+// gap G18, G19: hex cells need a box region (ccx: C3D8R). The bar uses tetrahedra.
+mesh m on rod {
+    size: 0.8 mm
+    cell: tet
+    refine wall: 0.33 mm
+}
+
+// First-order form: the velocity v is an unknown, so that it can take the initial value.
+physics impact on rod solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0) {
+    material copper
+    assume finite_strain, isotropic
+    state eps_p: Tensor2<Real> = 0
+    state alpha: Real = 0
+    // gap G22: finite-strain plasticity is only the additive split of the Green-Lagrange strain.
+    let S: Tensor2<Pressure> = hooke(E, nu, strain(u) - eps_p)
+    plastic {
+        yield: von_mises(S) - (sy + Hk*alpha)
+        strain: eps_p
+        hardening: alpha
+    }
+    eq ddt(u) - v = 0
+    eq rho*ddt(v) - div(defgrad(u)*S) = 0
+}
+
+// The wall holds v.z = 0 and lets the face slide in x and y.
+bc symx: v.x = 0
+bc symy: v.y = 0
+bc wall: v.z = 0
+
+step crash: transient(end: 80 us, dt: 4 ns, scheme: ssprk3) {
+    output u, von_mises(S), alpha every 2500
+}
+
+expect length: mean(u.z, top) == -10.74 mm within 0.8 mm
+expect radius: u.x at (R, 0 mm, 0 mm) == 3.82 mm within 0.8 mm

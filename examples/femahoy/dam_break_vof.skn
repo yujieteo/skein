@@ -1,0 +1,85 @@
+// femahoy: validation/cases/dam-break-vof/n40/system/controlDict
+// blocked-by: G11
+// Dam break with the volume of fluid method: a water column of width a = 2.25 in and height
+// 2a falls on a dry floor in air. Reference: the measured times T = t*sqrt(2*g/a) at which the
+// front is at Z = x/a = 2.11, 3.00 and 3.89 (Martin and Moyce 1952, Table 2): 1.83, 2.51, 3.11.
+
+model dam_break_vof: 2d, SI
+
+let a: Length = 0.05715 m
+let g: Acceleration = 9.81 m/s^2
+
+scales a, sqrt(g*a), 998 kg/m^3
+
+let tank: Surface = rect((0, 0) m, (5*a, 2.5*a))
+let walls: Curve = boundary(tank, y < 2.5*a)
+let top: Curve = boundary(tank, y == 2.5*a)
+
+// Step functions for the start field: 1 in the column 0 <= x <= a, 0 <= y <= 2a, else 0.
+// The repeated row at the edge of the column makes the jump.
+table col_x{px: Length in m, s: Real}:
+    0, 1
+    0.05715, 1
+    0.05715, 0
+    0.28575, 0
+
+table col_y{py: Length in m, s: Real}:
+    0, 1
+    0.1143, 1
+    0.1143, 0
+    0.142875, 0
+
+// 1 where the water fraction is above 0.5, else 0. It gives the front.
+table wet{f: Real, s: Real}:
+    0, 0
+    0.5, 0
+    0.5, 1
+    1, 1
+
+material water_air {
+    rho_w: Density = 998 kg/m^3
+    mu_w: DynViscosity = 998e-6 Pa*s
+    rho_a: Density = 1.2 kg/m^3
+    mu_a: DynViscosity = 1.8e-5 Pa*s
+    sig_s: Force/Length = 0.073 N/m
+}
+
+mesh m on tank {
+    size: a/40
+    cell: quad
+}
+
+// 2 fluids with a sharp interface. alpha is the volume fraction of the water. The surface
+// tension acts at the interface with the curvature of alpha (continuum surface force).
+physics flow on tank solves v: Vector<Velocity>, p: Pressure, alpha: Real = interp(col_x.px, col_x.s, x)*interp(col_y.py, col_y.s, y) {
+    material water_air
+    assume incompressible, newtonian, laminar
+    let rho: Density = alpha*rho_w + (1 - alpha)*rho_a
+    let mu: DynViscosity = alpha*mu_w + (1 - alpha)*mu_a
+    let kappa: Length^-1 = -div(grad(alpha)/norm(grad(alpha)))
+    let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    eq rho*(ddt(v) + grad(v)*v) - div(sigma) = rho*(0, -g) + sig_s*kappa*grad(alpha)
+    eq div(v) = 0
+    eq ddt(alpha) + div(alpha*v) = 0
+}
+
+// femahoy also uses MULES with interface compression. Skein has no such flux.
+method flow: fv {
+    mesh: m
+    gradient: green_gauss
+    flux: linear_upwind
+    limiter: van_leer
+    pv_coupling: rhie_chow
+}
+
+step collapse: transient(end: 0.18 s, dt: 0.4 ms, scheme: backward_euler) {
+    bc walls: v = 0
+    // top: open to the air at p = 0, the default natural condition sigma*n = 0.
+    // alpha: the default zero flux. Only air flows in at the top.
+    output v, p, alpha every 10
+    report front = max(x*interp(wet.f, wet.s, alpha), tank)
+}
+
+// gap G11: no time at which a report gets to a value. The checks need
+// T(Z) = sqrt(2*g/a)*(t(front == Z*a) - t(front == 1.44*a)) + 1.19 at Z = 2.11, 3.00, 3.89,
+// with 1.83, 2.51 and 3.11 within 5.5%.

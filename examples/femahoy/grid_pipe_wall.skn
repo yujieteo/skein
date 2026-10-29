@@ -1,0 +1,54 @@
+// femahoy: validation/cases/grid-pipe-wall/pipe/grid.toml
+// A plastic pipe wall with hot water inside and a convection to air
+// outside. Steady heat conduction, 3D, linear tetrahedra. The reference is
+// the analytic temperature of a cylinder wall and its heat flow.
+
+model pipe_wall: 3d, SI
+
+let r1: Length = 0.05 m
+let r2: Length = 0.08 m
+let lz: Length = 0.002 m
+let T_water: Temperature = 80 degC
+let T_air: Temperature = 20 degC
+let h: HeatTransfer = 10 W/(m^2*K)
+
+scales r1, 60 K, 200 W/m^2
+
+let bore: Solid = cylinder((0, 0, 0) m, (0, 0, 1), r1, lz)
+let pipe: Solid = cylinder((0, 0, 0) m, (0, 0, 1), r2, lz) - bore
+let water: Surface = boundary(pipe, bore)
+let air: Surface = boundary(pipe, x^2 + y^2 == r2^2)
+
+material pvc {
+    k: Conductivity = 0.2 W/(m*K)
+}
+
+mesh m on pipe {
+    size: 0.002 m
+    cell: tet
+}
+
+physics thermal on pipe solves T: Temperature = 293.15 K {
+    material pvc
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = 0
+}
+
+method thermal: cg {
+    mesh: m
+    order: 1
+}
+
+step steady: static {
+    // The 2 ends have no bc, so they are adiabatic.
+    bc water: T = T_water
+    bc air: dot(q, n) = h*(T - T_air)
+    output T, q
+}
+
+// femahoy gives 1e-4 of the value in degC. Here it is in K.
+expect middle: T at (0.065, 0, 0.001) m == 58.136421500 degC within 0.0058136 K
+expect middle_45: T at (0.0459619407771256, 0.0459619407771256, 0.001) m == 58.136421500 degC within 0.0058136 K
+expect outer_face: T at (0.08, 0, 0.001) m == 40.833228321 degC within 0.0040833 K
+// n points out of the wall, so the heat into the wall is -dot(q, n).
+expect heat_flow: -integral(dot(q, n), water) == 0.209438455 W within 0.01%

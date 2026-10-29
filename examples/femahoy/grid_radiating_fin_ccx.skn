@@ -1,0 +1,56 @@
+// femahoy: validation/cases/grid-radiating-fin-ccx/fin/grid.toml
+// blocked-by: G28
+// A square steel pin fin in vacuum: 600 K at the base, and a radiation to
+// surroundings at 300 K on all other faces. The conductivity changes with
+// the temperature. Steady nonlinear heat conduction, 3D, linear hexahedra.
+// The reference is CalculiX DC3D8 with *RADIATE on the same grid.
+
+model radiating_fin: 3d, SI
+
+let w: Length = 0.004 m
+let L: Length = 0.05 m
+let T_base: Temperature = 600 K
+let T_amb: Temperature = 300 K
+let sb: Power/(Area*Temperature^4) = 5.670374419e-8 W/(m^2*K^4)
+
+scales L, 300 K, 1000 W/m^2
+
+table k_steel{temp: Temperature in K, k_val: Conductivity in W/(m*K)}:
+    300, 14
+    500, 17.5
+    700, 20
+
+let fin: Solid = box((0, 0, 0) m, (w, w, L))
+let base: Surface = boundary(fin, z == 0 m)
+let radiating: Surface = boundary(fin) - base
+
+material steel {
+    eps: Real = 0.9
+}
+
+mesh m on fin {
+    size: 0.001 m
+    cell: hex
+}
+
+physics thermal on fin solves T: Temperature = 300 K {
+    material steel
+    // gap G28: a material property cannot use T, because T is declared later.
+    let k_T: Conductivity = interp(k_steel.temp, k_steel.k_val, T)
+    let q: Vector<HeatFlux> = -k_T*grad(T)
+    eq div(q) = 0
+}
+
+method thermal: cg {
+    mesh: m
+    order: 1
+}
+
+step steady: static {
+    bc base: T = T_base
+    bc radiating: dot(q, n) = eps*sb*(T^4 - T_amb^4)
+    output T, q
+}
+
+expect tip: T at (0.002, 0.002, 0.05) m == 446.0565 K within 0.01%
+expect middle: T at (0.002, 0.002, 0.025) m == 480.3071 K within 0.01%

@@ -1,0 +1,70 @@
+// femahoy: validation/cases/grid-bimetal-strip/strip/grid.toml
+// blocked-by: G18
+// A free strip of 2 bonded layers, heated from 20 degC to 120 degC. The layers expand
+// by different amounts, so the strip bends. The curvature of the top face is checked
+// against Timoshenko (1925): 1.163636e-3 1/mm in x and in y.
+
+model bimetal_strip: 3d, mm_N_MPa_s
+
+let a: Length = 50 mm
+let w: Length = 5 mm
+let th: Length = 0.5 mm
+let T0: Temperature = 20 degC
+let T1: Temperature = 120 degC
+// The mean of x^2 and of y^2 on the top face.
+let mx: Area = a^2/3
+let my: Area = w^2/3
+
+scales 2*th, 100 MPa, 100 K
+
+// One quarter of the strip. The planes x = 0 and y = 0 are planes of symmetry.
+let strip: Solid = box((0, 0, 0) mm, (a, w, 2*th))
+let layer_a: Solid = box((0, 0, 0) mm, (a, w, th))
+let layer_b: Solid = box((0 mm, 0 mm, th), (a, w, 2*th))
+let sym_x: Surface = boundary(strip, x == 0 mm)
+let sym_y: Surface = boundary(strip, y == 0 mm)
+// The bottom face at the centre holds the strip in z.
+let centre: Surface = boundary(strip, z == 0 mm && x <= 1 mm && y <= 1 mm)
+let top_face: Surface = boundary(strip, z == 2*th)
+
+material mat_a {
+    E: Pressure = 200 GPa
+    nu: Real = 0.3
+    alpha: Expansion = 12e-6 K^-1
+}
+
+material mat_b {
+    E: Pressure = 100 GPa
+    nu: Real = 0.3
+    alpha: Expansion = 20e-6 K^-1
+}
+
+mesh m on strip {
+    size: th
+    cell: hex
+}
+
+physics solid on strip solves u: Vector<Length> {
+    material mat_a on layer_a, mat_b on layer_b
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T1 - T0)*I)
+    eq div(sigma) = 0
+}
+
+// gap G18: no 8-node hex with incompatible modes. Order 2 replaces it.
+method solid: cg { mesh: m, order: 2 }
+
+step heat_up: static {
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc centre: u.z = 0
+    output u, sigma
+    report reaction(centre)
+}
+
+// The least squares fit of a quadratic to u.z on the top face. A curvature above 0
+// bulges outward, so it is -2 times the coefficient of x^2.
+expect top_kxx: -2*integral(u.z*(x^2 - mx), top_face)/integral((x^2 - mx)^2, top_face) == 1.163636e-3 mm^-1 within 1%
+expect top_kyy: -2*integral(u.z*(y^2 - my), top_face)/integral((y^2 - my)^2, top_face) == 1.163636e-3 mm^-1 within 1%
+expect centre_fz: reaction(centre).z == 0 within 1e-6 N
+expect centre_fx: reaction(centre).x == 0 within 1e-6 N

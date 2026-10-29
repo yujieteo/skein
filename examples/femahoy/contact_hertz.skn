@@ -1,0 +1,67 @@
+// femahoy: validation/cases/contact-hertz/job.inp
+// A steel ball (R = 10 mm) pressed on a steel block with 10 kN, no friction. A quarter
+// model with the symmetry planes x = 0 and y = 0. Reference: the Hertz pressure
+// p0 = 6363.06 MPa (Johnson 1985, section 4.2).
+
+model contact_hertz: 3d, mm_N_MPa_s
+
+let R: Length = 10 mm
+let gap0: Length = 0.002 mm
+let zc: Length = 10 mm + gap0 + R
+let P: Force = 10 kN
+let p_h: Pressure = 6363.06 MPa
+
+scales R, p_h
+
+let block: Solid = box((0, 0, 0) mm, (10, 10, 10) mm)
+let globe: Solid = sphere((0 mm, 0 mm, zc), R)
+let ball: Solid = globe & box((0 mm, 0 mm, 10 mm + gap0), (R, R, zc))
+let parts: Solid = block | ball
+let symx: Surface = boundary(parts, x == 0 mm)
+let symy: Surface = boundary(parts, y == 0 mm)
+let base: Surface = boundary(parts, z == 0 mm)
+let top: Surface = boundary(parts, z == zc)
+let block_top: Surface = boundary(block, z == 10 mm)
+let cap: Surface = boundary(ball, globe)
+let zone: Solid = sphere((0, 0, 10) mm, 1 mm)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+mesh m on parts {
+    size: 2.5 mm
+    cell: tet
+    refine zone: 0.4 mm
+}
+
+physics solid on parts: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+// Master: the top of the block. Slave: the cap of the ball.
+contact smooth: block_top, cap {
+    friction: 0
+    enforce: penalty
+    stiffness: 1e7 MPa/mm
+}
+
+bc base: u = 0
+bc symx: u.x = 0
+bc symy: u.y = 0
+
+// Push the top of the ball down by the Hertz approach. This closes the gap.
+step approach: static {
+    bc top: u.z = -0.075 mm
+}
+
+// The quarter carries P/4 as the pressure P/(pi*R^2) on the quarter top face.
+step load: static {
+    release top
+    bc top: sigma*n = (0, 0, -P/(pi*R^2))
+    output u, sigma
+}
+
+// On the top of the block, -sigma.zz is the contact pressure.
+expect p0: max(-sigma.zz, block_top) == p_h within 3%

@@ -1,0 +1,64 @@
+// femahoy: validation/cases/line-bars-getdp/bars/grid.toml
+// Skin and proximity effect in 2 copper bars 2 x 1 mm, 1 mm apart, at 100 kHz, in a box of air
+// with magnetic walls. The reference is GetDP: R = 4.865727173e-2 ohm/m, L = 4.870218310e-7 H/m.
+
+model bars: 2d, SI
+
+let f0: Frequency = 100 kHz
+let E0: Power/(Current*Length) = 1 V/m
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+
+scales 1 mm, 1 V, 1 A, 1/f0
+
+let box_air: Surface = rect((-20, -20) mm, (20, 20) mm)
+let bar_a: Surface = rect((-2.5, -0.5) mm, (-0.5, 0.5) mm)
+let bar_b: Surface = rect((0.5, -0.5) mm, (2.5, 0.5) mm)
+let outlines: Curve = boundary(bar_a) | boundary(bar_b)
+
+// Bar a is the signal and bar b the return. The drive E0 per length is opposite in the 2 bars.
+// The model is symmetric, so the currents are I and -I, as the 1 A and -1 A of femahoy.
+material copper_a {
+    sigma_e: Current^2/(Power*Length) = 5.8e7 A/(V*m)
+    mu: Power*Time/(Current^2*Length) = mu0
+    e_drive: Power/(Current*Length) = E0
+}
+
+material copper_b {
+    sigma_e: Current^2/(Power*Length) = 5.8e7 A/(V*m)
+    mu: Power*Time/(Current^2*Length) = mu0
+    e_drive: Power/(Current*Length) = -E0
+}
+
+material air {
+    sigma_e: Current^2/(Power*Length) = 0
+    mu: Power*Time/(Current^2*Length) = mu0
+    e_drive: Power/(Current*Length) = 0
+}
+
+// The cells on the outlines of the bars are a quarter of the skin depth at 100 kHz (209 um).
+mesh m on box_air {
+    size: 1 mm
+    cell: tri
+    grade: 1.1
+    refine outlines: 52 um
+}
+
+// The walls are magnetic: the default natural condition. The term of sigma_e*ddt(Az) in the
+// bars fixes the constant of Az, so the model needs no gauge point.
+physics eddy on box_air solves Az: Complex<Power*Time/(Current*Length)> {
+    material copper_a on bar_a, copper_b on bar_b, air on box_air - bar_a - bar_b
+    let J: Complex<Current/Area> = sigma_e*(e_drive - ddt(Az))
+    let Hr: Vector<Complex<Current/Length>> = grad(Az)/mu
+    eq -div(Hr) = J
+}
+
+method eddy: cg { mesh: m, order: 1 }
+
+// gap G9: a procedure argument cannot be a list. femahoy also solves 1 kHz and 10 kHz.
+step proximity: harmonic(freq: [f0]) {
+    output Az, J
+}
+
+// gap G7: no real() and imag() of a Complex value. The loop impedance per length is
+// Z = 2*E0/integral(J, bar_a). The checks are real(Z) == 4.865727173e-2 V/(A*m) and
+// imag(Z)/(2*pi*f0) == 4.870218310e-7 V*s/(A*m), each within 0.5%.

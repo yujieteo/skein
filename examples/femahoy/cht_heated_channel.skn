@@ -1,0 +1,99 @@
+// femahoy: validation/cases/cht-heated-channel/channel/system/controlDict
+// Conjugate heat transfer: laminar air between 2 plastic walls, half channel with a symmetry
+// line. A heater on the outer face of the wall gives 120 W/m^2 on 20 <= x <= 80 mm. Exact
+// references: Nu = 140/17 at x = 40 mm, a linear drop across the wall, the energy balance.
+
+model cht_heated_channel: 2d, SI
+
+let b: Length = 1 mm
+let tw: Length = 1 mm
+let len: Length = 90 mm
+let U: Velocity = 0.2 m/s
+let T_in: Temperature = 300 K
+let p_out: Pressure = 100000 Pa
+let q_h: HeatFlux = 120 W/m^2
+
+scales b, U, 1.2 kg/m^3, 1 K
+
+let fluid: Surface = rect((0, 0) mm, (len, b))
+let wall: Surface = rect((0 mm, b), (len, b + tw))
+let inlet: Curve = boundary(fluid, x == 0 mm)
+let outlet: Curve = boundary(fluid, x == len)
+let axis: Curve = boundary(fluid, y == 0 mm)
+let iface: Curve = boundary(fluid, wall)
+let heater: Curve = boundary(wall, y == b + tw && x >= 20 mm && x <= 80 mm)
+let win_f: Curve = boundary(fluid, y == b && x >= 38 mm && x <= 42 mm)
+let win_s: Curve = boundary(wall, y == b + tw && x >= 38 mm && x <= 42 mm)
+
+material air {
+    rho: Density = 1.2 kg/m^3
+    cp: SpecificHeat = 1000 J/(kg*K)
+    mu: DynViscosity = 1.8e-5 Pa*s
+    k: Conductivity = mu*cp/0.72
+}
+
+material pvc {
+    k: Conductivity = 0.25 W/(m*K)
+}
+
+// The femahoy cells are 0.2 mm long and 0.1 mm high, 10 across each region.
+mesh mf on fluid {
+    size: 0.1 mm
+    cell: quad
+}
+
+mesh ms on wall {
+    size: 0.1 mm
+    cell: quad
+}
+
+physics flow on fluid solves v: Vector<Velocity>, p: Pressure, Tf: Temperature = T_in {
+    material air
+    assume incompressible, newtonian, laminar
+    let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    let qf: Vector<HeatFlux> = fourier(k, Tf)
+    eq rho*grad(v)*v - div(sigma) = 0
+    eq div(v) = 0
+    eq rho*cp*dot(v, grad(Tf)) + div(qf) = 0
+}
+
+physics solid on wall solves Ts: Temperature = T_in {
+    material pvc
+    let qs: Vector<HeatFlux> = fourier(k, Ts)
+    eq div(qs) = 0
+}
+
+method flow: fv {
+    mesh: mf
+    gradient: green_gauss
+    flux: central
+    pv_coupling: rhie_chow
+}
+
+method solid: fv {
+    mesh: ms
+    gradient: green_gauss
+}
+
+step steady: static {
+    bc inlet: v = (U, 0)
+    bc inlet: Tf = T_in
+    bc outlet: sigma*n = -p_out*n
+    bc axis: v.y = 0
+    bc iface: v = 0
+    // The interface: the same temperature, and the heat that leaves the wall goes into the air.
+    // n is the outward normal of the wall.
+    bc iface: Tf = Ts
+    bc iface: dot(qs, n) = dot(qf, n)
+    bc heater: dot(qs, n) = -q_h
+    // the other faces of the wall: the default natural condition, dot(qs, n) = 0
+    solve { nonlinear: newton }
+    output v, p, Tf, Ts
+    report interface_T = mean(Tf, win_f)
+    report heater_T = mean(Ts, win_s)
+    report outlet_T = integral(Tf*dot(v, n), outlet)/integral(dot(v, n), outlet)
+}
+
+expect interface_T: mean(Tf, win_f) == 312.90435 K within 0.006 K
+expect heater_T: mean(Ts, win_s) == 313.38435 K within 0.006 K
+expect outlet_T: integral(Tf*dot(v, n), outlet)/integral(dot(v, n), outlet) == 330 K within 0.006 K

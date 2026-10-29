@@ -1,0 +1,44 @@
+// femahoy: validation/cases/grid-holm-spot/block/grid.toml
+// Constriction resistance of a contact spot of radius 1 mm at 1 V on a round copper block.
+// The reference is the middle of the bounds for the finite block, 0.972829/(4*sigma*a) = 4.1932267e-6 ohm.
+
+model holm_spot: 3d, mm_N_MPa_s
+
+let a: Length = 1 mm
+let rb: Length = 20 mm
+let V0: Power/Current = 1 V
+
+scales a, V0, 1 kA
+
+let block: Solid = cylinder((0, 0, -20) mm, (0, 0, 1), rb, 20 mm)
+let spot: Surface = boundary(block, z == 0 mm && sqrt(x^2 + y^2) <= a)
+// The bottom and the round side of the block.
+let ground: Surface = boundary(block, z < 0 mm)
+
+material copper {
+    sigma_e: Current^2/(Power*Length) = 5.8e7 A/(V*m)
+}
+
+// The current density is singular at the rim of the spot. femahoy puts thin copper parts at
+// the rim (0.98 mm to 1.02 mm, 0.02 mm deep) only to make small cells there.
+mesh m on block {
+    size: 4 mm
+    cell: tet
+    refine spot: 0.02 mm
+}
+
+physics elec on block solves phi: Power/Current {
+    material copper
+    let J: Vector<Current/Area> = -sigma_e*grad(phi)
+    eq div(J) = 0
+}
+
+method elec: cg { mesh: m, order: 1 }
+
+step conduct: static {
+    bc spot: phi = V0
+    bc ground: phi = 0
+    output phi, J
+}
+
+expect resistance: -V0/integral(dot(J, n), spot) == 4.1932267e-6 V/A within 3%

@@ -1,0 +1,64 @@
+// femahoy: validation/cases/line-coax/coax/grid.toml
+// Quasi-TEM cross-section of a coaxial cable of perfect conductors (a = 0.5 mm, b = 1.75 mm,
+// eps_r 2.25). Exact: C = 9.99176495361e-11 F/m, L = 2.50552593835e-7 H/m, Z0 = 50.0758519761 ohm.
+
+model line_coax: 2d, SI
+
+let a: Length = 0.5 mm
+let b: Length = 1.75 mm
+let V1: Power/Current = 1 V
+let A1: Power*Time/(Current*Length) = 1 V*s/m
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+let c0: Velocity = 299792458 m/s
+
+scales b, V1, 1 A, 1 ns
+
+// The field is zero in the perfect conductors, so the model is the dielectric only. The outer
+// tube of femahoy (b to 2 mm) carries no field.
+let dielectric: Surface = circle((0, 0) m, b) - circle((0, 0) m, a)
+let inner: Curve = boundary(dielectric, sqrt(x^2 + y^2) < (a + b)/2)
+let outer_face: Curve = boundary(dielectric, sqrt(x^2 + y^2) > (a + b)/2)
+
+material insulation {
+    eps: Current^2*Time/(Power*Length) = 2.25*eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+mesh m on dielectric {
+    size: 40 um
+    cell: tri
+}
+
+// C per length comes from the electrostatic potential phi.
+physics electrostatic on dielectric solves phi: Power/Current {
+    material insulation
+    let D: Vector<Current*Time/Area> = -eps*grad(phi)
+    eq div(D) = 0
+}
+
+// L per length comes from the vector potential Az. Hr is the magnetic field H turned by 90 deg.
+physics magnetic on dielectric solves Az: Power*Time/(Current*Length) {
+    material insulation
+    let Hr: Vector<Current/Length> = grad(Az)/mu
+    eq div(Hr) = 0
+}
+
+method electrostatic: cg { mesh: m, order: 1 }
+method magnetic: cg { mesh: m, order: 1 }
+
+// femahoy solves at 1 GHz. A line of perfect conductors has the same C and L at each frequency.
+step quasi_tem: static {
+    bc inner: phi = V1
+    bc outer_face: phi = 0
+    bc inner: Az = A1
+    bc outer_face: Az = 0
+    output phi, Az
+}
+
+// The charge per length on the inner conductor is -integral(dot(D, n), inner), and its current
+// for the flux A1 is integral(dot(Hr, n), inner).
+expect c: -integral(dot(D, n), inner)/V1 == 9.99176495361e-11 C/(V*m) within 0.05%
+expect l: A1/integral(dot(Hr, n), inner) == 2.50552593835e-7 V*s/(A*m) within 0.05%
+expect z0: sqrt((A1/integral(dot(Hr, n), inner))/(-integral(dot(D, n), inner)/V1)) == 50.0758519761 V/A within 0.05%
+expect eps_eff: (A1/integral(dot(Hr, n), inner))*(-integral(dot(D, n), inner)/V1)*c0^2 == 2.25 within 0.05%

@@ -1,0 +1,57 @@
+// femahoy: validation/cases/grid-plate-hole-stress-ccx/plate/grid.toml
+// The steel plate with a round hole and the copper pad of
+// grid_plate_hole_ccx, heated from 20 degC to 120 degC. The wall of the hole
+// holds the plate. Linear static thermal stress, 3D, quadratic tetrahedra
+// (the default method). The reference is CalculiX C3D10 on a gmsh mesh.
+
+model plate_hole_stress: 3d, SI
+
+let r_hole: Length = 0.01 m
+let T_ref: Temperature = 20 degC
+let T_hot: Temperature = 120 degC
+
+scales 0.1 m, 100 GPa, 100 K
+
+let bore: Solid = cylinder((0.03, 0.03, 0) m, (0, 0, 1), r_hole, 0.01 m)
+let plate: Solid = box((0, 0, 0) m, (0.1, 0.06, 0.01) m) - bore
+let pad: Solid = box((0.06, 0.02, 0.01) m, (0.09, 0.04, 0.02) m)
+let body: Solid = plate | pad
+let hole: Surface = boundary(body, bore)
+
+material steel {
+    E: Pressure = 200 GPa
+    nu: Real = 0.3
+    alpha: Expansion = 12e-6 K^-1
+}
+
+material copper {
+    E: Pressure = 110 GPa
+    nu: Real = 0.34
+    alpha: Expansion = 17e-6 K^-1
+}
+
+mesh m on body {
+    size: 0.004 m
+    cell: tet
+}
+
+// The temperature is uniform, so it is a constant, not an unknown.
+physics solid on body solves u: Vector<Length> {
+    material steel on plate, copper on pad
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T_hot - T_ref)*I)
+    eq div(sigma) = 0
+}
+
+step heat_up: static {
+    bc hole: u = 0
+    output u, sigma
+}
+
+expect pad_corner_ux: u.x at (0.09, 0.04, 0.02) m == 7.918296e-05 m within 1%
+expect pad_corner_uy: u.y at (0.09, 0.04, 0.02) m == 1.756393e-05 m within 1%
+expect pad_corner_uz: u.z at (0.09, 0.04, 0.02) m == 1.693667e-05 m within 1%
+expect plate_far_ux: u.x at (0.1, 0, 0) m == 7.748045e-05 m within 1%
+expect plate_far_uy: u.y at (0.1, 0, 0) m == -3.603389e-05 m within 1%
+expect plate_near_ux: u.x at (0, 0.06, 0.01) m == -3.302946e-05 m within 1%
+expect plate_near_uy: u.y at (0, 0.06, 0.01) m == 3.247890e-05 m within 1%

@@ -1,0 +1,68 @@
+// femahoy: validation/cases/grid-layered-wall/wall/grid.toml
+// blocked-by: G19
+// A building wall of plaster, insulation and brick, with a convection on
+// each side. Steady heat conduction, 3D, linear hexahedra. The reference
+// is the thermal circuit of resistances in series.
+
+model layered_wall: 3d, SI
+
+let w: Length = 0.2 m
+let h_in: HeatTransfer = 8 W/(m^2*K)
+let h_out: HeatTransfer = 25 W/(m^2*K)
+let T_in: Temperature = 20 degC
+// gap G29: "-5 degC" reads as -(278.15 K), so this is -5 degC in K.
+let T_out: Temperature = 268.15 K
+
+scales 0.315 m, 25 K, 10 W/m^2
+
+let wall: Solid = box((0, 0, 0) m, (0.315 m, w, w))
+let plaster_layer: Solid = box((0, 0, 0) m, (0.015 m, w, w))
+let insulation_layer: Solid = box((0.015, 0, 0) m, (0.115 m, w, w))
+let brick_layer: Solid = box((0.115, 0, 0) m, (0.315 m, w, w))
+let inside: Surface = boundary(wall, x == 0 m)
+let outside: Surface = boundary(wall, x == 0.315 m)
+
+material plaster {
+    k: Conductivity = 0.5 W/(m*K)
+}
+
+material insulation {
+    k: Conductivity = 0.04 W/(m*K)
+}
+
+material brick {
+    k: Conductivity = 0.8 W/(m*K)
+}
+
+// femahoy min_cells 2: 2 cells through the plaster.
+// gap G19: the spec does not put a grid plane on each face of a layer.
+mesh m on wall {
+    size: 0.05 m
+    cell: hex
+    refine plaster_layer: 0.0075 m
+}
+
+physics thermal on wall solves T: Temperature = 293.15 K {
+    material plaster on plaster_layer, insulation on insulation_layer, brick on brick_layer
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = 0
+}
+
+method thermal: cg {
+    mesh: m
+    order: 1
+}
+
+step steady: static {
+    // The other faces have no bc, so they are adiabatic.
+    bc inside: dot(q, n) = h_in*(T - T_in)
+    bc outside: dot(q, n) = h_out*(T - T_out)
+    output T, q
+}
+
+expect surface_in: T at (0, 0.1, 0.1) m == 18.938879457 degC within 1e-6 K
+expect plaster_insulation: T at (0.015, 0.1, 0.1) m == 18.684210526 degC within 1e-6 K
+// -2.538200340 degC
+expect insulation_brick: T at (0.115, 0.1, 0.1) m == 270.611799660 K within 1e-6 K
+// -4.660441426 degC
+expect surface_out: T at (0.315, 0.1, 0.1) m == 268.489558574 K within 1e-6 K

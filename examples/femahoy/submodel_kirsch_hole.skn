@@ -1,0 +1,50 @@
+// femahoy: validation/cases/submodel-kirsch-hole/job.inp
+// blocked-by: G19
+// The submodel of submodel_kirsch_hole_global.skn: the ring 10 <= r <= 20 mm
+// about the hole, with a fine mesh. The cut r = 20 mm takes the displacement
+// of the global model. The reference is the Kirsch sxx at the integration
+// point of femahoy nearest (0, a): 296.179 MPa, within 0.1 %.
+
+model submodel_kirsch_hole: 2d, mm_N_MPa_s
+
+let global: Results = results("submodel_kirsch_hole_global.skn", step: "load")
+
+let a: Length = 10 mm
+let r_cut: Length = 20 mm
+let th: Length = 1 mm
+
+scales a, 100 MPa
+
+let hole_disk: Surface = circle((0, 0) mm, a)
+let cut_disk: Surface = circle((0, 0) mm, r_cut)
+let ring: Surface = (cut_disk & rect((0, 0) mm, (r_cut, r_cut))) - hole_disk
+let left: Curve = boundary(ring, x == 0 mm)
+let bottom: Curve = boundary(ring, y == 0 mm)
+let cut: Curve = boundary(ring, cut_disk)
+let hole: Curve = boundary(ring, hole_disk)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+}
+
+// gap G19: femahoy uses CPE8R quads on the ring. Skein makes quads only on a rect.
+mesh m on ring {
+    size: 1 mm
+    cell: tri
+    refine hole: 0.25 mm
+}
+
+physics solid on ring: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_strain(th)
+}
+
+step load: static {
+    bc left: u.x = 0
+    bc bottom: u.y = 0
+    bc cut: u = global.u
+    output u, sigma
+}
+
+expect sxx_hole: sigma.xx at (0.139, 10.052) mm == 296.179 MPa within 0.1%

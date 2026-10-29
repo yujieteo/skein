@@ -1,0 +1,82 @@
+// femahoy: validation/cases/grid-constrained-block/block/grid.toml
+// blocked-by: G18
+// An orthotropic block held by rollers on all 6 faces and heated from 20 degC to
+// 120 degC. The strain is 0, so the stress is uniform: -84.302009777, -72.650733297
+// and -50.027159153 MPa in x, y and z (Jones 1999, section 2.5).
+
+model constrained_block: 3d, mm_N_MPa_s
+
+let T0: Temperature = 20 degC
+let T1: Temperature = 120 degC
+// The material axes are the axes x, y and z.
+let e1: Vector<Real> = (1.0, 0.0, 0.0)
+let e2: Vector<Real> = (0.0, 1.0, 0.0)
+let e3: Vector<Real> = (0.0, 0.0, 1.0)
+
+scales 10 mm, 100 MPa, 100 K
+
+let block: Solid = box((0, 0, 0) mm, (10, 8, 6) mm)
+let faces_x: Surface = boundary(block, x == 0 mm || x == 10 mm)
+let faces_y: Surface = boundary(block, y == 0 mm || y == 8 mm)
+let faces_z: Surface = boundary(block, z == 0 mm || z == 6 mm)
+
+material fibre {
+    Ex: Pressure = 100 GPa
+    Ey: Pressure = 50 GPa
+    Ez: Pressure = 20 GPa
+    nu_xy: Real = 0.3
+    nu_xz: Real = 0.25
+    nu_yz: Real = 0.2
+    Gxy: Pressure = 20 GPa
+    Gxz: Pressure = 10 GPa
+    Gyz: Pressure = 8 GPa
+    ax: Expansion = 5e-6 K^-1
+    ay: Expansion = 10e-6 K^-1
+    az: Expansion = 20e-6 K^-1
+}
+
+mesh m on block {
+    size: 2.5 mm
+    cell: hex
+}
+
+// hooke takes isotropic constants only, so the orthotropic stiffness is written out.
+physics solid on block solves u: Vector<Length> {
+    material fibre
+    assume small_strain
+    let nu_yx: Real = nu_xy*Ey/Ex
+    let nu_zx: Real = nu_xz*Ez/Ex
+    let nu_zy: Real = nu_yz*Ez/Ey
+    let D: Real = 1 - nu_xy*nu_yx - nu_yz*nu_zy - nu_xz*nu_zx - 2*nu_yx*nu_zy*nu_xz
+    let C11: Pressure = Ex*(1 - nu_yz*nu_zy)/D
+    let C22: Pressure = Ey*(1 - nu_xz*nu_zx)/D
+    let C33: Pressure = Ez*(1 - nu_xy*nu_yx)/D
+    let C12: Pressure = Ex*(nu_yx + nu_zx*nu_yz)/D
+    let C13: Pressure = Ex*(nu_zx + nu_yx*nu_zy)/D
+    let C23: Pressure = Ey*(nu_zy + nu_xy*nu_zx)/D
+    let eps: Tensor2<Real> = strain(u) - (T1 - T0)*(ax*outer(e1, e1) + ay*outer(e2, e2) + az*outer(e3, e3))
+    let sigma: Tensor2<Pressure> = (C11*eps.xx + C12*eps.yy + C13*eps.zz)*outer(e1, e1) +
+        (C12*eps.xx + C22*eps.yy + C23*eps.zz)*outer(e2, e2) +
+        (C13*eps.xx + C23*eps.yy + C33*eps.zz)*outer(e3, e3) +
+        2*Gxy*eps.xy*(outer(e1, e2) + outer(e2, e1)) +
+        2*Gxz*eps.xz*(outer(e1, e3) + outer(e3, e1)) +
+        2*Gyz*eps.yz*(outer(e2, e3) + outer(e3, e2))
+    eq div(sigma) = 0
+}
+
+// gap G18: no 8-node hex with incompatible modes. A uniform strain needs none, so order 1 is exact.
+method solid: cg { mesh: m, order: 1 }
+
+step heat_up: static {
+    bc faces_x: u.x = 0
+    bc faces_y: u.y = 0
+    bc faces_z: u.z = 0
+    output u, sigma
+}
+
+expect centre_sxx: sigma.xx at (5, 4, 3) mm == -84.302009777 MPa within 1e-6 MPa
+expect centre_syy: sigma.yy at (5, 4, 3) mm == -72.650733297 MPa within 1e-6 MPa
+expect centre_szz: sigma.zz at (5, 4, 3) mm == -50.027159153 MPa within 1e-6 MPa
+expect centre_sxy: sigma.xy at (5, 4, 3) mm == 0 within 1e-6 MPa
+expect corner_szz: sigma.zz at (10, 8, 6) mm == -50.027159153 MPa within 1e-6 MPa
+expect corner_ux: u.x at (10, 8, 6) mm == 0 within 1e-6 mm

@@ -1,0 +1,59 @@
+// femahoy: validation/cases/acoustics-pulsating-sphere/500hz/case.pro
+// A sphere of radius 0.1 m pulsates at 500 Hz in air. The Helmholtz equation in the octant
+// between the sphere and an outer sphere of 0.5 m, with an exact outgoing-wave condition.
+// Reference: Kinsler et al. (2000), section 7.1: z = 0.456197 + 0.498078i, p(0.3 m) in Pa.
+
+model acoustics_pulsating_sphere: 3d, SI
+
+let a_s: Length = 0.1 m
+let r_o: Length = 0.5 m
+let u_s: Velocity = 1e-3 m/s
+let c_air: Velocity = 343 m/s
+let rho_air: Density = 1.2 kg/m^3
+let f0: Frequency = 500 Hz
+let omega: Frequency = 2*pi*f0
+let kw: Length^-1 = omega/c_air
+
+scales a_s, c_air, rho_air
+
+let inner: Solid = sphere((0, 0, 0) m, a_s)
+let outer_s: Solid = sphere((0, 0, 0) m, r_o)
+let shell_air: Solid = (outer_s - inner) & box((0, 0, 0) m, (r_o, r_o, r_o))
+let src: Surface = boundary(shell_air, inner)
+let outer_face: Surface = boundary(shell_air, outer_s)
+
+material air {
+    rho: Density = rho_air
+    c: Velocity = c_air
+}
+
+mesh m on shell_air {
+    size: 50 mm
+    refine src: 10 mm
+}
+
+physics acoustic on shell_air solves p: Complex<Pressure> {
+    material air
+    eq div(grad(p)) + (omega/c)^2*p = 0
+}
+
+method acoustic: cg {
+    mesh: m
+    order: 2
+}
+
+// The time factor is exp(im*omega*t), as in femahoy. n points out of the air.
+// gap G9: a procedure argument cannot be a list, also a list of one frequency.
+step tone: harmonic(freq: [f0]) {
+    bc src: dot(grad(p), n) = im*omega*rho_air*u_s
+    bc outer_face: dot(grad(p), n) = -(im*kw + 1/r_o)*p
+    // the 3 symmetry planes: the default natural condition dot(grad(p), n) = 0
+    output p
+    report z_ratio = mean(p, src)/(rho_air*c_air*u_s)
+    report p_probe = p at (0.2, 0.2, 0.1) m
+}
+
+// gap G7: no real and imaginary parts. femahoy checks each part within 1%. Here the
+// complex value is checked within 1% of its modulus.
+expect z_ratio: mean(p, src)/(rho_air*c_air*u_s) == 0.456197 + 0.498078*im within 1%
+expect p_probe: p at (0.2, 0.2, 0.1) m == 4.98678e-2 Pa - 7.81063e-2 Pa*im within 1%

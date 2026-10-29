@@ -1,0 +1,183 @@
+// femahoy: validation/cases/grid-laminate-cell/cell/grid.toml
+// blocked-by: G18 G19
+// The periodic unit cell of a laminate of aluminium and a polymer, 2
+// layers along z. Each physics solves the periodic fluctuation of 1 load
+// case: a unit mean gradient, a unit mean strain or a unit temperature
+// change. The reference is the exact layer theory (Voigt and Reuss means).
+
+model laminate_cell: 3d, mm_N_MPa_s
+
+let lc: Length = 1 mm
+let dT: Temperature = 1 K
+let ex: Vector<Real> = (1, 0, 0)
+let ey: Vector<Real> = (0, 1, 0)
+let ez: Vector<Real> = (0, 0, 1)
+let g_x: Vector<Temperature/Length> = (1, 0, 0) K/mm
+let g_z: Vector<Temperature/Length> = (0, 0, 1) K/mm
+// Unit mean strains. A shear case has the engineering strain 1.
+let e_xx: Tensor2<Real> = outer(ex, ex)
+let e_zz: Tensor2<Real> = outer(ez, ez)
+let e_yz: Tensor2<Real> = sym(outer(ey, ez))
+let e_xy: Tensor2<Real> = sym(outer(ex, ey))
+
+scales lc, 1 GPa, 1 K, 1 W/(m*K)
+
+let unit_cell: Solid = box((0, 0, 0) mm, (lc, lc, lc))
+let metal: Solid = box((0, 0, 0) mm, (lc, lc, 0.3 mm))
+let resin: Solid = box((0, 0, 0.3) mm, (lc, lc, lc))
+let x_lo: Surface = boundary(unit_cell, x == 0 mm)
+let x_hi: Surface = boundary(unit_cell, x == lc)
+let y_lo: Surface = boundary(unit_cell, y == 0 mm)
+let y_hi: Surface = boundary(unit_cell, y == lc)
+let z_lo: Surface = boundary(unit_cell, z == 0 mm)
+let z_hi: Surface = boundary(unit_cell, z == lc)
+let corner: Point = point((0, 0, 0) mm)
+
+material aluminium {
+    k: Conductivity = 200 W/(m*K)
+    E: Pressure = 70 GPa
+    nu: Real = 0.33
+    alpha: Expansion = 23e-6 K^-1
+    rho: Density = 2700 kg/m^3
+    c: SpecificHeat = 900 J/(kg*K)
+}
+
+material polymer {
+    k: Conductivity = 0.25 W/(m*K)
+    E: Pressure = 3 GPa
+    nu: Real = 0.38
+    alpha: Expansion = 70e-6 K^-1
+    rho: Density = 1200 kg/m^3
+    c: SpecificHeat = 1500 J/(kg*K)
+}
+
+// gap G19: the spec does not put a grid plane on the face at z = 0.3 mm.
+mesh m on unit_cell {
+    size: 0.25 mm
+    cell: hex
+}
+
+// Copies of the cell side by side fill the space: k = 0 makes the
+// unknowns periodic.
+symmetry per_x: bloch { period: (1, 0, 0) mm, low: x_lo, high: x_hi, k: 0 }
+symmetry per_y: bloch { period: (0, 1, 0) mm, low: y_lo, high: y_hi, k: 0 }
+symmetry per_z: bloch { period: (0, 0, 1) mm, low: z_lo, high: z_hi, k: 0 }
+
+physics cond_x on unit_cell solves T_x: Temperature {
+    material aluminium on metal, polymer on resin
+    let q_x: Vector<HeatFlux> = -k*(g_x + grad(T_x))
+    // Material properties are not visible in expect, so 2 lets carry them.
+    let rho_m: Density = rho
+    let rhoc_m: Energy/(Volume*Temperature) = rho*c
+    eq div(q_x) = 0
+}
+
+physics cond_z on unit_cell solves T_z: Temperature {
+    material aluminium on metal, polymer on resin
+    let q_z: Vector<HeatFlux> = -k*(g_z + grad(T_z))
+    eq div(q_z) = 0
+}
+
+physics el_xx on unit_cell solves w_xx: Vector<Length> {
+    material aluminium on metal, polymer on resin
+    assume small_strain, isotropic
+    let s_xx: Tensor2<Pressure> = hooke(E, nu, e_xx + strain(w_xx))
+    eq div(s_xx) = 0
+}
+
+physics el_zz on unit_cell solves w_zz: Vector<Length> {
+    material aluminium on metal, polymer on resin
+    assume small_strain, isotropic
+    let s_zz: Tensor2<Pressure> = hooke(E, nu, e_zz + strain(w_zz))
+    eq div(s_zz) = 0
+}
+
+physics el_yz on unit_cell solves w_yz: Vector<Length> {
+    material aluminium on metal, polymer on resin
+    assume small_strain, isotropic
+    let s_yz: Tensor2<Pressure> = hooke(E, nu, e_yz + strain(w_yz))
+    eq div(s_yz) = 0
+}
+
+physics el_xy on unit_cell solves w_xy: Vector<Length> {
+    material aluminium on metal, polymer on resin
+    assume small_strain, isotropic
+    let s_xy: Tensor2<Pressure> = hooke(E, nu, e_xy + strain(w_xy))
+    eq div(s_xy) = 0
+}
+
+// A unit temperature change with no mean strain.
+physics el_th on unit_cell solves w_th: Vector<Length> {
+    material aluminium on metal, polymer on resin
+    assume small_strain, isotropic
+    let s_th: Tensor2<Pressure> = hooke(E, nu, strain(w_th) - alpha*dT*I)
+    eq div(s_th) = 0
+}
+
+// gap G18: no 8-node hex with incompatible modes. Order 1 is exact here.
+method cond_x: cg { mesh: m, order: 1 }
+method cond_z: cg { mesh: m, order: 1 }
+method el_xx: cg { mesh: m, order: 1 }
+method el_zz: cg { mesh: m, order: 1 }
+method el_yz: cg { mesh: m, order: 1 }
+method el_xy: cg { mesh: m, order: 1 }
+method el_th: cg { mesh: m, order: 1 }
+
+// The expansion of a cell that is transversely isotropic about z, with no
+// mean stress: alpha = -inv(C)*(mean stress of el_th)/dT.
+fn alpha_in(
+    cxx: Pressure,
+    cxy: Pressure,
+    cxz: Pressure,
+    czz: Pressure,
+    bx: Pressure,
+    bz: Pressure,
+) -> Expansion = -(czz*bx - cxz*bz)/(((cxx + cxy)*czz - 2*cxz^2)*dT)
+fn alpha_out(
+    cxx: Pressure,
+    cxy: Pressure,
+    cxz: Pressure,
+    czz: Pressure,
+    bx: Pressure,
+    bz: Pressure,
+) -> Expansion = -((cxx + cxy)*bz - 2*cxz*bx)/(((cxx + cxy)*czz - 2*cxz^2)*dT)
+
+step homogenize: static {
+    // A fixed point removes the constant of each periodic fluctuation.
+    bc corner: T_x = 0
+    bc corner: T_z = 0
+    bc corner: w_xx = 0
+    bc corner: w_zz = 0
+    bc corner: w_yz = 0
+    bc corner: w_xy = 0
+    bc corner: w_th = 0
+    output T_x, T_z, w_xx, w_zz, w_yz, w_xy, w_th
+}
+
+// The spec does not say that expect can use mean() (docs/femahoy_coverage.md).
+expect kxx: -mean(q_x.x, unit_cell)/g_x.x == 60.175 W/(m*K) within 1e-4%
+expect kzz: -mean(q_z.z, unit_cell)/g_z.z == 0.3569516331 W/(m*K) within 1e-4%
+expect c11: mean(s_xx.xx, unit_cell) == 28629.36401 MPa within 1e-4%
+expect c12: mean(s_xx.yy, unit_cell) == 11318.1512 MPa within 1e-4%
+expect c13: mean(s_xx.zz, unit_cell) == 4522.533011 MPa within 1e-4%
+expect c33: mean(s_zz.zz, unit_cell) == 7840.818918 MPa within 1e-4%
+expect c44: mean(s_yz.yz, unit_cell) == 1525.78578 MPa within 1e-4%
+expect c66: mean(s_xy.xy, unit_cell) == 8655.606407 MPa within 1e-4%
+expect alphaxx: alpha_in(
+    mean(s_xx.xx, unit_cell),
+    mean(s_xx.yy, unit_cell),
+    mean(s_xx.zz, unit_cell),
+    mean(s_zz.zz, unit_cell),
+    mean(s_th.xx, unit_cell),
+    mean(s_th.zz, unit_cell),
+) == 2.758369723e-5 K^-1 within 1e-4%
+expect alphazz: alpha_out(
+    mean(s_xx.xx, unit_cell),
+    mean(s_xx.yy, unit_cell),
+    mean(s_xx.zz, unit_cell),
+    mean(s_zz.zz, unit_cell),
+    mean(s_th.xx, unit_cell),
+    mean(s_th.zz, unit_cell),
+) == 9.094133916e-5 K^-1 within 1e-4%
+expect density: mean(rho_m, unit_cell) == 1650 kg/m^3 within 1e-4%
+expect specific_heat: mean(rhoc_m, unit_cell)/mean(rho_m, unit_cell) == 1205.454545 J/(kg*K) within 1e-4%

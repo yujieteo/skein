@@ -1,0 +1,49 @@
+// femahoy: validation/cases/grid-kirsch-hole/plate/grid.toml
+// A quarter of a wide plate with a round hole, under a tension of 100 MPa
+// along x. Linear static, 3D, quadratic tetrahedra (the default method).
+// The reference is the Kirsch solution: 300 MPa at the top of the hole and
+// -100 MPa at its side.
+
+model kirsch_hole: 3d, mm_N_MPa_s
+
+let a: Length = 1 mm
+let w: Length = 40 mm
+let th: Length = 1 mm
+let S: Pressure = 100 MPa
+
+scales a, S
+
+let bore: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), a, th)
+let plate: Solid = box((0, 0, 0) mm, (w, w, th)) - bore
+let hole: Surface = boundary(plate, bore)
+let x_cut: Surface = boundary(plate, x == 0 mm)
+let y_cut: Surface = boundary(plate, y == 0 mm)
+let bottom: Surface = boundary(plate, z == 0 mm)
+let far_end: Surface = boundary(plate, x == w)
+
+material plate_mat {
+    E: Pressure = 200 GPa
+    nu: Real = 0.0
+}
+
+mesh m on plate {
+    size: 4 mm
+    cell: tet
+    refine hole: 0.1 mm
+}
+
+physics solid on plate: linear_elastic solves u: Vector<Length> {
+    material plate_mat
+}
+
+step pull: static {
+    // The 2 cut planes are planes of symmetry.
+    bc x_cut: u.x = 0
+    bc y_cut: u.y = 0
+    bc bottom: u.z = 0
+    bc far_end: sigma*n = (S, 0, 0)
+    output u, sigma
+}
+
+expect top_sxx: sigma.xx at (0 mm, a, th/2) == 300 MPa within 1%
+expect side_syy: sigma.yy at (a, 0 mm, th/2) == -100 MPa within 1%

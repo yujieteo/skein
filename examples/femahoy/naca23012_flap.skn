@@ -1,0 +1,214 @@
+// femahoy: validation/cases/naca23012-flap/d0/system/controlDict
+// blocked-by: G10 G24
+// NACA 23012 with a plain flap of 0.20c, at 0 deg, effective Re = 8.4 million, fully turbulent
+// (Spalart-Allmaras). Flap 10 deg up, 0 and 10 deg down. Reference: Abbott and Greenberg (1939),
+// NACA Report 661, Table I: cl -0.3762, 0.1200, 0.5640; cm about the a.c. 0.08, -0.008, -0.09.
+
+model naca23012_flap: 2d, SI
+
+// Flap angle, down is positive.
+param delta: Angle = 0 deg in -10 deg..10 deg
+let chord: Length = 1 m
+let U: Velocity = 1 m/s
+let rho_f: Density = 1 kg/m^3
+let nu_f: KinViscosity = (1 m^2/s)/8400000
+// The hinge on the mean line, and the moment point (the a.c. of the airfoil without flap).
+let hx: Length = 0.8 m
+let hy: Length = 0.004417 m
+let xr: Length = 0.238 m
+let yr: Length = 0.07 m
+
+scales chord, U, rho_f
+
+let e_d: Vector<Real> = (1, 0)
+let e_l: Vector<Real> = (0, 1)
+
+// The Spalart-Allmaras constants of OpenFOAM.
+let sig_sa: Real = 0.66666
+let kap: Real = 0.41
+let cb1: Real = 0.1355
+let cb2: Real = 0.622
+let cw1: Real = cb1/kap^2 + (1 + cb2)/sig_sa
+let cw2: Real = 0.3
+let cw3: Real = 2
+let cv1: Real = 7.1
+let c_s: Real = 0.3
+
+// A point of the surface turns about the hinge by w*delta. w is the smooth step of femahoy:
+// 0 at x = 0.8 m, 1 aft of x = 0.85 m. Thus the hinge is sealed and fair.
+fn turn(px: Length, py: Length, w: Real) -> Vector<Length> = (hx + (px - hx)*cos(w*delta) + (py - hy)*sin(w*delta), hy - (px - hx)*sin(w*delta) + (py - hy)*cos(w*delta))
+
+// The NACA 230 mean line with the TMR thickness normal to it, 88 points with cosine spacing
+// and 4 more points at the hinge.
+// gap G24: no region with a smooth boundary. The polygon stands for the spline of femahoy.
+let foil: Surface = polygon(
+    turn(1 m, 0 m, 1),
+    turn(0.998464 m, 0.000252 m, 1),
+    turn(0.993863 m, 0.001006 m, 1),
+    turn(0.986228 m, 0.002248 m, 1),
+    turn(0.975603 m, 0.003959 m, 1),
+    turn(0.962056 m, 0.006113 m, 1),
+    turn(0.945668 m, 0.008678 m, 1),
+    turn(0.926541 m, 0.011617 m, 1),
+    turn(0.90479 m, 0.01489 m, 1),
+    turn(0.880552 m, 0.018454 m, 1),
+    turn(0.853973 m, 0.022264 m, 1),
+    turn(0.840456 m, 0.024163 m, 0.896),
+    turn(0.830481 m, 0.025548 m, 0.648),
+    turn(0.825219 m, 0.026273 m, 0.49172),
+    turn(0.820507 m, 0.02692 m, 0.352),
+    turn(0.810532 m, 0.028277 m, 0.104),
+    (0.794465, 0.030436) m,
+    (0.761899, 0.034705) m,
+    (0.727724, 0.03903) m,
+    (0.692149, 0.043361) m,
+    (0.655392, 0.047647) m,
+    (0.617681, 0.051833) m,
+    (0.579245, 0.055863) m,
+    (0.540323, 0.059679) m,
+    (0.501152, 0.063219) m,
+    (0.461974, 0.066424) m,
+    (0.42303, 0.069233) m,
+    (0.384557, 0.071586) m,
+    (0.346794, 0.073428) m,
+    (0.309971, 0.074709) m,
+    (0.274315, 0.075388) m,
+    (0.240046, 0.075432) m,
+    (0.207372, 0.074817) m,
+    (0.176171, 0.073488) m,
+    (0.14629, 0.07113) m,
+    (0.118188, 0.067466) m,
+    (0.092327, 0.062397) m,
+    (0.069131, 0.056003) m,
+    (0.048961, 0.048515) m,
+    (0.032086, 0.040268) m,
+    (0.018677, 0.031646) m,
+    (0.008807, 0.023029) m,
+    (0.002466, 0.014743) m,
+    (-0.000427, 0.007022) m,
+    (0, 0) m,
+    (0.003509, -0.00609) m,
+    (0.009846, -0.011108) m,
+    (0.018823, -0.015202) m,
+    (0.030267, -0.018571) m,
+    (0.044034, -0.021432) m,
+    (0.060033, -0.023999) m,
+    (0.078229, -0.02646) m,
+    (0.098657, -0.028964) m,
+    (0.121406, -0.031598) m,
+    (0.146604, -0.034368) m,
+    (0.174381, -0.037169) m,
+    (0.204842, -0.039753) m,
+    (0.237456, -0.041809) m,
+    (0.271695, -0.043279) m,
+    (0.307345, -0.044174) m,
+    (0.34419, -0.04452) m,
+    (0.381997, -0.044347) m,
+    (0.420536, -0.043694) m,
+    (0.459566, -0.042608) m,
+    (0.498848, -0.041136) m,
+    (0.538137, -0.039327) m,
+    (0.577189, -0.037234) m,
+    (0.615765, -0.034905) m,
+    (0.653624, -0.032388) m,
+    (0.690535, -0.029729) m,
+    (0.726266, -0.026972) m,
+    (0.760599, -0.02416) m,
+    (0.793321, -0.021333) m,
+    turn(0.809468 m, -0.019886 m, 0.104),
+    turn(0.819493 m, -0.018969 m, 0.352),
+    turn(0.824229 m, -0.018532 m, 0.49172),
+    turn(0.829519 m, -0.01804 m, 0.648),
+    turn(0.839544 m, -0.017096 m, 0.896),
+    turn(0.853133 m, -0.015795 m, 1),
+    turn(0.879854 m, -0.013163 m, 1),
+    turn(0.904226 m, -0.010672 m, 1),
+    turn(0.926099 m, -0.008363 m, 1),
+    turn(0.945338 m, -0.006271 m, 1),
+    turn(0.961824 m, -0.004432 m, 1),
+    turn(0.975453 m, -0.002878 m, 1),
+    turn(0.986142 m, -0.001638 m, 1),
+    turn(0.993825 m, -0.000734 m, 1),
+    turn(0.998454 m, -0.000184 m, 1),
+)
+let far: Surface = circle((0, 0) m, 500*chord) | rect((0 m, -500*chord), (500*chord, 500*chord))
+let fluid: Surface = far - foil
+let wall: Curve = boundary(fluid, foil)
+let outlet: Curve = boundary(far, x == 500*chord)
+let farfield: Curve = boundary(far, x < 500*chord)
+
+material air {
+    rho: Density = rho_f
+    nu: KinViscosity = nu_f
+}
+
+// The femahoy C-grid has a first cell height of 4 um and 64 cells across 1 chord.
+mesh m on fluid {
+    size: 20*chord
+    cell: tri
+    refine wall: 2 mm
+    layers wall: { first: 4 um, ratio: 1.18, count: 64 }
+}
+
+// The wall distance d, from the eikonal equation.
+physics walldist on fluid solves d: Length {
+    material air
+    eq norm(grad(d)) = 1
+}
+
+physics flow on fluid solves v: Vector<Velocity> = U*e_d, p: Pressure, nt: KinViscosity = 3*nu_f {
+    material air
+    assume incompressible
+    let chi: Real = nt/nu
+    let fv1: Real = chi^3/(chi^3 + cv1^3)
+    let fv2: Real = 1 - chi/(1 + chi*fv1)
+    let nut: KinViscosity = nt*fv1
+    let omg: Frequency = sqrt(2*ddot(skew(grad(v)), skew(grad(v))))
+    let s_t: Frequency = max(omg + fv2*nt/(kap^2*d^2), c_s*omg)
+    let r_sa: Real = min(nt/(s_t*kap^2*d^2), 10)
+    let g_sa: Real = r_sa + cw2*(r_sa^6 - r_sa)
+    let fw: Real = g_sa*exp(ln((1 + cw3^6)/(g_sa^6 + cw3^6))/6)
+    let sigma: Tensor2<Pressure> = -p*I + 2*rho*(nu + nut)*sym(grad(v))
+    let q_nt: Vector<KinViscosity*Velocity> = -(nu + nt)/sig_sa*grad(nt)
+    eq rho*grad(v)*v - div(sigma) = 0
+    eq div(v) = 0
+    eq dot(v, grad(nt)) + div(q_nt) - cb2/sig_sa*dot(grad(nt), grad(nt)) = cb1*s_t*nt - cw1*fw*(nt/d)^2
+}
+
+method walldist: cg {
+    mesh: m
+    order: 1
+}
+
+method flow: fv {
+    mesh: m
+    gradient: green_gauss
+    flux: linear_upwind
+    limiter: venkatakrishnan
+    pv_coupling: rhie_chow
+}
+
+step steady: static {
+    bc wall: d = 0
+    bc wall: v = 0
+    bc wall: nt = 0
+    // The free stream on the circle and on the 2 lines. The outlet has the default
+    // natural conditions: sigma*n = 0 and dot(q_nt, n) = 0.
+    bc farfield: v = U*e_d
+    bc farfield: nt = 3*nu_f
+    solve { nonlinear: newton }
+    output v, p, nt, d
+    // n points out of the fluid, so the force on the airfoil is -sigma*n.
+    report cl = -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord)
+    // cm is positive nose up, about the axis -z.
+    report cm = integral((x - xr)*(sigma*n).y - (y - yr)*(sigma*n).x, wall)/(0.5*rho_f*U^2*chord^2)
+}
+
+study flaps: grid {
+    delta: [-10, 0, 10] deg
+}
+
+// The expectations hold for the default delta = 0. The tolerance is 30% + 0.005.
+// gap G10: no expect for each study case. Flap -10 deg: cl -0.3762, cm 0.08. Flap 10 deg: cl 0.5640, cm -0.09.
+expect cl_0: -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord) == 0.1200 within 0.3*0.1200 + 0.005
+expect cm_0: integral((x - xr)*(sigma*n).y - (y - yr)*(sigma*n).x, wall)/(0.5*rho_f*U^2*chord^2) == -0.008 within 0.3*0.008 + 0.005

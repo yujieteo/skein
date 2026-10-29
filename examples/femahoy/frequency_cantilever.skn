@@ -1,0 +1,44 @@
+// femahoy: validation/cases/frequency-cantilever/job.inp
+// blocked-by: G18
+// The natural frequencies of a clamped steel beam of 100 x 10 x 5 mm. Modal
+// step, 3D, quadratic hexahedra on a 40 x 4 x 2 grid. The reference is mode 1
+// of Blevins (1979), Table 8-1: 417.758 Hz, within 1 %.
+
+model frequency_cantilever: 3d, mm_N_MPa_s
+
+let L: Length = 100 mm
+let W: Length = 10 mm
+let H: Length = 5 mm
+
+scales H, 210000 MPa, 7.85e-9 t/mm^3
+
+let beam: Solid = box((0, 0, 0) mm, (L, W, H))
+let fixed: Surface = boundary(beam, x == 0 mm)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+    rho: Density = 7.85e-9 t/mm^3
+}
+
+// gap G18: femahoy uses C3D20R (serendipity, reduced integration).
+mesh m on beam {
+    size: 2.5 mm
+    cell: hex
+}
+
+physics solid on beam solves u: Vector<Length> {
+    material steel
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
+    eq rho*ddt2(u) - div(sigma) = 0
+}
+
+bc fixed: u = 0
+
+step modes: modal(count: 6) {
+    output u
+}
+
+// gap G6: no name for the frequency of mode 1. The check is
+// f1 = 1.87510407^2/(2*pi*L^2)*sqrt(E*I/m) = 417.758 Hz within 1%.

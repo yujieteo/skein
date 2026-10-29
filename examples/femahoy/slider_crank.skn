@@ -1,0 +1,39 @@
+// femahoy: validation/cases/slider-crank/60rpm/chrono.py
+// A slider-crank: crank 0.1 m, rod 0.3 m, slider on the x axis, gravity along -y. A motor turns
+// the crank at 60 rpm from the dead centre. The joints have no friction, thus the motor power
+// is the rate of change of the energy. Reference at t = 1.125 s: x = 0.3622582729 m, 1.42695517 N*m.
+
+model slider_crank: 2d, SI
+
+let r_c: Length = 0.1 m
+let l_r: Length = 0.3 m
+let m1: Mass = 0.5 kg
+let m2: Mass = 1.5 kg
+let m3: Mass = 2 kg
+let g: Acceleration = 9.81 m/s^2
+let w: Frequency = 2*pi*(1 rad/s)
+
+scales l_r, 1/w, m3
+
+// The crank angle is w*t. phi is the rod angle, xb the slider position and tq the motor
+// torque. The crank and the rod are slender bars.
+physics linkage solves phi: Angle = 0 rad, xb: Length = r_c + l_r, tq: Force*Length {
+    let th: Angle = w*t
+    let g1: Vector<Length> = r_c/2*(cos(th), sin(th))
+    let g2: Vector<Length> = r_c*(cos(th), sin(th)) + l_r/2*(cos(phi), sin(phi))
+    let ek: Energy = 0.5*(m1*r_c^2/3)*w^2 + 0.5*m2*dot(ddt(g2), ddt(g2)) + 0.5*(m2*l_r^2/12)*ddt(phi)^2 + 0.5*m3*ddt(xb)^2
+    let ep: Energy = g*(m1*g1.y + m2*g2.y)
+    eq r_c*sin(th) + l_r*sin(phi) = 0
+    eq xb = r_c*cos(th) + l_r*cos(phi)
+    eq tq*w = ddt(ek + ep)
+}
+
+method linkage: ode {}
+
+// Chrono uses HHT with a fixed step of 1 ms.
+step run: transient(end: 1.125 s, dt: 1 ms, scheme: generalized_alpha(0.67)) {
+    report xb, tq
+}
+
+expect x_slider: xb == 0.3622582729 m within 0.01%
+expect torque: tq == 1.42695517 N*m within 0.01%

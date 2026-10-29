@@ -1,0 +1,81 @@
+// femahoy: validation/cases/cavity-devahldavis/ra1e4/system/controlDict
+// blocked-by: G10
+// Natural convection of air (Pr = 0.71) in a square cavity, laminar and steady. The left wall
+// is hot, the right wall is cold, the top and the bottom are adiabatic. L, Th - Tc and alpha
+// are 1, thus a velocity in m/s is in units of alpha/L. Reference: de Vahl Davis (1983), Table V.
+
+model cavity_devahldavis: 2d, SI
+
+param Ra: Real = 10000 in 10000..100000
+let a: Length = 1 m
+let dT: Temperature = 1 K
+let T0: Temperature = 0.5 K
+let alpha: KinViscosity = 1 m^2/s
+let nu_f: KinViscosity = 0.71 m^2/s
+let beta: Expansion = 1 K^-1
+// The gravity gives the Rayleigh number: Ra = g*beta*dT*a^3/(nu*alpha).
+let g: Acceleration = Ra*nu_f*alpha/(beta*dT*a^3)
+
+scales a, alpha/a, 1 kg/m^3, dT
+
+let cav: Surface = rect((0, 0) m, (a, a))
+let walls: Curve = boundary(cav)
+let hot: Curve = boundary(cav, x == 0 m)
+let cold: Curve = boundary(cav, x == a)
+let corner: Point = point((0, 0) m)
+let vline: Curve = line((0.5, 0) m, (0.5, 1) m)
+let hline: Curve = line((0, 0.5) m, (1, 0.5) m)
+
+material air {
+    rho: Density = 1 kg/m^3
+    mu: DynViscosity = rho*nu_f
+    cp: SpecificHeat = 1 J/(kg*K)
+    k: Conductivity = rho*cp*alpha
+}
+
+mesh m on cav {
+    size: a/129
+    cell: quad
+}
+
+// Boussinesq flow. The body force has the density change in it, so the model needs no
+// boussinesq assumption.
+physics flow on cav solves v: Vector<Velocity>, p: Pressure, T: Temperature = T0 {
+    material air
+    assume incompressible, newtonian, laminar
+    let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    let q: Vector<HeatFlux> = fourier(k, T)
+    eq rho*grad(v)*v - div(sigma) = rho*(1 - beta*(T - T0))*(0, -g)
+    eq div(v) = 0
+    eq rho*cp*dot(v, grad(T)) + div(q) = 0
+}
+
+method flow: fv {
+    mesh: m
+    gradient: green_gauss
+    flux: central
+    pv_coupling: rhie_chow
+}
+
+step steady: static {
+    bc walls: v = 0
+    bc hot: T = T0 + dT/2
+    bc cold: T = T0 - dT/2
+    // top and bottom: the default natural condition, dot(q, n) = 0
+    bc corner: p = 0
+    solve { nonlinear: newton }
+    output v, p, T
+    report nu_hot = mean(-grad(T).x, hot)*a/dT
+    report umax = max(v.x, vline)
+    report vmax = max(v.y, hline)
+}
+
+study ra_sweep: grid {
+    Ra: [10000, 100000]
+}
+
+// The expectations hold for the default Ra = 1e4.
+// gap G10: no expect for each study case. At Ra = 1e5: Nu 4.519, umax 34.73 m/s, vmax 68.59 m/s.
+expect nu_ra1e4: mean(-grad(T).x, hot)*a/dT == 2.243 within 0.6%
+expect umax_ra1e4: max(v.x, vline) == 16.178 m/s within 0.6%
+expect vmax_ra1e4: max(v.y, hline) == 19.617 m/s within 0.6%
