@@ -1,0 +1,651 @@
+// The rules of physics blocks, templates, assumptions, conditions and
+// methods (spec §4.2, §10 to §13).
+import std;
+import dictionary;
+namespace check;
+import syntax from "../syntax";
+import .dims;
+import .types;
+import .state;
+import .expr;
+import .typeexpr;
+import .items;
+
+// The node of the template `name` in the standard library, or -1.
+var std_prog = -1;
+
+fn find_template(name: u8[:]) -> i64 {
+    if std_prog < 0 { return -1; }
+    var c = syntax::nodes[std_prog].first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_TEMPLATE && tok_text(syntax::nodes[c].tok) == name { return c; }
+        c = syntax::nodes[c].next;
+    }
+    return -1;
+}
+
+// --- assumptions (spec §11.1) --------------------------------------------------------------
+
+let ASSUMPTIONS = [
+    "small_strain", "finite_strain", "isotropic", "orthotropic", "plane_stress", "plane_strain",
+    "incompressible", "compressible", "newtonian", "laminar", "turbulent", "boussinesq", "isothermal",
+];
+let CONFLICTS = [
+    "small_strain", "finite_strain", "isotropic", "orthotropic", "plane_stress", "plane_strain",
+    "incompressible", "compressible", "laminar", "turbulent", "boussinesq", "compressible",
+];
+
+// The assumptions of the physics that the checker is in.
+var assumed: Name[>..];
+
+fn check_assume(n: i64) {
+    var c = syntax::nodes[n].first;
+    while c >= 0 {
+        let a = syntax::nodes[c];
+        let name = tok_text(a.tok);
+        var arg = a.first;
+        while arg >= 0 {
+            setting_ty(arg);
+            arg = syntax::nodes[arg].next;
+        }
+        if !contains_name(ASSUMPTIONS, name) {
+            let near = nearest_of(name, ASSUMPTIONS);
+            let fix: u8[>..] = if near.len > 0 { str("did you mean '", near, "'?") } else { str("use one of: ", join(ASSUMPTIONS)) };
+            error(a.tok, "assumption_unknown", str("'", name, "' is not an assumption (spec §11.1)"), fix);
+        } else {
+            for i in 0..CONFLICTS.len / 2 {
+                let x = CONFLICTS[2 * i];
+                let y = CONFLICTS[2 * i + 1];
+                let other = if name == x { y } else if name == y { x } else { "" };
+                if other.len == 0 { continue; }
+                for b in assumed {
+                    if b == other {
+                        error(a.tok, "assumption_conflict", str("'", name, "' conflicts with '", other, "'"),
+                              str("remove '", name, "' or '", other, "'"));
+                    }
+                }
+            }
+            if (name == "plane_stress" || name == "plane_strain") && (space != 2 || axi) {
+                error(a.tok, "assumption_space", str("'", name, "' needs a 2d model"),
+                      "write the model as 2d, or remove the assumption");
+            }
+            // Only an explicit thickness makes integrals per body, not per depth.
+            if (name == "plane_stress" || name == "plane_strain") && a.first >= 0 { thickness = true; }
+            if name == "incompressible" { physics[cur_phys].incompressible = true; }
+            assumed.push(key(name));
+        }
+        c = a.next;
+    }
+}
+
+fn nearest_of(name: u8[:], names: const u8[:][:]) -> u8[>..] {
+    var best: u8[>..] = [];
+    var best_d = max(2, name.len / 3) + 1;
+    for k in names {
+        let d = edit_distance(name, k);
+        if d < best_d { best_d = d; best.clear(); best.append(k); }
+    }
+    return best;
+}
+
+// --- physics (spec §10) ----------------------------------------------------------------------
+
+// Records `div(F)` in the equation of unknown `k` (spec §12.1).
+recursive fn note_fluxes(n: i64, k: i64) {
+    let nd = syntax::nodes[n];
+    if nd.kind == syntax::N_CALL {
+        let callee = nd.first;
+        let arg = syntax::nodes[callee].next;
+        if syntax::nodes[callee].kind == syntax::N_NAME && tok_text(syntax::nodes[callee].tok) == "div" && arg >= 0 {
+            fluxes.push(Flux { phys: cur_phys, name: key(node_text(syntax::nodes[arg].first)), unknown: k });
+        }
+    }
+    var c = nd.first;
+    while c >= 0 {
+        note_fluxes(c, k);
+        c = syntax::nodes[c].next;
+    }
+}
+
+// Checks the statement `s` of a physics or a template. `eqs` counts the
+// equations.
+fn check_phys_stmt(s: i64, eqs: i64&) {
+    let k = syntax::nodes[s];
+    match k.kind {
+        syntax::N_ASSUME => { check_assume(s); },
+        syntax::N_LET => {
+            let sym = check_value_decl(s, S_LET);
+            syms[sym].phys = cur_phys;
+        },
+        syntax::N_STATE => {
+            let decl = type_of(k.first, true);
+            let value = syntax::nodes[k.first].next;
+            assign(first_tok(value), decl, expr_ty(value), str("'", tok_text(k.tok), "'"));
+            use_dim(decl);
+            var t = decl;
+            t.varying = true;
+            declare(S_STATE, k.tok, s, t);
+        },
+        syntax::N_EQN => {
+            let l = expr_ty(k.first);
+            let r = expr_ty(syntax::nodes[k.first].next);
+            sum_ty(k.tok, l, r, "=");
+            let p = physics[cur_phys];
+            if eqs < p.count { note_fluxes(s, p.first + eqs); }
+            note_high_derivs(s, 0);
+            eqs++;
+        },
+        syntax::N_PLASTIC => {
+            physics[cur_phys].plastic = true;
+            let b = k.first;
+            check_block(b, ["yield", "strain", "hardening"], "type_mismatch", "plastic");
+            let y = setting(b, "yield");
+            if y >= 0 {
+                let t = expr_ty(y);
+                let stress = num_ty(FORCE - dim_pow(LENGTH, 2), 0);
+                sum_ty(first_tok(y), t, stress, "the yield function and a stress");
+            }
+        },
+        _ => {},
+    }
+}
+
+fn check_physics(n: i64) {
+    let k = syntax::nodes[n];
+    let psym = declare(S_PHYSICS, k.tok, n, kind_ty(K_DECL));
+    physics.push(Phys { sym: psym, node: n, region: -1, template: -1, first: syms.len, count: 0,
+                        has_method: false, plastic: false, incompressible: false });
+    cur_phys = physics.len - 1;
+    assumed.clear();
+    var uses = -1;
+    var c = k.first;
+    while c >= 0 {
+        let ck = syntax::nodes[c];
+        if ck.kind == syntax::N_ON {
+            physics[cur_phys].region = ck.first;
+            region_ty(ck.first);
+        }
+        if ck.kind == syntax::N_USES { uses = c; }
+        c = ck.next;
+    }
+    // The unknowns.
+    physics[cur_phys].first = syms.len;
+    c = k.first;
+    while c >= 0 {
+        let u = syntax::nodes[c];
+        if u.kind == syntax::N_UNKNOWN {
+            var t = type_of(u.first, true);
+            use_dim(t);
+            let init = syntax::nodes[u.first].next;
+            if init >= 0 { assign(first_tok(init), t, expr_ty(init), str("the initial value of '", tok_text(u.tok), "'")); }
+            t.varying = true;
+            declare(S_UNKNOWN, u.tok, c, t);
+            physics[cur_phys].count++;
+        }
+        c = u.next;
+    }
+    // The materials first: a `let` may use their properties.
+    var whole = 0;
+    var parts = 0;
+    c = k.first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_MATASSIGN {
+            var m = syntax::nodes[c].first;
+            while m >= 0 {
+                if syntax::nodes[m].first >= 0 { parts++; } else { whole++; }
+                if whole > 1 || (whole == 1 && parts > 0) {
+                    error(syntax::nodes[m].tok, "material_cover", "two materials cover one point of the region",
+                          "give each material its part with 'on', for example 'material a on r1, b on r2'");
+                }
+                let mt = syntax::nodes[m].tok;
+                let ms = visible.get(key(tok_text(mt)));
+                if !ms {
+                    unknown_name(mt);
+                } else if syms[ms].kind != S_MATERIAL {
+                    error(mt, "type_mismatch", str("'", tok_text(mt), "' is not a material"), "name a material");
+                } else {
+                    phys_mats.push(PhysMat { phys: cur_phys, mat: ms });
+                }
+                if syntax::nodes[m].first >= 0 { region_ty(syntax::nodes[m].first); }
+                m = syntax::nodes[m].next;
+            }
+        }
+        c = syntax::nodes[c].next;
+    }
+    var eqs = 0;
+    if uses >= 0 { check_uses(uses, eqs); }
+    c = k.first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_EQN && uses >= 0 {
+            error(syntax::nodes[c].tok, "template_eq", "a physics that uses a template cannot add an eq",
+                  "write the physics in full, from the source of the template (skein help std)");
+        } else {
+            check_phys_stmt(c, eqs);
+        }
+        c = syntax::nodes[c].next;
+    }
+    let p = physics[cur_phys];
+    if p.incompressible && uses < 0 && !has_continuity(n) {
+        error(k.tok, "assumption_invalid", "incompressible needs an eq div(v) = 0 or a pressure unknown",
+              "add the eq div(v) = 0 with a pressure unknown, or remove incompressible");
+    }
+    if eqs != p.count && !(uses >= 0 && physics[cur_phys].template < 0) {
+        if eqs < p.count {
+            error(k.tok, "eq_count", str("the physics solves ", p.count, " unknowns but has ", eqs, " equations"),
+                  str("add the eq of '", tok_text(syms[p.first + eqs].tok), "'"));
+        } else {
+            error(k.tok, "eq_count", str("the physics solves ", p.count, " unknowns but has ", eqs, " equations"),
+                  "remove an eq, or add its unknown to solves");
+        }
+    }
+    cur_phys = -1;
+}
+
+// A physics that uses a template: its unknowns, arguments and statements (spec §4.2).
+fn check_uses(uses: i64, eqs: i64&) {
+    let ut = syntax::nodes[uses].tok;
+    let tm = find_template(tok_text(ut));
+    guard tm >= 0 else {
+        error(ut, "unknown_name", str("'", tok_text(ut), "' is not a template of the standard library"),
+              "use linear_elastic or navier_stokes, or write the physics in full");
+        return;
+    }
+    physics[cur_phys].template = tm;
+    let p = physics[cur_phys];
+    let mark = locals.len;
+    // The parameters, with the arguments of the model.
+    var params = 0;
+    var c = syntax::nodes[tm].first;
+    while c >= 0 && syntax::nodes[c].kind == syntax::N_TPARAM {
+        let pt = type_of(syntax::nodes[c].first, false);
+        locals.push(Local { name: key(tok_text(syntax::nodes[c].tok)), ty: pt });
+        params++;
+        c = syntax::nodes[c].next;
+    }
+    var a = syntax::nodes[uses].first;
+    var i = 0;
+    while a >= 0 {
+        let at = syntax::nodes[a];
+        var slot = if at.aux < 0 { i } else { -1 };
+        if at.aux >= 0 {
+            for j in params {
+                if locals[mark + j].name == tok_text(at.aux) { slot = j; }
+            }
+        }
+        let t = expr_ty(at.first);
+        if slot < 0 || slot >= params {
+            error(at.tok, "type_mismatch", str("the template '", tok_text(ut), "' has no parameter '", if at.aux >= 0 { tok_text(at.aux) } else { "" }, "'"),
+                  "use a parameter of the template (skein help std)");
+        } else {
+            assign(first_tok(at.first), locals[mark + slot].ty, t, str("the parameter '", locals[mark + slot].name, "'"));
+        }
+        i++;
+        a = at.next;
+    }
+    // The unknowns: the model names them, with the types of the template.
+    var j = 0;
+    while c >= 0 && syntax::nodes[c].kind == syntax::N_UNKNOWN {
+        let tt = type_of(syntax::nodes[c].first, false);
+        if j < p.count {
+            let ms = syms[p.first + j];
+            let mt = type_of(syntax::nodes[ms.node].first, false);
+            if mt.kind != tt.kind || mt.dim != tt.dim || mt.rank != tt.rank || mt.num != tt.num {
+                error(ms.tok, "type_mismatch",
+                      str("the unknown '", tok_text(ms.tok), "' is ", ty_str(mt), ", but the template solves ", ty_str(tt)),
+                      str("declare it as ", ty_str(tt)));
+            }
+            var lt = tt;
+            lt.varying = true;
+            locals.push(Local { name: key(tok_text(syntax::nodes[c].tok)), ty: lt });
+        }
+        j++;
+        c = syntax::nodes[c].next;
+    }
+    if j != p.count {
+        error(ut, "type_mismatch", str("the template '", tok_text(ut), "' solves ", j, " unknowns, not ", p.count),
+              "name one unknown for each unknown of the template");
+    }
+    // The statements, with each error at the template name.
+    report_tok = ut;
+    while c >= 0 {
+        check_phys_stmt(c, eqs);
+        c = syntax::nodes[c].next;
+    }
+    report_tok = -1;
+    locals.resize(mark);
+}
+
+// True when physics `n` has an eq `div(v) = …` of an unknown and a
+// pressure unknown (spec §11.1, `incompressible`).
+fn has_continuity(n: i64) -> bool {
+    var div_eq = false;
+    var c = syntax::nodes[n].first;
+    while c >= 0 {
+        let k = syntax::nodes[c];
+        if k.kind == syntax::N_EQN && syntax::nodes[k.first].kind == syntax::N_CALL {
+            let callee = syntax::nodes[k.first].first;
+            let arg = syntax::nodes[callee].next;
+            if tok_text(syntax::nodes[callee].tok) == "div" && arg >= 0 && unknown_of(syntax::nodes[arg].first) >= 0 {
+                div_eq = true;
+            }
+        }
+        c = k.next;
+    }
+    let p = physics[cur_phys];
+    var pressure = false;
+    for j in p.count {
+        let t = syms[p.first + j].ty;
+        if is_num(t) && t.rank == 0 && t.dim == FORCE - dim_pow(LENGTH, 2) { pressure = true; }
+    }
+    return div_eq && pressure;
+}
+
+// The unknowns under two nested derivatives, for `order_too_low`.
+struct HighDeriv { phys: i64, sym: i64, tok: i64 }
+var high_derivs: HighDeriv[>..];
+
+let DERIVS = ["grad", "div", "curl", "lap"];
+
+// Walks `n`. `depth` counts the derivatives around it: `lap` counts 2.
+recursive fn note_high_derivs(n: i64, depth: i64) {
+    let k = syntax::nodes[n];
+    var d = depth;
+    if k.kind == syntax::N_CALL && syntax::nodes[k.first].kind == syntax::N_NAME {
+        let name = tok_text(syntax::nodes[k.first].tok);
+        if contains_name(DERIVS, name) { d += if name == "lap" { 2 } else { 1 }; }
+    }
+    if k.kind == syntax::N_NAME && depth > 2 {
+        let s = unknown_of(n);
+        if s >= 0 { high_derivs.push(HighDeriv { phys: cur_phys, sym: s, tok: k.tok }); }
+    }
+    var c = k.first;
+    while c >= 0 {
+        note_high_derivs(c, d);
+        c = syntax::nodes[c].next;
+    }
+}
+
+// `order_too_low`: a `cg` order under 2 for an unknown that the equations
+// differentiate more than twice (spec §13).
+fn order_too_low(p: i64, b: i64) {
+    let order = setting(b, "order");
+    guard order >= 0 else { return; };
+    for h in high_derivs {
+        if h.phys != p { continue; }
+        var v = 2.0;
+        if syntax::nodes[order].kind == syntax::N_RECORD {
+            var c = syntax::nodes[order].first;
+            while c >= 0 {
+                let ov, ok = const_value(syntax::nodes[c].first);
+                if ok && syntax::nodes[c].aux >= 0 && tok_text(syntax::nodes[c].aux) == tok_text(syms[h.sym].tok) { v = ov; }
+                c = syntax::nodes[c].next;
+            }
+        } else {
+            let ov, ok = const_value(order);
+            if ok { v = ov; }
+        }
+        if v < 2.0 {
+            error(first_tok(order), "order_too_low",
+                  str("the equations differentiate '", tok_text(syms[h.sym].tok), "' more than twice, but its order is ", v),
+                  str("give '", tok_text(syms[h.sym].tok), "' the order 2 or more"));
+            return;
+        }
+    }
+}
+
+// --- boundary conditions (spec §12) ------------------------------------------------------
+
+// The unknown symbol of name node `n`, or -1.
+fn unknown_of(n: i64) -> i64 {
+    if syntax::nodes[n].kind != syntax::N_NAME { return -1; }
+    let s = visible.get(key(tok_text(syntax::nodes[n].tok)));
+    if s && syms[s].kind == S_UNKNOWN { return s; }
+    return -1;
+}
+
+// The unknown of the flux `f` (an expression), or -1.
+fn flux_unknown(f: i64) -> i64 {
+    let text = node_text(f);
+    for fl in fluxes {
+        if fl.name == text { return fl.unknown; }
+    }
+    return -1;
+}
+
+// For `F*n` or `dot(F, n)`, the node of F, else -1.
+fn flux_of(n: i64) -> i64 {
+    let k = syntax::nodes[n];
+    if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
+        let r = syntax::nodes[k.first].next;
+        if syntax::nodes[r].kind == syntax::N_NAME && tok_text(syntax::nodes[r].tok) == "n" { return k.first; }
+    }
+    if k.kind == syntax::N_CALL {
+        let callee = k.first;
+        let a1 = syntax::nodes[callee].next;
+        if a1 >= 0 && syntax::nodes[callee].kind == syntax::N_NAME && tok_text(syntax::nodes[callee].tok) == "dot" {
+            let a2 = syntax::nodes[a1].next;
+            if a2 >= 0 && syntax::nodes[syntax::nodes[a2].first].kind == syntax::N_NAME
+                && tok_text(syntax::nodes[syntax::nodes[a2].first].tok) == "n" {
+                return syntax::nodes[a1].first;
+            }
+        }
+    }
+    return -1;
+}
+
+fn check_bc(n: i64) {
+    let k = syntax::nodes[n];
+    let region = k.first;
+    let lhs = syntax::nodes[region].next;
+    let rhs = syntax::nodes[lhs].next;
+    let rt = region_ty(region);
+    var unknown = unknown_of(lhs);
+    var comp: Name = [];
+    var natural = false;
+    if unknown < 0 && syntax::nodes[lhs].kind == syntax::N_MEMBER {
+        unknown = unknown_of(syntax::nodes[lhs].first);
+        if unknown >= 0 { comp = key(tok_text(syntax::nodes[lhs].tok)); }
+    }
+    if unknown < 0 {
+        let f = flux_of(lhs);
+        if f >= 0 {
+            unknown = flux_unknown(f);
+            natural = unknown >= 0;
+        }
+    }
+    guard unknown >= 0 else {
+        expr_ty(lhs);
+        expr_ty(rhs);
+        error(first_tok(lhs), "bc_form", str("the left side '", node_text(lhs), "' is not an unknown or a flux"),
+              "write an unknown (u = …), a component (u.x = …), or a flux F*n where div(F) is in an eq");
+        return;
+    };
+    cur_phys = syms[unknown].phys;
+    let l = expr_ty(lhs);
+    let r = expr_ty(rhs);
+    if natural {
+        var lt = l;
+        if rt.kind == K_GEOM && rt.geo == 0 && is_num(lt) {
+            // Gap G16: on a Point, `F*n = P` is the force P.
+            lt.dim = lt.dim + dim_pow(LENGTH, space - 1 + depth());
+        }
+        sum_ty(k.tok, lt, r, "=");
+    } else {
+        assign(first_tok(rhs), l, r, str("'", node_text(lhs), "'"));
+    }
+    cur_phys = -1;
+    if rt.kind == K_GEOM && rt.geo > 0 && rt.geo >= space {
+        error(first_tok(region), "bc_off_boundary",
+              str("the region '", node_text(region), "' is a ", GEO_NAMES[rt.geo], ", not a part of a boundary"),
+              str("give a part of the boundary, for example boundary(", node_text(region), ")"));
+    }
+    for b in bcs {
+        if b.step != cur_step || b.unknown != unknown || b.comp != comp { continue; }
+        if node_text(b.region) != node_text(region) { continue; }
+        let other = syntax::nodes[b.node];
+        let orhs = syntax::nodes[syntax::nodes[other.first].next].next;
+        if b.natural != natural || (!natural && node_text(orhs) != node_text(rhs)) {
+            error(k.tok, "bc_conflict",
+                  str("this bc and the bc on line ", syntax::tokens[other.tok].line, " fight on '", node_text(region), "'"),
+                  "remove one of the two lines");
+        }
+    }
+    bcs.push(Bc { step: cur_step, region: region, unknown: unknown, comp: comp, natural: natural, node: n });
+}
+
+// --- the free boundary report (command_line.md §6.2) -------------------------------------
+
+fn free_boundary() {
+    for p in physics {
+        if p.region < 0 { continue; }
+        for j in p.count {
+            let u = p.first + j;
+            var flux: Name = [];
+            for fl in fluxes {
+                if fl.unknown == u { flux = fl.name; break; }
+            }
+            if flux.len == 0 { continue; }
+            var f = Free { physics: [], field: [], region: [], condition: [] };
+            f.physics.append(tok_text(syms[p.sym].tok));
+            f.field.append(tok_text(syms[u].tok));
+            var region: u8[>..] = str("boundary(", node_text(p.region), ")");
+            var seen: Name[>..] = [];
+            for b in bcs {
+                if b.unknown != u { continue; }
+                let t = node_text(b.region);
+                var dup = false;
+                for s in seen {
+                    if s == t { dup = true; }
+                }
+                if dup { continue; }
+                seen.push(key(t));
+                region.append(" - ");
+                region.append(t);
+            }
+            f.region.append(region[..min(region.len, 512)]);
+            let cond = str(flux, "*n = 0");
+            f.condition.append(cond[..min(cond.len, 256)]);
+            free.push(f);
+        }
+    }
+}
+
+// --- methods (spec §13) --------------------------------------------------------------------
+
+let METHOD_KINDS = ["cg", "dg", "fv", "rkpm", "gfd", "ode"];
+let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple"];
+let DG_SETTINGS = ["mesh", "order", "flux", "penalty", "shock_capturing", "couple"];
+let FV_SETTINGS = ["mesh", "gradient", "flux", "limiter", "pv_coupling", "couple"];
+let RKPM_SETTINGS = ["points", "basis", "support", "integrate", "bc", "couple"];
+let GFD_SETTINGS = ["points", "stencil", "weight", "couple"];
+let ODE_SETTINGS = ["couple"];
+let STABLE = ["supg_pspg", "vms", "supg_pspg_lsic", "pspg"];
+
+fn check_method(n: i64) {
+    let k = syntax::nodes[n];
+    let name = tok_text(k.tok);
+    let kind = if k.aux >= 0 { tok_text(k.aux) } else { "" };
+    let b = k.first;
+    var p = -1;
+    let s = visible.get(key(name));
+    if !s {
+        unknown_name(k.tok);
+    } else if syms[s].kind != S_PHYSICS {
+        error(k.tok, "type_mismatch", str("'", name, "' is not a physics"), "name a physics");
+    } else {
+        for q, i in physics {
+            if q.sym == s { p = i; }
+        }
+    }
+    if p >= 0 {
+        if physics[p].has_method {
+            error(k.tok, "duplicate_name", str("the physics '", name, "' has two methods"), "remove one method");
+        }
+        physics[p].has_method = true;
+    }
+    guard contains_name(METHOD_KINDS, kind) else {
+        error(k.aux, "method_setting", str("'", kind, "' is not a method kind"), str("use one of: ", join(METHOD_KINDS)));
+        check_values(b);
+        return;
+    }
+    let valid = if kind == "cg" { CG_SETTINGS[..] } else if kind == "dg" { DG_SETTINGS[..] } else if kind == "fv" { FV_SETTINGS[..] }
+                else if kind == "rkpm" { RKPM_SETTINGS[..] } else if kind == "gfd" { GFD_SETTINGS[..] } else { ODE_SETTINGS[..] };
+    check_block(b, valid, "method_setting", str("the method ", kind));
+    let mesh = setting(b, "mesh");
+    if mesh >= 0 && contains_name(valid, "mesh") { want_kind(mesh, K_MESH, "a mesh"); }
+    let pts = setting(b, "points");
+    if pts >= 0 && contains_name(valid, "points") { want_kind(pts, K_POINTS, "a point cloud"); }
+    if p >= 0 && kind == "gfd" && physics[p].plastic {
+        error(k.aux, "method_physics", "gfd cannot collocate a physics with a plastic block",
+              "use cg or rkpm for this physics");
+    }
+    if p >= 0 && kind == "cg" && physics[p].incompressible { inf_sup(p, b, k.aux); }
+    if p >= 0 && kind == "cg" { order_too_low(p, b); }
+}
+
+fn want_kind(n: i64, kind: i64, what: u8[:]) {
+    let t = setting_ty(n);
+    if !is_any(t) && t.kind != kind {
+        error(first_tok(n), "type_mismatch", str("'", node_text(n), "' is not ", what), str("name ", what));
+    }
+}
+
+// `inf_sup`: equal orders of velocity and pressure in `cg` with no
+// pressure stabilization.
+fn inf_sup(p: i64, b: i64, tok: i64) {
+    let order = setting(b, "order");
+    guard order >= 0 else { return; };
+    let stab = setting(b, "stabilize");
+    if stab >= 0 && contains_name(STABLE, node_text(stab)) { return; }
+    let ph = physics[p];
+    var vel = -1;
+    var pre = -1;
+    for j in ph.count {
+        let t = syms[ph.first + j].ty;
+        if is_num(t) && t.rank == 1 && t.dim == LENGTH - TIME { vel = ph.first + j; }
+        if is_num(t) && t.rank == 0 && t.dim == FORCE - dim_pow(LENGTH, 2) { pre = ph.first + j; }
+    }
+    guard vel >= 0 && pre >= 0 else { return; };
+    var ov = 0.0;
+    var op = 0.0;
+    if syntax::nodes[order].kind == syntax::N_RECORD {
+        var c = syntax::nodes[order].first;
+        while c >= 0 {
+            let v, ok = const_value(syntax::nodes[c].first);
+            if syntax::nodes[c].aux >= 0 && ok {
+                let f = tok_text(syntax::nodes[c].aux);
+                if f == tok_text(syms[vel].tok) { ov = v; }
+                if f == tok_text(syms[pre].tok) { op = v; }
+            }
+            c = syntax::nodes[c].next;
+        }
+    } else {
+        let v, ok = const_value(order);
+        if ok { ov = v; op = v; }
+    }
+    if ov > 0.0 && ov == op {
+        error(first_tok(order), "inf_sup", "equal orders of velocity and pressure with no pressure stabilization",
+              "add stabilize: supg_pspg, or give the velocity a higher order: { v: 2, p: 1 }");
+    }
+}
+
+// `method_missing`: a physics with a region and no method needs exactly
+// one mesh on its region (spec §13). The checker has no geometry, so it
+// counts the meshes on the same region, or all meshes when no mesh names it.
+fn method_missing() {
+    for p in physics {
+        if p.has_method || p.region < 0 { continue; }
+        var all = 0;
+        var same = 0;
+        for s in syms {
+            if s.kind != S_MESH { continue; }
+            all++;
+            if node_text(syntax::nodes[s.node].first) == node_text(p.region) { same++; }
+        }
+        if same == 1 || (same == 0 && all == 1) { continue; }
+        let name = tok_text(syms[p.sym].tok);
+        let msg: u8[>..] = if all == 0 { str("the physics '", name, "' has no method and the model has no mesh") }
+                           else { str("the physics '", name, "' has no method, and ", all, " meshes can hold its region") };
+        error(syms[p.sym].tok, "method_missing", msg, str("add method ", name, ": cg { mesh: <name> }"));
+    }
+}

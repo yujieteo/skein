@@ -1,0 +1,234 @@
+// `skein check` (docs/command_line.md §2, §6): parses a model, applies the
+// rules of spec §19 and prints the diagnostics and the free boundary
+// report in TOON or JSON.
+import std;
+import os;
+import dictionary;
+namespace check;
+import syntax from "../syntax";
+import .dims;
+import .types;
+import .state;
+import .expr;
+import .items;
+import .physics;
+import .steps;
+import .templates;
+
+// Checks the model `text` from the file `path`. The result is in `diags`
+// and `free`.
+fn check_text(path: u8[:], text: u8[:]) {
+    syntax::reset();
+    reset_state();
+    objectives.clear();
+    high_derivs.clear();
+    std_prog = -1;
+    let f = syntax::add_file(path, text);
+    syntax::lex(f);
+    let prog = syntax::parse(f);
+    for e in syntax::errors {
+        let k = syntax::tokens[e.tok];
+        var d = Diag { id: e.id, file: [], line: k.line, col: k.col, msg: e.msg, fix: e.fix };
+        d.file.append(path[..min(path.len, 256)]);
+        diags.push(d);
+    }
+    // The other rules need a tree with no syntax errors (spec §19).
+    if diags.len > 0 { return; }
+    let s = syntax::add_file(STD_PATH, STD_SOURCE);
+    syntax::lex(s);
+    std_prog = syntax::parse(s);
+    // The header first: it sets the space and the units of the built-in names.
+    let h = syntax::child_of_kind(prog, syntax::N_HEADER);
+    if h >= 0 { check_header(h); }
+    add_builtins();
+    note_declarations(prog);
+    var item = syntax::nodes[prog].first;
+    while item >= 0 {
+        check_item(item);
+        item = syntax::nodes[item].next;
+    }
+    scales_end();
+    objectives_end();
+    method_missing();
+    free_boundary();
+    sort_diags();
+}
+
+fn check_item(n: i64) {
+    match syntax::nodes[n].kind {
+        syntax::N_USE => {
+            error(syntax::nodes[n].tok, "use_item", "use is not in this version (phase 2)",
+                  "copy the items of the file into the model");
+        },
+        syntax::N_PARAM => { check_value_decl(n, S_PARAM); },
+        syntax::N_LET => { check_value_decl(n, S_LET); },
+        syntax::N_FN => { check_fn(n); },
+        syntax::N_TABLE => { check_table(n); },
+        syntax::N_MATERIAL => { check_material(n); },
+        syntax::N_MESH => { check_discretization(n, S_MESH); },
+        syntax::N_POINTS => { check_discretization(n, S_POINTS); },
+        syntax::N_PHYSICS => { check_physics(n); },
+        syntax::N_METHOD => { check_method(n); },
+        syntax::N_BC => { check_bc(n); },
+        syntax::N_CONTACT, syntax::N_INTERFACE => { check_pair(n); },
+        syntax::N_SYMMETRY => { check_symmetry(n); },
+        syntax::N_STEP => { check_step(n); },
+        syntax::N_EXPECT => { check_expect(n); },
+        syntax::N_ALLOW => { check_allow(n); },
+        syntax::N_SCALES => { check_scales(n); },
+        syntax::N_STUDY => { check_study(n); },
+        syntax::N_MANUFACTURE => { check_manufacture(n); },
+        syntax::N_TOLERANCE => { check_tolerance(n); },
+        syntax::N_TEMPLATE => {
+            error(syntax::nodes[n].tok, "duplicate_name", "only the standard library declares templates",
+                  "write the physics in full");
+        },
+        _ => {},
+    }
+}
+
+// Sorts the diagnostics by line and column (command_line.md §6.1), stably.
+fn sort_diags() {
+    for i in 1..diags.len {
+        var j = i;
+        while j > 0 && (diags[j - 1].line > diags[j].line
+                        || (diags[j - 1].line == diags[j].line && diags[j - 1].col > diags[j].col)) {
+            let tmp = diags[j - 1];
+            diags[j - 1] = diags[j];
+            diags[j] = tmp;
+            j--;
+        }
+    }
+}
+
+// --- output (docs/command_line.md §6) -------------------------------------------------------
+
+// `s` in double quotes, with `"` and `\` escaped (TOON and JSON).
+fn quoted(out: u8[>..]&, s: u8[:]) {
+    out.push('"');
+    for c in s {
+        if c == '"' || c == '\\' { out.push('\\'); }
+        if c == '\n' { out.append("\\n"); continue; }
+        out.push(c);
+    }
+    out.push('"');
+}
+
+// A TOON value: quoted when it holds a comma, a quote or a space at an end.
+fn toon_value(out: u8[>..]&, s: u8[:]) {
+    var plain = s.len > 0 && s[0] != ' ' && s[s.len - 1] != ' ';
+    for c in s {
+        if c == ',' || c == '"' || c == '\\' || c == ':' { plain = false; }
+    }
+    if plain { out.append(s); } else { quoted(out, s); }
+}
+
+fn write_toon(out: u8[>..]&) {
+    if nondim { out.append("units: nondim\n"); }
+    format(out, "diagnostics[", diags.len, "]{class,id,file,line,col,msg,fix}:\n");
+    for d in diags {
+        out.append("  error,");
+        out.append(d.id);
+        out.push(',');
+        toon_value(out, d.file);
+        format(out, ",", d.line, ",", d.col, ",");
+        quoted(out, d.msg);
+        out.push(',');
+        quoted(out, d.fix);
+        out.push('\n');
+    }
+    format(out, "summary: errors=", diags.len, " lints=0\n");
+    if diags.len > 0 { return; }
+    format(out, "free_boundary[", free.len, "]{physics,field,region,condition}:\n");
+    for f in free {
+        out.append("  ");
+        toon_value(out, f.physics);
+        out.push(',');
+        toon_value(out, f.field);
+        out.push(',');
+        quoted(out, f.region);
+        out.push(',');
+        quoted(out, f.condition);
+        out.push('\n');
+    }
+}
+
+fn write_json(out: u8[>..]&) {
+    out.append("{");
+    if nondim { out.append("\"units\":\"nondim\","); }
+    out.append("\"diagnostics\":[");
+    for d, i in diags {
+        if i > 0 { out.push(','); }
+        out.append("{\"class\":\"error\",\"id\":");
+        quoted(out, d.id);
+        out.append(",\"file\":");
+        quoted(out, d.file);
+        format(out, ",\"line\":", d.line, ",\"col\":", d.col, ",\"msg\":");
+        quoted(out, d.msg);
+        out.append(",\"fix\":");
+        quoted(out, d.fix);
+        out.push('}');
+    }
+    format(out, "],\"summary\":{\"errors\":", diags.len, ",\"lints\":0}");
+    if diags.len == 0 {
+        out.append(",\"free_boundary\":[");
+        for f, i in free {
+            if i > 0 { out.push(','); }
+            out.append("{\"physics\":");
+            quoted(out, f.physics);
+            out.append(",\"field\":");
+            quoted(out, f.field);
+            out.append(",\"region\":");
+            quoted(out, f.region);
+            out.append(",\"condition\":");
+            quoted(out, f.condition);
+            out.push('}');
+        }
+        out.push(']');
+    }
+    out.append("}\n");
+}
+
+let CHECK_USAGE = "usage: skein check [--format toon|json] model.skn\n";
+
+// `skein check`. `args[1]` is "check". The result is the exit status
+// (command_line.md §10).
+fn command(args: u8[:][:]) -> i64 {
+    var json = false;
+    var at = -1;
+    var i = 2;
+    while i < args.len {
+        let a = args[i];
+        if a == "--format" && i + 1 < args.len {
+            if args[i + 1] == "json" {
+                json = true;
+            } else if args[i + 1] != "toon" {
+                write_stderr(CHECK_USAGE);
+                return 2;
+            }
+            i += 2;
+            continue;
+        }
+        if (a.len > 0 && a[0] == '-') || at >= 0 {
+            write_stderr(CHECK_USAGE);
+            return 2;
+        }
+        at = i;
+        i++;
+    }
+    guard at >= 0 else {
+        write_stderr(CHECK_USAGE);
+        return 2;
+    };
+    let path = args[at];
+    var text: u8[>..] = [];
+    guard read_file(path, text) else {
+        write_stderr(str("skein: cannot read '", path, "'\n"));
+        return 2;
+    };
+    check_text(path, text);
+    var out: u8[>..] = [];
+    if json { write_json(out); } else { write_toon(out); }
+    write_stdout(out);
+    return if diags.len > 0 { 1 } else { 0 };
+}
