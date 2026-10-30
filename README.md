@@ -38,8 +38,7 @@ step load: static {
 
 **Status:** this repository holds the specification and the start of the
 compiler. `skein check` parses and type-checks a model. `skein fmt` rewrites
-a file in the standard layout. `skein md` writes a model as a Markdown
-document for a person to read. The [roadmap](docs/roadmap.md) gives the phases.
+a file in the standard layout. The [roadmap](docs/roadmap.md) gives the phases.
 Phase 1 is the front end: the parser, the type and unit checker,
 `skein fmt` and `skein check`.
 
@@ -74,7 +73,6 @@ golden files again and read the diff:
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
-| `src/md/` | `skein md` (`md.goose`). Its golden documents are in `tests/md/`. |
 
 ## Why Skein
 
