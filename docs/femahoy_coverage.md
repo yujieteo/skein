@@ -100,6 +100,19 @@ result, or the mesh or the solve is less efficient.
 | G28 | A material property that is a function of the unknown of the physics that uses it: a conductivity of T. | `validation/cases/grid-radiating-fin-ccx/fin/grid.toml:9` | §10.2 allows a property of a temperature field, but §3.1 needs each name before its use, and the `material` comes before the `physics` that declares `T`. The model puts the property in a physics `let`. | In §3.1, let a material property name an unknown of a physics that assigns the material. | 2 |
 | G29 | A temperature below 0 °C, for example a sink at -5 °C. | `validation/cases/grid-layered-wall/wall/grid.toml:49` | `-` is a unary operator (§2.4) and `5 degC` is 278.15 K (§6.3), so `-5 degC` is -278.15 K. The model gives the values in K. | A `-` directly before a literal with `degC` is part of the literal. | 1 |
 
+### Gaps of the 787 study
+
+The [787 fuselage study](studies/b787/skein/notes.md) is not a femahoy
+case, but its two models use the same marks. Its evidence paths are
+relative to the root of this repository. The models also need G3 for the
+composite skin (`docs/studies/b787/skein/fuselage.skn:146`, `docs/studies/b787/skein/door_corner.skn:154`).
+
+| Gap | Study feature | Evidence | Why the spec cannot state it | Smallest spec change | Phase |
+|---|---|---|---|---|---|
+| G31 | Offset beams on a shell: the stringers and the frames, with a torsion constant, a section axis, an offset and the axial force. | `docs/studies/b787/skein/fuselage.skn:166`, `:184`, `:204`, `docs/studies/b787/skein/door_corner.skn:175` | §4.2 gives `timoshenko(A, I_y, I_z)` with no source, no torsion constant, no section axis, no offset and no axial force. No rule ties a beam to the shell points on its line. | `timoshenko` arguments `J`, `y_axis` and `offset`, and a template `let Nx` (axial force). In §12.1, let the right side of an essential `bc` be an unknown of another physics on the same points (a tie). | 5 |
+| G32 | A shell or a beam line cut by a solid: `skin & door_box(pad_w)`, `stringers & left`. | `docs/studies/b787/skein/fuselage.skn:61`, `:70`, `:86`, `docs/studies/b787/skein/door_corner.skn:65`, `:75`, `:78`, `:91` | §5.3 and §8.4 do not give the dimension of `a & b` when `a` is a `Surface` or a `Curve` and `b` is a `Solid`. The checker gives the higher dimension, a `Solid`. | In §8.4: `a & b` has the lower dimension of `a` and `b`, and `a - b` has the dimension of `a`. | not set |
+| G33 | Shell resultants: the force resultant `N`, the membrane strain `eps_m`, an edge load `N*n`, and a strain of the global model in a submodel. | `docs/studies/b787/skein/fuselage.skn:160`, `:201`, `docs/studies/b787/skein/door_corner.skn:168`, `:203`, `:208`, `:214`, `:217` | The shell template of G3 declares no resultant. A natural `bc` needs a flux of an `eq` (§12.1). §15.1 gives a `Results` value the unknowns of the other model, not its physics `let` fields. | The G3 template gives `let N` and `let eps_m`, and its `eq` has `div(N)`, so `N*n` is a natural condition. In §15.1, a `Results` value also gives the physics `let` fields. | 5 |
+
 ### Points that the spec does not make clear
 
 These are not gaps, because the models can state the features. But the
