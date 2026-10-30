@@ -574,7 +574,8 @@ fn free_boundary() {
             }
             if flux < 0 { continue; }
             let name = tok_text(syms[u].tok);
-            let ftext = node_text(flux);
+            let fk = syntax::nodes[flux].kind;
+            let ftext: u8[>..] = if fk == syntax::N_NAME || fk == syntax::N_CALL { node_text(flux) } else { str("(", node_text(flux), ")") };
             var region: u8[>..] = str("boundary(", node_text(p.region), ")");
             for b, i in bcs {
                 if b.unknown != u || seen_before(u, i) { continue; }

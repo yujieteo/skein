@@ -144,6 +144,8 @@ fn test_conditions() {
     expect_id("bc_conflict", str(elastic, "bc boundary(b, x == 1 m): u = 0\nbc boundary(b,x==1 m): sigma*n = (0, 0, 1) MPa\n"));
     let heat = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial cu {\n    k: Conductivity = 400 W/(m*K)\n}\nmesh m1 on b { size: 0.1 m }\n");
     expect_clean("a flux with other spaces", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T) + k * grad(T) + k * grad(T) + k * grad(T) + k * grad(T)) = 0 W/m^3\n}\nbc f: dot(k*grad(T) + k*grad(T) + k*grad(T) + k*grad(T) + k*grad(T), n) = 0 W/m^2\n"));
+    expect_free("a sum flux", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T) + k * grad(T)) = 0 W/m^3\n}\nbc f: T = 300 K\n"),
+                "T,boundary(b) - f,(k * grad(T) + k * grad(T))*n = 0\n");
     expect_free("a symmetry plane", str(elastic, "let sym: Surface = boundary(b, y == 0 m)\nbc f: u = 0\nbc sym: u.y = 0 m\n"),
                 "u,boundary(b) - f - sym,sigma*n = 0\nu.x,sym,(sigma*n).x = 0\nu.z,sym,(sigma*n).z = 0\n");
     expect_id("method_missing", str(H, SOLID, "\nmesh m2 on b { size: 0.2 m }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n"));
