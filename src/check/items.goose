@@ -43,7 +43,7 @@ fn add_builtins() {
         if name == "pi" { t = base_ty(B_REAL); }
         if name == "x" || name == "y" || name == "z" { t = num_ty(LENGTH, 0); t.varying = true; }
         if name == "t" { t = num_ty(TIME, 0); t.varying = true; }
-        if name == "n" { t = num_ty(NO_DIM, 1); t.varying = true; }
+        if name == "n" || name == "tau" { t = num_ty(NO_DIM, 1); t.varying = true; }
         if name == "im" { t = base_ty(B_REAL); t.num = NS_COMPLEX; }
         if name == "dual_eps" { t = base_ty(B_REAL); t.num = NS_DUAL; }
         syms.push(Sym { kind: S_BUILTIN, tok: -1, node: -1, ty: t, has_val: false, val: 0.0, phys: -1 });

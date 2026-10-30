@@ -33,6 +33,11 @@ gives the roadmap phase that closes the gap:
   specification.
 - Each other gap closes in the phase that builds its solver or its physics.
   A gap that blocks a case closes when its phase adds the model of the case.
+- The shell, beam and laminate lane closes G3 before phase 5. Spec
+  [§4.3](skein_spec.md#43-shells-beams-and-laminates) states the shell template, and `src/shells/` solves it. The new model
+  [scordelis_lo_roof.skn](../examples/femahoy/scordelis_lo_roof.skn) and
+  the thin plate of
+  [laminate_pagano.skn](../examples/femahoy/laminate_pagano.skn) use it.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -45,7 +50,7 @@ Skein cannot state the core physics of these cases, so they have no model.
 |---|---|---|---|---|---|
 | G1 | Topology optimization: a density for each cell, SIMP, a sensitivity filter, an optimality criteria update, a volume limit. Then a solid from the density at 0.5. | `validation/cases/topology-mbb-beam/derivation.md:24`, `validation/cases/topology-mbb-beam-cad/derivation.md:23` | `minimize` (§20.2) varies only a few `param` values, and a `param` is a constant (§20.1). Geometry comes only from CSG of constants (§8). | A study procedure `topology(objective, region, volume, penalty, filter)`, and a geometry function `level(f, c)`: the region where a `Results` field `f` is `c` or more. | 5 |
 | G2 | Random vibration: a modal damping ratio, a PSD input and the RMS response over a frequency band. | `validation/cases/random-vibration-cantilever/job.inp:14`, `:25`, `check.toml:9` | `harmonic` (§14.2) has no damping ratio for each mode, and no report function integrates over the frequencies of a step (§14.5). Also needs G8 and G9. | A `harmonic` argument `damping: Real`, and a report function `rms(f, psd)` over the frequencies of the step. | 4 |
-| G3 | Shells (`S8R`, `S6`), also a composite shell section with plies. | `validation/cases/scordelis-lo-roof/job.inp:26`, `validation/cases/laminate-pagano/job.inp:16` | §4.2 names `reissner_mindlin(t)`, but gives no source, no types of `w` and `theta`, and no load argument. Its parameter `t` is also the built-in time. The thin plate of `laminate-pagano` is missing from its model. | Give the template source in §4.2, with a parameter `h: Length`, a load argument, typed unknowns and an optional `layup` table of plies (thickness, angle, material). | 5 |
+| G3 | Shells (`S8R`, `S6`), also a composite shell section with plies. | `validation/cases/scordelis-lo-roof/job.inp:26`, `validation/cases/laminate-pagano/job.inp:16` | §4.2 names `reissner_mindlin(t)`, but gives no source, no types of `w` and `theta`, and no load argument. Its parameter `t` is also the built-in time. The thin plate of `laminate-pagano` is missing from its model. | Give the template source in §4.2, with a parameter `h: Length`, a load argument, typed unknowns and an optional `layup` table of plies (thickness, angle, material). | 5, closed by [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
 | G4 | A perfect electric conductor on a curved wall: only the tangential part of the field is zero. | `validation/cases/grid-coax-tem/coax/grid.toml:1` | The left side of an essential `bc` is an unknown or a component of it (§12.1). A component is along x, y or z, not along the wall. | Accept `cross(n, u)` as the left side of an essential condition. | 5 |
 | G5 | A least-squares curve fit to 40 points. | `validation/cases/fit-nist-pontius/pontius/fit.toml:4` | A table feeds only `interp` and the rows of an `expect` (§5.6, §15.3). No construct sums an expression over the rows. `minimize` has no gradients, so it cannot get to a relative error of 1e-10. | A function `sum(expr)` over the rows of a table. A `nondim` model can then state the normal equations. Or: state that a curve fit is not a Skein model. | 2 |
 
@@ -152,7 +157,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Grid parts with `priority` over other parts | grid-fibre-composite-cell, grid-waveguide-dielectric | `-` and `material a on r1, b on r2` | [§8.4](skein_spec.md#84-region-algebra), [§10.3](skein_spec.md#103-physics) |
 | Node sets, element sets and surfaces (`*NSET`, `*ELSET`, `*SURFACE`), face sets of the grid solver | each case | `boundary(g, s)` with a condition of `x`, `y`, `z`, or with a shape | [§8.2](skein_spec.md#82-regions) |
 | A point (a node set of 1 node, a probe) | grid-lame-cylinder, warpage-2p5d-frame, grid-heated-block-stress-ccx | `point(p)` of type `Point` | [§8.3](skein_spec.md#83-lower-dimension-entities) |
-| A curved shell surface | scordelis-lo-roof | `boundary(cylinder(...), ...)` of type `Surface` | [§8.3](skein_spec.md#83-lower-dimension-entities), gap [G3](#gaps-that-block-a-case) |
+| A curved shell surface | scordelis-lo-roof | `boundary(cylinder(...), ...)` of type `Surface` | [§8.3](skein_spec.md#83-lower-dimension-entities), [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
 | Spline airfoils, a superellipse hole | naca0012-ladson, naca23012-flap, shape-hole-biaxial | `polygon` through the points | gaps [G24](#gaps-that-change-the-discretization-or-the-physics) and [G30](#gaps-that-make-a-model-fail-check) |
 | A solid from a density field | topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
 
@@ -169,7 +174,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Plane strain elements (`CPE4`, `CPE6`, `CPE8`, `CPE8R`) | submodel-kirsch-hole, fracture-centre-crack, contact-cattaneo, hyperelastic-tube, topology-mbb-beam | header `2d`, `cell: tri`, `assume plane_strain(th)` | [§3](skein_spec.md#3-grammar), [§9.1](skein_spec.md#91-mesh), [§11.1](skein_spec.md#111-assumption-table) |
 | Plane stress elements (`CPS6`) | shape-hole-biaxial | `assume plane_stress(th)` | [§11.1](skein_spec.md#111-assumption-table), [§11.2](skein_spec.md#112-how-plane_stress-reduces-a-3d-law) |
 | Quarter-point cells at a crack tip | fracture-centre-crack | `refine tip: size` | gap [G20](#gaps-that-change-the-discretization-or-the-physics) |
-| Shell elements (`S8R`, `S6`), a composite shell section | scordelis-lo-roof, laminate-pagano | the `reissner_mindlin` template on a `Surface` | [§4.2](skein_spec.md#42-the-standard-library), [§8.3](skein_spec.md#83-lower-dimension-entities), gap [G3](#gaps-that-block-a-case) |
+| Shell elements (`S8R`, `S6`), a composite shell section | scordelis-lo-roof, laminate-pagano | the `reissner_mindlin` template on a `Surface`, with a `layup` table for a composite section | [§4.3](skein_spec.md#43-shells-beams-and-laminates), [§8.3](skein_spec.md#83-lower-dimension-entities) |
 | First-order edge elements | grid-waveguide-te10, grid-waveguide-dielectric, grid-waveguide-step, grid-cavity-te101, team7-eddy-current, dipole-king-middleton | `method p: cg { order: 1, family: nedelec }` | [§13](skein_spec.md#13-methods) |
 | Triangles of the line solver | line-coax, line-stripline, line-wire-skin, line-bars-getdp | header `2d`, `cell: tri`, `order: 1` | [§9.1](skein_spec.md#91-mesh), [§13](skein_spec.md#13-methods) |
 | OpenFOAM cells and schemes (`Gauss linear`, `linearUpwind`, `vanLeer`, Rhie-Chow) | cavity-devahldavis, cht-heated-channel, dam-break-vof, naca0012-ladson, naca23012-flap, wedge-oblique-shock, turek-hron-fsi1 | `method p: fv { gradient, flux, limiter, pv_coupling }` | [§13](skein_spec.md#13-methods), [§17.3](skein_spec.md#173-finite-volume-fv) |
@@ -243,7 +248,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A traction vector on a face | grid-cantilever, grid-kirsch-hole, grid-round-cantilever | `bc r: sigma*n = (...)` | [§12.1](skein_spec.md#121-form) |
 | A traction that varies along a face | laminate-pagano, contact-cattaneo | `sigma*n` with a function of `x`, `y` | [§7.6](skein_spec.md#76-coordinates-and-time), [§12.1](skein_spec.md#121-form) |
 | `*CLOAD` at a node | cantilever-2step, topology-mbb-beam, contact-cattaneo | a traction with the same resultant | gap [G16](#gaps-that-remove-a-check) |
-| `*DLOAD, GRAV` | birth-death-column, scordelis-lo-roof | the template argument `b: rho*(0, 0, -g)` | [§4.2](skein_spec.md#42-the-standard-library), gap [G3](#gaps-that-block-a-case) |
+| `*DLOAD, GRAV` | birth-death-column, scordelis-lo-roof | the template argument `b: rho*(0, 0, -g)` | [§4.2](skein_spec.md#42-the-standard-library), [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
 | Gravity on a fluid | cavity-devahldavis, dam-break-vof, dam-break-martin-moyce | a body force term in `eq` | [§10.3](skein_spec.md#103-physics) |
 | `*TEMPERATURE` and a uniform temperature of the grid solver | warpage-2p5d-frame, warpage-thick-copper, grid-bimetal-strip, grid-constrained-block | a constant `T` in the thermal strain | [§10.4](skein_spec.md#104-coupling) |
 | A temperature field from a heat solve | grid-heated-block-stress-ccx | the unknown `T` of the heat physics in the thermal strain | [§10.4](skein_spec.md#104-coupling) |
@@ -383,7 +388,7 @@ tests read the fixture.
 | `validation/cases/optics-mie-cylinder` | [optics_mie_cylinder.skn](../examples/femahoy/optics_mie_cylinder.skn) |
 | `validation/cases/plasticity-sphere` | [plasticity_sphere.skn](../examples/femahoy/plasticity_sphere.skn) |
 | `validation/cases/random-vibration-cantilever` | none: gap [G2](#gaps-that-block-a-case) |
-| `validation/cases/scordelis-lo-roof` | none: gap [G3](#gaps-that-block-a-case) |
+| `validation/cases/scordelis-lo-roof` | [scordelis_lo_roof.skn](../examples/femahoy/scordelis_lo_roof.skn) |
 | `validation/cases/shape-hole-biaxial` | [shape_hole_biaxial.skn](../examples/femahoy/shape_hole_biaxial.skn) |
 | `validation/cases/slider-crank` | [slider_crank.skn](../examples/femahoy/slider_crank.skn) |
 | `validation/cases/submodel-kirsch-hole` | [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn), [submodel_kirsch_hole_global.skn](../examples/femahoy/submodel_kirsch_hole_global.skn) |

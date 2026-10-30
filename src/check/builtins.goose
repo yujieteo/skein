@@ -125,7 +125,8 @@ fn builtin_ty(tok: i64, name: u8[:], a: Args) -> Ty {
     var listed = false;
     for i in min(a.count, MAX_ARGS) { listed = listed || a.ty[i].list; }
     var r = builtin_ty_inner(tok, name, a, t0, t1, v);
-    if is_num(r) { r.list = r.list || listed; }
+    // laminate sums over the plies of its layup column (spec §4.3).
+    if is_num(r) && name != "laminate" { r.list = r.list || listed; }
     return r;
 }
 
@@ -323,6 +324,54 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         if name == "ddt2" { r.dim = t0.dim - dim_pow(TIME, 2); }
         return r;
     }
+    // Shells and beams (spec §4.3).
+    if name == "along" {
+        guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }
+        var r = same(t0, true);
+        r.dim = t0.dim - LENGTH;
+        return r;
+    }
+    if name == "tangent" {
+        guard arity(tok, name, a, 2, 2) && !is_any(t0) && is_num(t0) else { return any_ty(); }
+        if t0.rank != 1 && t0.rank != 2 {
+            error(tok, "rank_mismatch", str("tangent takes a vector or a Tensor2, not ", ty_str(t0)),
+                  "give tangent a vector or a Tensor2 field");
+            return any_ty();
+        }
+        want_rank(tok, name, a, 1, 1);
+        want_dimless(tok, name, a, 1);
+        return same(t0, v);
+    }
+    if name == "ply_stiffness" {
+        guard arity(tok, name, a, 4, 4) && !is_any(t0) && is_num(t0) else { return any_ty(); }
+        for i in 1..3 { sum_ty(first_tok(a.node[i]), t0, a.ty[i], ","); }
+        want_dimless(tok, name, a, 3);
+        var r = num_ty(t0.dim, 4);
+        r.varying = v;
+        return r;
+    }
+    if name == "laminate" {
+        guard arity(tok, name, a, 8, 8) && !is_any(t0) && want_rank(tok, name, a, 0, 4) else { return any_ty(); }
+        let k, known = const_value(a.node[7]);
+        guard known && (k == 0.0 || k == 1.0 || k == 2.0) else {
+            error(first_tok(a.node[7]), "type_mismatch", "the moment of laminate is not 0, 1 or 2",
+                  "give 0 for A, 1 for B or 2 for D");
+            return any_ty();
+        }
+        want_length(name, a.ty[3], a.node[3], 3);
+        want_length(name, a.ty[4], a.node[4], 4);
+        var r = num_ty(t0.dim + dim_pow(LENGTH, k as i64 + 1), 4);
+        r.varying = v;
+        return r;
+    }
+    if name == "argmax" {
+        // argmax(f, r): the point of the largest value of `f` on region `r` (spec §14.5).
+        guard arity(tok, name, a, 2, 2) && want_geom(tok, name, a, 1) && !is_any(t0) else { return any_ty(); }
+        if is_num(t0) && t0.rank != 0 {
+            error(tok, "rank_mismatch", str("argmax takes a scalar, not ", ty_str(t0)), "take argmax of a scalar, for example norm(u)");
+        }
+        return num_ty(LENGTH, 1);
+    }
     // Complex parts (gap G7).
     if name == "re" || name == "imag" || name == "arg" || name == "conj" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }
@@ -425,7 +474,11 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     if name == "shell" || name == "pattern" || name == "pattern_polar" || name == "fillet" ||
        name == "chamfer" || name == "move" || name == "rotate" || name == "scale" {
         guard arity(tok, name, a, 2, 3) && want_geom(tok, name, a, 0) else { return any_ty(); }
-        return t0;
+        // A pattern keeps its copies: max(f, r) on it gives one value for
+        // each copy (spec §14.5).
+        var r = t0;
+        if name == "pattern" || name == "pattern_polar" { r.list = true; }
+        return r;
     }
     return any_ty();
 }

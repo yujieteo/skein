@@ -1,0 +1,63 @@
+// femahoy: validation/cases/scordelis-lo-roof/job.inp
+// The Scordelis-Lo roof of MacNeal and Harder (1985): a cylindrical shell,
+// R = 25 ft, L = 50 ft, 40 deg on each side of the crown, t = 0.25 ft,
+// E = 4.32e8 lb/ft², nu = 0, under its weight of 90 lb/ft², with a rigid
+// diaphragm at each end. In mm: the reference vertical displacement at the
+// middle of each free edge is -302.4 mm, within 1 % (check.toml).
+
+model scordelis_lo_roof: 3d, mm_N_MPa_s
+
+let R: Length = 25000 mm
+let L: Length = 50000 mm
+let t_roof: Length = 250 mm
+let E_c: Pressure = 432 MPa
+// The weight of the femahoy case: 90 lb/ft² is 9.0e-5 MPa of the shell area.
+let q_w: Pressure = 9.0e-5 MPa
+let half: Angle = 40 deg
+
+scales R, E_c
+
+let barrel: Solid = cylinder((0, 0, 0) mm, (1, 0, 0), R, L)
+let roof: Surface = boundary(barrel, y^2 + z^2 == R^2 && z >= R*cos(half))
+let end0: Curve = boundary(roof, x == 0 mm)
+let end1: Curve = boundary(roof, x == L)
+let tip: Point = point((L/2, R*sin(half), R*cos(half)))
+
+material concrete {
+    E1: Pressure = E_c
+    E2: Pressure = E_c
+    G12: Pressure = E_c/2
+    nu12: Real = 0
+    t_ply: Length = t_roof
+    h: Length = t_roof
+}
+
+mesh m on roof {
+    size: 1000 mm
+    cell: quad
+}
+
+physics roof_shell on roof: reissner_mindlin(
+    top: n,
+    q: (0 MPa, 0 MPa, -q_w),
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material concrete
+}
+
+method roof_shell: cg { mesh: m, order: 1 }
+
+// Each end is a rigid diaphragm in its plane. w.x = 0 at the tip blocks
+// the motion along x.
+bc end0: w.y = 0
+bc end0: w.z = 0
+bc end1: w.y = 0
+bc end1: w.z = 0
+bc tip: w.x = 0
+
+step load: static {
+    output w
+    report tip_z = w.z at (L/2, R*sin(half), R*cos(half))
+}
+
+expect tip_deflection_z: w.z at (L/2, R*sin(half), R*cos(half)) == -302.4 mm within 1%

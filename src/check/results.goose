@@ -63,7 +63,8 @@ fn results_ty(tok: i64, file: i64, step: i64) -> Ty {
         if k.kind == syntax::N_PHYSICS {
             var c = k.first;
             while c >= 0 {
-                if syntax::nodes[c].kind == syntax::N_UNKNOWN {
+                // The unknowns and the `let` fields of the physics (spec §15.1).
+                if syntax::nodes[c].kind == syntax::N_UNKNOWN || syntax::nodes[c].kind == syntax::N_LET {
                     var t = type_of(syntax::nodes[c].first, false);
                     t.varying = true;
                     result_fields.push(ResultField { res: res, name: key(syntax::text(syntax::nodes[c].tok)), ty: t });
