@@ -158,12 +158,13 @@ fn check_physics(n: i64) {
     cur_phys = physics.len - 1;
     assumed.clear();
     var uses = -1;
+    var rty = any_ty();
     var c = k.first;
     while c >= 0 {
         let ck = syntax::nodes[c];
         if ck.kind == syntax::N_ON {
             physics[cur_phys].region = ck.first;
-            region_ty(ck.first);
+            rty = region_ty(ck.first);
         }
         if ck.kind == syntax::N_USES { uses = c; }
         c = ck.next;
@@ -213,7 +214,16 @@ fn check_physics(n: i64) {
         c = syntax::nodes[c].next;
     }
     var eqs = 0;
-    if uses >= 0 { check_uses(uses, eqs); }
+    if uses >= 0 {
+        check_uses(uses, eqs);
+        // A shell is on a Surface and a beam is on a Curve (spec §4.3).
+        let ut = syntax::nodes[uses].tok;
+        let want = if tok_text(ut) == "reissner_mindlin" { 2 } else if tok_text(ut) == "timoshenko" { 1 } else { -1 };
+        if want >= 0 && rty.kind == K_GEOM && rty.geo != want {
+            error(ut, "geometry_dim", str("'", tok_text(ut), "' needs a ", GEO_NAMES[want], ", but the region is a ", GEO_NAMES[rty.geo]),
+                  str("put the physics on a ", GEO_NAMES[want]));
+        }
+    }
     c = k.first;
     while c >= 0 {
         if syntax::nodes[c].kind == syntax::N_EQN && uses >= 0 {

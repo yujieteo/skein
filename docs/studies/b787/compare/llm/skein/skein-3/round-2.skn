@@ -1,316 +1,191 @@
-model b787_fwd_fuselage: 3d, SI
-// Boeing 787 forward fuselage barrel under ultimate cabin pressure, with the
-// left (+y) Type A door 2 cutout. This is a quarter model (0 <= x <= L,
-// 0 <= theta <= 180 deg), and the door-corner refinement stands in for the
-// submodel (section 6.4).
+// Boeing 787 forward fuselage barrel under ultimate cabin pressure.
+// Quarter model: 0 <= x <= 6.096 m, 0 deg <= theta <= 180 deg (y >= 0).
+// Includes a Type A door cutout at x = 0, theta = 75 deg.
 //
-// HOW THIS MODEL DIFFERS FROM THE SHEET (Skein has only the solid
-// linear_elastic template: no shells, no laminates, no offset beams, and no
-// global-to-local submodel transfer):
-//  * The skin and the pad-up are thin 3D solids, centred on the mid-surface
-//    radius R. They use the isotropic quasi-isotropic in-plane values
-//    (sec. 3.3), so the membrane stiffness is exact. The bending stiffness is
-//    that of a homogeneous plate of the same thickness.
-//  * Frames are solid rectangular rings on the inner skin face, with the
-//    exact area A and the exact centroid offset 0.07415 m. The radial I is
-//    1.23e-6 m^4 here, against 2.237e-6 in the sheet.
-//  * Stringers are round solid rods of the exact area A. They overlap the
-//    skin by 0.5 mm. Their centroid offset is 9.80 mm, against 17.50 mm in
-//    the sheet. EA is exact, so the stringer share of the axial load (check
-//    C2) is kept.
-//  * Membrane values are read on the skin mid-surface (radius R). Bending is
-//    linear through the thickness, so the mid-surface value is the membrane
-//    value.
-//  * Submodel: one run refines the mesh at the upper aft door corner
-//    (5 mm on the cutout edge, 20 mm in the 0.6 m square). This is in place
-//    of a driven submodel. Study "submodel" runs h_edge = 50 mm (the global
-//    mesh) and h_edge = 5 mm (the submodel mesh). Check C6 compares the two
-//    runs.
-//  * Elements: tetrahedra, continuous Galerkin, order 2.
+// Gaps between the problem sheet and the Skein features on the language card:
+//  - Stringers and frames (section 4): the card has no beam elements, so
+//    the barrel is plain skin. C1 still falls in its range (at the upper
+//    end). C2 is expected near p_U*R/(2t) = 30.7 MPa, which is about 7 %
+//    above the sheet value of 28.7 MPa, so expect c2 will fail. The beam
+//    forces of output 3 cannot be reported.
+//  - Pad-up (section 2.4): one physics block takes one laminate, so the
+//    whole skin is [45/0/-45/90]3s.
+//  - Submodel (section 6.4): the card has no submodel or field-driven
+//    boundary. The global mesh is refined instead: 5 mm on the cutout edge
+//    and 20 mm in the 0.6 m x 0.6 m corner square. The corner result is
+//    then the global result, so C6 holds by construction. The C6 strains
+//    are still reported.
+//  - Output 1 asks for the point of the maximum. The card has no argmax,
+//    so only the value is reported.
+//  - Element order: MITC4 shell quads, order 1.
 
-// ---------------- Values ----------------
-let L: Length = 6.096 m                  // quarter-model length, 10 frame pitches
-let R: Length = 2.883 m                  // skin mid-surface radius
-let t_skin: Length = 4.584 mm            // [45/0/-45/90]3s
-let t_pad: Length = 9.168 mm             // [45/0/-45/90]6s
-let w_pad: Length = 0.150 m              // pad-up band width
-let big: Length = 3.2 m                  // bounding size for cutting boxes
+model fuselage_787: 3d, SI
 
-let E_qi: Pressure = 55.85 GPa           // QI laminate in-plane modulus (sec. 3.3)
-let nu_qi: Real = 0.326
-
-let A_str: Area = 2.016e-4 m^2
-let A_frm: Area = 7.148e-4 m^2
-let e_frm: Length = 0.07415 m            // frame centroid offset from the mid-surface
-let d_frm: Length = 2*(e_frm - t_skin/2) // ring depth, keeps the centroid offset exact
-let b_frm: Length = A_frm/d_frm          // ring axial width, keeps the area exact
-let r_str: Length = 8.011 mm             // rod radius, pi*r^2 = A_str
-let rc_s: Length = R - t_skin/2 - r_str + 0.5 mm   // rod centre radius
-
-// Door: 1.067 x 1.829 m, corner radius 0.178 m, centre x = 0, theta = 75 deg
-let a_d: Length = 0.5334 m               // aft edge x
-let r_c: Length = 0.178 m                // corner radius
-let x_cc: Length = 0.3554 m              // corner-centre x
-let z_u: Length = 1.57755 m              // R cos(56.8255 deg), upper edge
-let z_l: Length = -0.15965 m             // R cos(93.1745 deg), lower edge
-let z_cu: Length = 1.42565 m             // R cos(60.3631 deg), upper corner centre
-let z_cl: Length = 0.01827 m             // R cos(89.6369 deg), lower corner centre
-let z_pu: Length = 1.70091 m             // pad-up upper edge, theta = 53.844 deg
-let z_pl: Length = -0.30911 m            // pad-up lower edge, theta = 96.155 deg
-
-// Loads (sec. 6.2)
-param p_L: Pressure = 65.0 kPa in 10 kPa..100 kPa
-let p_U: Pressure = 1.5*p_L              // ultimate, 25.303
-let q_end: Force/Length = p_U*R/2        // end closure, 140.5 kN/m
-let p_in: Pressure = p_U*R/(R - t_skin/2) // inner-face pressure that gives the mid-surface resultant
-
-// Mesh size on the door-corner cutout edge (5 mm = submodel, 50 mm = global)
-param h_edge: Length = 5 mm in 5 mm..50 mm
+// ---------------- parameters ----------------
+let R: Length = 2.883 m
+let L: Length = 6.096 m
+let p_L: Pressure = 65.0 kPa
+param p_U: Pressure = 97.5 kPa in 10 kPa..200 kPa
+let t_skin: Length = 4.584 mm
+let eps_allow: Real = 4000e-6
 
 scales R, p_U
 
-// ---------------- Geometry ----------------
-let qbox: Solid = box((0, 0, -big), (L, big, big))
+// ---------------- door cutout (section 2.3) ----------------
+// Edges: x = +-0.5334 m. s = 2.8593 to 4.6883 m (theta = 56.83 to 93.17 deg).
+// Corner radius 0.178 m. Corner centres at x_c = 0.3554 m.
+// The upper corner centre is at s = 3.0373 m and the lower at s = 4.5103 m.
+// On y >= 0, a band in theta is a band in z, because z = R cos(theta) is
+// monotonic there.
+// Each corner is the set of skin points within 3D distance r_c of the corner
+// centre on the skin. The chord-versus-arc error is about 3e-5 m.
+let x_d: Length = 0.5334 m
+let r_c: Length = 0.178 m
+let x_c: Length = 0.3554 m
+let z_hi: Length = 1.577583 m
+let z_lo: Length = -0.159614 m
+let y_cu: Length = 2.505814 m
+let z_cu: Length = 1.425681 m
+let y_cl: Length = 2.882942 m
+let z_cl: Length = 0.018304 m
 
-let skin_tube: Solid = (cylinder((0, 0, 0) m, (1, 0, 0), R + t_skin/2, L) - cylinder((0, 0, 0) m, (1, 0, 0), R - t_skin/2, L)) & qbox
+// The same cutout as a solid, used only to pick out the cutout edge curve
+let door: Solid = box((-1 m, 0 m, z_lo), (x_c, 2*R, z_hi)) | box((-1 m, 0 m, z_cl), (x_d, 2*R, z_cu)) | sphere((x_c, y_cu, z_cu), r_c) | sphere((x_c, y_cl, z_cl), r_c)
 
-// Door cutout (rounded rectangle in the x-s plane). The z planes give the
-// theta edges exactly at radius R. The corners are radial cylinders.
-let door_a: Solid = box((-0.1 m, 0 m, z_cl), (a_d, big, z_cu))
-let door_b: Solid = box((-0.1 m, 0 m, z_l), (x_cc, big, z_u))
-let door_cu: Solid = cylinder((x_cc, 2.288543 m, 1.302024 m), (0, 0.869177, 0.494502), r_c, 0.4 m)
-let door_cl: Solid = cylinder((x_cc, 2.632947 m, 0.016685 m), (0, 0.999980, 0.006337), r_c, 0.4 m)
-let door: Solid = door_a | door_b | door_cu | door_cl
+// ---------------- barrel skin ----------------
+// The shell is written directly on the named cylinder. The cutout is removed by the !(...) condition.
+let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
+let wall: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && !((x <= x_c && z >= z_lo && z <= z_hi) || (x <= x_d && z >= z_cl && z <= z_cu) || (x - x_c)^2 + (y - y_cu)^2 + (z - z_cu)^2 <= r_c^2 || (x - x_c)^2 + (y - y_cl)^2 + (z - z_cl)^2 <= r_c^2))
 
-// Pad-up: the band within 0.150 m of the cutout edge, at the same mid-surface
-let pad_a: Solid = box((-0.1 m, 0 m, z_cl), (a_d + w_pad, big, z_cu))
-let pad_b: Solid = box((-0.1 m, 0 m, z_pl), (x_cc, big, z_pu))
-let pad_cu: Solid = cylinder((x_cc, 2.288543 m, 1.302024 m), (0, 0.869177, 0.494502), r_c + w_pad, 0.4 m)
-let pad_cl: Solid = cylinder((x_cc, 2.632947 m, 0.016685 m), (0, 0.999980, 0.006337), r_c + w_pad, 0.4 m)
-let pad: Solid = (cylinder((0, 0, 0) m, (1, 0, 0), R + t_pad/2, L) - cylinder((0, 0, 0) m, (1, 0, 0), R - t_pad/2, L)) & (pad_a | pad_b | pad_cu | pad_cl) & qbox
+// Sides and points
+let x0: Curve = boundary(wall, x == 0 m)
+let ysym: Curve = boundary(wall, y == 0 m)
+let x_end: Curve = boundary(wall, x == L)
+let door_edge: Curve = boundary(wall, door)
+let bottom: Point = point((0 m, 0 m, -R))
 
-// Frames: x = 0.3048 + 0.6096 k, k = 0..9
-let band: Solid = (cylinder((0, 0, 0) m, (1, 0, 0), R - t_skin/2, L) - cylinder((0, 0, 0) m, (1, 0, 0), R - t_skin/2 - d_frm, L)) & qbox
-let fr01: Solid = (band & box((0.3048 m - b_frm/2, 0 m, -big), (0.3048 m + b_frm/2, big, big))) - door
-let fr02: Solid = band & box((0.9144 m - b_frm/2, 0 m, -big), (0.9144 m + b_frm/2, big, big))
-let fr03: Solid = band & box((1.5240 m - b_frm/2, 0 m, -big), (1.5240 m + b_frm/2, big, big))
-let fr04: Solid = band & box((2.1336 m - b_frm/2, 0 m, -big), (2.1336 m + b_frm/2, big, big))
-let fr05: Solid = band & box((2.7432 m - b_frm/2, 0 m, -big), (2.7432 m + b_frm/2, big, big))
-let fr06: Solid = band & box((3.3528 m - b_frm/2, 0 m, -big), (3.3528 m + b_frm/2, big, big))
-let fr07: Solid = band & box((3.9624 m - b_frm/2, 0 m, -big), (3.9624 m + b_frm/2, big, big))
-let fr08: Solid = band & box((4.5720 m - b_frm/2, 0 m, -big), (4.5720 m + b_frm/2, big, big))
-let fr09: Solid = band & box((5.1816 m - b_frm/2, 0 m, -big), (5.1816 m + b_frm/2, big, big))
-let fr10: Solid = band & box((5.7912 m - b_frm/2, 0 m, -big), (5.7912 m + b_frm/2, big, big))
-let frames: Solid = fr01 | fr02 | fr03 | fr04 | fr05 | fr06 | fr07 | fr08 | fr09 | fr10
+// Corner square of section 6.4. It is centred on (x_c, s = 3.0373 m) and
+// spans x = 0.0554..0.6554 m and s = 2.7373..3.3373 m (z = 1.157695..1.678252 m).
+let corner_zone: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x >= 0.0554 m && x <= 0.6554 m && z >= 1.157695 m && z <= 1.678252 m && !((x <= x_c && z >= z_lo && z <= z_hi) || (x <= x_d && z >= z_cl && z <= z_cu) || (x - x_c)^2 + (y - y_cu)^2 + (z - z_cu)^2 <= r_c^2))
 
-// Stringers: theta = 2 + 4 k deg, k = 0..44; centre (0, rc_s sin, rc_s cos)
-let s00: Solid = cylinder((0, 0.034899*rc_s, 0.999391*rc_s), (1, 0, 0), r_str, L)
-let s01: Solid = cylinder((0, 0.104528*rc_s, 0.994522*rc_s), (1, 0, 0), r_str, L)
-let s02: Solid = cylinder((0, 0.173648*rc_s, 0.984808*rc_s), (1, 0, 0), r_str, L)
-let s03: Solid = cylinder((0, 0.241922*rc_s, 0.970296*rc_s), (1, 0, 0), r_str, L)
-let s04: Solid = cylinder((0, 0.309017*rc_s, 0.951057*rc_s), (1, 0, 0), r_str, L)
-let s05: Solid = cylinder((0, 0.374607*rc_s, 0.927184*rc_s), (1, 0, 0), r_str, L)
-let s06: Solid = cylinder((0, 0.438371*rc_s, 0.898794*rc_s), (1, 0, 0), r_str, L)
-let s07: Solid = cylinder((0, 0.500000*rc_s, 0.866025*rc_s), (1, 0, 0), r_str, L)
-let s08: Solid = cylinder((0, 0.559193*rc_s, 0.829038*rc_s), (1, 0, 0), r_str, L)
-let s09: Solid = cylinder((0, 0.615661*rc_s, 0.788011*rc_s), (1, 0, 0), r_str, L)
-let s10: Solid = cylinder((0, 0.669131*rc_s, 0.743145*rc_s), (1, 0, 0), r_str, L)
-let s11: Solid = cylinder((0, 0.719340*rc_s, 0.694658*rc_s), (1, 0, 0), r_str, L)
-let s12: Solid = cylinder((0, 0.766044*rc_s, 0.642788*rc_s), (1, 0, 0), r_str, L)
-let s13: Solid = cylinder((0, 0.809017*rc_s, 0.587785*rc_s), (1, 0, 0), r_str, L)
-let s14: Solid = cylinder((0, 0.848048*rc_s, 0.529919*rc_s), (1, 0, 0), r_str, L) - door
-let s15: Solid = cylinder((0, 0.882948*rc_s, 0.469472*rc_s), (1, 0, 0), r_str, L) - door
-let s16: Solid = cylinder((0, 0.913545*rc_s, 0.406737*rc_s), (1, 0, 0), r_str, L) - door
-let s17: Solid = cylinder((0, 0.939693*rc_s, 0.342020*rc_s), (1, 0, 0), r_str, L) - door
-let s18: Solid = cylinder((0, 0.961262*rc_s, 0.275637*rc_s), (1, 0, 0), r_str, L) - door
-let s19: Solid = cylinder((0, 0.978148*rc_s, 0.207912*rc_s), (1, 0, 0), r_str, L) - door
-let s20: Solid = cylinder((0, 0.990268*rc_s, 0.139173*rc_s), (1, 0, 0), r_str, L) - door
-let s21: Solid = cylinder((0, 0.997564*rc_s, 0.069756*rc_s), (1, 0, 0), r_str, L) - door
-let s22: Solid = cylinder((0, 1.000000*rc_s, 0), (1, 0, 0), r_str, L) - door
-let s23: Solid = cylinder((0, 0.997564*rc_s, -0.069756*rc_s), (1, 0, 0), r_str, L)
-let s24: Solid = cylinder((0, 0.990268*rc_s, -0.139173*rc_s), (1, 0, 0), r_str, L)
-let s25: Solid = cylinder((0, 0.978148*rc_s, -0.207912*rc_s), (1, 0, 0), r_str, L)
-let s26: Solid = cylinder((0, 0.961262*rc_s, -0.275637*rc_s), (1, 0, 0), r_str, L)
-let s27: Solid = cylinder((0, 0.939693*rc_s, -0.342020*rc_s), (1, 0, 0), r_str, L)
-let s28: Solid = cylinder((0, 0.913545*rc_s, -0.406737*rc_s), (1, 0, 0), r_str, L)
-let s29: Solid = cylinder((0, 0.882948*rc_s, -0.469472*rc_s), (1, 0, 0), r_str, L)
-let s30: Solid = cylinder((0, 0.848048*rc_s, -0.529919*rc_s), (1, 0, 0), r_str, L)
-let s31: Solid = cylinder((0, 0.809017*rc_s, -0.587785*rc_s), (1, 0, 0), r_str, L)
-let s32: Solid = cylinder((0, 0.766044*rc_s, -0.642788*rc_s), (1, 0, 0), r_str, L)
-let s33: Solid = cylinder((0, 0.719340*rc_s, -0.694658*rc_s), (1, 0, 0), r_str, L)
-let s34: Solid = cylinder((0, 0.669131*rc_s, -0.743145*rc_s), (1, 0, 0), r_str, L)
-let s35: Solid = cylinder((0, 0.615661*rc_s, -0.788011*rc_s), (1, 0, 0), r_str, L)
-let s36: Solid = cylinder((0, 0.559193*rc_s, -0.829038*rc_s), (1, 0, 0), r_str, L)
-let s37: Solid = cylinder((0, 0.500000*rc_s, -0.866025*rc_s), (1, 0, 0), r_str, L)
-let s38: Solid = cylinder((0, 0.438371*rc_s, -0.898794*rc_s), (1, 0, 0), r_str, L)
-let s39: Solid = cylinder((0, 0.374607*rc_s, -0.927184*rc_s), (1, 0, 0), r_str, L)
-let s40: Solid = cylinder((0, 0.309017*rc_s, -0.951057*rc_s), (1, 0, 0), r_str, L)
-let s41: Solid = cylinder((0, 0.241922*rc_s, -0.970296*rc_s), (1, 0, 0), r_str, L)
-let s42: Solid = cylinder((0, 0.173648*rc_s, -0.984808*rc_s), (1, 0, 0), r_str, L)
-let s43: Solid = cylinder((0, 0.104528*rc_s, -0.994522*rc_s), (1, 0, 0), r_str, L)
-let s44: Solid = cylinder((0, 0.034899*rc_s, -0.999391*rc_s), (1, 0, 0), r_str, L)
-let stringers: Solid = s00 | s01 | s02 | s03 | s04 | s05 | s06 | s07 | s08 | s09 | s10 | s11 | s12 | s13 | s14 | s15 | s16 | s17 | s18 | s19 | s20 | s21 | s22 | s23 | s24 | s25 | s26 | s27 | s28 | s29 | s30 | s31 | s32 | s33 | s34 | s35 | s36 | s37 | s38 | s39 | s40 | s41 | s42 | s43 | s44
+// Check point P: x = 4.8768 m, theta = 140 deg
+let P: Point = point((4.8768 m, 1.853158 m, -2.208506 m))
+// C6 points: mid-points of the aft edge and the top edge of the corner square
+let P_aft: Point = point((0.6554 m, 2.505814 m, 1.425681 m))
+let P_top: Point = point((0.3554 m, 2.344173 m, 1.678252 m))
 
-let fus: Solid = (skin_tube | pad | stringers | frames) - door
+// ---------------- local directions on the skin ----------------
+let e_x: Vector<Real> = (1, 0, 0)
+let e_t: Vector<Real> = (0, z/R, -y/R)
+let e_r: Vector<Real> = (0, y/R, z/R)
 
-// ---------------- Regions ----------------
-let xsym: Surface = boundary(fus, x == 0 m)
-let ysym: Surface = boundary(fus, y == 0 m)
-// Stands in for the point x = 0, theta = 180 deg: the short radial line
-// through the bottom skin, where x == 0 and y == 0.
-let bottom: Surface = boundary(fus, x == 0 m && y == 0 m && z < 0 m)
-let end_skin: Surface = boundary(fus, x == L && y^2 + z^2 > (R - t_skin/2 - 0.01 mm)^2)
-let cut_faces: Surface = boundary(fus, door)
-// All cabin-side faces (skin, pad, stringers, frames). Excludes the
-// symmetry planes, the end x = L and the cutout faces.
-let wet: Surface = boundary(fus, y > 0 m && x > 0 m && x < L && y^2 + z^2 < (R - t_skin/2 + 0.01 mm)^2) - cut_faces
-// Aft half of the cutout edge: the straight aft edge and the two aft corner
-// arcs (x >= x_cc), through the pad-up thickness
-let door_aft: Surface = boundary(fus, x >= x_cc && y^2 + z^2 > (R - t_pad/2 - 0.01 mm)^2) & cut_faces
-let skin_outer: Surface = boundary(fus, y^2 + z^2 > (R + t_skin/2 - 0.01 mm)^2)
+// ---------------- laminate (sections 1.2, 3.2) ----------------
+// Skin [45/0/-45/90]3s, from the outer face
+table plies{angle: Angle in deg}:
+    45
+    0
+    -45
+    90
 
-// Door-corner "submodel" region: 0.6 x 0.6 m in x-s, centred on (x_c, s_c) = (0.3554, 3.0373)
-let sub_box: Solid = box((0.0554 m, 0 m, 1.15766 m), (0.6554 m, big, 1.67822 m))
-let corner_patch: Solid = fus & sub_box
-let corner_edge: Surface = boundary(corner_patch, door)
-
-// ---------------- Material, mesh, physics ----------------
-material cfrp_qi {
-    E: Pressure = E_qi
-    nu: Real = nu_qi
+material ply {
+    E1: Pressure = 148 GPa
+    E2: Pressure = 10.1 GPa
+    G12: Pressure = 3.94 GPa
+    nu12: Real = 0.32
+    t_ply: Length = 0.191 mm
+    h: Length = 24*0.191 mm
 }
 
-mesh msh on fus {
-    size: 50 mm
-    cell: tet
-    refine corner_patch: 4*h_edge
-    refine corner_edge: h_edge
+// ---------------- mesh (section 6.3, plus the corner refinement) ----------------
+mesh m on wall {
+    size: 0.0508 m
+    cell: quad
+    refine corner_zone: 0.020 m
+    refine door_edge: 0.005 m
 }
 
-physics solid on fus: linear_elastic solves u: Vector<Length> {
-    material cfrp_qi
+// ---------------- physics ----------------
+// Internal pressure p_U acts outward, normal to the mid-surface.
+// It acts on the skin only, so none acts in the cutout.
+physics skin on wall: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: p_U*n) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material ply
+    let w_r: Length = dot(w, e_r)
+    let s_hoop: Pressure = dot(e_t, N*e_t)/h
+    let s_axial: Pressure = dot(e_x, N*e_x)/h
+    let eps_hoop: Real = dot(e_t, eps_m*e_t)
+    let eps_xx: Real = dot(e_x, eps_m*e_x)
+    let eps_xt: Real = dot(e_x, eps_m*e_t)
+    let eps_1: Real = (eps_xx + eps_hoop)/2 + sqrt(((eps_xx - eps_hoop)/2)^2 + eps_xt^2)
 }
 
-method solid: cg { mesh: msh, order: 2 }
+method skin: cg { mesh: m, order: 1 }
 
-// ---------------- Symmetry (sec. 5) ----------------
-bc xsym: u.x = 0
-bc ysym: u.y = 0
-bc bottom: u.z = 0
+// ---------------- symmetry and support (section 5) ----------------
+bc x0: w.x = 0
+bc x0: theta.y = 0
+bc x0: theta.z = 0
+bc ysym: w.y = 0
+bc ysym: theta.x = 0
+bc ysym: theta.z = 0
+bc bottom: w.z = 0
 
-// ---------------- Analysis ----------------
-// Hoop stress: e_theta = (0, z, -y)/r, so
-// s_tt = (z^2 syy - 2yz syz + y^2 szz)/(y^2 + z^2)
+// ---------------- analysis (section 6) ----------------
 step pressurize: static {
-    // 1. Internal pressure, outward (traction = -p n on the cabin-side faces)
-    bc wet: sigma*n = -p_in*n
-    // 2. End closure, p_U R / 2 per unit arc on the skin edge (face area = pi R t)
-    bc end_skin: sigma*n = (q_end/t_skin, 0, 0)
-    // 3. Door load: p_U x_e(s) per unit s, radially outward. ds/dl = -n.x on the aft half.
-    bc door_aft: sigma*n = (0, y, z) * (-n.x * p_U * x / (t_pad * R))
+    // End closure load: p_U R / 2 = 140.5 kN/m along +x
+    bc x_end: N*n = (p_U*R/2, 0, 0)
 
-    output u, sigma, von_mises(sigma), (y*u.y + z*u.z)/(R + t_skin/2), (z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), sigma.xx
+    // Door load per unit length of s is p_U * x_e(s), outward along the radius.
+    // Per unit edge length, this is p_U * x * |n.x|. Here n.x <= 0 on the aft
+    // edge and the aft arcs, and n.x = 0 on the upper and lower edges.
+    bc door_edge: N*n = -p_U*x*n.x*e_r
 
-    // Output 1: radial displacement on the skin outer face. The VTU field gives the point.
-    report ur_max = max((y*u.y + z*u.z)/(R + t_skin/2), skin_outer)
-    report ur_min = min((y*u.y + z*u.z)/(R + t_skin/2), skin_outer)
+    output w, theta, w_r, s_hoop, s_axial, eps_hoop, eps_1
 
-    // Output 2 and checks C1, C2: membrane stresses at P (x = 4.8768, theta = 140 deg, mid-surface)
-    report c1_hoop_P = ((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2)) at (4.8768, 1.853158, -2.208505) m
-    report c1_ratio = (((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2)) at (4.8768, 1.853158, -2.208505) m) / (p_U*R/t_skin)
-    report c2_axial_P = sigma.xx at (4.8768, 1.853158, -2.208505) m
-    report c2_ratio = (sigma.xx at (4.8768, 1.853158, -2.208505) m) / (p_U*R/(2*t_skin))
+    // Output 1: radial displacement
+    report w_r_max = max(w_r, wall)
+    report w_r_min = min(w_r, wall)
 
-    // Output 4 and checks C3 to C5: reactions
-    report reaction(xsym)
+    // Output 2: membrane stresses (the fields are in the output file)
+    report s_hoop_P = s_hoop at P
+    report s_axial_P = s_axial at P
+
+    // Output 4: reaction sums
+    report reaction(x0)
     report reaction(ysym)
     report reaction(bottom)
-    report reaction_sum = reaction(xsym) + reaction(ysym) + reaction(bottom)
+    report R_sum_x = reaction(x0).x + reaction(ysym).x + reaction(bottom).x
+    report R_sum_y = reaction(x0).y + reaction(ysym).y + reaction(bottom).y
+    report R_sum_z = reaction(x0).z + reaction(ysym).z + reaction(bottom).z
 
-    // Output 3: peak axial force in each stringer and peak hoop force in each
-    // frame, as (peak section stress) * A. These are solids, so this is an
-    // upper bound that includes the bending fibre stress.
-    report s00_N = max(sigma.xx, s00) * A_str
-    report s01_N = max(sigma.xx, s01) * A_str
-    report s02_N = max(sigma.xx, s02) * A_str
-    report s03_N = max(sigma.xx, s03) * A_str
-    report s04_N = max(sigma.xx, s04) * A_str
-    report s05_N = max(sigma.xx, s05) * A_str
-    report s06_N = max(sigma.xx, s06) * A_str
-    report s07_N = max(sigma.xx, s07) * A_str
-    report s08_N = max(sigma.xx, s08) * A_str
-    report s09_N = max(sigma.xx, s09) * A_str
-    report s10_N = max(sigma.xx, s10) * A_str
-    report s11_N = max(sigma.xx, s11) * A_str
-    report s12_N = max(sigma.xx, s12) * A_str
-    report s13_N = max(sigma.xx, s13) * A_str
-    report s14_N = max(sigma.xx, s14) * A_str
-    report s15_N = max(sigma.xx, s15) * A_str
-    report s16_N = max(sigma.xx, s16) * A_str
-    report s17_N = max(sigma.xx, s17) * A_str
-    report s18_N = max(sigma.xx, s18) * A_str
-    report s19_N = max(sigma.xx, s19) * A_str
-    report s20_N = max(sigma.xx, s20) * A_str
-    report s21_N = max(sigma.xx, s21) * A_str
-    report s22_N = max(sigma.xx, s22) * A_str
-    report s23_N = max(sigma.xx, s23) * A_str
-    report s24_N = max(sigma.xx, s24) * A_str
-    report s25_N = max(sigma.xx, s25) * A_str
-    report s26_N = max(sigma.xx, s26) * A_str
-    report s27_N = max(sigma.xx, s27) * A_str
-    report s28_N = max(sigma.xx, s28) * A_str
-    report s29_N = max(sigma.xx, s29) * A_str
-    report s30_N = max(sigma.xx, s30) * A_str
-    report s31_N = max(sigma.xx, s31) * A_str
-    report s32_N = max(sigma.xx, s32) * A_str
-    report s33_N = max(sigma.xx, s33) * A_str
-    report s34_N = max(sigma.xx, s34) * A_str
-    report s35_N = max(sigma.xx, s35) * A_str
-    report s36_N = max(sigma.xx, s36) * A_str
-    report s37_N = max(sigma.xx, s37) * A_str
-    report s38_N = max(sigma.xx, s38) * A_str
-    report s39_N = max(sigma.xx, s39) * A_str
-    report s40_N = max(sigma.xx, s40) * A_str
-    report s41_N = max(sigma.xx, s41) * A_str
-    report s42_N = max(sigma.xx, s42) * A_str
-    report s43_N = max(sigma.xx, s43) * A_str
-    report s44_N = max(sigma.xx, s44) * A_str
-    report fr01_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr01) * A_frm
-    report fr02_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr02) * A_frm
-    report fr03_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr03) * A_frm
-    report fr04_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr04) * A_frm
-    report fr05_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr05) * A_frm
-    report fr06_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr06) * A_frm
-    report fr07_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr07) * A_frm
-    report fr08_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr08) * A_frm
-    report fr09_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr09) * A_frm
-    report fr10_N = max((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2), fr10) * A_frm
+    // Outputs 5 to 7: door-edge strain, concentration factor and margin
+    report eps_1_edge_max = max(eps_1, door_edge)
+    report eps_hoop_P = eps_hoop at P
+    report K = max(eps_1, door_edge)/(eps_hoop at P)
+    report MS = eps_allow/max(eps_1, door_edge) - 1
 
-    // Outputs 5 to 7: door corner. The cutout edge is a free edge, so its
-    // stress is uniaxial along the edge, and the max principal strain is
-    // von_mises / E. The VTU field gives the point.
-    report eps_edge_max = max(von_mises(sigma), corner_edge) / E_qi
-    report eps_hoop_P = (((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2) - nu_qi*(sigma.xx + (y^2*sigma.yy + 2*y*z*sigma.yz + z^2*sigma.zz)/(y^2 + z^2)))/E_qi) at (4.8768, 1.853158, -2.208505) m
-    report K_strain = (max(von_mises(sigma), corner_edge) / E_qi) / ((((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2) - nu_qi*(sigma.xx + (y^2*sigma.yy + 2*y*z*sigma.yz + z^2*sigma.zz)/(y^2 + z^2)))/E_qi) at (4.8768, 1.853158, -2.208505) m)
-    report MS_4000ue = 0.004 / (max(von_mises(sigma), corner_edge) / E_qi) - 1
+    // C1 and C2 ratios
+    report C1_ratio = (s_hoop at P)/(p_U*R/t_skin)
+    report C2_ratio = (s_axial at P)/(p_U*R/(2*t_skin))
 
-    // C6: hoop membrane strain at the mid-points of the aft and top edges of
-    // the region. Compare the h_edge = 50 mm run (global) with the
-    // h_edge = 5 mm run (submodel); they must agree within 5 %.
-    report c6_aft_mid = (((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2) - nu_qi*(sigma.xx + (y^2*sigma.yy + 2*y*z*sigma.yz + z^2*sigma.zz)/(y^2 + z^2)))/E_qi) at (0.6554, 2.50584, 1.42565) m
-    report c6_top_mid = (((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2) - nu_qi*(sigma.xx + (y^2*sigma.yy + 2*y*z*sigma.yz + z^2*sigma.zz)/(y^2 + z^2)))/E_qi) at (0.3554, 2.34420, 1.67822) m
+    // C6 strains at the corner-square edge mid-points
+    report eps_hoop_aft_mid = eps_hoop at P_aft
+    report eps_hoop_top_mid = eps_hoop at P_top
 }
 
-// ---------------- Checks (sec. 7.2) ----------------
-// C1: 48.8 MPa .. 61.3 MPa, written as 55.07 MPa +/- 11.35 %
-expect c1_hoop: ((z^2*sigma.yy - 2*y*z*sigma.yz + y^2*sigma.zz)/(y^2 + z^2)) at (4.8768, 1.853158, -2.208505) m == 55.07 MPa within 11.35%
-expect c2_axial: sigma.xx at (4.8768, 1.853158, -2.208505) m == 25.2 MPa within 5%
-expect c3_rx: (reaction(xsym) + reaction(ysym) + reaction(bottom)).x == -1273.0 kN within 0.1%
-// C4: |Rz| < 0.1 % of 1273 kN, written with a shift of 1273 kN
-expect c4_rz: (reaction(xsym) + reaction(ysym) + reaction(bottom)).z + 1273.0 kN == 1273.0 kN within 0.1%
-expect c5_ry: (reaction(xsym) + reaction(ysym) + reaction(bottom)).y == -3427.1 kN within 0.1%
-
-// Global mesh (h_edge = 50 mm) and submodel mesh (h_edge = 5 mm), for C6 and K
-study submodel: grid {
-    h_edge: [50, 5] mm
-}
+// ---------------- checks (section 7.2) ----------------
+// C1: 48.8..61.3 MPa, written as 55.05 MPa +- 11.35 %
+expect c1: s_hoop at P == 55.05 MPa within 11.35%
+// C2: 28.7 MPa within 5 %. Without stringers, this is expected near 30.7 MPa and to fail.
+expect c2: s_axial at P == 28.7 MPa within 5%
+// C3: sum of x reactions = -1273.0 kN
+expect c3: reaction(x0).x == -1273.0 kN within 0.1%
+// C4: |sum of z reactions| < 0.1 % of 1273.0 kN
+expect c4: 1 + reaction(bottom).z/(1273.0 kN) == 1 within 0.1%
+// C5: sum of y reactions = -p_U * 2R * L = -3427.1 kN
+expect c5: reaction(ysym).y == -3427.1 kN within 0.1%
+// C6: there is no separate submodel, so the global field is the corner field.
+// These two checks compare the refined corner field with itself and pass
+// trivially.
+expect c6_aft: eps_hoop at P_aft == eps_hoop at P_aft within 5%
+expect c6_top: eps_hoop at P_top == eps_hoop at P_top within 5%

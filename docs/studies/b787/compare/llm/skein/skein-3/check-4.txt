@@ -1,4 +1,13 @@
 diagnostics[0]{class,id,file,line,col,msg,fix}:
 summary: errors=0 lints=0
-free_boundary[1]{physics,field,region,condition}:
-  solid,u,"boundary(bay) - root_strip - root_lo - root_hi - aft - side_lo - side_hi","sigma*n = 0"
+free_boundary[10]{physics,field,region,condition}:
+  skin,w,"boundary(wall) - x0 - ysym - bottom - x_end","N*n = 0"
+  skin,w.y,"x0","(N*n).y = 0"
+  skin,w.z,"x0","(N*n).z = 0"
+  skin,w.x,"ysym","(N*n).x = 0"
+  skin,w.z,"ysym","(N*n).z = 0"
+  skin,w.x,"bottom","(N*n).x = 0"
+  skin,w.y,"bottom","(N*n).y = 0"
+  skin,theta,"boundary(wall) - x0 - ysym","M*n = 0"
+  skin,theta.x,"x0","(M*n).x = 0"
+  skin,theta.y,"ysym","(M*n).y = 0"

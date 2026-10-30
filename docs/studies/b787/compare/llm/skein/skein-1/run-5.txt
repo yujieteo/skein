@@ -1,19 +1,18 @@
-report[6]{step,expr,value}:
-  ultimate,reaction(fwd_end),"(-28291.960125842746, -5.87982640354312e-09, 3.5214497984270565e-10) N"
-  ultimate,"uxP = u.x at (4.8768 m, 7.0445 m, 0 m)","0.0009396403000107963 m"
-  ultimate,"uxA = u.x at (4.3768 m, 7.0445 m, 0 m)","0.0008441188900526742 m"
-  ultimate,"uxB = u.x at (5.3768 m, 7.0445 m, 0 m)","0.0010351617099696817 m"
-  ultimate,"uyC = u.y at (4.8768 m, 6.94385 m, 0 m)","-9.2495522255406e-05 m"
-  ultimate,"uyD = u.y at (4.8768 m, 7.14515 m, 0 m)","9.249552226017533e-05 m"
-verify[6]{stage,id,result,value,limit}:
-  post,equilibrium,pass,"8.428062159829676e-07 N","1.71353988 N"
-  post,expect,pass,"axial_P: 0.0009396403000107963 m","0.93168 mm within 2%"
-  post,expect,pass,"axial_A: 0.0008441188900526742 m","0.83616 mm within 2%"
-  post,expect,pass,"axial_B: 0.0010351617099696817 m","1.02720 mm within 2%"
-  post,expect,pass,"hoop_C: -9.2495522255406e-05 m","-0.092495 mm within 2%"
-  post,expect,pass,"hoop_D: 9.249552226017533e-05 m","0.092495 mm within 2%"
-solve[1]{step,dofs,cg_iterations,seconds,converged}:
-  ultimate,83619,2664,38.345689041001606,yes
+report[8]{step,expr,value}:
+  pressurize,"wy_P = w.y at (4876.8, 1853.158, -2208.506) mm","0.0017029763557489628 m"
+  pressurize,"wz_P = w.z at (4876.8, 1853.158, -2208.506) mm","0.0006191808332054396 m"
+  pressurize,"hoop_P = s_hoop at (4876.8, 1853.158, -2208.506) mm","61318033.614894085 Pa"
+  pressurize,"axial_P = s_axial at (4876.8, 1853.158, -2208.506) mm","30660183.534716498 Pa"
+  pressurize,"hoop_strain_P = eps_t at (4876.8, 1853.158, -2208.506) mm","0.0009189860086887927 "
+  pressurize,reaction(x0),"(-1272941.3250211326, -14045.413519755219, 3.486273811859064e-07) N"
+  pressurize,reaction(y0),"(-6994.191580599258, -3427079.76000023, 3.486273811859064e-07) N"
+  pressurize,reaction(pbot),"(-3496.985865173177, -7022.610735063433, 3.486273811859064e-07) N"
+verify[3]{stage,id,result,value,limit}:
+  post,equilibrium,pass,"8.305567684978028e-07 N","12.826866653795996 N"
+  post,expect,fail,"c1_hoop: 61318033.614894085 Pa","55.08 MPa within 11.3%"
+  post,expect,fail,"c2_axial: 30660183.534716498 Pa","28.7 MPa within 5%"
+solve[1]{step,cells,dofs,cg_iterations,seconds,converged}:
+  pressurize,22204,135054,0,25.312806097997964,yes
 results[1]:
-  .skein/results/b787_skin_strip/ultimate.vtu
-built .skein/build/b787_skin_strip/b787_skin_strip
+  .skein/results/b787_fwd_fuselage/pressurize.vtu
+built .skein/build/b787_fwd_fuselage/b787_fwd_fuselage

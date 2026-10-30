@@ -11,29 +11,48 @@ The element order is 2 for the shells and the beams (the `method` lines).
 
 ## Check status
 
-`skein check` gives 15 errors in each file. Each error is on a line under
-a `// gap` comment, and line 1 of each file names these gaps. Thus both
-files pass the phase 1 gate of the
+`skein check` gives 3 errors in `fuselage.skn` and 5 in `door_corner.skn`.
+Each error is on a line under a `// gap G32` comment, and line 1 of each
+file names G32. Thus both files pass the phase 1 gate of the
 [femahoy coverage](../../../femahoy_coverage.md): a model passes `skein
 check`, or it has a `// blocked-by:` mark. Both files also pass `skein fmt
 --check`.
 
+## Run status
+
+The models do not run yet. G32 stops `skein check`. After G32, `skein run`
+also needs these parts of the shell lane (`src/shells/gen.goose`), which
+solves only a shell on a part of the side of a cylinder now:
+
+- a cut in the shell (the door cutout and the pad-up band), with
+  triangles at the corners;
+- the beams of `timoshenko` and the tie to the skin;
+- more than one material on the shell, and the submodel cut values.
+
+`src/shells/test.goose` solves the global model of the sheet on a
+structured grid, with the cutout as a staircase of cells, and checks C1 to
+C5.
+
 ## Gaps
 
 Each file names its open gaps on line 1 (`// blocked-by:`), and puts a
-`// gap` comment where the gap applies. G31, G32 and G33 are in the
+`// gap` comment where the gap applies. G32 is in the
 [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study),
-with the spec changes that close them. N2 and N3 do not make `check` fail,
-so they are only on this page.
+with the spec change that closes it.
 
 | Gap | Feature | Why the spec cannot state it | Smallest spec change |
 |---|---|---|---|
-| G3 | Composite shells: the skin and the pad-up | [femahoy coverage](../../../femahoy_coverage.md#gaps-that-block-a-case). The model also needs a ply axis, the outer face and a load per area. | The G3 change, with these template arguments: `layup` (a table column of ply angles), `mirror`, `axis`, `top` and `q`. The thickness `h` and the ply values come from the material. The template gives `N` (force per length, membrane and transverse shear) and `eps_m` (membrane strain). |
-| G31 | Offset beams on the skin: the stringers and the frames, and their axial force `Nx` | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G31 change. |
 | G32 | The skin, the pad-up, the stringers, the frames and the door edge cut by a `Solid` | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G32 change. |
-| G33 | The shell resultants `N` and `eps_m`, the edge loads `N*n`, and `global.e_hoop` in the submodel | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G33 change. |
-| N2 | Outputs 1, 3 and 5: the point of a maximum, and the maximum of each beam | `max(f, r)` gives one value on one region (§14.5). | A report function `argmax(f, r)` that gives the point. `max(f, r)` on a `pattern` gives one value for each copy. |
-| N3 | Quadrilateral shells (sheet 6.3) | `cell: quad` needs a `box` or a `rect` (§9.1). | Let `cell: quad` apply to each `Surface`, with triangles where the shape needs them. The model uses `cell: tri`, the nearest valid form, so N3 is not in `blocked-by`. |
+
+These gaps are closed:
+
+| Gap | Feature | Closed by |
+|---|---|---|
+| G3 | Composite shells: the skin and the pad-up, with a ply axis, the outer face and a load per area | spec §4.3: `reissner_mindlin(layup, mirror, axis, top, q)` |
+| G31 (N1) | Offset beams on the skin and their axial force `Nx` | spec §4.3: `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` and `let Nx`; spec §12.1: the tie |
+| G33 | The shell resultants `N` and `eps_m`, the edge loads `N*n`, and `global.e_hoop` in the submodel | spec §4.3: `let N` and `let eps_m`; spec §15.1: the `let` fields of a `Results` value |
+| N2 | Outputs 1, 3 and 5: the point of a maximum, and the maximum of each beam | spec §14.5: `argmax(f, r)` gives the point, and `max(f, r)` on a `pattern` gives one value for each copy |
+| N3 | Quadrilateral shells (sheet 6.3) | spec §9.1: `cell: quad` on each `Surface`, with triangles where the shape needs them. The models use `cell: quad`. |
 
 ## Nearest forms and choices
 
@@ -71,6 +90,6 @@ Counted with tiktoken `o200k_base`:
 
 | File | Lines | Tokens |
 |---|---|---|
-| `fuselage.skn` | 230 | 2914 |
-| `door_corner.skn` | 218 | 2766 |
-| Total | 448 | 5680 |
+| `fuselage.skn` | 227 | 2859 |
+| `door_corner.skn` | 211 | 2632 |
+| Total | 438 | 5491 |

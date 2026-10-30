@@ -1,0 +1,97 @@
+// A closed thin cylinder under internal pressure, with the composite skin
+// of the 787 study (docs/studies/b787/problem.md sections 1 and 3):
+// R = 2.883 m, p = 97.5 kPa, the [45/0/-45/90]3s laminate of 24 plies of
+// 0.191 mm. Membrane theory gives the hoop stress pR/t and the axial
+// stress pR/(2t). The model is the quarter 0 deg <= theta <= 90 deg of a
+// bay 0 <= x <= 1.2192 m, with symmetry at x = 0 and the closure load
+// pR/2 per length at x = 1.2192 m. theta turns from +z to +y.
+
+model thin_cylinder_shell: 3d, SI
+
+let R: Length = 2.883 m
+let L: Length = 1.2192 m
+let p: Pressure = 97.5 kPa
+let t_skin: Length = 24*0.191 mm
+
+scales R, p
+
+let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
+let wall: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && z >= 0 m)
+let sym_x: Curve = boundary(wall, x == 0 m)
+let end: Curve = boundary(wall, x == L)
+let sym_y: Curve = boundary(wall, y == 0 m)
+let sym_z: Curve = boundary(wall, z == 0 m)
+
+// Unit vectors at a skin point: axial, radial (outward) and hoop.
+let e_x: Vector<Real> = (1, 0, 0)
+let e_r: Vector<Real> = (0, y/R, z/R)
+let e_t: Vector<Real> = (0, z/R, -y/R)
+
+// The check point: mid-bay, theta = 45 deg.
+let P: Vector<Length> = (L/2, R*sin(45 deg), R*cos(45 deg))
+
+// Plies from the outer surface. The base sequence repeats, then mirrors,
+// to the laminate thickness h of the material.
+table quasi{angle: Angle in deg}:
+    45
+    0
+    -45
+    90
+
+// T800S/3900 tape (sheet 1.2).
+material skin_lam {
+    E1: Pressure = 148 GPa
+    E2: Pressure = 10.1 GPa
+    G12: Pressure = 3.94 GPa
+    nu12: Real = 0.32
+    t_ply: Length = 0.191 mm
+    h: Length = t_skin
+}
+
+mesh m on wall {
+    size: 152.4 mm
+    cell: quad
+}
+
+physics skin on wall: reissner_mindlin(
+    layup: quasi.angle,
+    mirror: true,
+    axis: e_x,
+    top: e_r,
+    q: p*e_r,
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material skin_lam
+    let s_axial: Pressure = dot(e_x, N*e_x)/h
+    let s_hoop: Pressure = dot(e_t, N*e_t)/h
+}
+
+method skin: cg { mesh: m, order: 1 }
+
+// Symmetry about x = 0, y = 0 and z = 0.
+bc sym_x: w.x = 0
+bc sym_x: theta.y = 0
+bc sym_x: theta.z = 0
+bc sym_y: w.y = 0
+bc sym_y: theta.x = 0
+bc sym_y: theta.z = 0
+bc sym_z: w.z = 0
+bc sym_z: theta.x = 0
+bc sym_z: theta.y = 0
+
+step pressurize: static {
+    // The end closure load: the pressure on the end cap, per length of
+    // the edge.
+    bc end: N*n = p*R/2*e_x
+    output w
+    report s_hoop at P
+    report s_axial at P
+    report reaction(sym_x)
+}
+
+expect hoop: s_hoop at P == p*R/t_skin within 0.5%
+
+expect axial: s_axial at P == p*R/(2*t_skin) within 0.5%
+
+// The closure load on the quarter of the end: pR/2 on the arc R*pi/2.
+expect end_reaction: (reaction(sym_x)).x == -p*R/2*R*pi/2 within 0.1%

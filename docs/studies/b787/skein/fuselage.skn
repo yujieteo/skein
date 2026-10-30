@@ -1,4 +1,4 @@
-// blocked-by: G3 G31 G32 G33
+// blocked-by: G32
 // Boeing 787 forward fuselage under cabin pressure: the global model of
 // the problem sheet (../problem.md). One quarter of a 20-bay barrel,
 // 0 <= x <= 6.096 m and 0 deg <= theta <= 180 deg, with the left door 2
@@ -140,11 +140,10 @@ material frame_sec {
 
 mesh m on skin | beams {
     size: 50 mm
-    cell: tri
+    cell: quad
 }
 
-// gap G3: no source of reissner_mindlin, and no layup. The template here
-// takes the plies (layup, mirror), the ply 0 axis, the outer face and a
+// The shell template (spec 4.3) takes the plies (layup, mirror), the ply 0 axis, the outer face and a
 // load per area q. It gives the force resultant N (membrane and
 // transverse shear) and the membrane strain eps_m.
 // +45 deg turns from e_x to e_t, right-handed about e_r (sheet 3.1).
@@ -157,14 +156,13 @@ physics skin_shell on skin: reissner_mindlin(
 ) solves w: Vector<Length>,
     theta: Vector<Angle> {
     material skin_lam on plain, pad_lam on pad
-    // gap G33: the template does not declare N and eps_m.
     let s_axial: Pressure = dot(e_x, N*e_x)/h
     let s_hoop: Pressure = dot(e_t, N*e_t)/h
     let e_hoop: Real = dot(e_t, eps_m*e_t)
 }
 
-// gap G31: timoshenko(A, I_y, I_z) has no J, no section axis and no offset,
-// and gives no axial force. The template here takes them and gives Nx.
+// The beam template (spec 4.3) takes J, the section axis and the offset,
+// and gives the axial force Nx.
 physics beam on beams: timoshenko(
     A: A,
     I_y: I_y,
@@ -181,7 +179,7 @@ method skin_shell: cg { mesh: m, order: 2 }
 
 method beam: cg { mesh: m, order: 2 }
 
-// gap G31: the beams share the skin points on their lines. The tie also
+// A tie (spec 12.1): the beams share the skin points on their lines. The tie also
 // gives the beam ends the symmetry conditions of the skin.
 bc beams: w_b = w
 bc beams: theta_b = theta
@@ -198,14 +196,9 @@ step pressurize: static {
     // End closure load p_U*R/2, and the plug door load on the aft half
     // of the cutout edge. The sheet gives p_U*x per unit s. Per unit
     // edge length, this is p_U*x*|n.x|, because ds = |n.x|*dl.
-    // gap G33: N is not declared, and N*n is not a flux of an eq.
     bc skin_end: N*n = (p_U*R/2, 0, 0)
     bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
-    // gap G31: the template does not declare Nx.
     output w, dot(w, e_r), s_hoop, s_axial, Nx
-    // gap N2: max gives the value, not its point, and one value for all
-    // the beams, not one for each beam.
-    // gap G31: the template does not declare Nx.
     report w_r_max = max(dot(w, e_r), skin)
     report stringer_max = max(Nx, stringers)
     report frame_max = max(Nx, frames)

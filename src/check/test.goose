@@ -33,6 +33,70 @@ let FLOW = """
     }
     """;
 
+// A shell with ribs: the templates of G3 and N1 (spec §4.3), a tie, an edge
+// load N*n, argmax and max on a pattern (N2), and quad cells on a Surface (N3).
+let SHELL = """
+
+    let barrel: Solid = cylinder((0, 0, 0) m, (1, 0, 0), 1 m, 2 m)
+    let wall: Surface = boundary(barrel, y^2 + z^2 == 1 m^2)
+    let root: Curve = boundary(wall, x == 0 m)
+    let tip: Curve = boundary(wall, x == 2 m)
+    let s0: Curve = line((0, 0, 1) m, (2, 0, 1) m)
+    let ribs: Curve = pattern_polar(s0, (1, 0, 0), 8)
+
+    table plies{angle: Angle in deg}:
+        0
+        90
+
+    material lam {
+        E1: Pressure = 148 GPa
+        E2: Pressure = 10 GPa
+        G12: Pressure = 4 GPa
+        nu12: Real = 0.3
+        t_ply: Length = 1 mm
+        h: Length = 4 mm
+    }
+
+    material sec {
+        E: Pressure = 70 GPa
+        nu: Real = 0.3
+        A: Area = 1e-4 m^2
+        I_y: Length^4 = 1e-8 m^4
+        I_z: Length^4 = 2e-8 m^4
+        J: Length^4 = 1e-9 m^4
+    }
+
+    mesh m1 on wall | ribs {
+        size: 0.1 m
+        cell: quad
+    }
+
+    physics skin on wall: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: 1 kPa*n) solves w: Vector<Length>,
+        theta: Vector<Angle> {
+        material lam
+    }
+
+    physics rib on ribs: timoshenko(A: A, I_y: I_y, I_z: I_z, J: J, y_axis: n, offset: -10 mm*n) solves w_b: Vector<Length>,
+        theta_b: Vector<Angle> {
+        material sec
+    }
+
+    method skin: cg { mesh: m1, order: 1 }
+
+    method rib: cg { mesh: m1, order: 1 }
+
+    bc ribs: w_b = w
+    bc ribs: theta_b = theta
+    bc root: w = 0
+    bc root: theta = 0
+
+    step go: static {
+        bc tip: N*n = (1, 0, 0) kN/m
+        report peak = argmax(norm(w), wall)
+        report rib_max = max(Nx, ribs)
+    }
+    """;
+
 // The ids of the diagnostics of `src`, one per line.
 fn ids(src: u8[:]) -> u8[>..] {
     check::check_text("t.skn", src);
@@ -239,12 +303,25 @@ fn test_corpus(dir: u8[:]) {
     }
 }
 
+fn test_shells() {
+    expect_clean("a shell with offset beams", str(H, SHELL));
+    let mat = "material m2 {\n    E1: Pressure = 148 GPa\n    E2: Pressure = 10 GPa\n    G12: Pressure = 4 GPa\n    nu12: Real = 0.3\n    t_ply: Length = 1 mm\n    h: Length = 4 mm\n    E: Pressure = 70 GPa\n    nu: Real = 0.3\n    A: Area = 1e-4 m^2\n    I_y: Length^4 = 1e-8 m^4\n    I_z: Length^4 = 2e-8 m^4\n    J: Length^4 = 1e-9 m^4\n}\n";
+    expect_id("geometry_dim", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\n", mat,
+        "physics p on b: reissner_mindlin(top: (0, 0, 1)) solves w: Vector<Length>, theta: Vector<Angle> {\n    material m2\n}\n"));
+    expect_id("geometry_dim", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet s: Surface = boundary(b, x == 0 m)\n", mat,
+        "physics p on s: timoshenko(A: A, I_y: I_y, I_z: I_z, J: J, y_axis: (0, 1, 0)) solves w: Vector<Length>, theta: Vector<Angle> {\n    material m2\n}\n"));
+    expect_id("type_mismatch", str(H, "let D3: Real = laminate(ply_stiffness(1 Pa, 1 Pa, 1 Pa, 0.3), 0 deg, false, 1 mm, 1 mm, (1, 0, 0), (0, 0, 1), 3)\n", SHELL));
+    expect_id("rank_mismatch", str(H, "let g: Real = tangent(1, (0, 0, 1))\n", SHELL));
+    expect_id("rank_mismatch", str(H, SHELL, "\nstep more: static {\n    report argmax(w, wall)\n}\n"));
+}
+
 fn main() {
     test_names();
     test_types();
     test_physics();
     test_conditions();
     test_steps();
+    test_shells();
     test_studies();
     test_output();
     test_corpus("samples");

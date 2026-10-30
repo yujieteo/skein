@@ -90,6 +90,51 @@ let CARD = """
       the region. Write it only to change it:
       `method solid: cg { mesh: m, order: 2 }`.
 
+    ## Shells
+
+    `skein run` solves a shell on a part of the side of a cylinder on the x
+    axis (MITC4 quads, order 1). theta turns from +z to +y.
+
+    ```
+    let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
+    let wall: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m)
+    let x0: Curve = boundary(wall, x == 0 m)
+    let e_t: Vector<Real> = (0, z/R, -y/R)
+    table plies{angle: Angle in deg}:
+        45
+        0
+        -45
+        90
+    material ply {
+        E1: Pressure = 148 GPa
+        E2: Pressure = 10.1 GPa
+        G12: Pressure = 3.94 GPa
+        nu12: Real = 0.32
+        t_ply: Length = 0.191 mm
+        h: Length = 24*0.191 mm
+    }
+    mesh m on wall {
+        size: 50 mm
+        cell: quad
+    }
+    physics skin on wall: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: p*n) solves w: Vector<Length>,
+        theta: Vector<Angle> {
+        material ply
+        let s_hoop: Pressure = dot(e_t, N*e_t)/h
+    }
+    method skin: cg { mesh: m, order: 1 }
+    ```
+
+    - `layup` is one ply angle or a table column of angles from the top face.
+      The plies repeat to fill `h` (`h/2` with `mirror: true`).
+    - `N` is the force per length and `eps_m` the membrane strain (tensors).
+    - A `Curve` is a side of the shell: `boundary(wall, x == 0 m)` or
+      `boundary(wall, y == 0 m)`. A `Point` is `point((x, y, z))`.
+    - `bc x0: w.x = 0`, `bc x0: theta.y = 0`, `bc end: N*n = (f, 0, 0)` (a
+      force per length on a side).
+    - Report `w.z at p` or a physics `let` at p (p a node), or
+      `reaction(x0)`.
+
     ## Boundary conditions
 
     - `bc region: u = 0` fixes the displacement. `bc region: u.x = 0` fixes one

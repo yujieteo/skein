@@ -426,12 +426,97 @@ the standard library declares templates in this version.
 | `linear_elastic(b)` | `u` | 2 |
 | `heat(q_v)` | `T` | 2 |
 | `stokes(f)`, `navier_stokes(f)` | `v`, `p` | 3 |
-| `reissner_mindlin(t)` (shell), `timoshenko(A, I_y, I_z)` (beam) | `w`, `theta` | 5 |
+| `reissner_mindlin(layup, mirror, axis, top, q)` (shell), `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` (beam), §4.3 | `w`, `theta` | 5 |
 | `k_omega_sst` (turbulence) | `k`, `omega` | 5 |
 
 Reason: nobody writes a shell or a k-ω SST model from memory, and a
 template cuts the size of the common models. The source stays strong form,
 so a user can read it and copy it into a model to change it.
+
+### 4.3 Shells, beams and laminates
+
+A shell is a physics on a `Surface`, and a beam is a physics on a `Curve`
+(§8.3). Both solve a displacement `w: Vector<Length>` and a rotation vector
+`theta: Vector<Angle>`. A physics that uses `reissner_mindlin` on a region
+that is not a `Surface`, or `timoshenko` on a region that is not a `Curve`,
+is an error [`geometry_dim`]. These are the two templates:
+
+```skein
+template physics reissner_mindlin(layup: Angle = 0 deg, mirror: Bool = false, axis: Vector<Real> = (1, 0, 0), top: Vector<Real>, q: Vector<Pressure> = 0) solves w: Vector<Length>, theta: Vector<Angle> {
+    assume small_strain
+    let eps_m: Tensor2<Real> = tangent(strain(w), top)
+    let kappa: Tensor2<Real/Length> = tangent(sym(grad(cross(theta, top))), top)
+    let gamma: Vector<Real> = tangent(grad(dot(w, top)) + cross(theta, top), top)
+    let Q_ply: Tensor4<Pressure> = ply_stiffness(E1, E2, G12, nu12)
+    let A_lam: Tensor4<Force/Length> = laminate(Q_ply, layup, mirror, t_ply, h, axis, top, 0)
+    let B_lam: Tensor4<Force> = laminate(Q_ply, layup, mirror, t_ply, h, axis, top, 1)
+    let D_lam: Tensor4<Force*Length> = laminate(Q_ply, layup, mirror, t_ply, h, axis, top, 2)
+    let V_s: Vector<Force/Length> = 5/6*G12*h*gamma
+    let N: Tensor2<Force/Length> = ddot(A_lam, eps_m) + ddot(B_lam, kappa) + outer(top, V_s)
+    let M: Tensor2<Force> = ddot(B_lam, eps_m) + ddot(D_lam, kappa)
+    eq div(N) + q = 0
+    eq div(M) - V_s = 0
+}
+
+template physics timoshenko(A: Area, I_y: Length^4, I_z: Length^4, J: Length^4, y_axis: Vector<Real>, offset: Vector<Length> = 0, q: Vector<Force/Length> = 0) solves w: Vector<Length>, theta: Vector<Angle> {
+    assume small_strain
+    let e_yb: Vector<Real> = y_axis - dot(y_axis, tau)*tau
+    let e_zb: Vector<Real> = cross(tau, e_yb)
+    let G_b: Pressure = E/(2*(1 + nu))
+    let gam_b: Vector<Real> = along(w + cross(theta, offset)) + cross(tau, theta)
+    let kap_b: Vector<Real/Length> = along(theta)
+    let Nx: Force = E*A*dot(tau, gam_b)
+    let F_b: Vector<Force> = Nx*tau + 5/6*G_b*A*(dot(e_yb, gam_b)*e_yb + dot(e_zb, gam_b)*e_zb)
+    let M_b: Vector<Force*Length> = G_b*J*dot(tau, kap_b)*tau + E*I_y*dot(e_yb, kap_b)*e_yb + E*I_z*dot(e_zb, kap_b)*e_zb
+    eq along(F_b) + q = 0
+    eq along(M_b) + cross(tau, F_b) = 0
+}
+```
+
+**The shell.** The point at the distance z from the mid-surface, along
+`top`, moves by `w + z*cross(theta, top)`. The material of the shell gives
+the ply values `E1`, `E2`, `G12`, `nu12`, the ply thickness `t_ply` and
+the laminate thickness `h`. An isotropic shell has `E1 = E2 = E`,
+`G12 = E/(2*(1 + nu))`, `nu12 = nu` and `t_ply = h`.
+
+| Argument | Meaning |
+|---|---|
+| `layup` | the ply angles from the `top` face, a table column (§5.6) or one angle |
+| `mirror` | `true` adds the plies again in the reverse sequence: a symmetric laminate |
+| `axis` | the 0 deg direction. Its projection on the surface is the axis 1 of the section. |
+| `top` | the unit normal of the top face. A ply angle turns from `axis` by the right-hand rule about `top`. |
+| `q` | the load per area, for example `p*n` for a pressure |
+
+The plies of `layup` repeat to fill `h`, or to fill `h/2` with `mirror`.
+Then `mirror` adds them again in the reverse sequence. The template gives `N`,
+the force per length (the membrane force and the transverse shear force
+`V_s` along `top`), the moment `M` and the membrane strain `eps_m`. The
+membrane stress of a laminate is `N/h`. Because `div(N)` is in an `eq`,
+`bc e: N*n = f` is an edge load per length (§12.1). The transverse shear
+factor is 5/6, with G13 = G23 = G12.
+
+**The beam.** `tau` is the unit tangent of the curve. The axis of the
+section is at `offset` from the line of the physics: a rigid link. The
+section y axis is `y_axis` made normal to `tau`, and z is `cross(tau, e_y)`.
+`I_y` is `∫ z² dA` and `I_z` is `∫ y² dA`. The material gives `E` and
+`nu`. The template gives the axial force `Nx` (positive in tension), the
+force `F_b` and the moment `M_b`.
+
+The built-in functions of the two templates:
+
+| Function | Meaning |
+|---|---|
+| `tangent(f, top)` | `P*f` for a vector, `P*f*P` for a `Tensor2`, with `P = I - outer(top, top)` |
+| `ply_stiffness(E1, E2, G12, nu12)` | the plane stress stiffness of a ply in its fibre axes, a `Tensor4` |
+| `laminate(Q, layup, mirror, t_ply, h, axis, top, k)` | `∫ Q(z) z^k dz` over the plies, with each ply turned to its angle. `k` is 0, 1 or 2 [`type_mismatch`]: A, B and D of classical laminate theory. |
+| `along(f)` | the derivative of `f` along the curve, `df/ds` |
+
+Reason: a fuselage, a wing and a ship hull are shells with offset
+stiffeners. A solid mesh of a 4.6 mm skin on a 3 m radius needs millions
+of cells. The ABD matrix of classical laminate theory is the standard
+section of a composite shell (Jones 1999, §4.2). The solver uses the MITC4
+shell (Dvorkin and Bathe 1984) for these equations, so the shell does not
+lock in shear.
 
 ---
 
@@ -831,7 +916,7 @@ mesh m on beam {
 | Setting | Type | Default | Meaning |
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
-| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` need a `box` or `rect` region, and `hex` can also mesh a quarter of a tube |
+| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `hex` needs a `box` region or a quarter of a tube. `quad` on a `rect` is a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. |
 | `grade` | `Real` | 1.3 | largest ratio of the size of two neighbour cells |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
@@ -853,6 +938,7 @@ licences are not compatible with Apache 2.0.
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
 | `quad`, `hex` | a structured grid on a `box` or `rect`, or in r, θ and z on a quarter of a tube: `(cylinder - cylinder) & box`, with the box corner on the axis |
+| `quad` on another `Surface` | the triangles of the 2D case, then the merge of each pair of triangles into a quad (Blossom-Quad, Remacle et al. 2012). A triangle stays where no pair has an acceptable quality. |
 | boundary layers | prisms or quads extruded along the normal of the surface, then the core mesh |
 
 The sharp edges come from the CSG tree: each intersection of the surfaces
@@ -1092,6 +1178,19 @@ A `bc` names a region and states an equation on it. The checker sorts each
 
 A natural condition on the flux of the equation paired with unknown `u` is a
 condition for `u`.
+
+The right side of an essential condition may be an unknown of another
+physics, with the same type, on the same points: a **tie**.
+
+```skein
+bc beams: w_b = w
+bc beams: theta_b = theta
+```
+
+The mesher puts the nodes of the `Curve` `beams` on nodes of the shell,
+and the two fields share these dofs. Reason: a stringer and a frame share
+the skin points on their lines. The offset of the beam (§4.3) is in the
+beam, not in the tie.
 
 On a `Point` region, `n` has no value. There the checker reads a natural
 condition `F*n = P` as the force `P` at the point. `P` has the dimension of
@@ -1333,8 +1432,15 @@ writes the solver, the iterations and the restart to stderr.
 `output e1, e2, …` writes the fields or field expressions to the result
 file at the end of the step, or each `every k` time steps. `report e` prints
 a scalar or a vector to the run log in TOON. Functions for `report`:
-`reaction(r)`, `max(f, r)`, `min(f, r)`, `integral(f, r)`, `mean(f, r)`,
-`eigenvalue(k)`.
+`reaction(r)`, `max(f, r)`, `min(f, r)`, `argmax(f, r)`, `integral(f, r)`,
+`mean(f, r)`, `eigenvalue(k)`.
+
+`argmax(f, r)` is the point of `r` where the scalar `f` has its largest
+value, a `Vector<Length>` [`rank_mismatch`]. If `r` comes from a `pattern`
+or a `pattern_polar` (§8.1), `max(f, r)` and `min(f, r)` give one value for
+each copy, a list in the sequence of the copies. A region operation keeps
+the copies of its left side. Reason: a report must give the largest axial
+force of each stringer, not only of all of them.
 
 `eigenvalue(k: Int)` is the eigenvalue of mode `k` of a `modal` step, or
 of a `buckling` step. For a `modal` step, it is the natural frequency
@@ -1386,7 +1492,8 @@ let global: Results = results("01_cantilever.skn", step: "load")
 
 `results(file, step:)` refers to the state of another model at the end of
 the step. The checker reads the other file and gives `global.u` the type of
-the field `u` in it. The run uses the saved state, or runs the other model
+the field `u` in it. The `let` fields of a physics of the other model are
+fields of the `Results` value too, for example `global.e_hoop`. The run uses the saved state, or runs the other model
 first if no state exists.
 
 ### 15.2 Submodels
@@ -2084,18 +2191,19 @@ project of its own size, and Skein is a simulation language first. See the
 | `abs`, `sqrt`, `exp`, `ln`, `sin`, `cos`, `tan`, `tanh`, `atan`, `atan2(y, x)`, `min`, `max`, `pi` | scalar math |
 | `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
-| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `eigenvalue(k)` | reports (§14.5) |
+| `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
+| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)` | reports (§14.5) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 
 ### Constants
 
-`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `im` (imaginary unit),
+`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `tau` (the unit tangent of a `Curve`), `im` (imaginary unit),
 `dual_eps` (dual unit).
 
 ### Standard library
 
-The physics templates of §4.2. `skein help std` prints their source.
+The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 
 ---
 
@@ -2113,11 +2221,14 @@ The physics templates of §4.2. `skein help std` prints their source.
 - Cheng, S.-W., Dey, T. K., Ramos, E. A. (2007). Delaunay refinement for piecewise smooth complexes. SODA.
 - Chew, L. P. (1989). Guaranteed-quality triangular meshes. Cornell TR 89-983.
 - Chung, J., Hulbert, G. M. (1993). A time integration algorithm for structural dynamics with improved numerical dissipation: the generalized-α method. J. Appl. Mech. 60.
+- Dvorkin, E. N., Bathe, K. J. (1984). A continuum mechanics based four-node shell element for general non-linear analysis. Engineering Computations 1.
 - Ghia, U., Ghia, K. N., Shin, C. T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. J. Comput. Phys. 48.
 - Hughes, T. J. R., Franca, L. P., Balestra, M. (1986). A new finite element formulation for computational fluid dynamics: V. CMAME 59.
+- Jones, R. M. (1999). Mechanics of Composite Materials, 2nd ed. Taylor & Francis.
 - Knyazev, A. V. (2001). Toward the optimal preconditioned eigensolver: LOBPCG. SIAM J. Sci. Comput. 23(2).
 - Labelle, F., Shewchuk, J. R. (2007). Isosurface stuffing: fast tetrahedral meshes with good dihedral angles. ACM Trans. Graph. 26(3).
 - Liu, W. K., Jun, S., Zhang, Y. F. (1995). Reproducing kernel particle methods. IJNMF 20.
+- Remacle, J.-F., Lambrechts, J., Seny, B., Marchandise, E., Johnen, A., Geuzaine, C. (2012). Blossom-Quad: a non-uniform quadrilateral mesh generator using a minimum-cost perfect-matching algorithm. IJNME 89(9).
 - Rhie, C. M., Chow, W. L. (1983). Numerical study of the turbulent flow past an airfoil with trailing edge separation. AIAA J. 21(11).
 - Ruppert, J. (1995). A Delaunay refinement algorithm for quality 2-dimensional mesh generation. J. Algorithms 18(3).
 - Shakib, F., Hughes, T. J. R., Johan, Z. (1991). A new finite element formulation for computational fluid dynamics: X. CMAME 89.
