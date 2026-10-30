@@ -361,9 +361,10 @@ records each round:
 | `skein` | the card of `skein help --llm`, the request, "Write the complete Skein model." | `skein check` | `skein run` | the first `report` value in a length unit |
 | `inp` | the request, and "Write the complete CalculiX input deck", with the mesh in the deck | `fh run` (ccx reads the deck) | the same `fh run` | the largest displacement component in the `.dat` file |
 
-If the check fails, the driver gives the model the checker output and "Fix
-the model." (or "Fix the deck."). It stops after the check passes or after
-round 5. Each run is one new `claude -p` session with no tools, no settings
+If the check or the run fails, the driver gives the model its output and
+"Fix the model." (or "Fix the deck."). For Skein, the run is `skein run`
+after a passed `skein check`. For a deck, `fh run` is the check and the run.
+The driver stops after the run passes or after round 5. Each run is one new `claude -p` session with no tools, no settings
 and no memory. The repair rounds resume that session. The input tokens
 count the whole context of each round, which includes the card.
 
@@ -381,25 +382,39 @@ The output folder gets the answer and the checker output of each round, and
 Euler-Bernoulli for the request: PL³/(3EI) = 0.381 mm, with I = 50 × 100³ / 12 mm⁴.
 Model: claude-opus-5-5, 2026-10-30. The round limit is 5.
 
+"First-try pass" means that the check passed in round 1.
+
 | Path | Run | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection | Reaction | Mesh and element |
 |---|---|---|---|---|---|---|---|---|---|
-| skein | 1 | yes | 0 | 3337 | 1055 | 11.5 s | none: `skein run` refused the model | none | 10 mm hex, order 2 |
-| skein | 2 | yes | 0 | 3337 | 1125 | 13.1 s | none: `skein run` refused the model | none | 10 mm hex, order 2 |
-| skein | 3 | yes | 0 | 3337 | 1070 | 45.9 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2: 139293 unknowns, 1223 CG iterations |
+| skein | 1 | yes | 0 | 3339 | 1164 | 48.3 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 2 | yes | 1 | 7964 | 1802 | 52.6 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 3 | yes | 0 | 3339 | 915 | 44.5 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
 | inp | 1 | yes | 0 | 656 | 2706 | 26.1 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
 | inp | 2 | yes | 0 | 656 | 3364 | 32.6 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
 | inp | 3 | yes | 0 | 656 | 6538 | 52.7 s | −0.379456 mm | 1000 N | 40 C3D8I, 126 nodes |
+
+Each Skein solve had 139293 unknowns and took 1223 CG iterations.
+
+An earlier version of the driver gave only the check output back to the
+model, not the run output. With it, `skein run` gave a number in 1 of 3
+Skein runs (same model, same day):
+
+| Path | Run | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection |
+|---|---|---|---|---|---|---|---|
+| skein | 1 | yes | 0 | 3337 | 1055 | 11.5 s | none: `skein run` refused the model |
+| skein | 2 | yes | 0 | 3337 | 1125 | 13.1 s | none: `skein run` refused the model |
+| skein | 3 | yes | 0 | 3337 | 1070 | 45.9 s | −0.382161 mm |
 
 - The Skein input tokens include the card of `skein help --llm` (about
   2700 tokens).
 - The Skein result is 0.3 % above Euler-Bernoulli, and the equilibrium
   check of `skein run` passed. Shear adds about 0.8 % to Euler-Bernoulli.
-- `skein run` refused runs 1 and 2 with the error `unsupported`, because
-  each model had a report that this slice does not compute:
-  `min(u.z, tip)` in run 1 and `mean(u.z, tip)` in run 2. The card lists
-  `min` and `mean` as report functions. Each model also had
-  `u.z at (L, W/2, H/2)`, which the slice computes. The driver gives only the
-  check output back to the model, not the run output.
+- `skein run` refuses a report that this slice does not compute, with the
+  error `unsupported`. The card lists `min`, `mean` and `max` as report
+  functions, and the models used them: `min(u.z, tip)` and `mean(u.z, tip)`
+  with the earlier driver, and `mean(u.z, tip)` and
+  `max(von_mises(sigma), beam)` in run 2 above. In run 2, one repair round
+  removed them.
 - Inp runs 1 and 2 used beam elements, not solid elements. Inp run 3 wrote
   its 126 nodes and 40 elements by hand in 234 lines.
 
