@@ -1,0 +1,53 @@
+*HEADING
+Boeing 787 forward fuselage barrel, upper aft door corner submodel
+** Problem: docs/studies/b787/problem.md, section 6.4. Units: N, m, Pa.
+** Run: python3 mesh.py, abaqus job=global, then
+**      abaqus job=door_corner globalmodel=global
+**
+** Region: 0.600 m x 0.600 m in the x-s plane, centred on the corner
+** radius centre x = 0.3554, s = 3.0373. Same idealization as the global
+** model: S4R and S3R skin and pad-up, B31 stringers and frames.
+** Mesh: 0.005 m on the cutout edge, 0.020 m at most elsewhere.
+*INCLUDE, INPUT=door_corner_mesh.inp
+*INCLUDE, INPUT=properties.inp
+**
+*SURFACE, TYPE=ELEMENT, NAME=CABIN_FACE
+SHELLS, SNEG
+**
+** Shell-to-shell submodel. DRIVEN holds all nodes on the region boundary,
+** which includes the beam ends.
+*SUBMODEL, TYPE=NODE, GLOBAL ELSET=SHELLS, EXTERIOR TOLERANCE=0.05
+DRIVEN
+**
+*STEP, NAME=ULTIMATE_PRESSURE
+Ultimate cabin pressure, driven by step 1 of the global model
+*STATIC
+*BOUNDARY, SUBMODEL, STEP=1
+DRIVEN, 1, 6
+*DSLOAD
+CABIN_FACE, P, 97500.
+** Door load p_U * x_e(s) per unit s on the corner arc and the straight aft
+** edge in the region.
+*INCLUDE, INPUT=door_corner_loads.inp
+**
+*OUTPUT, FIELD
+*NODE OUTPUT
+U, UR, RF
+*ELEMENT OUTPUT, ELSET=SHELLS
+SF, SE
+*ELEMENT OUTPUT, ELSET=STRINGERS
+SF
+*ELEMENT OUTPUT, ELSET=FRAMES
+SF
+**
+** Outputs 5 to 7: the maximum principal membrane strain on the cutout
+** edge, from SE1, SE2 and SE3 (engineering shear) of CUTOUT_EDGE.
+** K = that strain / SE2 at P in global.dat. MS = 4000E-6 / strain - 1.
+*EL PRINT, ELSET=CUTOUT_EDGE, POSITION=CENTROIDAL
+SE
+** C6: SE2 here and in global.dat agree within 5 %.
+*EL PRINT, ELSET=C6_TOP, POSITION=CENTROIDAL
+SE
+*EL PRINT, ELSET=C6_AFT, POSITION=CENTROIDAL
+SE
+*END STEP
