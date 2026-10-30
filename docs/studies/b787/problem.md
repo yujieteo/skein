@@ -171,9 +171,10 @@ a negligible effect here.
   skin face. Two vertical webs, 25 mm apart (outer faces), are 35 mm
   high from the inner skin face. A crown joins the webs. All walls are
   1.528 mm thick.
-- **Frame:** a C-section. An outer flange, 50 mm wide, lies on the inner
-  skin face. A web is 150 mm high from the inner skin face. An inner
-  flange is 40 mm wide. All walls are 3.056 mm thick. The frame is
+- **Frame:** a J-section. An outer flange, 50 mm wide, lies on the inner
+  skin face, centred on the web. A web is 150 mm high from the inner skin
+  face. An inner flange, 40 mm wide, goes to one side of the web only.
+  All walls are 3.056 mm thick. The frame is
   continuous over the stringers (the model has no stringer
   clearance holes).
 
@@ -190,8 +191,8 @@ come from.
 | I about the centroidal axis normal to the skin (lateral bending) | 4.908e-8 m⁴ | 8.305e-8 m⁴ |
 | Torsion constant J (open section) | 1.569e-10 m⁴ | 2.225e-9 m⁴ |
 
-The frame centroid is 3.16 mm to the side of the web line. The model
-ignores this lateral offset. **[assumption]**
+The frame centroid is 3.16 mm from the web line, on the side of the
+inner flange. The model ignores this lateral offset. **[assumption]**
 
 ---
 
