@@ -73,9 +73,9 @@ fn load_sum() -> f64, f64, f64 {
 }
 
 // Holds all dofs of the nodes of node set s at 0.
-fn fix_set(s: i64) {
+fn fix_set(s: i64, first: i64, last: i64) {
     for n in set_members(s) {
-        for p in dofs_per_node { fixed[dofs_per_node * n + p] = 1; }
+        for p in first..last { fixed[dofs_per_node * n + p] = 1; }
     }
     clear_solution();
 }
@@ -84,10 +84,11 @@ fn fix_set(s: i64) {
 
 var face_w: f64[>..] = [];
 
-// Adds a uniform traction (force per area) (tx, ty, tz) on the faces of
-// face set s: the consistent nodal forces of cell_face_weights. False, with
-// a message, if a cell type has no face routine.
-fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64) -> bool {
+// Adds a uniform traction (force per area) (tx, ty, tz) + sn n on the
+// faces of face set s, with n the unit normal out of the body: the
+// consistent nodal forces of cell_face_weights. False, with a message, if
+// a cell type has no face routine.
+fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64, sn: f64) -> bool {
     let t: f64[3] = [tx, ty, tz];
     for item in set_members(s) {
         let c = item / FACE_STRIDE;
@@ -95,9 +96,9 @@ fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64) -> bool {
             write_stderr(str("runtime: the cell type ", CELL_NAMES[cell_type[c]], " has no face routine\n"));
             return false;
         }
-        for w, a in face_w {
+        for a in face_w.len / 4 {
             let d = dofs_per_node * cell_node(c, a);
-            for k in min(dofs_per_node, 3) { load[d + k] += w * t[k]; }
+            for k in min(dofs_per_node, 3) { load[d + k] += face_w[4 * a] * t[k] + face_w[4 * a + 1 + k] * sn; }
         }
     }
     clear_solution();
@@ -109,7 +110,7 @@ fn set_area(s: i64) -> f64 {
     var area = 0.0;
     for item in set_members(s) {
         if cell_face_weights(item / FACE_STRIDE, item % FACE_STRIDE, face_w) {
-            for w in face_w { area += w; }
+            for a in face_w.len / 4 { area += face_w[4 * a]; }
         }
     }
     return area;
@@ -458,24 +459,62 @@ fn reference_point(c: i64, p: f64[3], xi: f64[3]&) -> bool {
     return false;
 }
 
-// The dofs 0 to 2 at (x, y, z), interpolated in the first 3D cell that
-// holds the point. A point outside the 3D cells gives 0, 0, 0.
-fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
-    guard disp.len > 0 else { return 0.0, 0.0, 0.0; }
+// The last 3D cell that holds (x, y, z), with the shape functions there in
+// point_n and point_dn, or -1. On a face between two cells of a lattice
+// mesh, the last cell is the cell on the high side of each axis.
+fn find_cell(x: f64, y: f64, z: f64) -> i64 {
     let p: f64[3] = [x, y, z];
     var xi: f64[3] = [0.0, 0.0, 0.0];
-    for c in cell_count() {
+    var c = cell_count() - 1;
+    while c >= 0 {
         let t = cell_type[c] as i64;
-        if CELL_DIMS[t] != 3 || !in_cell_bounds(c, p) || !reference_point(c, p, xi) || !cell_inside(t, xi) {
-            continue;
+        if CELL_DIMS[t] == 3 && in_cell_bounds(c, p) && reference_point(c, p, xi) && cell_inside(t, xi) {
+            cell_shape(t, xi, point_n, point_dn);
+            return c;
         }
-        cell_shape(t, xi, point_n, point_dn);
-        var u: f64[3] = [0.0, 0.0, 0.0];
-        for w, a in point_n {
-            let d = dofs_per_node * cell_node(c, a);
-            for k in min(dofs_per_node, 3) { u[k] += w * disp[d + k]; }
-        }
-        return u[0], u[1], u[2];
+        c--;
     }
-    return 0.0, 0.0, 0.0;
+    return -1;
+}
+
+// The dofs 0 to 2 at (x, y, z), interpolated in the cell of find_cell. A
+// point outside the 3D cells gives 0, 0, 0.
+fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
+    guard disp.len > 0 else { return 0.0, 0.0, 0.0; }
+    let c = find_cell(x, y, z);
+    guard c >= 0 else { return 0.0, 0.0, 0.0; }
+    var u: f64[3] = [0.0, 0.0, 0.0];
+    for w, a in point_n {
+        let d = dofs_per_node * cell_node(c, a);
+        for k in min(dofs_per_node, 3) { u[k] += w * disp[d + k]; }
+    }
+    return u[0], u[1], u[2];
+}
+
+// The linear elastic stress at (x, y, z) from the gradient of the dofs 0
+// to 2 in the cell of find_cell: xx, yy, zz, yz, xz and xy. A point
+// outside the 3D cells gives 0.
+fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
+    guard disp.len > 0 && dofs_per_node >= 3 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    let c = find_cell(x, y, z);
+    guard c >= 0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    var jac: f64[9] = [0.0; 9];
+    cell_jacobian(c, point_dn, jac);
+    var inv: f64[9] = [0.0; 9];
+    guard inverse3(jac, inv) != 0.0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    // g[3 k + s] = ∂u_k / ∂x_s
+    var g: f64[9] = [0.0; 9];
+    for a in point_n.len {
+        let d = dofs_per_node * cell_node(c, a);
+        for s in 3 {
+            let ds = inv[3 * s] * point_dn[3 * a] + inv[3 * s + 1] * point_dn[3 * a + 1]
+                + inv[3 * s + 2] * point_dn[3 * a + 2];
+            for k in 3 { g[3 * k + s] += disp[d + k] * ds; }
+        }
+    }
+    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    let mu = young / (2.0 * (1.0 + poisson));
+    let tr = lambda * (g[0] + g[4] + g[8]);
+    return tr + 2.0 * mu * g[0], tr + 2.0 * mu * g[4], tr + 2.0 * mu * g[8],
+        mu * (g[5] + g[7]), mu * (g[2] + g[6]), mu * (g[1] + g[3]);
 }

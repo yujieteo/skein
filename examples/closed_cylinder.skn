@@ -1,0 +1,76 @@
+// A closed-end thin steel cylinder under an internal pressure of 1 MPa,
+// with an inner radius a of 100 mm and a wall t_w of 5 mm (a/t_w = 20).
+// Linear static, 3D, 27-node hexahedra. The model is a quarter of the
+// wall, 40 mm long, with symmetry on x = 0, y = 0 and z = 0. The end cap
+// is not in the model: its load, the pressure on the area pi a^2, is a
+// uniform axial stress on the end z = L of the wall. Far from the cap,
+// this is the load of a closed tube (Saint-Venant).
+//
+// The checks read the stress at the middle of the wall (r_m) and at the
+// middle of the length, on y = 0, where yy is the hoop and zz the axial
+// component.
+
+model closed_cylinder: 3d, mm_N_MPa_s
+
+let a: Length = 100 mm
+let t_w: Length = 5 mm
+let b: Length = a + t_w
+let r_m: Length = a + t_w/2
+let L: Length = 40 mm
+let p: Pressure = 1 MPa
+
+scales t_w, p
+
+let barrel: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), b, L)
+let bore: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), a, L)
+let quarter: Solid = box((0, 0, 0) mm, (b, b, L))
+let wall: Solid = (barrel - bore) & quarter
+let inner: Surface = boundary(wall, bore)
+let sym_x: Surface = boundary(wall, x == 0 mm)
+let sym_y: Surface = boundary(wall, y == 0 mm)
+let bottom: Surface = boundary(wall, z == 0 mm)
+let cap: Surface = boundary(wall, z == L)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+mesh m on wall {
+    size: 2.5 mm
+    cell: hex
+}
+
+physics solid on wall: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+step press: static {
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc bottom: u.z = 0
+    bc inner: sigma*n = -p*n
+    // The cap load p pi a^2 on the wall area pi (b^2 - a^2).
+    bc cap: sigma*n = (0, 0, p*a^2/(b^2 - a^2))
+    output u, sigma
+    report reaction(bottom)
+}
+
+// Thin-wall theory: hoop p a/t_w and axial p a/(2 t_w). It leaves out
+// terms of the order t_w/a = 5%, so the limit is 5%.
+expect hoop_thin: sigma.yy at (r_m, 0 mm, L/2) == p*a/t_w within 5%
+
+expect axial_thin: sigma.zz at (r_m, 0 mm, L/2) == p*a/(2*t_w) within 5%
+
+// The thick-wall Lame solution is exact for these loads, so only the
+// error of the mesh is left. It is 0.02% on 2.5 mm cells, and the limit
+// is 0.1%.
+expect hoop_lame: sigma.yy at (r_m, 0 mm, L/2) == p*a^2/(b^2 - a^2)*(1 + b^2/r_m^2) within 0.1%
+
+expect axial_lame: sigma.zz at (r_m, 0 mm, L/2) == p*a^2/(b^2 - a^2) within 0.1%
+
+// The support on z = 0 holds the cap load of the quarter, p pi a^2/4.
+// The reaction points to -z. The limit 1e-6 is the limit of the check
+// equilibrium (docs/checks.md). The area of the parabolic cell edges
+// differs from the area of the arcs by less than 1e-8.
+expect axial_force: reaction(bottom).z == -p*pi*a^2/4 within 0.0001%

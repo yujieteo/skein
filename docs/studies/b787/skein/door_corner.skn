@@ -1,4 +1,4 @@
-// blocked-by: G3 N1
+// blocked-by: G3 G31 G32 G33
 // Boeing 787 forward fuselage under cabin pressure: the door-corner
 // submodel of the problem sheet (../problem.md, 6.4). A 0.600 m square
 // panel of the x-s plane, centred on the centre of the upper aft corner
@@ -62,6 +62,8 @@ let wall: Surface = boundary(barrel, y^2 + z^2 == R^2 && y >= 0 m)
 let x_c: Length = w_d/2 - r_c
 let s_c: Length = R*theta_d - h_d/2 + r_c
 let sub: Solid = panel(x_c, 0.300 m, s_c/R, 0.300 m)
+// gap G32: a Surface or a Curve & a Solid is a Solid in the checker, not
+// the part of the Surface or the Curve in the Solid.
 let skin: Surface = (wall & sub) - door_box(0 m)
 let pad: Surface = skin & door_box(pad_w)
 let plain: Surface = skin - door_box(pad_w)
@@ -70,8 +72,10 @@ let plain: Surface = skin - door_box(pad_w)
 // x = f_pitch/2 + f_pitch*k. The cutout cuts both (sheet 2.3).
 let stringer_0: Curve = line((0 m, R*sin(2 deg), R*cos(2 deg)), (x_end, R*sin(2 deg), R*cos(2 deg)))
 let left: Solid = box((0 m, 0 m, -2*R), (x_end, 2*R, 2*R))
+// gap G32: the & left & sub gives a Solid.
 let stringers: Curve = (pattern_polar(stringer_0, e_x, 90) & left & sub) - door_box(0 m)
 let ring_0: Curve = boundary(wall, x == 0 m)
+// gap G32: the & sub gives a Solid.
 let frames: Curve = pattern(
     move(ring_0, (f_pitch/2, 0 m, 0 m)),
     (f_pitch, 0 m, 0 m),
@@ -84,6 +88,7 @@ let door_edge: Curve = boundary(skin, door_box(0 m))
 // The aft part of the cutout edge in the panel: a part of the straight
 // aft edge and of the upper aft corner arc (sheet 6.2).
 let aft_of_x_c: Solid = box((x_c, 0 m, -2*R), (x_end, 2*R, 2*R))
+// gap G32: the & aft_of_x_c gives a Solid.
 let door_aft: Curve = door_edge & aft_of_x_c
 
 // The mid-points of the cut edges that have skin (sheet 7.2, C6).
@@ -160,13 +165,14 @@ physics skin_shell on skin: reissner_mindlin(
 ) solves w: Vector<Length>,
     theta: Vector<Angle> {
     material skin_lam on plain, pad_lam on pad
+    // gap G33: the template does not declare eps_m.
     let e_hoop: Real = dot(e_t, eps_m*e_t)
     let e_axial: Real = dot(e_x, eps_m*e_x)
     let e_shear: Real = dot(e_x, eps_m*e_t)
     let e_1: Real = (e_axial + e_hoop)/2 + sqrt(((e_axial - e_hoop)/2)^2 + e_shear^2)
 }
 
-// gap N1: timoshenko(A, I_y, I_z) has no J, no section axis and no offset,
+// gap G31: timoshenko(A, I_y, I_z) has no J, no section axis and no offset,
 // and gives no axial force. The template here takes them and gives Nx.
 physics beam on beams: timoshenko(
     A: A,
@@ -194,14 +200,19 @@ bc cut: theta = global.theta
 step pressurize: static {
     // The plug door load: p_U*x per unit s, so p_U*x*|n.x| per unit edge
     // length, because ds = |n.x|*dl.
+    // gap G33: N is not declared, and N*n is not a flux of an eq.
     bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
     output w, e_1, e_hoop
     // gap N2: max gives the value, not its point.
     report e_1_max = max(e_1, door_edge)
+    // gap G33: e_hoop is a let of the global physics, not a field of
+    // the results.
     report K = max(e_1, door_edge)/(global.e_hoop at P)
     report MS = 4000e-6/max(e_1, door_edge) - 1
 }
 
+// gap G33: global.e_hoop is not a field of the results.
 expect c6_aft: e_hoop at Q_aft == global.e_hoop at Q_aft within 5%
 
+// gap G33: global.e_hoop is not a field of the results.
 expect c6_top: e_hoop at Q_top == global.e_hoop at Q_top within 5%

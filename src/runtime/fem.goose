@@ -174,9 +174,10 @@ fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
     return elements_matrix(c, ke);
 }
 
-// The weights of a uniform load on local face f of cell c: w[a] is the
-// integral of N_a over the face, for each local node a. False if the cell
-// type has no face routine.
+// The weights of a uniform load on local face f of cell c, for each local
+// node a: w[4 a] is the integral of N_a over the face, and w[4 a + 1 + k]
+// is the integral of N_a n_k, with n the unit normal out of the cell.
+// False if the cell type has no face routine.
 fn cell_face_weights(c: i64, f: i64, w: f64[>..]&) -> bool {
     w.clear();
     let t = cell_type[c] as i64;

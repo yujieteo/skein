@@ -44,7 +44,11 @@ fn hex27_face_weights(c: i64, f: i64, w: f64[>..]&) {
     let r = f / 2;
     let a = if r == 0 { 1 } else { 0 };
     let b = if r == 2 { 1 } else { 2 };
-    for l in 27 { w.push(0.0); }
+    // ta × tb is along +ξ_r for r = 0 and 2, and along -ξ_r for r = 1. The
+    // face at side 0 looks to -ξ_r.
+    var sign = if r == 1 { -1.0 } else { 1.0 };
+    if f % 2 == 0 { sign = -sign; }
+    for l in 4 * 27 { w.push(0.0); }
     var xi: f64[3] = [0.0, 0.0, 0.0];
     xi[r] = if f % 2 == 0 { -1.0 } else { 1.0 };
     for gb in 3 {
@@ -64,11 +68,19 @@ fn hex27_face_weights(c: i64, f: i64, w: f64[>..]&) {
                     tb[s] += shape_dn[3 * l + b] * coords[3 * n + s];
                 }
             }
-            let nx = ta[1] * tb[2] - ta[2] * tb[1];
-            let ny = ta[2] * tb[0] - ta[0] * tb[2];
-            let nz = ta[0] * tb[1] - ta[1] * tb[0];
-            let da = GAUSS3_W[ga] * GAUSS3_W[gb] * sqrt(nx * nx + ny * ny + nz * nz);
-            for l in 27 { w[l] += shape_n[l] * da; }
+            // The outward normal times the area per unit area of the
+            // reference square.
+            let nx = sign * (ta[1] * tb[2] - ta[2] * tb[1]);
+            let ny = sign * (ta[2] * tb[0] - ta[0] * tb[2]);
+            let nz = sign * (ta[0] * tb[1] - ta[1] * tb[0]);
+            let gw = GAUSS3_W[ga] * GAUSS3_W[gb];
+            let da = gw * sqrt(nx * nx + ny * ny + nz * nz);
+            for l in 27 {
+                w[4 * l] += shape_n[l] * da;
+                w[4 * l + 1] += shape_n[l] * gw * nx;
+                w[4 * l + 2] += shape_n[l] * gw * ny;
+                w[4 * l + 3] += shape_n[l] * gw * nz;
+            }
         }
     }
 }

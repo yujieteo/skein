@@ -124,8 +124,44 @@ fn test_grid_cantilever() {
         "output(\"RESULTS/load.vtu\");",
         "let ux, uy, uz = runtime::displacement_at(100.0, 5.0, 5.0);",
         "expect(\"tip_uz\", uz, -0.191933, 0.015, true, \"mm\", \"-0.191933 mm within 1.5%\");",
-        "not_run(\"top_sxx: sigma.xx at (51.25, 5, 10) mm is not in this slice\");",
+        "let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(51.25, 5.0, 10.0);",
+        "expect(\"top_sxx\", sxx, 29.25, 0.015, true, \"MPa\", \"29.25 MPa within 1.5%\");",
     ]);
+}
+
+fn test_closed_cylinder() {
+    var text: u8[>..] = [];
+    read_file("examples/closed_cylinder.skn", text);
+    expect_lines("closed_cylinder", text, [
+        "runtime::mesh_annulus(0.0, 0.0, 100.0, 105.0, 0.0, 1.5707963267948966, 0.0, 40.0,",
+        "runtime::cells_for(1.5707963267948966 * 105.0, 2.5),",
+        "face(runtime::fix_component(\"t1\", runtime::X), \"sym_x\");",
+        "face(runtime::fix_component(\"t0\", runtime::Y), \"sym_y\");",
+        "face(runtime::fix_component(\"z0\", runtime::Z), \"bottom\");",
+        "face(runtime::normal_traction(\"r0\", -1.0), \"inner\");",
+        "face(runtime::traction(\"z1\", 0.0, 0.0, 9.75609756097561), \"cap\");",
+        "let rx, ry, rz = runtime::total_reaction();",
+        "largest = max(largest, 1.0 * runtime::face_area(\"r0\"));",
+        "let x, y, z = runtime::reaction(\"z0\");",
+        "report(\"press\", \"reaction(bottom)\", vector(0.0, 0.0, z, \"N\"));",
+        "let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(102.5, 0.0, 20.0);",
+        "expect(\"hoop_lame\", syy, 19.993906066365838, 0.001, true, \"MPa\", \"p*a^2/(b^2 - a^2)*(1 + b^2/r_m^2) within 0.1%\");",
+        "expect(\"axial_force\", z, -7853.981633974483, 1e-06, true, \"N\", \"-p*pi*a^2/4 within 0.0001%\");",
+    ]);
+    expect_lines("a label that starts and ends with a group",
+                 replace(text, "== p*a^2/(b^2 - a^2)*(1 + b^2/r_m^2)", "== (p*a^2/(b^2 - a^2))*(1 + b^2/r_m^2)"),
+                 ["\"(p*a^2/(b^2 - a^2))*(1 + b^2/r_m^2) within 0.1%\""]);
+    let tube = "let wall: Solid = (barrel - bore) & quarter";
+    expect_error("a full tube", replace(text, tube, "let wall: Solid = barrel - bore"),
+                 "error unsupported 28:31 the solid 'wall' is not a box or a quarter of a tube");
+    expect_error("a cut off the centre", replace(text, "box((0, 0, 0) mm, (b, b, L))", "box((1, 0, 0) mm, (b, b, L))"),
+                 "error unsupported 27:35 this slice cuts only the quarter x >= cx, y >= cy of a tube");
+    expect_error("an edge with the same fixed component", replace(text, "bc bottom: u.z = 0", "bc bottom: u = 0"),
+                 "error unsupported 51:5 the fixed faces sym_x and bottom share an edge");
+    expect_error("a reaction with no support", replace(text, "reaction(bottom).z", "reaction(bottom).x"),
+                 "error unsupported 76:8 expect axial_force: the face bottom does not fix u.x");
+    expect_error("a transposed sigma component", replace(text, "sigma.zz at (r_m, 0 mm, L/2) == p*a/(2", "sigma.zy at (r_m, 0 mm, L/2) == p*a/(2"),
+                 "error unsupported 63:26 sigma has no component 'zy'");
 }
 
 fn test_units() {
@@ -233,25 +269,14 @@ fn test_reaction() {
         """)), [
         "largest = max(largest, 1.0 * runtime::face_area(\"z0\"));\n    largest = max(largest, 1.0 * runtime::face_area(\"z1\"));\n    equilibrium(rx, ry, rz, largest, \"N\");",
     ]);
-    expect_lines("fixed faces with an edge", model(MM, str(MESH, """
+    expect_error("fixed faces with an edge", model(MM, str(MESH, """
         let bottom: Surface = boundary(beam, z == 0 mm)
 
         step load: static {
             bc root: u = 0
             bc bottom: u = 0
         }
-        """)), ["face(runtime::fix(\"x0\"), \"root\");\n    // bc bottom: u = 0\n    face(runtime::fix(\"z0\"), \"bottom\");",
-                "let rx, ry, rz = runtime::total_reaction();"]);
-    expect_lines("the reaction of a face with a shared edge", model(MM, str(MESH, """
-        let bottom: Surface = boundary(beam, z == 0 mm)
-
-        step load: static {
-            bc root: u = 0
-            bc bottom: u = 0
-            bc tip: u = 0
-            report reaction(root)
-        }
-        """)), ["let x, y, z = runtime::reaction(\"x0\");\n        var alone = true;\n        alone = alone && !shared(\"root\", \"x0\", \"bottom\", \"z0\");\n        alone = alone && !shared(\"root\", \"x0\", \"tip\", \"x1\");\n        if alone { report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\")); }"]);
+        """)), "error unsupported 23:5 the fixed faces root and bottom share an edge");
     expect_error("a later step fixes a new face", model(MM, str(MESH, """
         step one: static {
             bc root: u = 0
@@ -263,24 +288,6 @@ fn test_reaction() {
         """)), "error unsupported 24:5 step two fixes a face that step one does not fix");
     expect_error("the reaction of a loaded face", replace(model(MM, str(MESH, STEP)), "reaction(root)", "reaction(tip)"),
                  "error unsupported 23:21 the face tip is not fixed in step load");
-}
-
-fn test_unsupported() {
-    expect_error("a cylinder", str(MM, """
-
-        let bore: Solid = cylinder((40, 0, 20) mm, (0, 1, 0), 6 mm, 20 mm)
-        """), "error unsupported 2:27 the solid 'bore' is not one box");
-    expect_error("tet cells", replace(model(MM, str(MESH, STEP)), "cell: hex", "cell: tet"),
-                 "error unsupported 13:11 this slice meshes a box with hex cells only");
-    expect_error("order 1", model(MM, str(MESH, "method solid: cg { order: 1 }\n", STEP)),
-                 "error unsupported 19:20 this slice has only order 2");
-    expect_error("a face off the box", replace(model(MM, str(MESH, STEP)), "x == L", "x == 50 mm"),
-                 "error unsupported 5:37 the surface is not on a face of the box");
-    expect_error("no support", replace(model(MM, str(MESH, STEP)), "bc root: u = 0\n", ""),
-                 "error unsupported 16:9 no face is fixed");
-    expect_error("a unit outside the slice", replace(model(MM, str(MESH, STEP)), "-1) MPa", "-1) J"),
-                 "error unsupported 21:34 the unit 'J' is not in this slice");
-    expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
 }
 
 // The dispatch tables: a template or a procedure of a lane that has no
@@ -300,13 +307,32 @@ fn test_dispatch() {
                  "error unsupported 22:25 the solve setting is not in this slice");
 }
 
+fn test_unsupported() {
+    expect_error("a cylinder", str(MM, """
+
+        let bore: Solid = cylinder((40, 0, 20) mm, (0, 1, 0), 6 mm, 20 mm)
+        """), "error unsupported 2:27 this slice has cylinders on the axis (0, 0, 1) only");
+    expect_error("tet cells", replace(model(MM, str(MESH, STEP)), "cell: hex", "cell: tet"),
+                 "error unsupported 13:11 this slice meshes with hex cells only");
+    expect_error("order 1", model(MM, str(MESH, "method solid: cg { order: 1 }\n", STEP)),
+                 "error unsupported 19:20 this slice has only order 2");
+    expect_error("a face off the box", replace(model(MM, str(MESH, STEP)), "x == L", "x == 50 mm"),
+                 "error unsupported 5:37 the surface is not on a face of beam");
+    expect_error("no support", replace(model(MM, str(MESH, STEP)), "bc root: u = 0\n", ""),
+                 "error unsupported 16:9 no face is fixed");
+    expect_error("a unit outside the slice", replace(model(MM, str(MESH, STEP)), "-1) MPa", "-1) J"),
+                 "error unsupported 21:34 the unit 'J' is not in this slice");
+    expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
+}
+
 fn main() {
     test_grid_cantilever();
-    test_dispatch();
+    test_closed_cylinder();
     test_units();
     test_two_steps();
     test_bc_scope();
     test_reaction();
+    test_dispatch();
     test_unsupported();
     if failures > 0 {
         print(failures, " codegen tests failed");

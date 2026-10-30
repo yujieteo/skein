@@ -139,6 +139,51 @@ fn test_shared_edge() {
     }
 }
 
+// A quarter of a closed-end steel tube, a = 100 mm, b = 105 mm, 10 mm
+// long, with an internal pressure of 1 MPa. Symmetry on x = 0, y = 0 and
+// z = 0. The closed end is the uniform axial stress A = p a² / (b² - a²)
+// on z = 10 mm. The Lamé solution is exact for these loads:
+// σθ = A (1 + b²/r²), σr = A (1 - b²/r²) and σz = A. The 0.1% limit is
+// about 4 times the error of this mesh.
+fn test_annulus() {
+    let a = 100.0;
+    let b = 105.0;
+    let p = 1.0;
+    let A = p * a * a / (b * b - a * a);
+    runtime::mesh_annulus(0.0, 0.0, a, b, 0.0, 0.5 * PI, 0.0, 10.0, 2, 48, 2);
+    runtime::material(E, NU);
+    assert(runtime::fix_component("t1", runtime::X));
+    assert(runtime::fix_component("t0", runtime::Y));
+    assert(runtime::fix_component("z0", runtime::Z));
+    assert(runtime::normal_traction("r0", -p));
+    assert(runtime::traction("z1", 0.0, 0.0, A));
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL annulus: CG does not converge in ", runtime::cg_iterations(), " iterations");
+    }
+    let r = 102.5;
+    let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(r, 0.0, 5.0);
+    let rx, ry, rz = runtime::reaction("z0");
+    let fx, fy, fz = runtime::applied_load();
+    print("annulus: 2 x 48 x 2 hex27, ", runtime::dof_count(), " dofs, ",
+        runtime::cg_iterations(), " CG iterations, ", runtime::solve_seconds(), " s");
+    print("  at r = ", r, ": hoop ", syy, ", axial ", szz, " MPa");
+    print("  reaction z ", rz, " N, applied ", fx, " ", fy, " ", fz, " N");
+    expect_near("annulus hoop against Lame", syy, A * (1.0 + b * b / (r * r)), 1.0e-3);
+    expect_near("annulus axial against Lame", szz, A, 1.0e-3);
+    // The axial load is the pressure on the end cap, p π a² / 4.
+    expect_near("annulus axial reaction", rz, -0.25 * PI * a * a * p, 1.0e-6);
+    // The hoop stress at 45°: (σθ + σr) / 2 on xx and yy, (σθ - σr) / 2 on xy.
+    let s45 = r * sqrt(0.5);
+    let txx, tyy, tzz, tyz, txz, txy = runtime::stress_at(s45, s45, 5.0);
+    expect_near("annulus shear at 45 degrees", -txy, A * b * b / (r * r), 1.0e-2);
+    let ox, oy, oz = runtime::displacement_at(0.0, 0.0, 5.0);
+    if ox != 0.0 || oy != 0.0 || oz != 0.0 {
+        failures++;
+        print("FAIL annulus: the axis is not in the mesh, but u there is ", ox, " ", oy, " ", oz);
+    }
+}
+
 // A field with 1 dof for each node, as the heat template has: the VTU
 // file holds 1 component for each node, with the value of its dof.
 fn test_scalar_field() {
@@ -201,6 +246,7 @@ fn main() {
     test_second_step();
     test_newton();
     test_shared_edge();
+    test_annulus();
     test_scalar_field();
     test_registry();
     if failures > 0 { exit(1); }

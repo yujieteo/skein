@@ -6,6 +6,7 @@
 //     runtime::mesh_box(0.0, 0.0, 0.0, 100.0, 10.0, 10.0, 40, 4, 4);
 //     runtime::material(210000.0, 0.3);
 //     runtime::fix("x0");
+//     runtime::fix_component("y0", runtime::Y);
 //     runtime::traction("x1", 0.0, 0.0, -1.0);
 //     runtime::linear_solver("cg", "jacobi");
 //     let ok = runtime::solve_static();
@@ -22,10 +23,11 @@
 // surface. A name that the mesh does not have selects nothing, and the
 // call returns false. The box mesher names the faces of the box x0, x1,
 // y0, y1, z0 and z1: x0 is the face x = x0, as in
-// `boundary(beam, x == 0 mm)`.
+// `boundary(beam, x == 0 mm)`. The annulus mesher names the faces of the
+// sector r0, r1, t0, t1, z0 and z1 (r, θ and z).
 //
-// The mesh is the unstructured mesh of fem.goose, and mesh_box is its
-// first mesher. The state is global: one mesh, one material, one set of supports and one
+// The mesh is the unstructured mesh of fem.goose. mesh_box and
+// mesh_annulus are its first meshers. The state is global: one mesh, one material, one set of supports and one
 // set of loads. A second load step calls `clear_loads`, applies its loads
 // and solves again. A second mesh (a sweep over a dimension) starts again
 // at `mesh_box`, which clears all of the state.
@@ -37,12 +39,25 @@ import .solid;
 import .solve;
 import .vtu;
 
+// The components of a vector, for fix_component.
+let X = 0;
+let Y = 1;
+let Z = 2;
+
 // Meshes the box from (x0, y0, z0) to (x1, y1, z1) with nx × ny × nz
 // 27-node hexahedra (triquadratic Lagrange cells). Clears the material,
 // the supports, the loads and the solution.
 fn mesh_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
             nx: i64, ny: i64, nz: i64) {
     build_box(x0, y0, z0, x1, y1, z1, nx, ny, nz);
+}
+
+// Meshes the sector r0 <= r <= r1, t0 <= θ <= t1, z0 <= z <= z1 of an
+// annulus about the axis x = cx, y = cy with nr × nt × nz 27-node
+// hexahedra. Clears the state as `mesh_box` does.
+fn mesh_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, z1: f64,
+                nr: i64, nt: i64, nz: i64) {
+    build_annulus(cx, cy, r0, r1, t0, t1, z0, z1, nr, nt, nz);
 }
 
 // The number of cells along `length` for a cell size of at most `size`.
@@ -61,7 +76,16 @@ fn material(E: f64, nu: f64) {
 fn fix(set: const u8[:]) -> bool {
     let s = find_set(set, false);
     guard s >= 0 else { return false; }
-    fix_set(s);
+    fix_set(s, 0, dofs_per_node);
+    return true;
+}
+
+// Holds dof c (X, Y or Z for a solid) at 0 on the nodes of a node set, as
+// a plane of symmetry does.
+fn fix_component(set: const u8[:], c: i64) -> bool {
+    let s = find_set(set, false);
+    guard s >= 0 && c >= 0 && c < dofs_per_node else { return false; }
+    fix_set(s, c, c + 1);
     return true;
 }
 
@@ -69,7 +93,15 @@ fn fix(set: const u8[:]) -> bool {
 fn traction(set: const u8[:], tx: f64, ty: f64, tz: f64) -> bool {
     let s = find_set(set, true);
     guard s >= 0 else { return false; }
-    return add_set_traction(s, tx, ty, tz);
+    return add_set_traction(s, tx, ty, tz, 0.0);
+}
+
+// Adds the traction s n on a face set, with n the unit normal out of the
+// body. An internal pressure p is s = -p.
+fn normal_traction(set: const u8[:], s: f64) -> bool {
+    let fs = find_set(set, true);
+    guard fs >= 0 else { return false; }
+    return add_set_traction(fs, 0.0, 0.0, 0.0, s);
 }
 
 // The area of a face set, or 0 if the mesh has no face set of that name.
@@ -111,6 +143,12 @@ fn solve_static() -> bool {
 // point. A point outside the 3D cells gives 0, 0, 0.
 fn displacement_at(x: f64, y: f64, z: f64) -> f64, f64, f64 {
     return interpolate_u(x, y, z);
+}
+
+// The stress at (x, y, z) in the cell that holds the point: xx, yy, zz,
+// yz, xz and xy. A point outside the 3D cells gives 0.
+fn stress_at(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
+    return stress_at_point(x, y, z);
 }
 
 // The sum of the reaction forces on the fixed nodes of a node set.

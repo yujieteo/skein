@@ -7,7 +7,8 @@ import syntax from "./syntax";
 import fmt.fmt;
 import cli.card;
 import codegen.run;
-import check.check;
+import check from "./check";
+import md from "./md";
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -16,7 +17,8 @@ let USAGE = """
       check   parse and type-check a model
       fmt     rewrite files in the standard layout
       help    print this text
-      run     build and run a model (only a linear static box for now)
+      run     build and run a model (only a linear static box or quarter of a tube for now)
+      md      write a model as a Markdown document
     """;
 
 fn main() {
@@ -45,6 +47,11 @@ fn main() {
         exit(codegen::run(rest));
     }
     if command == "check" { exit(check::command(args)); }
+    if command == "md" {
+        var rest: const u8[:][>..] = [];
+        for a in args[2..] { rest.push(a); }
+        exit(md::run(rest));
+    }
     write_stderr(str("skein: unknown command '", command, "'\n", USAGE, "\n"));
     exit(2);
 }

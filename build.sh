@@ -2,7 +2,8 @@
 # Builds and tests the skein compiler.
 #
 #   ./build.sh          build build/skein
-#   ./build.sh test     build, then run each src/<part>/test.goose
+#   ./build.sh test     build, then run each src/<part>/test.goose and
+#                       check the generated C (scripts/generated_c.sh)
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.
@@ -30,6 +31,9 @@ run_tests() {
             status=1
         fi
     done
+    if ! "$root/scripts/generated_c.sh"; then
+        status=1
+    fi
     return $status
 }
 
