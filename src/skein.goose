@@ -7,6 +7,7 @@ import syntax from "./syntax";
 import fmt.fmt;
 import cli.card;
 import codegen.run;
+import check.check;
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -43,10 +44,7 @@ fn main() {
         for a in args[2..] { rest.push(a); }
         exit(codegen::run(rest));
     }
-    if command == "check" {
-        write_stderr(str("skein: ", command, " is not implemented yet\n"));
-        exit(1);
-    }
+    if command == "check" { exit(check::command(args)); }
     write_stderr(str("skein: unknown command '", command, "'\n", USAGE, "\n"));
     exit(2);
 }

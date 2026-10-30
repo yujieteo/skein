@@ -37,9 +37,10 @@ step load: static {
 ```
 
 **Status:** this repository holds the specification and the start of the
-compiler. The compiler cannot check a model yet. The
-[roadmap](docs/roadmap.md) gives the phases. Phase 1 is the front end: the
-parser, the type and unit checker, `skein fmt` and `skein check`.
+compiler. `skein check` parses and type-checks a model. `skein fmt` rewrites
+a file in the standard layout. The [roadmap](docs/roadmap.md) gives the phases.
+Phase 1 is the front end: the parser, the type and unit checker,
+`skein fmt` and `skein check`.
 
 ## Building
 
@@ -61,6 +62,7 @@ Goose source tree at the same commit as the compiler.
 | `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron box mesher (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
+| `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
 
 ## Why Skein
 
