@@ -14,6 +14,10 @@ import math;
 import os;
 import elements from "../elements";
 
+extern "libc.so.6" {
+    fn system(command: const u8&) -> i32;
+}
+
 var failures = 0;
 
 fn expect_near(what: u8[:], got: f64, want: f64, rel: f64) {
@@ -270,10 +274,35 @@ fn test_heated_bar() {
     heated_bar(3, 2, 8, 0.002);
 }
 
+// --- skein run ------------------------------------------------------------------
+
+// `skein run` of the gate models: each model holds its own `expect`, so a
+// run that does not pass exits with a status other than 0. `./build.sh
+// test` builds build/skein first. The runs write .skein under build/.
+let MODELS = [
+    "examples/femahoy/grid_kirsch_hole.skn",
+    "examples/elements/kirsch_plate_tri.skn",
+    "examples/elements/heated_bar_tet.skn",
+];
+
+fn test_runs() {
+    for m in MODELS {
+        print("skein run ", m, ":");
+        var c: u8[>..] = [];
+        format(c, "cd build && ./skein run ../", m);
+        c.push(0);
+        if system(c[0]) != 0 {
+            failures++;
+            print("FAIL skein run ", m);
+        }
+    }
+}
+
 fn main() {
     test_patches();
     test_kirsch();
     test_heated_bar();
+    test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");
 }

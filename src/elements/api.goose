@@ -98,9 +98,9 @@ fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
 // Adds a uniform outward heat flux q·n = g (power per area) on the region.
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 
-// Removes the loads and the solution of the last step. The mesh, the
-// physics and the fixed dofs stay.
-fn clear_loads() { clear_loads_and_fixes(); }
+// Removes the fixed values, the loads and the solution, for the next
+// step. The mesh and the physics stay.
+fn clear_bcs() { clear_conditions(); }
 
 // Assembles and solves by CG with a Jacobi preconditioner. Returns false
 // if CG does not converge.
@@ -139,6 +139,9 @@ fn applied_load() -> f64, f64, f64 {
     let f = total_load();
     return f[0], f[1], f[2];
 }
+
+// The sum of the sizes of the nodal loads and sources.
+fn load_scale() -> f64 { return load_magnitude(); }
 
 // Writes the mesh and the solution, with the name `field`, to a VTU file.
 fn write_vtu(path: const u8[:], field: const u8[:]) -> bool { return write_vtu_file(path, field); }

@@ -79,6 +79,9 @@ let BASE_UNITS = [
     BaseUnit { name: "Pa", u: Unit { f: 1.0, l: -1, m: 1, t: -2 } },
     BaseUnit { name: "t", u: Unit { f: 1000.0, l: 0, m: 1, t: 0 } },
     BaseUnit { name: "bar", u: Unit { f: 1.0e5, l: -1, m: 1, t: -2 } },
+    // skein-elements: the heat units of src/elements/gen.goose. Each system uses the kelvin.
+    BaseUnit { name: "W", u: Unit { f: 1.0, l: 2, m: 1, t: -3 } },
+    BaseUnit { name: "K", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
 ];
 
 let PREFIX_CHARS = "numckMG";

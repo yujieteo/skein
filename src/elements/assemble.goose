@@ -338,7 +338,9 @@ fn add_region_load(gv: f64[3]) {
     }
 }
 
-fn clear_loads_and_fixes() {
+fn clear_conditions() {
+    for &v in fixed { v = 0; }
+    for &v in prescribed { v = 0.0; }
     for &v in load { v = 0.0; }
     for &v in sol { v = 0.0; }
 }
@@ -374,6 +376,15 @@ fn all_reaction() -> f64[3] {
         for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
     }
+    return sum;
+}
+
+// The sum of the sizes of the nodal loads and sources: the scale of the
+// check `equilibrium`, which loads that cancel do not make 0.
+fn load_magnitude() -> f64 {
+    var sum = 0.0;
+    for v in load { sum += abs(v); }
+    for v in assembled_source { sum += abs(v); }
     return sum;
 }
 
