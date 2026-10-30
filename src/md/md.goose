@@ -242,7 +242,7 @@ fn prec(n: i64) -> i64 {
 }
 
 // `n` in parentheses when it binds less tightly than `least`.
-fn math_at(n: i64, least: i64) {
+recursive fn math_at(n: i64, least: i64) {
     if prec(n) >= least {
         math(n);
         return;
