@@ -13,7 +13,9 @@
 //    the true curve, until all segments are edges of the triangulation.
 // 4. Each triangle inside the polygon of the segments with an angle below MIN_ANGLE, or a
 //    circumradius above size / sqrt(3), gets a point at its circumcentre.
-//    If that point encroaches a segment, the segment is split instead.
+//    If that point encroaches a segment, the segment is split instead. A
+//    triangle whose smallest angle is at a corner of 2 segments below
+//    MIN_ANGLE cannot reach it, so only its circumradius counts.
 import std;
 import math;
 import dictionary;
@@ -40,6 +42,7 @@ var curves: Curve[>..] = [];
 var px: f64[>..] = [];
 var py: f64[>..] = [];
 var vtri: i64[>..] = [];        // a live triangle at each point
+var sharp: bool[>..] = [];      // 2 segments meet at the point at less than MIN_ANGLE
 
 // The triangles: 3 points, counter-clockwise, and the 3 neighbours. The
 // neighbour k is across the edge opposite point k, or -1.
@@ -107,9 +110,33 @@ fn curve_length(c: i64) -> f64 {
     return TAU * p[2];
 }
 
-// True if curve c is on the boundary of shape g at t: φ has a different
-// sign on the two sides of the curve.
+// True if an earlier curve holds the point of curve c at t: a line on the
+// same line, or the same circle. That curve then has the boundary there.
+fn covered(c: i64, t: f64, eps: f64) -> bool {
+    let x, y = curve_point(c, t);
+    let p = curves[c].p;
+    for e in c {
+        guard curves[e].kind == curves[c].kind else { continue; }
+        let q = curves[e].p;
+        if curves[c].kind == ARC {
+            if abs(q[0] - p[0]) <= eps && abs(q[1] - p[1]) <= eps && abs(q[2] - p[2]) <= eps { return true; }
+            continue;
+        }
+        let l = curve_length(e);
+        let dx = (q[2] - q[0]) / l;
+        let dy = (q[3] - q[1]) / l;
+        let off0 = (p[1] - q[1]) * dx - (p[0] - q[0]) * dy;
+        let off1 = (p[3] - q[1]) * dx - (p[2] - q[0]) * dy;
+        let along = (x - q[0]) * dx + (y - q[1]) * dy;
+        if abs(off0) <= eps && abs(off1) <= eps && along >= 0.0 && along <= l { return true; }
+    }
+    return false;
+}
+
+// True if curve c has the boundary of shape g at t: φ has a different
+// sign on the two sides of the curve, and no earlier curve holds the point.
 fn on_boundary(g: i64, c: i64, t: f64, eps: f64) -> bool {
+    if covered(c, t, eps) { return false; }
     let x, y = curve_point(c, t);
     let p = curves[c].p;
     var nx = 0.0;
@@ -125,7 +152,8 @@ fn on_boundary(g: i64, c: i64, t: f64, eps: f64) -> bool {
     return (phi(g, x + eps * nx, y + eps * ny, 0.0) < 0.0) != (phi(g, x - eps * nx, y - eps * ny, 0.0) < 0.0);
 }
 
-// The point at (x, y), or a new one. `tol` merges the ends of two pieces.
+// The point at (x, y), or a new one. `tol` merges the ends of two pieces:
+// the bisection puts an end up to eps / tan(angle) from the true corner.
 fn boundary_point(x: f64, y: f64, tol: f64) -> i64 {
     for i in 3..px.len {
         if abs(px[i] - x) <= tol && abs(py[i] - y) <= tol { return i; }
@@ -156,7 +184,7 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64) {
 // The pieces of each curve that are on the boundary of g.
 fn sample_boundary(g: i64, size: f64, diameter: f64) {
     let eps = 1.0e-7 * diameter;
-    let tol = 1.0e-9 * diameter;
+    let tol = 100.0 * eps;
     for c in curves.len {
         let m = max(512, ceil(16.0 * curve_length(c) / size) as i64);
         var on: bool[>..] = [];
@@ -203,6 +231,27 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
             let tb = change(j % m) + (j / m);
             add_piece(c, ta, tb, size, tol);
             i = j + 1;
+        }
+    }
+}
+
+// Sets `sharp` of each point of the sampled boundary.
+fn find_sharp_corners() {
+    for v in px.len { sharp.push(false); }
+    let limit = cos(radians(MIN_ANGLE));
+    for s in segments.len {
+        for e in s {
+            for i in 2 {
+                let v = if i == 0 { segments[s].a } else { segments[s].b };
+                let a = if v == segments[s].a { segments[s].b } else { segments[s].a };
+                let b = if v == segments[e].a { segments[e].b } else if v == segments[e].b { segments[e].a } else { -1 };
+                guard b >= 0 && b != a else { continue; }
+                let ax = px[a] - px[v];
+                let ay = py[a] - py[v];
+                let bx = px[b] - px[v];
+                let by = py[b] - py[v];
+                if ax * bx + ay * by > limit * sqrt((ax * ax + ay * ay) * (bx * bx + by * by)) { sharp[v] = true; }
+            }
         }
     }
 }
@@ -508,9 +557,9 @@ fn classify() {
     }
 }
 
-// The circumcentre of t, and the ratio of its circumradius to its
-// shortest edge.
-fn circumcentre(t: i64) -> f64, f64, f64, f64 {
+// The circumcentre of t, the ratio of its circumradius to its shortest
+// edge, and the point opposite that edge, at the smallest angle.
+fn circumcentre(t: i64) -> f64, f64, f64, f64, i64 {
     let a = tv[3 * t];
     let b = tv[3 * t + 1];
     let c = tv[3 * t + 2];
@@ -526,8 +575,9 @@ fn circumcentre(t: i64) -> f64, f64, f64, f64 {
     let r = sqrt(ux * ux + uy * uy);
     let ex = px[c] - px[b];
     let ey = py[c] - py[b];
-    let shortest = sqrt(min(min(b2, c2), ex * ex + ey * ey));
-    return px[a] + ux, py[a] + uy, r, r / shortest;
+    let e2 = ex * ex + ey * ey;
+    let apex = if e2 <= b2 && e2 <= c2 { a } else if b2 <= c2 { c } else { b };
+    return px[a] + ux, py[a] + uy, r, r / sqrt(min(min(b2, c2), e2)), apex;
 }
 
 // Meshes the 2D shape g with triangles of edge length about `size`. False
@@ -539,6 +589,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     px.clear();
     py.clear();
     vtri.clear();
+    sharp.clear();
     tv.clear();
     tn.clear();
     talive.clear();
@@ -564,6 +615,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     for i in 3 { vtri.push(-1); }
     new_triangle(0, 1, 2);
     sample_boundary(g, size, diameter);
+    find_sharp_corners();
     for v in 3..px.len { insert_existing(v, locate(px[v], py[v])); }
     // A budget of points: 20 times the points of a uniform mesh of the box.
     let budget = 20 * (ceil(w / size) as i64 + 2) * (ceil(h / size) as i64 + 2) + 100 * px.len;
@@ -575,8 +627,8 @@ fn mesh_2d(g: i64, size: f64) -> bool {
         var inserted = false;
         for t in talive.len {
             if !talive[t] || !tin[t] { continue; }
-            let x, y, r, q = circumcentre(t);
-            if q <= ratio && r <= largest { continue; }
+            let x, y, r, q, apex = circumcentre(t);
+            if (q <= ratio || apex < sharp.len && sharp[apex]) && r <= largest { continue; }
             if px.len >= budget { done = false; break; }
             var split = false;
             for s in segments.len {
