@@ -1322,6 +1322,12 @@ Each setting is optional. The defaults:
 
 All solvers are in Goose (§18.4).
 
+`linear: gmres` with `precond: ilu0` uses GMRES with a fixed restart of
+300. It is for small models only, because each solve holds about 301 basis
+vectors of n doubles for n unknowns. A finer mesh needs more iterations,
+and the restart can then make GMRES stall. A solve that does not converge
+writes the solver, the iterations and the restart to stderr.
+
 ### 14.5 `output` and `report`
 
 `output e1, e2, …` writes the fields or field expressions to the result
@@ -1634,8 +1640,10 @@ thread_fn assemble_worker() {
 
 ### 18.4 The runtime
 
-`runtime` is a Goose package in `src/runtime/`. It holds no C, except the C
-that the Goose standard library uses for files and the clock. The
+`runtime` is a Goose package in `src/runtime/`. GMRES(m), ILU(0) and
+Newton are in the package `solvers` in `src/solvers/`. `runtime` calls its
+GMRES(m) and ILU(0). `runtime` holds no C, except the C that the Goose
+standard library uses for files and the clock. The
 [end-to-end slice](roadmap.md#the-end-to-end-slice) ships a box mesher, CG
 with Jacobi and the VTU writer before phase 2.
 
