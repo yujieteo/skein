@@ -242,6 +242,16 @@ fn test_reaction() {
         }
         """)), ["face(runtime::fix(\"x0\"), \"root\");\n    // bc bottom: u = 0\n    face(runtime::fix(\"z0\"), \"bottom\");",
                 "let rx, ry, rz = runtime::total_reaction();"]);
+    expect_lines("the reaction of a face with a shared edge", model(MM, str(MESH, """
+        let bottom: Surface = boundary(beam, z == 0 mm)
+
+        step load: static {
+            bc root: u = 0
+            bc bottom: u = 0
+            bc tip: u = 0
+            report reaction(root)
+        }
+        """)), ["let x, y, z = runtime::reaction(\"x0\");\n        var alone = true;\n        alone = alone && !shared(\"root\", \"x0\", \"bottom\", \"z0\");\n        alone = alone && !shared(\"root\", \"x0\", \"tip\", \"x1\");\n        if alone { report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\")); }"]);
     expect_error("a later step fixes a new face", model(MM, str(MESH, """
         step one: static {
             bc root: u = 0

@@ -934,8 +934,10 @@ fn fixed_faces(si: i64) -> i64[>..] {
 }
 
 // The runtime keeps the supports from step to step, so each step must fix
-// the same faces. The reaction sums each fixed face once, so two fixed
-// faces must not share an edge.
+// the same faces. The check equilibrium uses the total reaction, which
+// counts each fixed node once, so two fixed faces can share an edge. A
+// report of the reaction of a fixed face that shares nodes with another
+// fixed face fails when the program runs (emit_report).
 fn supports() {
     let a = fixed_faces(0);
     if a.len == 0 {
@@ -1067,6 +1069,18 @@ let PRELUDE = """
         }
     }
 
+    // The reaction of a fixed face that shares nodes with another fixed
+    // face is not the load on that face alone, so the run reports an error.
+    fn shared(face: u8[:], set: u8[:], other: u8[:], other_set: u8[:]) -> bool {
+        guard runtime::sets_share_nodes(set, other_set) else { return false; }
+        write_stderr(str("skein run: the fixed faces '", face, "' and '", other, "' share nodes, so reaction(",
+                         face, ") is not the load on '", face, "' alone. Report the reaction of a fixed face ",
+                         "that shares no node with another fixed face. The check equilibrium uses the total ",
+                         "reaction of all fixed faces.\n"));
+        failed = true;
+        return true;
+    }
+
     fn solve(step: u8[:], solver: u8[:], preconditioner: u8[:]) {
         runtime::linear_solver(solver, preconditioner);
         let converged = runtime::solve_static();
@@ -1173,7 +1187,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     }
     format(out, "    equilibrium(rx, ry, rz, largest, \"", system.force, "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] {
-        emit_report(out, s.name, r);
+        emit_report(out, si, r);
     }
     if s.output {
         var path: u8[>..] = [];
@@ -1191,16 +1205,29 @@ fn emit_point(out: u8[>..]&, at: f64[3]) {
     out.append(");\n");
 }
 
-fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
+fn emit_report(out: u8[>..]&, si: i64, r: Report) {
     format(out, "    // report ", r.label, "\n");
     out.append("    {\n    ");
     let e = r.expr;
+    let reaction = kind(e) == syntax::N_CALL;
     var value: u8[>..] = [];
-    if kind(e) == syntax::N_CALL {
+    if reaction {
         let f = faces[find_face(name(syntax::nodes[syntax::child(e, 1)].first))];
         out.append("    let x, y, z = runtime::reaction(");
         quoted(out, f.set);
-        out.append(");\n");
+        out.append(");\n        var alone = true;\n");
+        for g in fixed_faces(si) {
+            if faces[g].set == f.set { continue; }
+            out.append("        alone = alone && !shared(");
+            quoted(out, f.name);
+            out.append(", ");
+            quoted(out, f.set);
+            out.append(", ");
+            quoted(out, faces[g].name);
+            out.append(", ");
+            quoted(out, faces[g].set);
+            out.append(");\n");
+        }
         format(value, "vector(x, y, z, \"", system.force, "\")");
     } else {
         let comp = point_field(e);
@@ -1212,11 +1239,11 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
             format(value, "quantity(u", AXIS_NAMES[comp], ", \"", system.length, "\")");
         }
     }
-    out.append("        report(");
-    quoted(out, step);
+    out.append(if reaction { "        if alone { report(" } else { "        report(" });
+    quoted(out, steps[si].name);
     out.append(", ");
     quoted(out, r.label);
-    format(out, ", ", value, ");\n    }\n");
+    format(out, ", ", value, if reaction { "); }\n    }\n" } else { ");\n    }\n" });
 }
 
 fn emit_expect(out: u8[>..]&, x: Expect) {

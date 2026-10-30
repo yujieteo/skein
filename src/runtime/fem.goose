@@ -130,6 +130,17 @@ fn find_set(name: const u8[:], face: bool) -> i64 {
 
 fn set_members(s: i64) -> const i64[:] { return set_items[set_start[s]..set_start[s + 1]]; }
 
+// Whether the node sets a and b have a node in common.
+fn sets_meet(a: i64, b: i64) -> bool {
+    var mark: bool[>..] = [];
+    for n in node_count() { mark.push(false); }
+    for n in set_members(a) { mark[n] = true; }
+    for n in set_members(b) {
+        if mark[n] { return true; }
+    }
+    return false;
+}
+
 // --- the element registry ------------------------------------------------------------
 
 // The shape functions of cell type t at the reference point xi: n[a] for

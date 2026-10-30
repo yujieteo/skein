@@ -120,6 +120,15 @@ fn reaction(set: const u8[:]) -> f64, f64, f64 {
     return set_reaction(s);
 }
 
+// Whether the node sets a and b have a node in common. False if the mesh
+// has no node set of one of the names.
+fn sets_share_nodes(a: const u8[:], b: const u8[:]) -> bool {
+    let sa = find_set(a, false);
+    let sb = find_set(b, false);
+    guard sa >= 0 && sb >= 0 else { return false; }
+    return sets_meet(sa, sb);
+}
+
 // The sum of the reaction forces on all fixed nodes, each node once.
 fn total_reaction() -> f64, f64, f64 {
     return fixed_reaction();

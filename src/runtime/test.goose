@@ -127,6 +127,10 @@ fn test_shared_edge() {
         failures++;
         print("FAIL shared edge: CG does not converge");
     }
+    if !runtime::sets_share_nodes("x0", "z0") || runtime::sets_share_nodes("x0", "x1") {
+        failures++;
+        print("FAIL shared nodes: x0 and z0 share an edge, and x0 and x1 share no node");
+    }
     let rx, ry, rz = runtime::total_reaction();
     let fx, fy, fz = runtime::applied_load();
     if abs(rx + fx) > 1.0e-6 * P || abs(ry + fy) > 1.0e-6 * P || abs(rz + fz) > 1.0e-6 * P {
