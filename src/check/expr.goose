@@ -23,8 +23,10 @@ let BUILTIN_FNS = [
     "box", "cylinder", "sphere", "cone", "torus", "rect", "circle", "polygon", "extrude",
     "revolve", "sweep", "line", "arc", "spline", "point", "shell", "loft", "pattern",
     "pattern_polar", "fillet", "chamfer", "move", "rotate", "scale",
+    // Shells and beams (spec §4.3) and argmax (§14.5).
+    "tangent", "ply_stiffness", "laminate", "along", "argmax",
 ];
-let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "im", "dual_eps"];
+let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "dual_eps"];
 
 fn tok_text(t: i64) -> const u8[:] { syntax::text(t) }
 fn node_tok(n: i64) -> i64 { syntax::nodes[n].tok }
