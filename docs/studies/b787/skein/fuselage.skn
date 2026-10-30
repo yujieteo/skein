@@ -77,7 +77,10 @@ let beams: Curve = stringers | frames
 let skin_x0: Curve = boundary(skin, x == 0 m)
 let skin_y0: Curve = boundary(skin, y == 0 m)
 let skin_end: Curve = boundary(skin, x == x_end)
-let door_aft: Curve = boundary(skin, x == w_d/2)
+// The aft half of the cutout edge: the straight aft edge and the two aft
+// corner arcs (sheet 6.2).
+let aft_of_x_c: Solid = box((w_d/2 - r_c, 0 m, -2*R), (x_end, 2*R, 2*R))
+let door_aft: Curve = boundary(skin, door_box(0 m)) & aft_of_x_c
 let bottom: Point = point((0 m, 0 m, -R))
 
 // The check point P (sheet 7.2): plain skin, mid-bay and mid-pitch.
@@ -187,9 +190,11 @@ bc skin_y0: theta.z = 0
 bc bottom: w.z = 0
 
 step pressurize: static {
-    // End closure load p_U*R/2, and the plug door load on the aft edge.
+    // End closure load p_U*R/2, and the plug door load on the aft half
+    // of the cutout edge. The sheet gives p_U*x per unit s. Per unit
+    // edge length, this is p_U*x*|n.x|, because ds = |n.x|*dl.
     bc skin_end: N*n = (p_U*R/2, 0, 0)
-    bc door_aft: N*n = p_U*w_d/2*e_r
+    bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
     output w, dot(w, e_r), s_hoop, s_axial, Nx
     // gap N2: max gives the value, not its point, and one value for all
     // the beams, not one for each beam.

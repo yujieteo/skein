@@ -81,9 +81,12 @@ let beams: Curve = stringers | frames
 
 let cut: Curve = boundary(skin, sub)
 let door_edge: Curve = boundary(skin, door_box(0 m))
-let door_aft: Curve = boundary(skin, x == w_d/2)
+// The aft part of the cutout edge in the panel: a part of the straight
+// aft edge and of the upper aft corner arc (sheet 6.2).
+let aft_of_x_c: Solid = box((x_c, 0 m, -2*R), (x_end, 2*R, 2*R))
+let door_aft: Curve = door_edge & aft_of_x_c
 
-// The mid-points of the cut edges that have skin (notes.md, C6).
+// The mid-points of the cut edges that have skin (sheet 7.2, C6).
 let Q_aft: Vector<Length> = (x_c + 0.300 m, R*sin(s_c/R), R*cos(s_c/R))
 let Q_top: Vector<Length> = (x_c, R*sin((s_c - 0.300 m)/R), R*cos((s_c - 0.300 m)/R))
 // The check point P of the global model (sheet 7.2), for K.
@@ -189,7 +192,9 @@ bc cut: w = global.w
 bc cut: theta = global.theta
 
 step pressurize: static {
-    bc door_aft: N*n = p_U*w_d/2*e_r
+    // The plug door load: p_U*x per unit s, so p_U*x*|n.x| per unit edge
+    // length, because ds = |n.x|*dl.
+    bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
     output w, e_1, e_hoop
     // gap N2: max gives the value, not its point.
     report e_1_max = max(e_1, door_edge)

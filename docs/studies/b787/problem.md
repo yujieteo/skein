@@ -243,10 +243,16 @@ This sheet takes the maximum relief valve setting as equal to p_L.
    uniform per unit arc length, equal to p_U R / 2 = 140.5 kN/m. The
    total for the quarter model is p_U π R² / 2 = 1273.0 kN.
 3. **Door load:** the door is not in the model. A plug door transfers its
-   pressure load to the cutout edges. On the aft cutout edge (x = 0.5334,
-   between the corner radii), apply a force per unit length, outward
-   along the local radius, equal to p_U × 0.5334 = 52.01 kN/m. This is the
-   pressure on the half of the door in the quarter model.
+   pressure load to the cutout edges. Apply the door load on the aft half
+   of the cutout edge in the quarter model: the straight aft edge and the
+   two aft corner arcs. At each point, the load is outward along the local
+   radius. Its value per unit arc length in s (not per unit edge length) is
+   p_U × x_e(s). Here, x_e(s) is the x coordinate of the cutout edge at
+   that s. On the straight aft edge, this is p_U × 0.5334 = 52.01 kN/m.
+   The strip of the door from x = 0 to x_e(s) puts its pressure on the
+   edge at the same s, so the resultant is equal to the pressure on the
+   half door. The half door area is 0.9620 m², and the resultant is
+   89.12 kN along +y and 23.88 kN along +z.
 
 ### 6.3 Mesh
 
@@ -310,7 +316,7 @@ stringers). The values below are at p_U, with t = 4.584 mm.
 | C3 | Sum of x reactions | −1273.0 kN (equal and opposite to the end closure load) | within 0.1 % |
 | C4 | Sum of z reactions | 0 | less than 0.1 % of 1273.0 kN |
 | C5 | Sum of y reactions | −p_U × 2R × 6.096 = −3427.1 kN (the pressure resultant on the left half, including the door load) | within 0.1 % |
-| C6 | Submodel boundary | the hoop membrane strain at the mid-point of each region edge agrees with the global model | within 5 % |
+| C6 | Submodel boundary | the hoop membrane strain at the mid-point of each region edge that has skin (the aft and top edges; the forward and lower edge mid-points are in the cutout) agrees with the global model | within 5 % |
 
 C1 is a range because the frames carry part of the hoop load near each
 frame. In the middle of the bay, the skin carries most of it.

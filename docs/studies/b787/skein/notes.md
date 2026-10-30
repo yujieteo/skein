@@ -45,13 +45,6 @@ Each file names its open gaps on line 2 (`// blocked-by:`), and puts a
 - The skin is one physics with two materials (`skin_lam`, `pad_lam`).
   Each material gives the ply values and the laminate thickness `h`.
 
-## Problem sheet issue
-
-Check C6 compares the strain at the mid-point of each edge of the
-submodel square. The mid-points of the forward edge (x = 0.0554 m) and
-the lower edge (s = 3.3376 m) are in the door cutout, where there is no
-skin. The submodel checks the other two mid-points (`c6_aft`, `c6_top`).
-
 ## Parser and formatter findings
 
 - A `use` library file (§4.1) has no header, and the parser rejects it
@@ -71,6 +64,6 @@ Counted with tiktoken `o200k_base`:
 
 | File | Lines | Tokens |
 |---|---|---|
-| `fuselage.skn` | 217 | 2662 |
-| `door_corner.skn` | 202 | 2474 |
-| Total | 419 | 5136 |
+| `fuselage.skn` | 222 | 2787 |
+| `door_corner.skn` | 207 | 2591 |
+| Total | 429 | 5378 |
