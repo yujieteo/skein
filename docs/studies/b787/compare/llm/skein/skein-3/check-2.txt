@@ -1,10 +1,13 @@
 diagnostics[0]{class,id,file,line,col,msg,fix}:
 summary: errors=0 lints=0
-free_boundary[7]{physics,field,region,condition}:
-  solid,u,"boundary(fus) - xsym - ysym - bottom - wet - end_skin - door_aft","sigma*n = 0"
-  solid,u.y,"xsym","(sigma*n).y = 0"
-  solid,u.z,"xsym","(sigma*n).z = 0"
-  solid,u.x,"ysym","(sigma*n).x = 0"
-  solid,u.z,"ysym","(sigma*n).z = 0"
-  solid,u.x,"bottom","(sigma*n).x = 0"
-  solid,u.y,"bottom","(sigma*n).y = 0"
+free_boundary[10]{physics,field,region,condition}:
+  skin,w,"boundary(wall) - x0 - ysym - bottom - x_end - door_edge","N*n = 0"
+  skin,w.y,"x0","(N*n).y = 0"
+  skin,w.z,"x0","(N*n).z = 0"
+  skin,w.x,"ysym","(N*n).x = 0"
+  skin,w.z,"ysym","(N*n).z = 0"
+  skin,w.x,"bottom","(N*n).x = 0"
+  skin,w.y,"bottom","(N*n).y = 0"
+  skin,theta,"boundary(wall) - x0 - ysym","M*n = 0"
+  skin,theta.x,"x0","(M*n).x = 0"
+  skin,theta.y,"ysym","(M*n).y = 0"

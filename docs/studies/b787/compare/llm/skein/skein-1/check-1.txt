@@ -1,10 +1,4 @@
-diagnostics[8]{class,id,file,line,col,msg,fix}:
-  error,unit_fractional,round-1.skn,203,60,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,204,46,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,205,75,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,206,74,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,206,104,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,243,39,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,248,52,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-  error,unit_fractional,round-1.skn,249,52,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
-summary: errors=8 lints=0
+diagnostics[2]{class,id,file,line,col,msg,fix}:
+  error,geometry_dim,round-1.skn,76,29,"'corner_patch' is a Surface, but the value is a Solid","declare it as Solid"
+  error,duplicate_name,round-1.skn,110,9,"'shell' is a built-in name (Appendix A)","rename 'shell'"
+summary: errors=2 lints=0

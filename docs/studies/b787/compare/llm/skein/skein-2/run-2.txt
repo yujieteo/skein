@@ -1,3 +1,0 @@
-diagnostics[1]{class,id,file,line,col,msg,fix}:
-  error,unsupported,round-2.skn,95,62,"the solid 'skin' is not one box: this slice meshes only a box","write the solid as box((x0, y0, z0) mm, (x1, y1, z1) mm)"
-summary: errors=1 lints=0

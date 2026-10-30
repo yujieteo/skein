@@ -1,3 +1,13 @@
-diagnostics[1]{class,id,file,line,col,msg,fix}:
-  error,geometry_dim,round-1.skn,159,21,"'bottom' is a Curve, but the value is a Surface","declare it as Surface"
-summary: errors=1 lints=0
+diagnostics[0]{class,id,file,line,col,msg,fix}:
+summary: errors=0 lints=0
+free_boundary[10]{physics,field,region,condition}:
+  skin,w,"boundary(wall) - x0 - ysym - bottom - x_end - door_edge","N*n = 0"
+  skin,w.y,"x0","(N*n).y = 0"
+  skin,w.z,"x0","(N*n).z = 0"
+  skin,w.x,"ysym","(N*n).x = 0"
+  skin,w.z,"ysym","(N*n).z = 0"
+  skin,w.x,"bottom","(N*n).x = 0"
+  skin,w.y,"bottom","(N*n).y = 0"
+  skin,theta,"boundary(wall) - x0 - ysym","M*n = 0"
+  skin,theta.x,"x0","(M*n).x = 0"
+  skin,theta.y,"ysym","(M*n).y = 0"
