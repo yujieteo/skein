@@ -170,11 +170,29 @@ fn main() {
     let l_polygon = mesher::union(mesher::rect(0.0, 0.0, 10.0, 2.0), mesher::polygon(arm));
     mesh_case("2D L of a rect and a polygon", l_polygon, 3.0, 36.0, 1.0e-10);
 
-    // Corners below MIN_ANGLE: wedges of 21.8 and 16.7 degrees.
+    // Corners below MIN_ANGLE: wedges of 21.8, 16.7 and 20 degrees. At
+    // the larger sizes, the 2 segments at the corner have different
+    // lengths, and a midpoint split of each encroaches the other.
     let wide: f64[6] = [0.0, 0.0, 10.0, 0.0, 10.0, 4.0];
-    mesh_case("2D wedge of 21.8 deg", mesher::polygon(wide), 1.0, 20.0, 1.0e-10);
     let narrow: f64[6] = [0.0, 0.0, 10.0, 0.0, 10.0, 3.0];
-    mesh_case("2D wedge of 16.7 deg", mesher::polygon(narrow), 1.0, 15.0, 1.0e-10);
+    let twenty: f64[6] = [0.0, 0.0, 10.0, 0.0, 6.578, 2.394];
+    for size in [1.0, 2.5] {
+        mesh_case("2D wedge of 21.8 deg", mesher::polygon(wide), size, 20.0, 1.0e-10);
+        mesh_case("2D wedge of 16.7 deg", mesher::polygon(narrow), size, 15.0, 1.0e-10);
+    }
+    mesh_case("2D wedge of 20 deg", mesher::polygon(twenty), 2.0, 0.5 * 10.0 * 2.394, 1.0e-10);
+
+    // A rect with a round end, as for a slot: the circle touches the top
+    // and the bottom edges of the rect at their ends.
+    let slot = mesher::union(mesher::rect(0.0, 0.0, 20.0, 10.0), mesher::circle(20.0, 5.0, 5.0));
+    for size in [0.7, 2.0, 4.5] {
+        if !mesher::mesh_2d(slot, size) { fail(str("2D slot, size ", size, ": the mesher did not finish")); }
+        expect_conforming("2D slot", slot);
+        let q = mesher::mesh_quality();
+        print("2D slot, size ", size, "\n", q);
+        if !mesher::quality_passes(q) { fail(str("2D slot, size ", size, ": mesh_quality")); }
+        if shortest_edge() < 0.1 * size { fail(str("2D slot, size ", size, ": the shortest edge is ", shortest_edge())); }
+    }
 
     // A circle that cuts an edge of the plate at an angle that is not 90
     // deg: each of the 2 corners must be one point, so no edge is much

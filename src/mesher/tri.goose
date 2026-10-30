@@ -4,13 +4,15 @@
 // 1. Each boundary curve of a primitive (a line of a rect or a polygon, a
 //    circle) is sampled. A sample is on the boundary of the whole shape
 //    when φ changes sign across the curve there. The ends of each piece on
-//    the boundary are found by bisection; they are the sharp corners and
-//    stay fixed. Each piece is cut into segments no longer than `size`.
+//    the boundary are found by bisection, then moved to the nearest true
+//    intersection with another curve; they are the corners and stay
+//    fixed. Each piece is cut into segments no longer than `size`.
 // 2. The Bowyer-Watson algorithm inserts the points into a Delaunay
 //    triangulation inside a large triangle.
 // 3. A segment is encroached if a point lies inside its diametral circle.
 //    Each encroached segment is split at the midpoint of its parameter on
-//    the true curve, until all segments are edges of the triangulation.
+//    the true curve, or on a concentric shell next to a corner below
+//    60 degrees, until all segments are edges of the triangulation.
 // 4. Each triangle inside the polygon of the segments with an angle below MIN_ANGLE, or a
 //    circumradius above size / sqrt(3), gets a point at its circumcentre.
 //    If that point encroaches a segment, the segment is split instead. A
@@ -42,7 +44,7 @@ var curves: Curve[>..] = [];
 var px: f64[>..] = [];
 var py: f64[>..] = [];
 var vtri: i64[>..] = [];        // a live triangle at each point
-var sharp: bool[>..] = [];      // 2 segments meet at the point at less than MIN_ANGLE
+var corner: f64[>..] = [];      // the smallest angle of 2 segments at the point, degrees
 
 // The triangles: 3 points, counter-clockwise, and the 3 neighbours. The
 // neighbour k is across the edge opposite point k, or -1.
@@ -152,6 +154,73 @@ fn on_boundary(g: i64, c: i64, t: f64, eps: f64) -> bool {
     return (phi(g, x + eps * nx, y + eps * ny, 0.0) < 0.0) != (phi(g, x - eps * nx, y - eps * ny, 0.0) < 0.0);
 }
 
+// The points where the line through (x0, y0) along the unit vector
+// (ux, uy) meets the circle of centre (cx, cy) and radius r. A line within
+// eps of a tangent touches the circle at one point.
+fn line_circle(x0: f64, y0: f64, ux: f64, uy: f64, cx: f64, cy: f64, r: f64, eps: f64, out: f64[>..]&) {
+    let b = (x0 - cx) * ux + (y0 - cy) * uy;
+    let h = abs((x0 - cx) * uy - (y0 - cy) * ux);
+    guard h <= r + eps else { return; }
+    let w = sqrt(max(r * r - h * h, 0.0));
+    for sign in [-1.0, 1.0] {
+        out.push(x0 + (sign * w - b) * ux);
+        out.push(y0 + (sign * w - b) * uy);
+    }
+}
+
+// The parameter of curve c at the intersection with another curve that is
+// nearest to the point at t, or t if no intersection is within `reach`.
+// The ends of a piece from the bisection of on_boundary are only near the
+// true corner: up to eps / tan(angle), or sqrt(eps r) at a tangent.
+fn snap_end(c: i64, t: f64, eps: f64, reach: f64) -> f64 {
+    let x, y = curve_point(c, t);
+    let p = curves[c].p;
+    var points: f64[>..] = [];
+    for e in curves.len {
+        guard e != c else { continue; }
+        let q = curves[e].p;
+        if curves[c].kind == LINE && curves[e].kind == LINE {
+            let dx = p[2] - p[0];
+            let dy = p[3] - p[1];
+            let ex = q[2] - q[0];
+            let ey = q[3] - q[1];
+            let d = dx * ey - dy * ex;
+            guard abs(d) > 1.0e-12 * (dx * dx + dy * dy + ex * ex + ey * ey) else { continue; }
+            let s = ((q[0] - p[0]) * ey - (q[1] - p[1]) * ex) / d;
+            points.push(p[0] + s * dx);
+            points.push(p[1] + s * dy);
+        } else if curves[c].kind == LINE || curves[e].kind == LINE {
+            let l = if curves[c].kind == LINE { p } else { q };
+            let a = if curves[c].kind == ARC { p } else { q };
+            let n = sqrt((l[2] - l[0]) * (l[2] - l[0]) + (l[3] - l[1]) * (l[3] - l[1]));
+            line_circle(l[0], l[1], (l[2] - l[0]) / n, (l[3] - l[1]) / n, a[0], a[1], a[2], eps, points);
+        } else {
+            let dx = q[0] - p[0];
+            let dy = q[1] - p[1];
+            let d = sqrt(dx * dx + dy * dy);
+            guard d > eps else { continue; }
+            let along = (d * d + p[2] * p[2] - q[2] * q[2]) / (2.0 * d);
+            line_circle(p[0] + along * dx / d, p[1] + along * dy / d, -dy / d, dx / d, p[0], p[1], p[2], eps, points);
+        }
+    }
+    var best = t;
+    var nearest = reach;
+    for i in points.len / 2 {
+        let d = sqrt((points[2 * i] - x) * (points[2 * i] - x) + (points[2 * i + 1] - y) * (points[2 * i + 1] - y));
+        guard d < nearest else { continue; }
+        nearest = d;
+        if curves[c].kind == LINE {
+            let dx = p[2] - p[0];
+            let dy = p[3] - p[1];
+            best = ((points[2 * i] - p[0]) * dx + (points[2 * i + 1] - p[1]) * dy) / (dx * dx + dy * dy);
+        } else {
+            let a = atan2(points[2 * i + 1] - p[1], points[2 * i] - p[0]) / TAU;
+            best = a + round(t - a);
+        }
+    }
+    return best;
+}
+
 // The point at (x, y), or a new one. `tol` merges the ends of two pieces:
 // the bisection puts an end up to eps / tan(angle) from the true corner.
 fn boundary_point(x: f64, y: f64, tol: f64) -> i64 {
@@ -185,6 +254,7 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64) {
 fn sample_boundary(g: i64, size: f64, diameter: f64) {
     let eps = 1.0e-7 * diameter;
     let tol = 100.0 * eps;
+    let reach = 10.0 * sqrt(eps * diameter);
     for c in curves.len {
         let m = max(512, ceil(16.0 * curve_length(c) / size) as i64);
         var on: bool[>..] = [];
@@ -198,7 +268,7 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
                 let mid = 0.5 * (lo + hi);
                 if on_boundary(g, c, mid, eps) == state { lo = mid; } else { hi = mid; }
             }
-            return 0.5 * (lo + hi);
+            return snap_end(c, 0.5 * (lo + hi), eps, reach);
         }
         if curves[c].kind == LINE {
             var i = 0;
@@ -235,10 +305,9 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
     }
 }
 
-// Sets `sharp` of each point of the sampled boundary.
-fn find_sharp_corners() {
-    for v in px.len { sharp.push(false); }
-    let limit = cos(radians(MIN_ANGLE));
+// Sets `corner` of each point of the sampled boundary.
+fn find_corners() {
+    for v in px.len { corner.push(180.0); }
     for s in segments.len {
         for e in s {
             for i in 2 {
@@ -250,7 +319,8 @@ fn find_sharp_corners() {
                 let ay = py[a] - py[v];
                 let bx = px[b] - px[v];
                 let by = py[b] - py[v];
-                if ax * bx + ay * by > limit * sqrt((ax * ax + ay * ay) * (bx * bx + by * by)) { sharp[v] = true; }
+                let c = (ax * bx + ay * by) / sqrt((ax * ax + ay * ay) * (bx * bx + by * by));
+                corner[v] = min(corner[v], degrees(acos(max(-1.0, min(1.0, c)))));
             }
         }
     }
@@ -483,9 +553,25 @@ fn encroached(s: i64) -> bool {
     return false;
 }
 
+// True if point v is a corner of 2 segments at less than `angle` degrees.
+fn sharp(v: i64, angle: f64) -> bool { return v < corner.len && corner[v] < angle; }
+
+// Splits segment s at its midpoint. A segment with one end at a corner
+// below 60 degrees, where midpoint splits of the 2 segments can encroach
+// each other without end, is split on a concentric shell: at a distance
+// of a power of 2 from the corner. Then the 2 segments at the corner get
+// the same length, and the split of one does not encroach the other.
 fn split_segment(s: i64) {
     let seg = segments[s];
-    let tm = 0.5 * (seg.t0 + seg.t1);
+    let sharp_a = sharp(seg.a, 60.0);
+    let sharp_b = sharp(seg.b, 60.0);
+    var f = 0.5;
+    if sharp_a != sharp_b {
+        let l = sqrt((px[seg.b] - px[seg.a]) * (px[seg.b] - px[seg.a]) + (py[seg.b] - py[seg.a]) * (py[seg.b] - py[seg.a]));
+        let shell = pow(2.0, round(log2(0.5 * l))) / l;
+        f = if sharp_a { shell } else { 1.0 - shell };
+    }
+    let tm = seg.t0 + f * (seg.t1 - seg.t0);
     let x, y = curve_point(seg.curve, tm);
     let v = insert_point(x, y);
     segments[s].alive = false;
@@ -589,7 +675,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     px.clear();
     py.clear();
     vtri.clear();
-    sharp.clear();
+    corner.clear();
     tv.clear();
     tn.clear();
     talive.clear();
@@ -615,7 +701,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     for i in 3 { vtri.push(-1); }
     new_triangle(0, 1, 2);
     sample_boundary(g, size, diameter);
-    find_sharp_corners();
+    find_corners();
     for v in 3..px.len { insert_existing(v, locate(px[v], py[v])); }
     // A budget of points: 20 times the points of a uniform mesh of the box.
     let budget = 20 * (ceil(w / size) as i64 + 2) * (ceil(h / size) as i64 + 2) + 100 * px.len;
@@ -628,7 +714,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
         for t in talive.len {
             if !talive[t] || !tin[t] { continue; }
             let x, y, r, q, apex = circumcentre(t);
-            if (q <= ratio || apex < sharp.len && sharp[apex]) && r <= largest { continue; }
+            if (q <= ratio || sharp(apex, MIN_ANGLE)) && r <= largest { continue; }
             if px.len >= budget { done = false; break; }
             var split = false;
             for s in segments.len {
