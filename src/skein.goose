@@ -9,6 +9,9 @@ import cli.card;
 import codegen.run;
 import check from "./check";
 import md from "./md";
+import mesher.verify;   // mesher lane: skein verify
+import runtime from "./runtime";   // mesher lane: the mesh type of the mesher
+import solvers from "./solvers";   // the runtime imports it
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -19,6 +22,7 @@ let USAGE = """
       help    print this text
       run     build and run a model (only a linear static box or quarter of a tube for now)
       md      write a model as a Markdown document
+      verify  check a model, mesh it and report mesh_quality
     """;
 
 fn main() {
@@ -47,6 +51,7 @@ fn main() {
         exit(codegen::run(rest));
     }
     if command == "check" { exit(check::command(args)); }
+    if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
     if command == "md" {
         var rest: const u8[:][>..] = [];
         for a in args[2..] { rest.push(a); }
