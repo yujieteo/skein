@@ -561,6 +561,13 @@ fn add_free(psym: i64, field: u8[:], region: u8[:], condition: u8[:]) {
     free.push(f);
 }
 
+// The text of expression `e`, in parentheses when it is not a name or a call.
+fn grouped(e: i64) -> u8[>..] {
+    let k = syntax::nodes[e].kind;
+    if k == syntax::N_NAME || k == syntax::N_CALL { return node_text(e); }
+    return str("(", node_text(e), ")");
+}
+
 // A region with a bc on some components of an unknown gets the natural
 // condition on each other component (spec §12.3).
 fn free_boundary() {
@@ -574,13 +581,12 @@ fn free_boundary() {
             }
             if flux < 0 { continue; }
             let name = tok_text(syms[u].tok);
-            let fk = syntax::nodes[flux].kind;
-            let ftext: u8[>..] = if fk == syntax::N_NAME || fk == syntax::N_CALL { node_text(flux) } else { str("(", node_text(flux), ")") };
+            let ftext = grouped(flux);
             var region: u8[>..] = str("boundary(", node_text(p.region), ")");
             for b, i in bcs {
                 if b.unknown != u || seen_before(u, i) { continue; }
                 region.append(" - ");
-                region.append(node_text(b.region));
+                region.append(grouped(b.region));
             }
             add_free(p.sym, name, region, str(ftext, "*n = 0"));
             for b, i in bcs {
