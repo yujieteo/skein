@@ -313,7 +313,7 @@ stringers). The values below are at p_U, with t = 4.584 mm.
 | Check | Quantity | Expected value | Pass when |
 |---|---|---|---|
 | C1 | Hoop membrane stress at P | between p_U R / (t + A_frame / frame pitch) = 48.8 MPa and p_U R / t = 61.3 MPa | inside the range; report the ratio to p_U R / t |
-| C2 | Axial membrane stress at P | (p_U R / 2) / (t + A_stringer / stringer pitch) = 25.2 MPa | within 5 %; report the ratio to p_U R / (2t) = 30.7 MPa |
+| C2 | Axial membrane stress at P | (p_U R / 2 + ν σ_h A_stringer / stringer pitch) / (t + A_stringer / stringer pitch) = 28.7 MPa, with ν = 0.326 and σ_h = p_U R / t = 61.3 MPa (section 7.3) | within 5 %; report the ratio to p_U R / (2t) = 30.7 MPa |
 | C3 | Sum of x reactions | −1273.0 kN (equal and opposite to the end closure load) | within 0.1 % |
 | C4 | Sum of z reactions | 0 | less than 0.1 % of 1273.0 kN |
 | C5 | Sum of y reactions | −p_U × 2R × 6.096 = −3427.1 kN (the pressure resultant on the left half, including the door load) | within 0.1 % |
@@ -321,6 +321,34 @@ stringers). The values below are at p_U, with t = 4.584 mm.
 
 C1 is a range because the frames carry part of the hoop load near each
 frame. In the middle of the bay, the skin carries most of it.
+
+### 7.3 Derivation of the C2 value
+
+Assumptions:
+
+- The skin and the stringers have the same axial strain ε_x at P.
+- The skin hoop stress at P is σ_h = p_U R / t = 61.3 MPa (mid-bay, so
+  the frames carry little hoop load). Through ν, it changes the skin
+  axial strain.
+- The skin is in plane stress with E = 55.85 GPa and ν = 0.326
+  (section 3.3). The stringers are beams with the same E, so the
+  stringer-to-skin axial modulus ratio is 1. The stringers have no hoop
+  stress.
+- The stringer bending from the centroid offset is ignored.
+
+Derivation, with a = A_stringer / stringer pitch = 2.016e-4 / 0.2013 =
+1.0016e-3 m:
+
+1. Skin: ε_x = (σ_x − ν σ_h) / E.
+2. Stringer: σ_s = E ε_x = σ_x − ν σ_h.
+3. Axial equilibrium per unit arc length: σ_x t + σ_s a = p_U R / 2.
+4. From 2 and 3: σ_x = (p_U R / 2 + ν σ_h a) / (t + a)
+   = (140.54 + 0.326 × 61.32 × 1.0016) / 5.5856 = 28.7 MPa.
+
+The stringer stress is then σ_s = 28.7 − 0.326 × 61.3 = 8.8 MPa.
+
+An earlier issue of this sheet gave (p_U R / 2) / (t + a) = 25.2 MPa.
+That value is wrong because it ignores the ν σ_h term in step 1.
 
 ---
 
