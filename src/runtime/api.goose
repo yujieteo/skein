@@ -120,6 +120,11 @@ fn reaction(set: const u8[:]) -> f64, f64, f64 {
     return set_reaction(s);
 }
 
+// The sum of the reaction forces on all fixed nodes, each node once.
+fn total_reaction() -> f64, f64, f64 {
+    return fixed_reaction();
+}
+
 // The sum of all applied loads.
 fn applied_load() -> f64, f64, f64 {
     return load_sum();

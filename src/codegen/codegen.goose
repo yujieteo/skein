@@ -279,12 +279,10 @@ recursive fn eval(n: i64) -> Val {
 // --- the model -------------------------------------------------------------------
 
 // A surface: the node set and the face set `set` of the mesh. A face of
-// the box is the face set x0, x1, y0, y1, z0 or z1 (src/runtime/api.goose),
-// normal to `axis`. A surface of the mesher or the shells lane has axis -1.
+// the box is the face set x0, x1, y0, y1, z0 or z1 (src/runtime/api.goose).
 struct Face {
     name: u8[..64],
     set: u8[..64],
-    axis: i64,
 }
 
 // A boundary condition: `u = 0` (`fix`), or `sigma*n = t` on a face.
@@ -447,7 +445,7 @@ let FACE_FIX = "write the surface as boundary(beam, x == 0 mm), with x, y or z e
 // of the mesher lane goes to mesher_surface (lane_mesher.goose), and of the
 // shells lane to shells_surface (lane_shells.goose).
 fn surface(n: i64, value: i64) {
-    var f = Face { name: [], set: [], axis: -1 };
+    var f = Face { name: [], set: [] };
     set64(f.name, name(n));
     if mesh_lane != CORE {
         let found = if mesh_lane == MESHER { mesher_surface(n, value, f.set) } else { shells_surface(n, value, f.set) };
@@ -484,7 +482,6 @@ fn surface(n: i64, value: i64) {
         unsupported(tok(cond), "the surface is not on a face of the box", FACE_FIX);
         return;
     }
-    f.axis = axis;
     set64(f.set, str(AXIS_NAMES[axis], side));
     faces.push(f);
 }
@@ -875,8 +872,12 @@ fn read(prog: i64) -> bool {
     if physics_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if material_name.len == 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
-    // A cell other than hex of order 2 goes to the elements lane (lane_elements.goose).
-    if (cell_name != "hex" || order != 2) && !elements_cell(cell_name, order) {
+    // A cell other than hex of order 2 goes to the lane that meshes the
+    // geometry: the mesher, the shells or the elements lane (lane_*.goose).
+    let lane_cell = if mesh_lane == MESHER { mesher_cell(cell_name, order) }
+                    else if mesh_lane == SHELLS { shells_cell(cell_name, order) }
+                    else { elements_cell(cell_name, order) };
+    if (cell_name != "hex" || order != 2) && !lane_cell {
         if cell_name != "hex" {
             unsupported(cell_tok, "this slice meshes a box with hex cells only", "write cell: hex");
         } else {
@@ -940,13 +941,6 @@ fn supports() {
     if a.len == 0 {
         unsupported(physics_tok, "no face is fixed, so the box can move as a rigid body", "add bc root: u = 0");
         return;
-    }
-    for f in a[1..] {
-        if faces[f].axis < 0 || faces[f].axis != faces[a[0]].axis {
-            unsupported(bc_tok(0, f), str("the fixed faces ", faces[a[0]].name, " and ", faces[f].name,
-                                          " share an edge, and this slice cannot sum their reaction"),
-                        "fix one face, or two opposite faces");
-        }
     }
     for si in 1..steps.len {
         let b = fixed_faces(si);
@@ -1165,14 +1159,8 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append(", ");
     quoted(out, s.preconditioner);
     out.append(");\n");
-    // The reaction on all fixed faces, for the check `equilibrium`.
-    out.append("    var rx, ry, rz = 0.0, 0.0, 0.0;\n");
-    for fi in fixed_faces(si) {
-        let f = faces[fi];
-        out.append("    {\n        let x, y, z = runtime::reaction(");
-        quoted(out, f.set);
-        out.append(");\n        rx += x;\n        ry += y;\n        rz += z;\n    }\n");
-    }
+    // The reaction on all fixed nodes, each once, for the check `equilibrium`.
+    out.append("    let rx, ry, rz = runtime::total_reaction();\n");
     // The largest load: the size of a traction times the area of its face.
     out.append("    var largest = 0.0;\n");
     for b in active[s.first_bc..s.first_bc + s.bc_count] {

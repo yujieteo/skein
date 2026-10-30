@@ -116,6 +116,25 @@ fn test_newton() {
     expect_near("newton tip uz against the linear solve", uz, -0.1905018167560175, 1.0e-6);
 }
 
+// Two fixed faces with a shared edge: the total reaction counts each node
+// of the edge once, so it balances the load.
+fn test_shared_edge() {
+    runtime::mesh_box(0.0, 0.0, 0.0, L, B, H, 10, 1, 1);
+    runtime::material(E, NU);
+    assert(runtime::fix("x0") && runtime::fix("z0"));
+    assert(runtime::traction("x1", 0.0, 0.0, -P / (B * H)));
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL shared edge: CG does not converge");
+    }
+    let rx, ry, rz = runtime::total_reaction();
+    let fx, fy, fz = runtime::applied_load();
+    if abs(rx + fx) > 1.0e-6 * P || abs(ry + fy) > 1.0e-6 * P || abs(rz + fz) > 1.0e-6 * P {
+        failures++;
+        print("FAIL shared edge: total reaction ", rx, " ", ry, " ", rz, ", load ", fx, " ", fy, " ", fz);
+    }
+}
+
 // A field with 1 dof for each node, as the heat template has: the VTU
 // file holds 1 component for each node, with the value of its dof.
 fn test_scalar_field() {
@@ -177,6 +196,7 @@ fn main() {
     test_cantilever();
     test_second_step();
     test_newton();
+    test_shared_edge();
     test_scalar_field();
     test_registry();
     if failures > 0 { exit(1); }

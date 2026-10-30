@@ -5,7 +5,9 @@
 // and its value, and sets `set` to the name of the node set and the face
 // set of the mesh that the surface is; false if it is not one. mesher_emit
 // writes the calls in main that fill the mesh of src/runtime/fem.goose and
-// its named sets, in place of runtime::mesh_box.
+// its named sets, in place of runtime::mesh_box. mesher_cell says if the
+// mesher meshes with `cell: <cell>` and `order: <order>`, other than hex of
+// order 2.
 import std;
 namespace codegen;
 
@@ -14,3 +16,5 @@ fn mesher_read(n: i64, value: i64) -> bool { return false; }
 fn mesher_surface(n: i64, value: i64, set: u8[..64]&) -> bool { return false; }
 
 fn mesher_emit(out: u8[>..]&) {}
+
+fn mesher_cell(cell: u8[:], order: i64) -> bool { return false; }

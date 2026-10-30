@@ -384,16 +384,27 @@ fn newton<RES, JAC>(u: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
 fn set_reaction(s: i64) -> f64, f64, f64 {
     var sum: f64[3] = [0.0, 0.0, 0.0];
     guard row_start.len > 0 else { return 0.0, 0.0, 0.0; }
-    for node in set_members(s) {
-        for c in dofs_per_node {
-            let d = dofs_per_node * node + c;
-            if fixed[d] == 0 { continue; }
-            var ku = 0.0;
-            for e in row_start[d]..row_start[d + 1] { ku += val[e] * disp[col[e]]; }
-            if c < 3 { sum[c] += ku - load[d]; }
-        }
-    }
+    for node in set_members(s) { add_node_reaction(node, sum); }
     return sum[0], sum[1], sum[2];
+}
+
+// The reaction on all fixed nodes. A node in two fixed sets counts once.
+fn fixed_reaction() -> f64, f64, f64 {
+    var sum: f64[3] = [0.0, 0.0, 0.0];
+    guard row_start.len > 0 else { return 0.0, 0.0, 0.0; }
+    for node in node_count() { add_node_reaction(node, sum); }
+    return sum[0], sum[1], sum[2];
+}
+
+// Adds K u - f on the fixed dofs 0 to 2 of `node` to sum.
+fn add_node_reaction(node: i64, sum: f64[3]&) {
+    for c in min(dofs_per_node, 3) {
+        let d = dofs_per_node * node + c;
+        if fixed[d] == 0 { continue; }
+        var ku = 0.0;
+        for e in row_start[d]..row_start[d + 1] { ku += val[e] * disp[col[e]]; }
+        sum[c] += ku - load[d];
+    }
 }
 
 // --- points ----------------------------------------------------------------------

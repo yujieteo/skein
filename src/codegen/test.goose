@@ -204,7 +204,7 @@ fn test_bc_scope() {
     ]);
 }
 
-// The equilibrium check sums the reaction of each fixed face once.
+// The equilibrium check sums the reaction of each fixed node once.
 fn test_reaction() {
     let twice = """
         bc root: u = 0
@@ -215,7 +215,7 @@ fn test_reaction() {
         }
         """;
     let got = generate(model(MM, str(MESH, twice)));
-    if occurrences(got, "runtime::reaction(") != 1 || occurrences(got, "runtime::fix(") != 1 {
+    if occurrences(got, "runtime::total_reaction()") != 1 || occurrences(got, "runtime::fix(") != 1 {
         failures++;
         print("FAIL a face fixed twice: not one fix and one reaction in:\n", got);
     }
@@ -233,14 +233,15 @@ fn test_reaction() {
         """)), [
         "largest = max(largest, 1.0 * runtime::face_area(\"z0\"));\n    largest = max(largest, 1.0 * runtime::face_area(\"z1\"));\n    equilibrium(rx, ry, rz, largest, \"N\");",
     ]);
-    expect_error("fixed faces with an edge", model(MM, str(MESH, """
+    expect_lines("fixed faces with an edge", model(MM, str(MESH, """
         let bottom: Surface = boundary(beam, z == 0 mm)
 
         step load: static {
             bc root: u = 0
             bc bottom: u = 0
         }
-        """)), "error unsupported 23:5 the fixed faces root and bottom share an edge");
+        """)), ["face(runtime::fix(\"x0\"), \"root\");\n    // bc bottom: u = 0\n    face(runtime::fix(\"z0\"), \"bottom\");",
+                "let rx, ry, rz = runtime::total_reaction();"]);
     expect_error("a later step fixes a new face", model(MM, str(MESH, """
         step one: static {
             bc root: u = 0
