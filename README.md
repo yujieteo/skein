@@ -60,6 +60,7 @@ Goose source tree at the same commit as the compiler.
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
 | `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron box mesher (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
+| `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 
 ## Why Skein
 

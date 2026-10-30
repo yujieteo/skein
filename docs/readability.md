@@ -7,8 +7,8 @@ a steel cantilever 100 × 10 × 10 mm, fixed at x = 0, with a shear force of
 LLM workflow (§4).
 
 **Status:** §1 to §3 are complete. The LLM workflow ran once for each path
-with `skein check` and no `skein run`, because `skein run` is not ready.
-The 3 runs for each path with `skein run` come in a later commit.
+with `skein check` only, before `skein run` existed. The 3 runs for each
+path with `skein run` come in a later commit.
 
 ---
 
@@ -187,7 +187,7 @@ does not write it, but a deck that an LLM writes in one file must hold it
 ### 1.3 The results of the femahoy inputs
 
 The two femahoy inputs ran with `fh run` (femahoy and CalculiX on this
-computer, 2026-10-30). The `skein run` result comes with the runtime.
+computer, 2026-10-30). The `skein run` result is not in this table yet.
 
 | Input | Mesh and element | Tip deflection u_z | Root reaction F_z |
 |---|---|---|---|
