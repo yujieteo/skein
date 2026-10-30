@@ -1290,36 +1290,38 @@ static const uint8_t gs_str57[25] = " with the preconditioner ";
 static const uint8_t gs_str58[5] = "gmres";
 static const uint8_t gs_str59[4] = "ilu0";
 static const uint8_t gs_str60[33] = "runtime: ILU(0) has a zero pivot\012";
-static const uint8_t gs_str61[114] = "<?xml version=\"1.0\"?>\012<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">\012<UnstructuredGrid>";
-static const uint8_t gs_str62[23] = "<Piece NumberOfPoints=\"";
-static const uint8_t gs_str63[17] = "\" NumberOfCells=\"";
-static const uint8_t gs_str64[3] = "\">\012";
-static const uint8_t gs_str65[74] = "<Points>\012<DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">\012";
-static const uint8_t gs_str66[31] = "</DataArray>\012</Points>\012<Cells>\012";
-static const uint8_t gs_str67[60] = "<DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\012";
-static const uint8_t gs_str68[68] = "</DataArray>\012<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\012";
-static const uint8_t gs_str69[66] = "</DataArray>\012<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\012";
-static const uint8_t gs_str70[34] = "</DataArray>\012</Cells>\012<PointData>\012";
-static const uint8_t gs_str71[32] = "<DataArray type=\"Float64\" Name=\"";
-static const uint8_t gs_str72[22] = "\" NumberOfComponents=\"";
-static const uint8_t gs_str73[18] = "\" format=\"ascii\">\012";
-static const uint8_t gs_str74[13] = "</DataArray>\012";
-static const uint8_t gs_str75[53] = "</PointData>\012</Piece>\012</UnstructuredGrid>\012</VTKFile>\012";
-static const uint8_t gs_str76[6] = "expect";
-static const uint8_t gs_str77[2] = ": ";
-static const uint8_t gs_str78[4] = "tri3";
-static const uint8_t gs_str79[4] = "tri6";
-static const uint8_t gs_str80[4] = "tet4";
-static const uint8_t gs_str81[5] = "tet10";
-static const uint8_t gs_str82[4] = "hex8";
-static const uint8_t gs_str83[5] = "hex27";
-static const uint8_t gs_str84[11] = "quad4_shell";
-static const uint8_t gs_str85[5] = "beam2";
-static const uint8_t gs_str86[2] = "x0";
-static const uint8_t gs_str87[2] = "x1";
-static const uint8_t gs_str88[2] = "y0";
-static const uint8_t gs_str89[2] = "y1";
-static const uint8_t gs_str90[2] = "r1";
+static const uint8_t gs_str61[45] = "runtime: gmres with ilu0 did not converge in ";
+static const uint8_t gs_str62[30] = " iterations with a restart of ";
+static const uint8_t gs_str63[114] = "<?xml version=\"1.0\"?>\012<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">\012<UnstructuredGrid>";
+static const uint8_t gs_str64[23] = "<Piece NumberOfPoints=\"";
+static const uint8_t gs_str65[17] = "\" NumberOfCells=\"";
+static const uint8_t gs_str66[3] = "\">\012";
+static const uint8_t gs_str67[74] = "<Points>\012<DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">\012";
+static const uint8_t gs_str68[31] = "</DataArray>\012</Points>\012<Cells>\012";
+static const uint8_t gs_str69[60] = "<DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\012";
+static const uint8_t gs_str70[68] = "</DataArray>\012<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\012";
+static const uint8_t gs_str71[66] = "</DataArray>\012<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\012";
+static const uint8_t gs_str72[34] = "</DataArray>\012</Cells>\012<PointData>\012";
+static const uint8_t gs_str73[32] = "<DataArray type=\"Float64\" Name=\"";
+static const uint8_t gs_str74[22] = "\" NumberOfComponents=\"";
+static const uint8_t gs_str75[18] = "\" format=\"ascii\">\012";
+static const uint8_t gs_str76[13] = "</DataArray>\012";
+static const uint8_t gs_str77[53] = "</PointData>\012</Piece>\012</UnstructuredGrid>\012</VTKFile>\012";
+static const uint8_t gs_str78[6] = "expect";
+static const uint8_t gs_str79[2] = ": ";
+static const uint8_t gs_str80[4] = "tri3";
+static const uint8_t gs_str81[4] = "tri6";
+static const uint8_t gs_str82[4] = "tet4";
+static const uint8_t gs_str83[5] = "tet10";
+static const uint8_t gs_str84[4] = "hex8";
+static const uint8_t gs_str85[5] = "hex27";
+static const uint8_t gs_str86[11] = "quad4_shell";
+static const uint8_t gs_str87[5] = "beam2";
+static const uint8_t gs_str88[2] = "x0";
+static const uint8_t gs_str89[2] = "x1";
+static const uint8_t gs_str90[2] = "y0";
+static const uint8_t gs_str91[2] = "y1";
+static const uint8_t gs_str92[2] = "r1";
 #pragma pack(pop)
 
 /* ---- data ---- */
@@ -6594,6 +6596,9 @@ static uint8_t runtime_solvers_solve_g7(void *solver_g_data, int64_t solver_g_le
     sl_f64 t69;
     sl_f64 t70;
     sl_f64 t71;
+    gs_rhdr t73;
+    sl_u8 t81;
+    sl_u8 t82;
     t2 = solver_g;
     t3.data = ((uint8_t *)gs_str58); t3.len = 5;
     uint8_t t4 = t2.len == t3.len;
@@ -6625,28 +6630,28 @@ static uint8_t runtime_solvers_solve_g7(void *solver_g_data, int64_t solver_g_le
     a_g.len = 0;
     int64_t t11 = (GS_GL->runtime_val_g7.len);
     uint8_t *t12 = (uint8_t *)((GS_GL->runtime_val_g7.base));
-    uint8_t *t77 = GS(gs_sp + 0)->top;
+    uint8_t *t87 = GS(gs_sp + 0)->top;
     for (int64_t t13 = 0; t13 < (t11); t13++) {
         double v_g = (*(double *)((t12) + t13 * 8));
         double t16 = v_g;
-        double *t17 = (double *)t77;
-        *(double *)t77 = t16;
-        t77 += 8;
+        double *t17 = (double *)t87;
+        *(double *)t87 = t16;
+        t87 += 8;
         a_g.len++;
     }
-    GS(gs_sp + 0)->top = t77;
+    GS(gs_sp + 0)->top = t87;
     rhs_g.base = GS(gs_sp + 1)->top; rhs_g.len = 0;
     rhs_g.len = 0;
-    uint8_t *t78 = GS(gs_sp + 1)->top;
+    uint8_t *t88 = GS(gs_sp + 1)->top;
     for (int64_t t18 = 0; t18 < (b_g.len); t18++) {
         double v_g_2 = b_g.data[t18];
         double t21 = v_g_2;
-        double *t22 = (double *)t78;
-        *(double *)t78 = t21;
-        t78 += 8;
+        double *t22 = (double *)t88;
+        *(double *)t88 = t21;
+        t88 += 8;
         rhs_g.len++;
     }
-    GS(gs_sp + 1)->top = t78;
+    GS(gs_sp + 1)->top = t88;
     t23.data = (int64_t *)((GS_GL->runtime_row_start_g7.base)); t23.len = (GS_GL->runtime_row_start_g7.len);
     row_start_g = t23;
     t24.data = (int32_t *)((GS_GL->runtime_col_g7.base)); t24.len = (GS_GL->runtime_col_g7.len);
@@ -6736,26 +6741,56 @@ static uint8_t runtime_solvers_solve_g7(void *solver_g_data, int64_t solver_g_le
     t71.data = (double *)((x_g.hdr->base)); t71.len = (x_g.hdr->len);
     int64_t t72 = solvers_gmres_g7(t67.data, t67.len, t68.data, t68.len, t69.data, t69.len, t70.data, t70.len, t71.data, t71.len, tol_g, 300, max_it_g, &lu_g, GS(gs_sp + 2), &diag_g, GS(gs_sp + 3), &converged_g, gs_sp + 4);
     its_g = t72;
-    uint8_t t73;
-    t73 = 1;
-    uint8_t t74;
-    t74 = converged_g;
-    *gs_r1 = t74;
-    int64_t t75;
-    t75 = its_g;
-    *gs_r2 = t75;
+    if ((uint8_t)(!converged_g)) {
+        uint8_t *t89 = GS(gs_sp + 4)->top;
+        t73.base = t89; t73.len = 0;
+        uint8_t *t74 = t89;
+        int64_t t75 = 0;
+        int64_t t76 = 45;
+        gs_memcpy(t89, (const uint8_t *)(((uint8_t *)gs_str61)), (size_t)t76);
+        t89 += t76;
+        t75 += t76;
+        int64_t t77 = gs_fmt_i64(t89, (int64_t)(its_g));
+        t89 += t77;
+        t75 += t77;
+        int64_t t78 = 30;
+        gs_memcpy(t89, (const uint8_t *)(((uint8_t *)gs_str62)), (size_t)t78);
+        t89 += t78;
+        t75 += t78;
+        int64_t t79 = gs_fmt_i64(t89, (int64_t)(300));
+        t89 += t79;
+        t75 += t79;
+        int64_t t80 = 1;
+        gs_memcpy(t89, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t80);
+        t89 += t80;
+        t75 += t80;
+        t73.len = t75;
+        t81.data = (uint8_t *)((t73.base)); t81.len = (t73.len);
+        t82 = t81;
+        gs_os_write_stderr(t82);
+        t89 = t73.base;
+        GS(gs_sp + 4)->top = t89;
+    }
+    uint8_t t83;
+    t83 = 1;
+    uint8_t t84;
+    t84 = converged_g;
+    *gs_r1 = t84;
+    int64_t t85;
+    t85 = its_g;
+    *gs_r2 = t85;
     GS(gs_sp + 3)->top = diag_g.base;
     GS(gs_sp + 2)->top = lu_g.base;
     GS(gs_sp + 1)->top = rhs_g.base;
     GS(gs_sp + 0)->top = a_g.base;
-    return t73;
+    return t83;
     GS(gs_sp + 3)->top = diag_g.base;
     GS(gs_sp + 2)->top = lu_g.base;
     GS(gs_sp + 1)->top = rhs_g.base;
     GS(gs_sp + 0)->top = a_g.base;
-    GS_UNREACHABLE(gs_file8, 21);
-    uint8_t t76 = {0};
-    return t76;
+    GS_UNREACHABLE(gs_file8, 24);
+    uint8_t t86 = {0};
+    return t86;
 }
 
 static uint8_t solvers_ilu0_g7(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, gs_rhdr *lu_g_hdr, gs_stack *lu_g_stk, gs_rhdr *diag_g_hdr, gs_stack *diag_g_stk, int64_t gs_sp) {
@@ -8338,7 +8373,7 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
     out_g.base = t138; out_g.len = 0;
     out_g.len = 0;
     int64_t t7 = 114;
-    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str61)), (size_t)t7);
+    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str63)), (size_t)t7);
     t138 += t7;
     out_g.len += t7;
     int64_t t8 = 1;
@@ -8346,25 +8381,25 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
     t138 += t8;
     out_g.len += t8;
     int64_t t9 = 23;
-    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str62)), (size_t)t9);
+    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str64)), (size_t)t9);
     t138 += t9;
     out_g.len += t9;
     int64_t t10 = gs_fmt_i64(t138, (int64_t)(nodes_g));
     t138 += t10;
     out_g.len += t10;
     int64_t t11 = 17;
-    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str63)), (size_t)t11);
+    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str65)), (size_t)t11);
     t138 += t11;
     out_g.len += t11;
     int64_t t12 = gs_fmt_i64(t138, (int64_t)(cells_g));
     t138 += t12;
     out_g.len += t12;
     int64_t t13 = 3;
-    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str64)), (size_t)t13);
+    gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str66)), (size_t)t13);
     t138 += t13;
     out_g.len += t13;
     int64_t t14 = 74;
-    gs_memcpy(t138, ((uint8_t *)gs_str65), (size_t)((t14) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str67), (size_t)((t14) * 1));
     t138 += (t14) * 1;
     out_g.len += t14;
     int64_t t15 = nodes_g;
@@ -8395,11 +8430,11 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
         out_g.len += t26;
     }
     int64_t t27 = 31;
-    gs_memcpy(t138, ((uint8_t *)gs_str66), (size_t)((t27) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str68), (size_t)((t27) * 1));
     t138 += (t27) * 1;
     out_g.len += t27;
     int64_t t28 = 60;
-    gs_memcpy(t138, ((uint8_t *)gs_str67), (size_t)((t28) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str69), (size_t)((t28) * 1));
     t138 += (t28) * 1;
     out_g.len += t28;
     int64_t t29 = ((GS_GL->runtime_cell_type_g7.len));
@@ -8522,7 +8557,7 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
         L31:;
     }
     int64_t t83 = 68;
-    gs_memcpy(t138, ((uint8_t *)gs_str68), (size_t)((t83) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str70), (size_t)((t83) * 1));
     t138 += (t83) * 1;
     out_g.len += t83;
     int64_t offset_g = 0;
@@ -8556,7 +8591,7 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
         }
     }
     int64_t t94 = 66;
-    gs_memcpy(t138, ((uint8_t *)gs_str69), (size_t)((t94) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str71), (size_t)((t94) * 1));
     t138 += (t94) * 1;
     out_g.len += t94;
     int64_t t95 = ((GS_GL->runtime_cell_type_g7.len));
@@ -8582,7 +8617,7 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
         }
     }
     int64_t t106 = 34;
-    gs_memcpy(t138, ((uint8_t *)gs_str70), (size_t)((t106) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str72), (size_t)((t106) * 1));
     t138 += (t106) * 1;
     out_g.len += t106;
     int64_t t107 = (GS_GL->runtime_point_fields_g7.len);
@@ -8590,7 +8625,7 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
     for (int64_t t109 = 0; t109 < (t107); t109++) {
         f_g = (*(runtime_Field_g7 *)((t108) + t109 * 81));
         int64_t t112 = 32;
-        gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str71)), (size_t)t112);
+        gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str73)), (size_t)t112);
         t138 += t112;
         out_g.len += t112;
         int64_t t114 = (int64_t)f_g.name_g.len;
@@ -8599,14 +8634,14 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
         t138 += t113;
         out_g.len += t113;
         int64_t t115 = 22;
-        gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str72)), (size_t)t115);
+        gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str74)), (size_t)t115);
         t138 += t115;
         out_g.len += t115;
         int64_t t116 = gs_fmt_i64(t138, (int64_t)(f_g.count_g));
         t138 += t116;
         out_g.len += t116;
         int64_t t117 = 18;
-        gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str73)), (size_t)t117);
+        gs_memcpy(t138, (const uint8_t *)(((uint8_t *)gs_str75)), (size_t)t117);
         t138 += t117;
         out_g.len += t117;
         int64_t t118 = nodes_g;
@@ -8632,12 +8667,12 @@ static uint8_t runtime_write_vtu_file_g7(void *path_g_data, int64_t path_g_len, 
             out_g.len++;
         }
         int64_t t130 = 13;
-        gs_memcpy(t138, ((uint8_t *)gs_str74), (size_t)((t130) * 1));
+        gs_memcpy(t138, ((uint8_t *)gs_str76), (size_t)((t130) * 1));
         t138 += (t130) * 1;
         out_g.len += t130;
     }
     int64_t t131 = 53;
-    gs_memcpy(t138, ((uint8_t *)gs_str75), (size_t)((t131) * 1));
+    gs_memcpy(t138, ((uint8_t *)gs_str77), (size_t)((t131) * 1));
     t138 += (t131) * 1;
     out_g.len += t131;
     uint8_t t132;
@@ -9283,7 +9318,7 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
     } else {
         tol_g = within_g;
     }
-    t3.data = ((uint8_t *)gs_str76); t3.len = 6;
+    t3.data = ((uint8_t *)gs_str78); t3.len = 6;
     id_g = t3;
     double t4;
     double x_g_2 = ((double)((double)(got_g)) - (double)(want_g));
@@ -9306,7 +9341,7 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
     t31 += t9;
     t8 += t9;
     int64_t t11 = 2;
-    gs_memcpy(t31, (const uint8_t *)(((uint8_t *)gs_str77)), (size_t)t11);
+    gs_memcpy(t31, (const uint8_t *)(((uint8_t *)gs_str79)), (size_t)t11);
     t31 += t11;
     t8 += t11;
     int64_t t12 = gs_fmt_f64(t31, (double)(got_g));
@@ -9445,21 +9480,21 @@ static void gs_init_globals(void) {
     GS_GL->runtime_HEX27_g7 = 5;
     GS_GL->runtime_QUAD4_SHELL_g7 = 6;
     GS_GL->runtime_BEAM2_g7 = 7;
-    t1.data = ((uint8_t *)gs_str78); t1.len = 4;
+    t1.data = ((uint8_t *)gs_str80); t1.len = 4;
     t0.e[0] = t1;
-    t2.data = ((uint8_t *)gs_str79); t2.len = 4;
+    t2.data = ((uint8_t *)gs_str81); t2.len = 4;
     t0.e[1] = t2;
-    t3.data = ((uint8_t *)gs_str80); t3.len = 4;
+    t3.data = ((uint8_t *)gs_str82); t3.len = 4;
     t0.e[2] = t3;
-    t4.data = ((uint8_t *)gs_str81); t4.len = 5;
+    t4.data = ((uint8_t *)gs_str83); t4.len = 5;
     t0.e[3] = t4;
-    t5.data = ((uint8_t *)gs_str82); t5.len = 4;
+    t5.data = ((uint8_t *)gs_str84); t5.len = 4;
     t0.e[4] = t5;
-    t6.data = ((uint8_t *)gs_str83); t6.len = 5;
+    t6.data = ((uint8_t *)gs_str85); t6.len = 5;
     t0.e[5] = t6;
-    t7.data = ((uint8_t *)gs_str84); t7.len = 11;
+    t7.data = ((uint8_t *)gs_str86); t7.len = 11;
     t0.e[6] = t7;
-    t8.data = ((uint8_t *)gs_str85); t8.len = 5;
+    t8.data = ((uint8_t *)gs_str87); t8.len = 5;
     t0.e[7] = t8;
     GS_GL->runtime_CELL_NAMES_g7 = t0;
     t9.e[0] = 3;
@@ -9598,13 +9633,13 @@ static void gs_init_globals(void) {
     t16.e[1] = 0;
     t16.e[2] = 0;
     GS_GL->runtime_lattice_g7 = t16;
-    t18.data = ((uint8_t *)gs_str86); t18.len = 2;
+    t18.data = ((uint8_t *)gs_str88); t18.len = 2;
     t17.e[0] = t18;
-    t19.data = ((uint8_t *)gs_str87); t19.len = 2;
+    t19.data = ((uint8_t *)gs_str89); t19.len = 2;
     t17.e[1] = t19;
-    t20.data = ((uint8_t *)gs_str88); t20.len = 2;
+    t20.data = ((uint8_t *)gs_str90); t20.len = 2;
     t17.e[2] = t20;
-    t21.data = ((uint8_t *)gs_str89); t21.len = 2;
+    t21.data = ((uint8_t *)gs_str91); t21.len = 2;
     t17.e[3] = t21;
     t22.data = ((uint8_t *)gs_str9); t22.len = 2;
     t17.e[4] = t22;
@@ -9613,7 +9648,7 @@ static void gs_init_globals(void) {
     GS_GL->runtime_FACE_NAMES_g7 = t17;
     t25.data = ((uint8_t *)gs_str29); t25.len = 2;
     t24.e[0] = t25;
-    t26.data = ((uint8_t *)gs_str90); t26.len = 2;
+    t26.data = ((uint8_t *)gs_str92); t26.len = 2;
     t24.e[1] = t26;
     t27.data = ((uint8_t *)gs_str26); t27.len = 2;
     t24.e[2] = t27;
