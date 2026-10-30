@@ -183,17 +183,24 @@ does not write it, but a deck that an LLM writes in one file must hold it
 | the element | default: order 2 on hex cells | `Mesh.ElementOrder = 2` in `beam.geo`, C3D20 | the grid solver chooses |
 | the dimensions of the model | type-checked by `skein check` | not checked | not checked |
 
-### 1.3 The results of the femahoy inputs
+### 1.3 The results
 
-The two femahoy inputs ran with `fh run` (femahoy and CalculiX on this
-computer, 2026-10-30). The `skein run` result comes with the runtime.
+The Skein file ran with `skein run` on main. The two femahoy inputs ran
+with `fh run` (femahoy and CalculiX on this computer). All runs are from
+2026-10-30.
 
 | Input | Mesh and element | Tip deflection u_z | Root reaction F_z |
 |---|---|---|---|
+| Skein | 40 × 4 × 4 hex27 (order 2), 19683 unknowns, 542 CG iterations | −0.190502 mm | 100.000 N |
 | femahoy grid | grid solver, `max_cell` 2.5 mm | −0.190113 mm | 100.000 N |
 | femahoy CalculiX | 40 × 4 × 4 C3D20, rigid tip | −0.190408 mm | 100.000 N |
 | Euler-Bernoulli, PL³/(3EI) | | −0.190476 mm | 100 N |
 | Timoshenko, the reference of the femahoy case | | −0.191933 mm | 100 N |
+
+The Skein tip deflection is 0.75 % below the Timoshenko reference, 0.20 %
+above the femahoy grid solver and 0.01 % above Euler-Bernoulli. The
+equilibrium check of `skein run` passed: the reaction equals the applied
+load to 2.4e-8 N.
 
 ---
 
@@ -327,11 +334,21 @@ E3, femahoy grid: `h15/grid.toml` against the base file.
 
 ### 2.3 The results of the edits
 
-The femahoy answers ran with `fh run`. The results show that each edit
-gives the model that the task asks for.
+The femahoy answers ran with `fh run`, and the Skein answers ran with
+`skein run` on main. The results show that each edit gives the model that
+the task asks for.
 
-| Task | femahoy CalculiX u_z, F_z | femahoy grid u_z, F_z |
-|---|---|---|
+| Task | Skein u_z, F_z | femahoy CalculiX u_z, F_z | femahoy grid u_z, F_z |
+|---|---|---|---|
+| E1 | −0.285753 mm, 150.000 N | −0.285612 mm, 150.000 N | −0.285169 mm, 150.000 N |
+| E2, step 2 | −0.381004 mm, 200.000 N | −0.380815 mm, 200.000 N | −0.380225 mm, 200.000 N |
+| E3, H = 15 mm | not in this slice | −0.056905 mm, 100.000 N | −0.056823 mm, 100.000 N |
+| E3, H = 20 mm | not in this slice | −0.024300 mm, 100.000 N | −0.024266 mm, 100.000 N |
+
+`skein run` refuses the `study` of E3 with the error `unsupported`, because
+this slice runs one linear static model. The E3 file passes `skein check`.
+
+---|---|---|
 | E1 | −0.285612 mm, 150.000 N | −0.285169 mm, 150.000 N |
 | E2, step 2 | −0.380815 mm, 200.000 N | −0.380225 mm, 200.000 N |
 | E3, H = 15 mm | −0.056905 mm, 100.000 N | −0.056823 mm, 100.000 N |
@@ -381,14 +398,16 @@ The output folder gets the answer and the checker output of each round, and
 
 Euler-Bernoulli for the request: PL³/(3EI) = 0.381 mm, with I = 50 × 100³ / 12 mm⁴.
 Model: claude-opus-5-5, 2026-10-30. The round limit is 5.
+For the femahoy case of §1, `skein run` gives −0.190502 mm and 100.000 N
+on 40 × 4 × 4 hex27 cells (§1.3).
 
 "First-try pass" means that the check passed in round 1.
 
 | Path | Run | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection | Reaction | Mesh and element |
 |---|---|---|---|---|---|---|---|---|---|
-| skein | 1 | yes | 0 | 3339 | 1164 | 48.3 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
-| skein | 2 | yes | 1 | 7964 | 1802 | 52.6 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
-| skein | 3 | yes | 0 | 3339 | 915 | 44.5 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 1 | yes | 1 | 7823 | 1736 | 53.1 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 2 | yes | 0 | 3339 | 1127 | 55.1 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 3 | yes | 0 | 3339 | 998 | 44.3 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
 | inp | 1 | yes | 0 | 656 | 2706 | 26.1 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
 | inp | 2 | yes | 0 | 656 | 3364 | 32.6 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
 | inp | 3 | yes | 0 | 656 | 6538 | 52.7 s | −0.379456 mm | 1000 N | 40 C3D8I, 126 nodes |
@@ -412,11 +431,11 @@ Skein runs (same model, same day):
 - `skein run` refuses a report that this slice does not compute, with the
   error `unsupported`. The card lists `min`, `mean` and `max` as report
   functions, and the models used them: `min(u.z, tip)` and `mean(u.z, tip)`
-  with the earlier driver, and `mean(u.z, tip)` and
-  `max(von_mises(sigma), beam)` in run 2 above. In run 2, one repair round
-  removed them.
+  with the earlier driver, and `max(von_mises(sigma), beam)` in run 1 above.
+  In run 1, one repair round removed it.
 - Inp runs 1 and 2 used beam elements, not solid elements. Inp run 3 wrote
   its 126 nodes and 40 elements by hand in 234 lines.
 
-The build for these runs merged main, the `skein run` PR, the checker PR
-and this branch.
+The Skein runs above used main with `skein run`, merged with the checker
+PR, because `skein check` is not on main yet. The earlier runs and the inp
+runs used the same code before the merge to main.
