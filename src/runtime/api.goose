@@ -5,38 +5,44 @@
 //
 //     runtime::mesh_box(0.0, 0.0, 0.0, 100.0, 10.0, 10.0, 40, 4, 4);
 //     runtime::material(210000.0, 0.3);
-//     runtime::fix_face(runtime::X, 0.0);
-//     runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0);
+//     runtime::fix("x0");
+//     runtime::fix_component("y0", runtime::Y);
+//     runtime::traction("x1", 0.0, 0.0, -1.0);
+//     runtime::linear_solver("cg", "jacobi");
 //     let ok = runtime::solve_static();
 //     let ux, uy, uz = runtime::displacement_at(100.0, 5.0, 5.0);
-//     let rx, ry, rz = runtime::reaction_face(runtime::X, 0.0);
+//     let rx, ry, rz = runtime::reaction("x0");
 //     runtime::write_vtu("out.vtu");
 //
 // The runtime has no units. The generated code converts each value to one
 // consistent system, for example mm, N and MPa, before the call.
 //
-// The mesh is a box (`mesh_box`) or a sector of an annulus about an axis
-// parallel to z (`mesh_annulus`). A face is the part of the boundary where
-// the lattice coordinate `axis` is equal to `value`. For a box the lattice
-// coordinates are x, y and z, as in `boundary(beam, x == 0 mm)`. For an
-// annulus they are r, θ (in radians) and z. A value that is not on a face
-// selects no nodes, and the call returns false.
+// A support, a load and a reaction name a set of the mesh: a node set for
+// `fix` and `reaction`, a face set for `traction` and `face_area`. A
+// mesher gives a node set and a face set of the same name for each
+// surface. A name that the mesh does not have selects nothing, and the
+// call returns false. The box mesher names the faces of the box x0, x1,
+// y0, y1, z0 and z1: x0 is the face x = x0, as in
+// `boundary(beam, x == 0 mm)`. The annulus mesher names the faces of the
+// sector r0, r1, t0, t1, z0 and z1 (r, θ and z).
 //
-// The state is global: one mesh, one material, one set of supports and one
+// The mesh is the unstructured mesh of fem.goose. mesh_box and
+// mesh_annulus are its first meshers. The state is global: one mesh, one material, one set of supports and one
 // set of loads. A second load step calls `clear_loads`, applies its loads
 // and solves again. A second mesh (a sweep over a dimension) starts again
 // at `mesh_box`, which clears all of the state.
 import std;
 namespace runtime;
+import .fem;
 import .mesh;
+import .solid;
 import .solve;
 import .vtu;
 
+// The components of a vector, for fix_component.
 let X = 0;
 let Y = 1;
 let Z = 2;
-let R = 0;
-let THETA = 1;
 
 // Meshes the box from (x0, y0, z0) to (x1, y1, z1) with nx × ny × nz
 // 27-node hexahedra (triquadratic Lagrange cells). Clears the material,
@@ -66,26 +72,43 @@ fn material(E: f64, nu: f64) {
     poisson = nu;
 }
 
-// Holds all 3 components of the displacement at 0 on a face.
-fn fix_face(axis: i64, value: f64) -> bool {
-    return mark_fixed(axis, value, 0, 3);
+// Holds all dofs at 0 on the nodes of a node set.
+fn fix(set: const u8[:]) -> bool {
+    let s = find_set(set, false);
+    guard s >= 0 else { return false; }
+    fix_set(s, 0, dofs_per_node);
+    return true;
 }
 
-// Holds component c (X, Y or Z) of the displacement at 0 on a face, as a
-// plane of symmetry does.
-fn fix_face_component(axis: i64, value: f64, c: i64) -> bool {
-    return mark_fixed(axis, value, c, c + 1);
+// Holds dof c (X, Y or Z for a solid) at 0 on the nodes of a node set, as
+// a plane of symmetry does.
+fn fix_component(set: const u8[:], c: i64) -> bool {
+    let s = find_set(set, false);
+    guard s >= 0 && c >= 0 && c < dofs_per_node else { return false; }
+    fix_set(s, c, c + 1);
+    return true;
 }
 
-// Adds a uniform traction (force per area) (tx, ty, tz) on a face.
-fn traction_face(axis: i64, value: f64, tx: f64, ty: f64, tz: f64) -> bool {
-    return add_face_load(axis, value, tx, ty, tz, 0.0);
+// Adds a uniform traction (force per area) (tx, ty, tz) on a face set.
+fn traction(set: const u8[:], tx: f64, ty: f64, tz: f64) -> bool {
+    let s = find_set(set, true);
+    guard s >= 0 else { return false; }
+    return add_set_traction(s, tx, ty, tz, 0.0);
 }
 
-// Adds the traction s n on a face, with n the unit normal out of the body.
-// An internal pressure p is s = -p.
-fn normal_traction_face(axis: i64, value: f64, s: f64) -> bool {
-    return add_face_load(axis, value, 0.0, 0.0, 0.0, s);
+// Adds the traction s n on a face set, with n the unit normal out of the
+// body. An internal pressure p is s = -p.
+fn normal_traction(set: const u8[:], s: f64) -> bool {
+    let fs = find_set(set, true);
+    guard fs >= 0 else { return false; }
+    return add_set_traction(fs, 0.0, 0.0, 0.0, s);
+}
+
+// The area of a face set, or 0 if the mesh has no face set of that name.
+fn face_area(set: const u8[:]) -> f64 {
+    let s = find_set(set, true);
+    guard s >= 0 else { return 0.0; }
+    return set_area(s);
 }
 
 // Adds the force (fx, fy, fz) at the node nearest to (x, y, z).
@@ -99,28 +122,54 @@ fn clear_loads() {
     clear_load_vector();
 }
 
-// Assembles the stiffness matrix and solves K u = f by CG with a Jacobi
-// preconditioner. Returns false if CG does not converge.
+// Sets the linear solver and the preconditioner of the next solves by
+// name. "cg" with "jacobi" is the default. The solvers lane registers the
+// others in lane_solvers.goose.
+fn linear_solver(solver: const u8[:], preconditioner: const u8[:]) {
+    solver_name = [];
+    solver_name.append(solver[..min(solver.len, 64)]);
+    preconditioner_name = [];
+    preconditioner_name.append(preconditioner[..min(preconditioner.len, 64)]);
+}
+
+// Assembles the stiffness matrix and solves K u = f by the linear solver
+// (CG with a Jacobi preconditioner by default). Returns false if the solver
+// does not converge.
 fn solve_static() -> bool {
     return solve_linear_static();
 }
 
 // The displacement at (x, y, z), interpolated in the cell that holds the
-// point. A point outside the mesh gives 0, 0, 0.
+// point. A point outside the 3D cells gives 0, 0, 0.
 fn displacement_at(x: f64, y: f64, z: f64) -> f64, f64, f64 {
     return interpolate_u(x, y, z);
 }
 
 // The stress at (x, y, z) in the cell that holds the point: xx, yy, zz,
-// yz, xz and xy. A point outside the mesh gives 0.
+// yz, xz and xy. A point outside the 3D cells gives 0.
 fn stress_at(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
     return stress_at_point(x, y, z);
 }
 
-// The sum of the reaction forces on the fixed dofs of the nodes of a face.
-// A node on an edge counts in each face that holds it.
-fn reaction_face(axis: i64, value: f64) -> f64, f64, f64 {
-    return face_reaction(axis, value);
+// The sum of the reaction forces on the fixed nodes of a node set.
+fn reaction(set: const u8[:]) -> f64, f64, f64 {
+    let s = find_set(set, false);
+    guard s >= 0 else { return 0.0, 0.0, 0.0; }
+    return set_reaction(s);
+}
+
+// Whether the node sets a and b have a node in common. False if the mesh
+// has no node set of one of the names.
+fn sets_share_nodes(a: const u8[:], b: const u8[:]) -> bool {
+    let sa = find_set(a, false);
+    let sb = find_set(b, false);
+    guard sa >= 0 && sb >= 0 else { return false; }
+    return sets_meet(sa, sb);
+}
+
+// The sum of the reaction forces on all fixed nodes, each node once.
+fn total_reaction() -> f64, f64, f64 {
+    return fixed_reaction();
 }
 
 // The sum of all applied loads.
@@ -128,12 +177,12 @@ fn applied_load() -> f64, f64, f64 {
     return load_sum();
 }
 
-// Writes the mesh and the displacement to a VTU file for ParaView.
+// Writes the mesh and the fields of the dofs to a VTU file for ParaView.
 fn write_vtu(path: const u8[:]) -> bool {
     return write_vtu_file(path);
 }
 
 // Facts about the last solve, for the report.
-fn dof_count() -> i64 { return 3 * node_count(); }
+fn dof_count() -> i64 { return dof_total(); }
 fn cg_iterations() -> i64 { return last_iterations; }
 fn solve_seconds() -> f64 { return last_seconds; }
