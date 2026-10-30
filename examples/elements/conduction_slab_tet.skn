@@ -1,0 +1,39 @@
+// A slab with fixed temperatures on two faces and no source. The exact
+// field is linear in x, so the mid-plane temperature is 50 degC. The
+// reactions cancel and no load is applied, so this model checks that the
+// check `equilibrium` scales with the sizes of the reactions.
+
+model conduction_slab_tet: 3d, SI
+
+let l: Length = 0.01 m
+let a: Length = 0.02 m
+
+scales l, 100 K, 20 W/(m*K)
+
+let slab: Solid = box((0, 0, 0) m, (l, a, a))
+let hot: Surface = boundary(slab, x == 0 m)
+let cold: Surface = boundary(slab, x == l)
+
+material steel {
+    k: Conductivity = 20 W/(m*K)
+}
+
+mesh m on slab {
+    size: 0.0025 m
+    cell: tet
+}
+
+physics thermal on slab: heat solves T: Temperature {
+    material steel
+}
+
+method thermal: cg { mesh: m, order: 1 }
+
+step steady: static {
+    bc hot: T = 100 degC
+    bc cold: T = 0 degC
+    output T
+    report heat_in = reaction(hot)
+}
+
+expect mid: T at (0.005, 0.01, 0.01) m == 50 degC within 0.05 K

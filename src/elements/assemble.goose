@@ -379,12 +379,20 @@ fn all_reaction() -> f64[3] {
     return sum;
 }
 
-// The sum of the sizes of the nodal loads and sources: the scale of the
-// check `equilibrium`, which loads that cancel do not make 0.
+// The sum of the sizes of the nodal loads, sources and reactions: the scale
+// of the check `equilibrium`, which loads that cancel do not make 0. The
+// reactions keep the scale above 0 when only fixed values drive the model.
 fn load_magnitude() -> f64 {
     var sum = 0.0;
     for v in load { sum += abs(v); }
     for v in assembled_source { sum += abs(v); }
+    guard row_start.len > 0 else { return sum; }
+    for d in sol.len {
+        if fixed[d] == 0 { continue; }
+        var ku = 0.0;
+        for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+        sum += abs(ku - load[d] - assembled_source[d]);
+    }
     return sum;
 }
 

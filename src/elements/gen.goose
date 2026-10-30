@@ -1082,7 +1082,8 @@ let PRELUDE = """
     }
 
     // The sum of the reactions and the applied loads is 0 (checks.md,
-    // `equilibrium`), to 1e-6 of the sum of the sizes of the nodal loads.
+    // `equilibrium`), to 1e-6 of the sum of the sizes of the nodal loads
+    // and reactions.
     fn equilibrium(unit: u8[:]) {
         let rx, ry, rz = elements::total_reaction();
         let fx, fy, fz = elements::applied_load();
