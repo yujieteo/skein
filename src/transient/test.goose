@@ -55,8 +55,9 @@ fn centre(cells: i64, dt: f64, scheme: i64) -> f64 {
     return transient::temperature_at(0.5 * H);
 }
 
-// The femahoy case as its model gives it: 0.5 mm cells, backward Euler,
-// dt = 0.1 s, within the 0.06 K of its `expect` line.
+// The femahoy case: backward Euler, dt = 0.1 s, within the 0.06 K of its
+// `expect` line. The test uses quadratic cells of the same 0.5 mm size as
+// the femahoy model, which uses linear cells.
 fn test_femahoy() {
     let series_centre = series(0.5 * H, END);
     if abs(series_centre - SERIES_CENTRE) > 1.0e-8 {
