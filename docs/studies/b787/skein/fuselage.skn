@@ -1,4 +1,4 @@
-// blocked-by: G3 N1
+// blocked-by: G3 G31 G32 G33
 // Boeing 787 forward fuselage under cabin pressure: the global model of
 // the problem sheet (../problem.md). One quarter of a 20-bay barrel,
 // 0 <= x <= 6.096 m and 0 deg <= theta <= 180 deg, with the left door 2
@@ -58,6 +58,8 @@ fn door_box(g: Length) -> Solid = fillet(panel(0 m, w_d/2 + g, theta_d, h_d/2 + 
 let barrel: Solid = cylinder((0, 0, 0) m, e_x, R, x_end)
 let wall: Surface = boundary(barrel, y^2 + z^2 == R^2 && y >= 0 m)
 let skin: Surface = wall - door_box(0 m)
+// gap G32: a Surface or a Curve & a Solid is a Solid in the checker, not
+// the part of the Surface or the Curve in the Solid.
 let pad: Surface = skin & door_box(pad_w)
 let plain: Surface = skin - door_box(pad_w)
 
@@ -65,6 +67,7 @@ let plain: Surface = skin - door_box(pad_w)
 // x = f_pitch/2 + f_pitch*k. The cutout cuts both (sheet 2.3).
 let stringer_0: Curve = line((0 m, R*sin(2 deg), R*cos(2 deg)), (x_end, R*sin(2 deg), R*cos(2 deg)))
 let left: Solid = box((0 m, 0 m, -2*R), (x_end, 2*R, 2*R))
+// gap G32: the & left gives a Solid.
 let stringers: Curve = (pattern_polar(stringer_0, e_x, 90) & left) - door_box(0 m)
 let ring_0: Curve = boundary(wall, x == 0 m)
 let frames: Curve = pattern(
@@ -80,6 +83,7 @@ let skin_end: Curve = boundary(skin, x == x_end)
 // The aft half of the cutout edge: the straight aft edge and the two aft
 // corner arcs (sheet 6.2).
 let aft_of_x_c: Solid = box((w_d/2 - r_c, 0 m, -2*R), (x_end, 2*R, 2*R))
+// gap G32: the & aft_of_x_c gives a Solid.
 let door_aft: Curve = boundary(skin, door_box(0 m)) & aft_of_x_c
 let bottom: Point = point((0 m, 0 m, -R))
 
@@ -153,12 +157,13 @@ physics skin_shell on skin: reissner_mindlin(
 ) solves w: Vector<Length>,
     theta: Vector<Angle> {
     material skin_lam on plain, pad_lam on pad
+    // gap G33: the template does not declare N and eps_m.
     let s_axial: Pressure = dot(e_x, N*e_x)/h
     let s_hoop: Pressure = dot(e_t, N*e_t)/h
     let e_hoop: Real = dot(e_t, eps_m*e_t)
 }
 
-// gap N1: timoshenko(A, I_y, I_z) has no J, no section axis and no offset,
+// gap G31: timoshenko(A, I_y, I_z) has no J, no section axis and no offset,
 // and gives no axial force. The template here takes them and gives Nx.
 physics beam on beams: timoshenko(
     A: A,
@@ -176,7 +181,7 @@ method skin_shell: cg { mesh: m, order: 2 }
 
 method beam: cg { mesh: m, order: 2 }
 
-// gap N1: the beams share the skin points on their lines. The tie also
+// gap G31: the beams share the skin points on their lines. The tie also
 // gives the beam ends the symmetry conditions of the skin.
 bc beams: w_b = w
 bc beams: theta_b = theta
@@ -193,11 +198,14 @@ step pressurize: static {
     // End closure load p_U*R/2, and the plug door load on the aft half
     // of the cutout edge. The sheet gives p_U*x per unit s. Per unit
     // edge length, this is p_U*x*|n.x|, because ds = |n.x|*dl.
+    // gap G33: N is not declared, and N*n is not a flux of an eq.
     bc skin_end: N*n = (p_U*R/2, 0, 0)
     bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
+    // gap G31: the template does not declare Nx.
     output w, dot(w, e_r), s_hoop, s_axial, Nx
     // gap N2: max gives the value, not its point, and one value for all
     // the beams, not one for each beam.
+    // gap G31: the template does not declare Nx.
     report w_r_max = max(dot(w, e_r), skin)
     report stringer_max = max(Nx, stringers)
     report frame_max = max(Nx, frames)
@@ -213,7 +221,9 @@ let s_hoop_hi: Pressure = p_U*R/t_skin
 
 expect c1_hoop: s_hoop at P == (s_hoop_lo + s_hoop_hi)/2 within (s_hoop_hi - s_hoop_lo)/2
 
-expect c2_axial: s_axial at P == p_U*R/2/(t_skin + A_s/s_pitch) within 5%
+// Sheet 7.3: equal axial strain in skin and stringers, nu = 0.326.
+expect c2_axial: s_axial at P ==
+    (p_U*R/2 + 0.326*s_hoop_hi*A_s/s_pitch)/(t_skin + A_s/s_pitch) within 5%
 
 expect c3_rx: (reaction(skin_x0)).x == -F_end within 0.1%
 

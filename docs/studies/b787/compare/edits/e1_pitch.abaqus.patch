@@ -1,0 +1,28 @@
+diff --git a/base/abaqus/global.inp b/e1_pitch/abaqus/global.inp
+index 363fcdc..5ccf1b3 100644
+--- a/base/abaqus/global.inp
++++ b/e1_pitch/abaqus/global.inp
+@@ -42,7 +42,7 @@ SF
+ SF
+ **
+ ** Checks, printed to global.dat. Membrane stress = SF / 4.584E-3.
+-** C1: SF2 / t at P in 48.8 to 61.3 MPa; report SF2 / t / 61.3 MPa.
++** C1: SF2 / t at P in 44.3 to 61.3 MPa; report SF2 / t / 61.3 MPa.
+ ** C2: SF1 / t at P = 28.7 MPa within 5 %; report SF1 / t / 30.7 MPa.
+ ** P is the node common to the four elements of CHECK_P. Use their mean.
+ *EL PRINT, ELSET=CHECK_P, POSITION=CENTROIDAL
+diff --git a/base/abaqus/mesh.py b/e1_pitch/abaqus/mesh.py
+index 8caa587..5fad33c 100644
+--- a/base/abaqus/mesh.py
++++ b/e1_pitch/abaqus/mesh.py
+@@ -18,8 +18,8 @@ import os
+ R = 2.883
+ P_U = 97.5e3
+ L_HALF = 6.096
+-PITCH_FRAME = 0.6096
+-FRAMES = [0.3048 + PITCH_FRAME * k for k in range(10)]
++PITCH_FRAME = 0.4064
++FRAMES = [0.2032 + PITCH_FRAME * k for k in range(15)]
+ STRINGERS_DEG = [2.0 + 4.0 * k for k in range(45)]  # 0 to 180 deg only
+ 
+ DOOR_A = 0.5334                    # half width along x

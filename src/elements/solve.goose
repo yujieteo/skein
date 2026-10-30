@@ -1,5 +1,6 @@
-// CG with a Jacobi preconditioner on the free dofs. This is a stand-in
-// until the solver interface of src/solvers/ lands.
+// CG with a Jacobi preconditioner on the free dofs of the mesh of this
+// package. The solver interface of src/runtime/solve.goose and the
+// solvers of src/solvers/ work on the mesh of src/runtime/fem.goose.
 //
 // The fixed dofs take their prescribed values first. CG then solves
 // K du = f - K u0 on the free dofs: it holds the residual and the search

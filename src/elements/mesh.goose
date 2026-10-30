@@ -2,11 +2,13 @@
 //
 // The mesh is unstructured: a list of node coordinates and a list of cells,
 // each with `per_cell` local nodes in the sequence of shape.goose. The
-// structured meshers below are a stand-in until the mesher of src/mesher/
-// lands: they map a lattice of cells onto a box or onto a plate with a
-// quarter hole, and cut each lattice cell into simplices.
+// structured meshers below map a lattice of cells onto a box or onto a
+// plate with a quarter hole, and cut each lattice cell into simplices.
+// build_simplices takes the vertices and cells of another mesher, for
+// example the tri3 and tet4 mesh of src/mesher/.
 import std;
 import math;
+import dictionary;
 namespace elements;
 import .shape;
 
@@ -232,4 +234,40 @@ fn build_hole(d: i64, ord: i64, lo: f64[3], hi: f64[3], r: f64, size: f64, fine:
     around += around % 2;
     let layers = if d == 3 { max(ceil((hi[2] - lo[2]) / size - 1.0e-9) as i64, 1) } else { 1 };
     build_lattice(around, radial.len - 1, layers);
+}
+
+// The cells `vertices` (d + 1 nodes each, in positive orientation) on the
+// nodes `xyz` (x, y and z of each node). For order 2 it adds a node at the
+// midpoint of each edge, once for the cells that share the edge.
+fn build_simplices(d: i64, ord: i64, xyz: f64[:], vertices: i64[:]) {
+    assert(xyz.len % 3 == 0 && vertices.len % (d + 1) == 0);
+    var lo: f64[3] = [0.0, 0.0, 0.0];
+    var hi: f64[3] = [0.0, 0.0, 0.0];
+    for t in 3 {
+        lo[t] = xyz[t];
+        hi[t] = xyz[t];
+        for n in xyz.len / 3 {
+            lo[t] = min(lo[t], xyz[3 * n + t]);
+            hi[t] = max(hi[t], xyz[3 * n + t]);
+        }
+    }
+    start_mesh(d, ord, lo, hi);
+    coords.append(xyz);
+    let nv = xyz.len / 3;
+    var mid = dictionary<i64, i64> {};
+    for c in vertices.len / (d + 1) {
+        let v = vertices[(d + 1) * c..(d + 1) * (c + 1)];
+        conn.append(v);
+        guard ord == 2 else { continue; }
+        for e in edge_count(d) {
+            let a = v[edge_node(d, e, 0)];
+            let b = v[edge_node(d, e, 1)];
+            let key = min(a, b) * nv + max(a, b);
+            let m = mid.get_or_insert(key, node_count());
+            if m == node_count() {
+                for t in 3 { coords.push(0.5 * (xyz[3 * a + t] + xyz[3 * b + t])); }
+            }
+            conn.push(m);
+        }
+    }
 }

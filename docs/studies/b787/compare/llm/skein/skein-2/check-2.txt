@@ -1,0 +1,10 @@
+diagnostics[0]{class,id,file,line,col,msg,fix}:
+summary: errors=0 lints=0
+free_boundary[7]{physics,field,region,condition}:
+  solid,u,"boundary(struct) - symx - symy - zpin - inner - end_skin - door_aft","sigma*n = 0"
+  solid,u.y,"symx","(sigma*n).y = 0"
+  solid,u.z,"symx","(sigma*n).z = 0"
+  solid,u.x,"symy","(sigma*n).x = 0"
+  solid,u.z,"symy","(sigma*n).z = 0"
+  solid,u.x,"zpin","(sigma*n).x = 0"
+  solid,u.y,"zpin","(sigma*n).y = 0"

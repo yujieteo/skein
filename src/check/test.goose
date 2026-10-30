@@ -115,6 +115,8 @@ fn test_types() {
     expect_id("not_constant", str(H, "param a: Length = x\n"));
     expect_id("geometry_dim", str(H2, "let s: Solid = rect((0, 0) m, (1, 1) m)\n"));
     expect_id("geometry_space", str(H, "let s: Surface = circle((0, 0) m, 1 m)\n"));
+    expect_clean("a 2D profile of extrude and revolve in a 3d model", str(H, "let s: Solid = extrude(rect((0, 0) m, (1, 1) m), 2 m) | revolve(circle((2, 0) m, 1 m), 1 rad)\n"));
+    expect_id("geometry_space", str(H, "let s: Solid = extrude(rect((0, 0) m, (1, 1) m), circle((0, 0) m, 1 m))\n"));
     expect_id("nondim_unit", "model m: 2d, nondim\nlet a: Real = 1 m\n");
     // Gaps G7, G12, G29, G30: these are valid.
     expect_clean("G7 re, imag, arg, conj", str(H, "let w: Complex<Real> = 1 + 2*im\nlet a: Real = re(w) + imag(w) + abs(w)\nlet b: Angle = arg(conj(w))\n"));
@@ -246,6 +248,7 @@ fn main() {
     test_studies();
     test_output();
     test_corpus("samples");
+    test_corpus("examples");
     test_corpus("examples/femahoy");
     if failures > 0 {
         print(failures, " failed");

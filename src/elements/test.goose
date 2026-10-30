@@ -13,6 +13,9 @@ import std;
 import math;
 import os;
 import elements from "../elements";
+import mesher from "../mesher";
+import runtime from "../runtime";   // the mesher imports it
+import solvers from "../solvers";   // the runtime imports it
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -177,9 +180,11 @@ let A = 1.0;
 let W = 40.0;
 let S = 100.0;
 
-fn kirsch(d: i64, ord: i64, size: f64, fine: f64, tol: f64) {
+// Solves the quarter plate of half width w on the graded structured mesh
+// and gives the factor sigma_xx / S at the top of the hole.
+fn kirsch(d: i64, ord: i64, w: f64, size: f64, fine: f64) -> f64 {
     let th = 1.0;
-    elements::mesh_hole(d, ord, 0.0, 0.0, 0.0, W, W, th, A, size, fine);
+    elements::mesh_hole(d, ord, 0.0, 0.0, 0.0, w, w, th, A, size, fine);
     if d == 2 { elements::elastic_plane_stress(200000.0, 0.3, th); } else { elements::elastic(200000.0, 0.0); }
     assert(elements::plane(elements::X, 0.0));
     elements::fix(elements::X, 0.0);
@@ -189,9 +194,9 @@ fn kirsch(d: i64, ord: i64, size: f64, fine: f64, tol: f64) {
         assert(elements::plane(elements::Z, 0.0));
         elements::fix(elements::Z, 0.0);
     }
-    assert(elements::plane(elements::X, W));
+    assert(elements::plane(elements::X, w));
     elements::traction(S, 0.0, 0.0);
-    let name = str("kirsch ", kind_name(d, ord), " size ", size, " fine ", fine);
+    let name = str("kirsch ", kind_name(d, ord), " w ", w, " size ", size, " fine ", fine);
     if !elements::solve() {
         failures++;
         print("FAIL ", name, ": CG does not converge");
@@ -206,15 +211,171 @@ fn kirsch(d: i64, ord: i64, size: f64, fine: f64, tol: f64) {
           elements::cg_iterations(), " CG iterations, ", elements::solve_seconds(), " s");
     print("  sigma_xx at the top ", top, " (factor ", top / S, "), sigma_yy at the side ", side,
           ", reaction x ", rx, ", load x ", fx);
-    expect_near(str(name, " factor at the top"), top / S, 3.0, tol);
-    expect_near(str(name, " load"), fx, S * W * th, 1.0e-12);
+    expect_near(str(name, " load"), fx, S * w * th, 1.0e-12);
     expect_near(str(name, " equilibrium"), -rx, fx, 1.0e-8);
+    return top / S;
 }
 
+// The quarter plate of half width w on the unstructured triangles of
+// src/mesher/, all of the size h, and the factor at the top of the hole.
+// For order 2, the midpoint node of each edge on the hole goes onto the
+// arc, so the cell edge there is curved.
+fn kirsch_mesher(ord: i64, w: f64, h: f64) -> f64 {
+    mesher::clear_shapes();
+    let g = mesher::subtract(mesher::rect(0.0, 0.0, w, w), mesher::circle(0.0, 0.0, A));
+    if !mesher::mesh_2d(g, h) {
+        failures++;
+        print("FAIL kirsch mesher: the mesher does not finish");
+        return 0.0;
+    }
+    var vertices: i64[>..] = [];
+    vertices.append(runtime::cell_nodes);
+    elements::mesh_simplices(2, ord, runtime::coords, vertices);
+    let tol_r = 1.0e-9 * w;
+    if ord == 2 {
+        for c in elements::cell_count() {
+            for e in 3 {
+                let a = elements::cell_node(c, elements::edge_node(2, e, 0));
+                let b = elements::cell_node(c, elements::edge_node(2, e, 1));
+                guard abs(radius(a) - A) <= tol_r && abs(radius(b) - A) <= tol_r else { continue; }
+                let m = elements::cell_node(c, 3 + e);
+                let r = radius(m);
+                for t in 2 { elements::coords[3 * m + t] *= A / r; }
+            }
+        }
+    }
+    let th = 1.0;
+    elements::elastic_plane_stress(200000.0, 0.3, th);
+    assert(elements::plane(elements::X, 0.0));
+    elements::fix(elements::X, 0.0);
+    assert(elements::plane(elements::Y, 0.0));
+    elements::fix(elements::Y, 0.0);
+    assert(elements::plane(elements::X, w));
+    elements::traction(S, 0.0, 0.0);
+    let name = str("kirsch mesher ", kind_name(2, ord), " w ", w, " size ", h);
+    if !elements::solve() {
+        failures++;
+        print("FAIL ", name, ": CG does not converge");
+    }
+    let top, found = elements::stress_at(elements::X, elements::X, 0.0, A, 0.0);
+    assert(elements::plane(elements::X, 0.0));
+    let rx, ry, rz = elements::reaction();
+    let fx, fy, fz = elements::applied_load();
+    print(name, ": ", elements::element_count(), " cells, ", elements::dof_count(), " dofs, ",
+          elements::cg_iterations(), " CG iterations, ", elements::solve_seconds(), " s");
+    print("  sigma_xx at the top ", top, " (factor ", top / S, "), reaction x ", rx, ", load x ", fx);
+    if !found {
+        failures++;
+        print("FAIL ", name, ": no cell holds the top of the hole");
+    }
+    expect_near(str(name, " load"), fx, S * w * th, 1.0e-12);
+    expect_near(str(name, " equilibrium"), -rx, fx, 1.0e-8);
+    return top / S;
+}
+
+fn radius(n: i64) -> f64 {
+    let x = elements::coords[3 * n];
+    let y = elements::coords[3 * n + 1];
+    return sqrt(x * x + y * y);
+}
+
+// The gate: the factor against Kirsch on the plate of half width W = 40 A.
+// The tolerance of P1 is 5 % because its stress is constant in each cell.
+// Then the mesh of src/mesher/ on a plate of half width 10 A, which is
+// small enough for cells of one size: its factor against the structured
+// mesh of the same plate. The finite plate raises the factor to about
+// 3.08, so Kirsch is not the reference there. The tolerance is 2 %: the
+// stress at the top is the mean of the 2 cells at that node, which differ
+// by 2.3 % at h = 0.2 A.
 fn test_kirsch() {
-    kirsch(2, 1, 4.0, 0.05, 0.05);
-    kirsch(2, 2, 4.0, 0.1, 0.01);
-    kirsch(3, 2, 4.0, 0.1, 0.01);
+    expect_near("kirsch tri3 factor at the top", kirsch(2, 1, W, 4.0, 0.05), 3.0, 0.05);
+    expect_near("kirsch tri6 factor at the top", kirsch(2, 2, W, 4.0, 0.1), 3.0, 0.01);
+    expect_near("kirsch tet10 factor at the top", kirsch(3, 2, W, 4.0, 0.1), 3.0, 0.01);
+    let small = 10.0 * A;
+    let structured = kirsch(2, 2, small, 1.0, 0.05);
+    expect_near("kirsch mesher tri6 against the structured mesh", kirsch_mesher(2, small, 0.2), structured, 0.02);
+}
+
+// --- the registry entries in src/runtime/ -----------------------------------------
+
+// The box 0 <= x <= L, 0 <= y, z <= 1 of src/mesher/ in tet4 cells, or in
+// tet10 cells through mesh_simplices, solved by the runtime with the
+// registry entries of src/runtime/lane_elements.goose. A tension S on
+// x = L, with each of x = 0, y = 0 and z = 0 held only along its normal,
+// gives u_x = S x / E and sigma_xx = S in the whole box. Each element
+// holds this linear field, so the error is round-off.
+let BOX_L = 4.0;
+let BOX_E = 200000.0;
+
+fn runtime_tets(ord: i64) {
+    mesher::clear_shapes();
+    if !mesher::mesh_3d(mesher::box(0.0, 0.0, 0.0, BOX_L, 1.0, 1.0), 0.5) {
+        failures++;
+        print("FAIL runtime tets: the mesher does not finish");
+        return;
+    }
+    var xyz: f64[>..] = [];
+    xyz.append(runtime::coords);
+    var vertices: i64[>..] = [];
+    vertices.append(runtime::cell_nodes);
+    elements::mesh_simplices(3, ord, xyz, vertices);
+    let t = if ord == 1 { runtime::TET4 } else { runtime::TET10 };
+    runtime::mesh_clear();
+    for n in elements::node_count() {
+        runtime::add_node(elements::coords[3 * n], elements::coords[3 * n + 1], elements::coords[3 * n + 2]);
+    }
+    let nn = elements::node_count_of(3, ord);
+    for c in elements::cell_count() { runtime::add_cell(t, elements::conn[nn * c..nn * (c + 1)]); }
+    runtime::clear_dofs();
+    let tol = 1.0e-9;
+    for axis in 3 {
+        var nodes: i64[>..] = [];
+        for n in runtime::node_count() {
+            if abs(runtime::coords[3 * n + axis]) <= tol { nodes.push(n); }
+        }
+        runtime::add_node_set(str("low", axis), nodes);
+    }
+    var faces: i64[>..] = [];
+    for c in runtime::cell_count() {
+        for f in 4 {
+            var all = true;
+            for a in 3 {
+                let n = runtime::cell_node(c, elements::facet_node(3, f, a));
+                if abs(runtime::coords[3 * n] - BOX_L) > tol { all = false; }
+            }
+            if all { faces.push(runtime::FACE_STRIDE * c + f); }
+        }
+    }
+    runtime::add_face_set("end", faces);
+    runtime::material(BOX_E, 0.3);
+    for axis in 3 { assert(runtime::fix_component(str("low", axis), axis)); }
+    assert(runtime::traction("end", S, 0.0, 0.0));
+    let name = str("runtime ", runtime::CELL_NAMES[t]);
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL ", name, ": the runtime does not solve");
+        return;
+    }
+    var eu = 0.0;
+    for n in runtime::node_count() {
+        let want = S * runtime::coords[3 * n] / BOX_E;
+        eu = max(eu, abs(runtime::disp[3 * n] - want) / (S * BOX_L / BOX_E));
+    }
+    let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(0.3 * BOX_L, 0.4, 0.6);
+    let es = max(abs(sxx - S), max(abs(syy), abs(sxy))) / S;
+    let fx, fy, fz = runtime::applied_load();
+    print(name, ": ", runtime::cell_count(), " cells, ", runtime::dof_count(), " dofs, error of u ", eu,
+          ", of the stress ", es, ", load x ", fx);
+    expect_near(str(name, " load"), fx, S, 1.0e-12);
+    if !(eu <= 1.0e-8) || !(es <= 1.0e-8) {
+        failures++;
+        print("FAIL ", name, ": the linear field is not exact");
+    }
+}
+
+fn test_runtime_tets() {
+    runtime_tets(1);
+    runtime_tets(2);
 }
 
 // --- the heated bar --------------------------------------------------------------
@@ -340,6 +501,7 @@ fn test_runs() {
 fn main() {
     test_patches();
     test_kirsch();
+    test_runtime_tets();
     test_heated_bar();
     test_equilibrium_scale();
     test_runs();

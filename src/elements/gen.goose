@@ -11,9 +11,11 @@
 // model of a plate with a hole. Each other construct gives an error
 // `unsupported` at its token, with a fix.
 //
-// This generator is a stand-in until the codegen dispatch tables of task
-// skein-p2-interface land. It uses the units and the values of
-// src/codegen/codegen.goose.
+// The dispatch tables of src/codegen/dispatch.goose add a template or a
+// procedure to the box model of src/codegen/codegen.goose. A model of this
+// generator differs in the dimension, the geometry and the cells, so
+// src/codegen/run.goose sends the whole model here. It uses the units and
+// the values of src/codegen/codegen.goose.
 import std;
 import math;
 namespace elements_gen;

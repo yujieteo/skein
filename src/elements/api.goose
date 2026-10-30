@@ -50,6 +50,15 @@ fn mesh_hole(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: 
     physics = -1;
 }
 
+// Meshes with the cells `vertices` of dimension `d` (d + 1 nodes each, in
+// positive orientation) on the nodes `xyz`, for example the mesh of
+// src/mesher/ in src/runtime/fem.goose. Order 2 adds a node at the
+// midpoint of each edge.
+fn mesh_simplices(d: i64, ord: i64, xyz: f64[:], vertices: i64[:]) {
+    build_simplices(d, ord, xyz, vertices);
+    physics = -1;
+}
+
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
     return max(ceil(length / size - 1.0e-9) as i64, 1);
