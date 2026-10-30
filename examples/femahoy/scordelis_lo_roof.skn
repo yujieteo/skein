@@ -11,7 +11,9 @@ let R: Length = 25000 mm
 let L: Length = 50000 mm
 let t_roof: Length = 250 mm
 let E_c: Pressure = 432 MPa
-// The weight of the femahoy case: 90 lb/ft² is 9.0e-5 MPa of the shell area.
+// This is not a unit conversion. The model keeps the numbers of the femahoy
+// case and reads ft as m and lb as N, so 90 lb/ft² becomes 90 N/m², or
+// 9.0e-5 MPa. q/E and the lengths stay consistent, so -302.4 mm is the reference.
 let q_w: Pressure = 9.0e-5 MPa
 let half: Angle = 40 deg
 
