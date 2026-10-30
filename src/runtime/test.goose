@@ -69,8 +69,32 @@ fn test_cantilever() {
     }
 }
 
+// A second load step on the same mesh: a point force at the tip, after
+// `clear_loads`. A plane that is not a face of the box selects nothing.
+fn test_second_step() {
+    runtime::clear_loads();
+    runtime::force_point(L, 0.5 * B, 0.5 * H, 0.0, 0.0, -2.0 * P);
+    if runtime::traction_face(runtime::X, 0.5 * L, 0.0, 0.0, 1.0) {
+        failures++;
+        print("FAIL traction_face: x = L/2 is not a face of the box");
+    }
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL second step: CG does not converge");
+    }
+    let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, H);
+    let rx, ry, rz = runtime::reaction_face(runtime::X, 0.0);
+    let fx, fy, fz = runtime::applied_load();
+    print("second step: point force ", fz, " N, tip uz at the top ", uz, " mm, reaction z ", rz, " N");
+    expect_near("second step applied load", fz, -2.0 * P, 1.0e-12);
+    expect_near("second step reaction", rz, 2.0 * P, 1.0e-6);
+    // The beam is linear: twice the load gives about twice the deflection.
+    expect_near("second step tip uz", uz, 2.0 * FEMAHOY_TIP, 0.02);
+}
+
 fn main() {
     test_cantilever();
+    test_second_step();
     if failures > 0 { exit(1); }
     print("runtime: all tests pass");
 }
