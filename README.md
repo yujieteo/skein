@@ -77,6 +77,7 @@ The list of these models is in `scripts/generated_c.sh`.
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
+| `src/transient/` | implicit time stepping of M du/dt + K u = 0 for the `transient` procedure: backward Euler, Crank-Nicolson and BDF2 (`step.goose`), and a line of quadratic cells for heat in a slab or a bar (`line.goose`). Not yet called by `skein run`. |
 
 ## Why Skein
 
