@@ -5,7 +5,7 @@ Boeing 787 forward fuselage barrel, upper aft door corner submodel
 **      abaqus job=door_corner globalmodel=global
 **
 ** Region: 0.600 m x 0.600 m in the x-s plane, centred on the corner
-** radius centre x = 0.3554, s = 3.0376. Same idealization as the global
+** radius centre x = 0.3554, s = 3.0373. Same idealization as the global
 ** model: S4R and S3R skin and pad-up, B31 stringers and frames.
 ** Mesh: 0.005 m on the cutout edge, 0.020 m at most elsewhere.
 *INCLUDE, INPUT=door_corner_mesh.inp

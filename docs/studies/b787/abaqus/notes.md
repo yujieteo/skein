@@ -94,8 +94,7 @@ The deck uses two corrections that Firstmate sent after the first sheet:
 2. C6 uses only the mid-points of the region edges that have skin: the
    top edge (s = 2.7373) and the aft edge (x = 0.6554). The mid-points of
    the forward and the lower edge are in the cutout. The deck names the
-   sets `C6_TOP` and `C6_AFT`. The sheet copy in this branch does not yet
-   have this change.
+   sets `C6_TOP` and `C6_AFT`. The sheet copy in this branch has it.
 
 ## Not checked without Abaqus
 
