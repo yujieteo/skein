@@ -1,0 +1,64 @@
+*HEADING
+Boeing 787 forward fuselage barrel, cabin pressure at ultimate, quarter model
+** Problem: docs/studies/b787/problem.md. Units: N, m, Pa.
+** Run: python3 mesh.py, then abaqus job=global
+**
+** Quarter barrel: 0 <= x <= 6.096, 0 <= theta <= 180 deg, R = 2.883.
+** Skin and pad-up: S4R, with S3R only where a corner radius cuts a cell.
+** Stringers and frames: B31 on the skin nodes, centroid offset inward.
+** All elements are first order. Mesh size 0.05 m.
+*INCLUDE, INPUT=global_mesh.inp
+*INCLUDE, INPUT=properties.inp
+**
+** Cabin side of the skin. Positive pressure on SNEG pushes outward.
+*SURFACE, TYPE=ELEMENT, NAME=CABIN_FACE
+SHELLS, SNEG
+**
+** Symmetry: x = 0 plane, y = 0 plane (theta = 0 and 180 deg).
+** RIGID_Z (x = 0, theta = 180 deg) only removes the rigid motion along z.
+*BOUNDARY
+SYM_X, XSYMM
+SYM_Y, YSYMM
+RIGID_Z, 3, 3
+**
+*STEP, NAME=ULTIMATE_PRESSURE
+Ultimate cabin pressure p_U = 1.5 x 65.0 kPa, linear static
+*STATIC
+*DSLOAD
+CABIN_FACE, P, 97500.
+** End closure load at x = 6.096. Door load p_U * x_e(s) per unit s on the
+** straight aft edge and the two aft corner arcs.
+*INCLUDE, INPUT=global_loads.inp
+**
+** The submodel reads U and UR from the output database.
+*OUTPUT, FIELD
+*NODE OUTPUT
+U, UR, RF
+*ELEMENT OUTPUT, ELSET=SHELLS
+SF, SE
+*ELEMENT OUTPUT, ELSET=STRINGERS
+SF
+*ELEMENT OUTPUT, ELSET=FRAMES
+SF
+**
+** Checks, printed to global.dat. Membrane stress = SF / 4.584E-3.
+** C1: SF2 / t at P in 48.8 to 61.3 MPa; report SF2 / t / 61.3 MPa.
+** C2: SF1 / t at P = 25.2 MPa within 5 %; report SF1 / t / 30.7 MPa.
+** P is the node common to the four elements of CHECK_P. Use their mean.
+*EL PRINT, ELSET=CHECK_P, POSITION=CENTROIDAL
+SF, SE
+*NODE PRINT, NSET=CHECK_P
+U
+** C3: total RF1 = -1273.0 kN within 0.1 %.
+** C4: total RF3 = 0, less than 1.273 kN.
+** C5: total RF2 = -3427.1 kN within 0.1 %.
+*NODE PRINT, NSET=NALL, TOTALS=ONLY
+RF
+** C6: hoop membrane strain SE2 at the mid-points of the submodel edges that
+** have skin: the top edge (s = 2.7373) and the aft edge (x = 0.6554).
+** Compare with the same sets in door_corner.dat.
+*EL PRINT, ELSET=C6_TOP, POSITION=CENTROIDAL
+SE
+*EL PRINT, ELSET=C6_AFT, POSITION=CENTROIDAL
+SE
+*END STEP

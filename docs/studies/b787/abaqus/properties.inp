@@ -1,0 +1,123 @@
+** Materials, orientation and sections. Both decks include this file.
+** Units: N, m, Pa.
+**
+** T800S/3900 unidirectional tape, room temperature, ambient (sheet 1.2).
+** G13 = G12 and G23 = 3.0 GPa are not in the sheet [assumption]; they
+** only set the transverse shear stiffness of the shells.
+*MATERIAL, NAME=T800S_3900
+*ELASTIC, TYPE=LAMINA
+** E1, E2, nu12, G12, G13, G23
+148.0E9, 10.1E9, 0.32, 3.94E9, 3.94E9, 3.0E9
+**
+** Shell axes: 1 = global X (fuselage axis, aft), 2 = normal x 1 (direction
+** of increasing theta). The shell normal points outward, so a positive ply
+** angle turns from +x toward +theta seen from outside, as in sheet 3.1.
+*ORIENTATION, NAME=AXIAL_HOOP
+1., 0., 0., 0., 1., 0.
+3, 0.
+**
+** Plies are listed from SNEG (inner face) to SPOS (outer face). Each
+** laminate is symmetric, so the list is also the sheet order, outer to inner.
+** Skin [45/0/-45/90]3s, 24 plies, 4.584 mm, on the mid-surface.
+*SHELL SECTION, ELSET=SKIN, COMPOSITE, ORIENTATION=AXIAL_HOOP, OFFSET=0.
+0.000191, 3, T800S_3900, 45., S01
+0.000191, 3, T800S_3900, 0., S02
+0.000191, 3, T800S_3900, -45., S03
+0.000191, 3, T800S_3900, 90., S04
+0.000191, 3, T800S_3900, 45., S05
+0.000191, 3, T800S_3900, 0., S06
+0.000191, 3, T800S_3900, -45., S07
+0.000191, 3, T800S_3900, 90., S08
+0.000191, 3, T800S_3900, 45., S09
+0.000191, 3, T800S_3900, 0., S10
+0.000191, 3, T800S_3900, -45., S11
+0.000191, 3, T800S_3900, 90., S12
+0.000191, 3, T800S_3900, 90., S13
+0.000191, 3, T800S_3900, -45., S14
+0.000191, 3, T800S_3900, 0., S15
+0.000191, 3, T800S_3900, 45., S16
+0.000191, 3, T800S_3900, 90., S17
+0.000191, 3, T800S_3900, -45., S18
+0.000191, 3, T800S_3900, 0., S19
+0.000191, 3, T800S_3900, 45., S20
+0.000191, 3, T800S_3900, 90., S21
+0.000191, 3, T800S_3900, -45., S22
+0.000191, 3, T800S_3900, 0., S23
+0.000191, 3, T800S_3900, 45., S24
+** Pad-up [45/0/-45/90]6s, 48 plies, 9.168 mm, on the same mid-surface.
+*SHELL SECTION, ELSET=PADUP, COMPOSITE, ORIENTATION=AXIAL_HOOP, OFFSET=0.
+0.000191, 3, T800S_3900, 45., P01
+0.000191, 3, T800S_3900, 0., P02
+0.000191, 3, T800S_3900, -45., P03
+0.000191, 3, T800S_3900, 90., P04
+0.000191, 3, T800S_3900, 45., P05
+0.000191, 3, T800S_3900, 0., P06
+0.000191, 3, T800S_3900, -45., P07
+0.000191, 3, T800S_3900, 90., P08
+0.000191, 3, T800S_3900, 45., P09
+0.000191, 3, T800S_3900, 0., P10
+0.000191, 3, T800S_3900, -45., P11
+0.000191, 3, T800S_3900, 90., P12
+0.000191, 3, T800S_3900, 45., P13
+0.000191, 3, T800S_3900, 0., P14
+0.000191, 3, T800S_3900, -45., P15
+0.000191, 3, T800S_3900, 90., P16
+0.000191, 3, T800S_3900, 45., P17
+0.000191, 3, T800S_3900, 0., P18
+0.000191, 3, T800S_3900, -45., P19
+0.000191, 3, T800S_3900, 90., P20
+0.000191, 3, T800S_3900, 45., P21
+0.000191, 3, T800S_3900, 0., P22
+0.000191, 3, T800S_3900, -45., P23
+0.000191, 3, T800S_3900, 90., P24
+0.000191, 3, T800S_3900, 90., P25
+0.000191, 3, T800S_3900, -45., P26
+0.000191, 3, T800S_3900, 0., P27
+0.000191, 3, T800S_3900, 45., P28
+0.000191, 3, T800S_3900, 90., P29
+0.000191, 3, T800S_3900, -45., P30
+0.000191, 3, T800S_3900, 0., P31
+0.000191, 3, T800S_3900, 45., P32
+0.000191, 3, T800S_3900, 90., P33
+0.000191, 3, T800S_3900, -45., P34
+0.000191, 3, T800S_3900, 0., P35
+0.000191, 3, T800S_3900, 45., P36
+0.000191, 3, T800S_3900, 90., P37
+0.000191, 3, T800S_3900, -45., P38
+0.000191, 3, T800S_3900, 0., P39
+0.000191, 3, T800S_3900, 45., P40
+0.000191, 3, T800S_3900, 90., P41
+0.000191, 3, T800S_3900, -45., P42
+0.000191, 3, T800S_3900, 0., P43
+0.000191, 3, T800S_3900, 45., P44
+0.000191, 3, T800S_3900, 90., P45
+0.000191, 3, T800S_3900, -45., P46
+0.000191, 3, T800S_3900, 0., P47
+0.000191, 3, T800S_3900, 45., P48
+**
+** Stringers and frames: linear general beam sections (sheet 4.2) in the
+** homogeneous quasi-isotropic material E = 55.85 GPa, nu = 0.326 (sheet 3.3).
+** The third node of each B31 element lies on the fuselage axis, so n1
+** points inward along the radius. n2 is tangent to the skin.
+** I11 is about n1 (lateral bending), I22 is about n2 (radial bending).
+** The centroid is offset inward along n1. The shear centre is put at the
+** centroid [assumption]; the sheet gives no value.
+*BEAM GENERAL SECTION, ELSET=STRINGERS, SECTION=GENERAL
+** A, I11, I12, I22, J
+2.016E-4, 4.908E-8, 0., 3.639E-8, 1.569E-10
+** n1 approximate direction, replaced by the third node of each element
+0., 0., -1.
+** E, G
+55.85E9, 21.06E9
+*CENTROID
+0.01750, 0.
+*SHEAR CENTER
+0.01750, 0.
+*BEAM GENERAL SECTION, ELSET=FRAMES, SECTION=GENERAL
+7.148E-4, 8.305E-8, 0., 2.237E-6, 2.225E-9
+0., 0., -1.
+55.85E9, 21.06E9
+*CENTROID
+0.07415, 0.
+*SHEAR CENTER
+0.07415, 0.
