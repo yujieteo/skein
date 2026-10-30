@@ -68,6 +68,16 @@ generator, the runtime or Goose, write the C again:
 
 The list of these models is in `scripts/generated_c.sh`.
 
+The test of `src/md/` compares the documents of two models with the
+golden files in `tests/md/`. After a change to `skein md`, write the
+golden files again and read the diff:
+
+```
+./build.sh
+./build/skein md samples/01_cantilever.skn > tests/md/01_cantilever.md
+./build/skein md examples/femahoy/heat_fin.skn > tests/md/heat_fin.md
+```
+
 | Directory | Contents |
 |---|---|
 | `src/skein.goose` | the command line |
