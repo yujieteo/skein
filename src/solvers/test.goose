@@ -128,7 +128,7 @@ fn newton_on_grid(n: i64) -> f64 {
     var history: f64[>..] = [];
     let tol = 1.0e-12 * solvers::norm(source);
     let steps, converged = solvers::newton(pattern_start, pattern_col, jacobian, u, tol, 20,
-                                           1.0e-13, true, history, residual, jacobian_values);
+                                           1.0e-13, history, residual, jacobian_values);
     if !converged { fail(str("Newton on ", n, " x ", n, " does not converge in ", steps, " steps")); }
     print("newton: ", n, " x ", n, " cells, ", u.len, " unknowns, ", steps, " steps");
     print("  step  |F|                     rate");
@@ -192,15 +192,6 @@ fn test_cantilever() {
     solvers::constrain(runtime::row_start, runtime::col, val, runtime::fixed, b);
     let n = b.len;
 
-    var inv_diag: f64[>..] = [];
-    solvers::inverse_diagonal(runtime::row_start, runtime::col, val, inv_diag);
-    var x_cg: f64[>..] = [];
-    solvers::zeros(x_cg, n);
-    let cg_its, cg_ok = solvers::cg(runtime::row_start, runtime::col, val, b, x_cg, RTOL, 10 * n) { r, z =>
-        for v, d in r { z[d] = inv_diag[d] * v; }
-    };
-    if !cg_ok { fail("cantilever: CG with Jacobi does not converge"); }
-
     var lu: f64[>..] = [];
     var diag: i64[>..] = [];
     if !solvers::ilu0(runtime::row_start, runtime::col, val, lu, diag) { fail("cantilever: ILU(0) has a zero pivot"); }
@@ -213,17 +204,13 @@ fn test_cantilever() {
 
     for v, d in x { runtime::disp[d] = v; }
     let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
-    for v, d in x_cg { runtime::disp[d] = v; }
-    let cx, cy, cz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
     print("cantilever: ", n, " dofs, relative tolerance ", RTOL);
     print("  runtime CG+Jacobi ", runtime_iterations, " iterations, tip uz ", rz, " mm");
-    print("  CG+Jacobi         ", cg_its, " iterations, tip uz ", cz, " mm");
     print("  GMRES(", RESTART, ")+ILU(0) ", gm_its, " iterations, tip uz ", uz, " mm");
-    if gm_its >= cg_its { fail(str("cantilever: GMRES+ILU(0) takes ", gm_its, " iterations, CG+Jacobi ", cg_its)); }
+    if gm_its >= runtime_iterations { fail(str("cantilever: GMRES+ILU(0) takes ", gm_its, " iterations, CG+Jacobi ", runtime_iterations)); }
     // RUNTIME_TIP has 6 digits: 5e-7 mm is half of its last digit.
     if abs(uz - RUNTIME_TIP) > 5.0e-7 { fail(str("cantilever: GMRES tip uz ", uz, ", want ", RUNTIME_TIP)); }
     if abs(rz - RUNTIME_TIP) > 5.0e-7 { fail(str("cantilever: runtime tip uz ", rz, ", want ", RUNTIME_TIP)); }
-    if abs(cz - RUNTIME_TIP) > 5.0e-7 { fail(str("cantilever: CG tip uz ", cz, ", want ", RUNTIME_TIP)); }
 }
 
 fn main() {

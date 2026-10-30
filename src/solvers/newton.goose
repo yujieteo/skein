@@ -1,4 +1,4 @@
-// Newton's method for F(u) = 0, with an optional backtracking line search.
+// Newton's method for F(u) = 0, with a backtracking line search.
 // The caller gives the residual R(u, f), which sets f = F(u), and the
 // Jacobian J(u, val), which sets the values of dF/du on a fixed CSR
 // pattern. Each step solves J du = -F by GMRES with ILU(0).
@@ -20,7 +20,7 @@ let NEWTON_HALVINGS = 20;           // the most halvings of a step
 // small value keeps the quadratic convergence. Returns the number of
 // steps and true if it converged.
 fn newton<R, J>(row_start: i64[:], col: i32[:], val: f64[:], u: f64[:], tol: f64,
-                max_steps: i64, linear_rtol: f64, line_search: bool,
+                max_steps: i64, linear_rtol: f64,
                 history: f64[>..]&) -> i64, bool {
     let n = u.len;
     var f: f64[>..] = [];
@@ -55,7 +55,7 @@ fn newton<R, J>(row_start: i64[:], col: i32[:], val: f64[:], u: f64[:], tol: f64
             for d in n { trial[d] = u[d] + lambda * du[d]; }
             R(trial, f);
             let tn = norm(f);
-            if !line_search || tn <= (1.0 - NEWTON_SUFFICIENT * lambda) * fnorm { fnorm = tn; break; }
+            if tn <= (1.0 - NEWTON_SUFFICIENT * lambda) * fnorm { fnorm = tn; break; }
             halvings++;
             if halvings > NEWTON_HALVINGS { return step, false; }
             lambda *= 0.5;

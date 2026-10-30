@@ -55,13 +55,3 @@ fn ilu0_apply(row_start: i64[:], col: i32[:], lu: f64[:], diag: i64[:], r: f64[:
         z[i] = s / lu[diag[i]];
     }
 }
-
-// The diagonal of A, inverted, for the Jacobi preconditioner.
-fn inverse_diagonal(row_start: i64[:], col: i32[:], val: f64[:], inv_diag: f64[>..]&) {
-    let n = row_start.len - 1;
-    inv_diag.clear();
-    for r in n {
-        let d = entry(row_start, col, r, r);
-        inv_diag.push(if d >= 0 && val[d] != 0.0 { 1.0 / val[d] } else { 1.0 });
-    }
-}

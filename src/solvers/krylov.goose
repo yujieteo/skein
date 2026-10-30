@@ -1,57 +1,18 @@
-// The Krylov solvers: CG for symmetric positive definite systems and
-// restarted GMRES(m) for the others. Each takes the preconditioner as a
+// The Krylov solver: restarted GMRES(m). It takes the preconditioner as a
 // function value P(r, z) that sets z = M⁻¹ r, for example
 //
 //     solvers::gmres(row_start, col, val, b, x, 1.0e-10, 50, 1000) { r, z =>
 //         solvers::ilu0_apply(row_start, col, lu, diag, r, z);
 //     };
 //
-// Both start from the x that they get, and stop when the norm of the
-// residual b - A x is at most rtol times the norm of b. Each returns the
+// It starts from the x that it gets, and stops when the norm of the
+// residual b - A x is at most rtol times the norm of b. It returns the
 // number of iterations (matrix-vector products in the loop) and true if
 // it converged.
 import std;
 import math;
 namespace solvers;
 import .sparse;
-
-// Preconditioned CG (Saad, Algorithm 9.1).
-fn cg<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
-         rtol: f64, max_iterations: i64) -> i64, bool {
-    let n = b.len;
-    var r: f64[>..] = [];
-    var z: f64[>..] = [];
-    var p: f64[>..] = [];
-    var q: f64[>..] = [];
-    zeros(r, n);
-    zeros(z, n);
-    zeros(p, n);
-    zeros(q, n);
-    multiply(row_start, col, val, x, q);
-    for d in n { r[d] = b[d] - q[d]; }
-    let target = rtol * norm(b);
-    if norm(r) <= target { return 0, true; }
-    P(r[..], z[..]);
-    for d in n { p[d] = z[d]; }
-    var rz = dot(r, z);
-    var it = 0;
-    while it < max_iterations {
-        multiply(row_start, col, val, p, q);
-        let alpha = rz / dot(p, q);
-        for d in n {
-            x[d] += alpha * p[d];
-            r[d] -= alpha * q[d];
-        }
-        it++;
-        if norm(r) <= target { return it, true; }
-        P(r[..], z[..]);
-        let rz_new = dot(r, z);
-        let beta = rz_new / rz;
-        rz = rz_new;
-        for d in n { p[d] = z[d] + beta * p[d]; }
-    }
-    return it, false;
-}
 
 // Right-preconditioned GMRES with a restart after m iterations (Saad,
 // Algorithm 9.5), with Givens rotations for the least-squares problem and
