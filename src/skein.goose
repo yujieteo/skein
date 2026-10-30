@@ -6,6 +6,7 @@ import os;
 import syntax from "./syntax";
 import fmt.fmt;
 import cli.card;
+import codegen.run;
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -14,6 +15,7 @@ let USAGE = """
       check   parse and type-check a model
       fmt     rewrite files in the standard layout
       help    print this text
+      run     build and run a model (only a linear static box for now)
     """;
 
 fn main() {
@@ -35,6 +37,11 @@ fn main() {
         var rest: const u8[:][>..] = [];
         for a in args[2..] { rest.push(a); }
         exit(fmt::run(rest));
+    }
+    if command == "run" {
+        var rest: const u8[:][>..] = [];
+        for a in args[2..] { rest.push(a); }
+        exit(codegen::run(rest));
     }
     if command == "check" {
         write_stderr(str("skein: ", command, " is not implemented yet\n"));
