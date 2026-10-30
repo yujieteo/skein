@@ -4,7 +4,10 @@
 // knows the pair of names, whether it converged and the iterations.
 //
 // "gmres" with "ilu0" is GMRES(m) with ILU(0) on K with the fixed dofs as
-// identity rows and columns (solvers::constrain).
+// identity rows and columns (solvers::constrain). It is for small models
+// only: the restart is fixed at GMRES_RESTART = 300, and each solve holds
+// about 301 basis vectors of n doubles. A finer mesh needs more iterations,
+// and the restart can then make GMRES stall.
 import std;
 namespace runtime;
 import .solve;
@@ -35,5 +38,9 @@ fn solvers_solve(solver: u8[:], preconditioner: u8[:], b: f64[:], x: f64[>..]&, 
     let its, converged = solvers::gmres(row_start, col, a, rhs, x, tol, GMRES_RESTART, max_it) { r, z =>
         solvers::ilu0_apply(row_start, col, lu, diag, r, z);
     };
+    if !converged {
+        write_stderr(str("runtime: gmres with ilu0 did not converge in ", its,
+                         " iterations with a restart of ", GMRES_RESTART, "\n"));
+    }
     return true, converged, its;
 }
