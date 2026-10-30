@@ -84,53 +84,62 @@ var ke: f64[6561];      // 81 × 81, row 3 l + p for component p of local node l
 var grad: f64[81];      // the gradient of each shape function at a Gauss point
 var dref: f64[81];      // the same in the reference cell
 
+// Fills `grad` with the gradient of each shape function of cell
+// (cx, cy, cz) at the local point (s0, s1, s2), and gives the Jacobian
+// determinant there.
+fn shape_gradients(cx: i64, cy: i64, cz: i64, s0: f64, s1: f64, s2: f64) -> f64 {
+    // jac[3 r + t] = ∂x_t / ∂s_r
+    var jac: f64[9] = [0.0; 9];
+    for l in 27 {
+        let a = l % 3;
+        let b = l / 3 % 3;
+        let c = l / 9;
+        dref[3 * l] = shape_1d_ds(a, s0) * shape_1d(b, s1) * shape_1d(c, s2);
+        dref[3 * l + 1] = shape_1d(a, s0) * shape_1d_ds(b, s1) * shape_1d(c, s2);
+        dref[3 * l + 2] = shape_1d(a, s0) * shape_1d(b, s1) * shape_1d_ds(c, s2);
+        let n = cell_node(cx, cy, cz, l);
+        for r in 3 {
+            for t in 3 { jac[3 * r + t] += dref[3 * l + r] * coords[3 * n + t]; }
+        }
+    }
+    let det = jac[0] * (jac[4] * jac[8] - jac[5] * jac[7])
+        - jac[1] * (jac[3] * jac[8] - jac[5] * jac[6])
+        + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
+    assert(det > 0.0);
+    // inv = jac⁻¹, so ∂N/∂x_t = Σr inv[3 t + r] ∂N/∂s_r
+    var inv: f64[9] = [0.0; 9];
+    inv[0] = (jac[4] * jac[8] - jac[5] * jac[7]) / det;
+    inv[1] = (jac[2] * jac[7] - jac[1] * jac[8]) / det;
+    inv[2] = (jac[1] * jac[5] - jac[2] * jac[4]) / det;
+    inv[3] = (jac[5] * jac[6] - jac[3] * jac[8]) / det;
+    inv[4] = (jac[0] * jac[8] - jac[2] * jac[6]) / det;
+    inv[5] = (jac[2] * jac[3] - jac[0] * jac[5]) / det;
+    inv[6] = (jac[3] * jac[7] - jac[4] * jac[6]) / det;
+    inv[7] = (jac[1] * jac[6] - jac[0] * jac[7]) / det;
+    inv[8] = (jac[0] * jac[4] - jac[1] * jac[3]) / det;
+    for l in 27 {
+        for t in 3 {
+            grad[3 * l + t] = inv[3 * t] * dref[3 * l] + inv[3 * t + 1] * dref[3 * l + 1]
+                + inv[3 * t + 2] * dref[3 * l + 2];
+        }
+    }
+    return det;
+}
+
+fn lame_lambda() -> f64 { young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson)) }
+fn lame_mu() -> f64 { young / (2.0 * (1.0 + poisson)) }
+
 // The stiffness of cell (cx, cy, cz) by 3 × 3 × 3 Gauss points:
 // K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV.
 fn cell_stiffness(cx: i64, cy: i64, cz: i64) {
-    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    let mu = young / (2.0 * (1.0 + poisson));
+    let lambda = lame_lambda();
+    let mu = lame_mu();
     for &v in ke { v = 0.0; }
     for gc in 3 {
         for gb in 3 {
             for ga in 3 {
-                let s: f64[3] = [GAUSS_X[ga], GAUSS_X[gb], GAUSS_X[gc]];
-                let w = GAUSS_W[ga] * GAUSS_W[gb] * GAUSS_W[gc];
-                // jac[3 r + t] = ∂x_t / ∂s_r
-                var jac: f64[9] = [0.0; 9];
-                for l in 27 {
-                    let a = l % 3;
-                    let b = l / 3 % 3;
-                    let c = l / 9;
-                    dref[3 * l] = shape_1d_ds(a, s[0]) * shape_1d(b, s[1]) * shape_1d(c, s[2]);
-                    dref[3 * l + 1] = shape_1d(a, s[0]) * shape_1d_ds(b, s[1]) * shape_1d(c, s[2]);
-                    dref[3 * l + 2] = shape_1d(a, s[0]) * shape_1d(b, s[1]) * shape_1d_ds(c, s[2]);
-                    let n = cell_node(cx, cy, cz, l);
-                    for r in 3 {
-                        for t in 3 { jac[3 * r + t] += dref[3 * l + r] * coords[3 * n + t]; }
-                    }
-                }
-                let det = jac[0] * (jac[4] * jac[8] - jac[5] * jac[7])
-                    - jac[1] * (jac[3] * jac[8] - jac[5] * jac[6])
-                    + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
-                assert(det > 0.0);
-                // inv = jac⁻¹, so ∂N/∂x_t = Σr inv[3 t + r] ∂N/∂s_r
-                var inv: f64[9] = [0.0; 9];
-                inv[0] = (jac[4] * jac[8] - jac[5] * jac[7]) / det;
-                inv[1] = (jac[2] * jac[7] - jac[1] * jac[8]) / det;
-                inv[2] = (jac[1] * jac[5] - jac[2] * jac[4]) / det;
-                inv[3] = (jac[5] * jac[6] - jac[3] * jac[8]) / det;
-                inv[4] = (jac[0] * jac[8] - jac[2] * jac[6]) / det;
-                inv[5] = (jac[2] * jac[3] - jac[0] * jac[5]) / det;
-                inv[6] = (jac[3] * jac[7] - jac[4] * jac[6]) / det;
-                inv[7] = (jac[1] * jac[6] - jac[0] * jac[7]) / det;
-                inv[8] = (jac[0] * jac[4] - jac[1] * jac[3]) / det;
-                for l in 27 {
-                    for t in 3 {
-                        grad[3 * l + t] = inv[3 * t] * dref[3 * l] + inv[3 * t + 1] * dref[3 * l + 1]
-                            + inv[3 * t + 2] * dref[3 * l + 2];
-                    }
-                }
-                let dv = w * det;
+                let det = shape_gradients(cx, cy, cz, GAUSS_X[ga], GAUSS_X[gb], GAUSS_X[gc]);
+                let dv = GAUSS_W[ga] * GAUSS_W[gb] * GAUSS_W[gc] * det;
                 for i in 27 {
                     for j in 27 {
                         let dot = grad[3 * i] * grad[3 * j] + grad[3 * i + 1] * grad[3 * j + 1]
@@ -260,4 +269,29 @@ fn face_reaction(axis: i64, value: f64) -> f64, f64, f64 {
         }
     }
     return sum[0], sum[1], sum[2];
+}
+
+// --- stress ----------------------------------------------------------------------
+
+// The stress at (x, y, z) from the gradient of u in the cell that holds the
+// point: xx, yy, zz, yz, xz and xy. A point outside the mesh gives 0.
+fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
+    guard disp.len > 0 && find_point(x, y, z) else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    let cx = point_cell[0];
+    let cy = point_cell[1];
+    let cz = point_cell[2];
+    shape_gradients(cx, cy, cz, point_local[0], point_local[1], point_local[2]);
+    // g[3 c + t] = ∂u_c / ∂x_t
+    var g: f64[9] = [0.0; 9];
+    for l in 27 {
+        let n = cell_node(cx, cy, cz, l);
+        for c in 3 {
+            for t in 3 { g[3 * c + t] += disp[3 * n + c] * grad[3 * l + t]; }
+        }
+    }
+    let lambda = lame_lambda();
+    let mu = lame_mu();
+    let tr = lambda * (g[0] + g[4] + g[8]);
+    return tr + 2.0 * mu * g[0], tr + 2.0 * mu * g[4], tr + 2.0 * mu * g[8],
+        mu * (g[5] + g[7]), mu * (g[2] + g[6]), mu * (g[1] + g[3]);
 }

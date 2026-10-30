@@ -831,7 +831,7 @@ mesh m on beam {
 | Setting | Type | Default | Meaning |
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
-| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` need a `box` or `rect` region |
+| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` need a `box` or `rect` region, and `hex` can also mesh a quarter of a tube |
 | `grade` | `Real` | 1.3 | largest ratio of the size of two neighbour cells |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
@@ -852,7 +852,7 @@ licences are not compatible with Apache 2.0.
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
-| `quad`, `hex` | a structured grid on a `box` or `rect` |
+| `quad`, `hex` | a structured grid on a `box` or `rect`, or in r, θ and z on a quarter of a tube: `(cylinder - cylinder) & box`, with the box corner on the axis |
 | boundary layers | prisms or quads extruded along the normal of the surface, then the core mesh |
 
 The sharp edges come from the CSG tree: each intersection of the surfaces

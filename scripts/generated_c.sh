@@ -20,6 +20,7 @@ set -eu
 
 # The models that skein run can run. Add a model here when skein run can run it.
 models="
+examples/closed_cylinder.skn
 examples/femahoy/grid_cantilever.skn
 "
 
