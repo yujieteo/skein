@@ -29,7 +29,7 @@ fn check_text(path: u8[:], text: u8[:]) {
     syntax::read_uses(prog);
     for e in syntax::errors {
         let k = syntax::tokens[e.tok];
-        var d = Diag { id: e.id, file: [], line: k.line, col: k.col, msg: e.msg, fix: e.fix };
+        var d = Diag { id: e.id, file: [], fnum: k.file, line: k.line, col: k.col, msg: e.msg, fix: e.fix };
         let file = syntax::files[k.file].path;
         d.file.append(file[..min(file.len, 256)]);
         diags.push(d);
@@ -85,12 +85,18 @@ fn check_item(n: i64) {
     }
 }
 
-// Sorts the diagnostics by line and column (command_line.md §6.1), stably.
+// Sorts the diagnostics by file, line and column (command_line.md §6.1),
+// stably. The model file comes first, then each library file in `use` order.
+fn after(a: Diag, b: Diag) -> bool {
+    if a.fnum != b.fnum { return a.fnum > b.fnum; }
+    if a.line != b.line { return a.line > b.line; }
+    return a.col > b.col;
+}
+
 fn sort_diags() {
     for i in 1..diags.len {
         var j = i;
-        while j > 0 && (diags[j - 1].line > diags[j].line
-                        || (diags[j - 1].line == diags[j].line && diags[j - 1].col > diags[j].col)) {
+        while j > 0 && after(diags[j - 1], diags[j]) {
             let tmp = diags[j - 1];
             diags[j - 1] = diags[j];
             diags[j] = tmp;

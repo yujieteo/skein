@@ -12,6 +12,7 @@ import .types;
 struct Diag {
     id: u8[..32],
     file: u8[..256],
+    fnum: i64,
     line: i64,
     col: i64,
     msg: u8[..512],
@@ -29,9 +30,9 @@ fn error(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
     let at = if report_tok >= 0 { report_tok } else { tok };
     let k = syntax::tokens[max(at, 0)];
     for d in diags {
-        if d.line == k.line && d.col == k.col && d.id == id { return; }
+        if d.fnum == k.file && d.line == k.line && d.col == k.col && d.id == id { return; }
     }
-    var d = Diag { id: [], file: [], line: k.line, col: k.col, msg: [], fix: [] };
+    var d = Diag { id: [], file: [], fnum: k.file, line: k.line, col: k.col, msg: [], fix: [] };
     let path = syntax::files[k.file].path;
     d.id.append(id[..min(id.len, 32)]);
     d.file.append(path[..min(path.len, 256)]);

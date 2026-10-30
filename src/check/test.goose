@@ -183,6 +183,7 @@ fn test_use() {
     write_file("build/use_header.skn", "model lib: 3d, SI\nlet a: Real = 1\n");
     write_file("build/use_table.skn", "let a: Real = 1\ntable tb{a: Real}:\n    1\n");
     write_file("build/use_use.skn", "use \"use_ok.skn\"\n");
+    write_file("build/use_bad.skn", "// 1\n// 2\n// 3\nlet a: Real = bb\n");
     expect_clean("use", str(H, "use \"build/use_ok.skn\"\nlet L: Length = twice(1 m)\nlet E2: Pressure = 2*E_s\n"));
     expect_id("use_item", str(H, "use \"build/no_such_file.skn\"\n"));
     expect_id("use_item", str(H, "use \"build/use_header.skn\"\n"));
@@ -190,6 +191,13 @@ fn test_use() {
     expect_id("use_item", str(H, "use \"build/use_use.skn\"\n"));
     expect_id("duplicate_name", str(H, "use \"build/use_ok.skn\"\nlet E_s: Pressure = 1 GPa\n"));
     expect_id("duplicate_name", str(H, "use \"build/use_ok.skn\"\nuse \"build/use_ok.skn\"\n"));
+    // An error in the library and one in the model at the same line and column.
+    expect_ids("a library and a model error at one place",
+               str(H, "use \"build/use_bad.skn\"\nlet c: Real = dd\n"), "unknown_name\nunknown_name\n");
+    if check::diags.len != 2 || check::diags[0].file != "t.skn" || check::diags[1].file != "build/use_bad.skn" {
+        failures++;
+        print("FAIL the model diagnostics come before the library diagnostics");
+    }
 }
 
 fn test_types() {
