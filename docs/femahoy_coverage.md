@@ -109,8 +109,8 @@ result, or the mesh or the solve is less efficient.
 
 The [787 fuselage study](studies/b787/skein/notes.md) is not a femahoy
 case, but its two models use the same marks. Its evidence paths are
-relative to the root of this repository. The models also need G3 for the
-composite skin (`docs/studies/b787/skein/fuselage.skn:146`, `docs/studies/b787/skein/door_corner.skn:154`).
+relative to the root of this repository. The composite skin of the models
+uses the shell template of G3 (`docs/studies/b787/skein/fuselage.skn:150`, `docs/studies/b787/skein/door_corner.skn:158`).
 
 | Gap | Study feature | Evidence | Why the spec cannot state it | Smallest spec change | Phase |
 |---|---|---|---|---|---|
