@@ -505,7 +505,7 @@ fn same_value(a: i64, ca: u8[:], b: i64, cb: u8[:]) -> bool {
     let va, oka = rhs_value(a, cb);
     let vb, okb = rhs_value(b, ca);
     if oka && okb { return va == vb; }
-    return norm_text(a) == norm_text(b);
+    return ca != cb || norm_text(a) == norm_text(b);
 }
 
 // The constant value in SI of component `comp` of the right side `rhs`

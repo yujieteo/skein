@@ -71,9 +71,9 @@ fn free_rows(src: u8[:]) -> u8[>..] {
 
 fn expect_free(what: u8[:], src: u8[:], want: u8[:]) {
     let got = free_rows(src);
-    if got == want { return; }
+    if got == want && check::diags.len == 0 { return; }
     failures++;
-    print("FAIL ", what, ": got [", got, "]");
+    print("FAIL ", what, ": got [", got, "] and ", check::diags.len, " diagnostics");
 }
 
 // `src` gives no diagnostic.
@@ -139,6 +139,7 @@ fn test_conditions() {
     expect_clean("G16 a point force", str(elastic, "let tip: Point = point((1, 1, 1) m)\nbc tip: sigma*n = (0, 0, -1) kN\n"));
     expect_clean("a bc on a face", str(elastic, "bc f: u = 0\nbc f: u.x = 0 m\n"));
     expect_clean("a vector and a component bc that agree", str(elastic, "bc f: u = (0, 1, 0) mm\nbc f: u.x = 0 m\n"));
+    expect_clean("a named vector and a component bc", str(elastic, "let d: Vector<Length> = (1, 0, 0) mm\nbc f: u = d\nbc f: u.y = 0 m\n"));
     expect_id("bc_conflict", str(elastic, "bc f: u.x = 0 m\nbc f: sigma*n = (0, 0, 1) MPa\n"));
     expect_id("bc_conflict", str(elastic, "bc f: u = (1, 0, 0) mm\nbc f: u.x = 0 m\n"));
     expect_id("bc_conflict", str(elastic, "bc boundary(b, x == 1 m): u = 0\nbc boundary(b,x==1 m): sigma*n = (0, 0, 1) MPa\n"));
@@ -148,8 +149,8 @@ fn test_conditions() {
                 "T,boundary(b) - f,(k * grad(T) + k * grad(T))*n = 0\n");
     expect_free("a bc on a compound region", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T)) = 0 W/m^3\n}\nbc boundary(b)-f: T = 300 K\n"),
                 "T,boundary(b) - (boundary(b)-f),(k * grad(T))*n = 0\n");
-    expect_free("a symmetry plane", str(elastic, "let sym: Surface = boundary(b, y == 0 m)\nbc f: u = 0\nbc sym: u.y = 0 m\n"),
-                "u,boundary(b) - f - sym,sigma*n = 0\nu.x,sym,(sigma*n).x = 0\nu.z,sym,(sigma*n).z = 0\n");
+    expect_free("a symmetry plane", str(elastic, "let plane: Surface = boundary(b, y == 0 m)\nbc f: u = 0\nbc plane: u.y = 0 m\n"),
+                "u,boundary(b) - f - plane,sigma*n = 0\nu.x,plane,(sigma*n).x = 0\nu.z,plane,(sigma*n).z = 0\n");
     expect_id("method_missing", str(H, SOLID, "\nmesh m2 on b { size: 0.2 m }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n"));
     expect_id("method_setting", str(elastic, "method s: cg {\n    points: m1\n}\n"));
     expect_id("method_physics", str(H, SOLID, "\npoints cloud on b { spacing: 0.1 m }\nphysics s on b solves u: Vector<Length> {\n    material steel\n    state a: Real = 0\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))\n    plastic {\n        yield: von_mises(sigma) - 200 MPa\n        strain: a\n    }\n    eq div(sigma) = 0\n}\nmethod s: gfd {\n    points: cloud\n}\n"));

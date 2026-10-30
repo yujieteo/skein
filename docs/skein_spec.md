@@ -1033,7 +1033,7 @@ gives examples.
 | `isotropic` | material tensors from `hooke` and `fourier` are isotropic | `orthotropic` |
 | `orthotropic(R)` | material axes are the columns of the rotation `R` | `isotropic` |
 | `plane_stress(t)` | a `2d` model only. σzz = σxz = σyz = 0. The compiler solves the constitutive law for εzz and removes it (§11.2). Thickness `t` multiplies volume and surface integrals. | `plane_strain`, a `3d` model |
-| `plane_strain(t)` | a `2d` model only. εzz = εxz = εyz = 0. `t` defaults to 1 of the length unit. | `plane_stress` |
+| `plane_strain(t)` | a `2d` model only. εzz = εxz = εyz = 0. With no t, integrals are per unit depth (§14.5). | `plane_stress` |
 | `incompressible` | the physics must have an equation `div(v) = 0`, or a pressure unknown that enforces `tr(strain(u)) = 0` | `compressible` |
 | `compressible` | density is a varying value or an unknown | `incompressible` |
 | `newtonian` | the fluid stress must be linear in `sym(grad(v))` | |
