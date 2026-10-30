@@ -277,6 +277,27 @@ fn shell_resultants(c: i64) -> f64[9], f64[9] {
     return nt, et;
 }
 
+// The mean of shell_resultants over the shell cells at node n.
+fn mean_resultants(n: i64) -> f64[9], f64[9] {
+    var nt: f64[9] = [0.0; 9];
+    var et: f64[9] = [0.0; 9];
+    var count = 0;
+    for c in shells.len {
+        if position(shells[c].n[..], n) < 0 { continue; }
+        let a, b = shell_resultants(c);
+        for k in 9 {
+            nt[k] += a[k];
+            et[k] += b[k];
+        }
+        count++;
+    }
+    for k in 9 {
+        nt[k] /= max(count, 1);
+        et[k] /= max(count, 1);
+    }
+    return nt, et;
+}
+
 // Sets the director of each node that has none to the mean normal of the
 // shell cells at the node.
 fn mean_directors() {

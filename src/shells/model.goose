@@ -123,12 +123,29 @@ fn edge_load(a: i64, b: i64, fx: f64, fy: f64, fz: f64) {
     }
 }
 
+// Frees each dof again, for the supports of a new step.
+fn clear_supports() { for &v in fixed { v = 0; } }
+
 fn clear_loads() {
     for &v in load { v = 0.0; }
     for &v in disp { v = 0.0; }
 }
 
 fn displacement(n: i64, dof: i64) -> f64 { return disp[6 * n + dof]; }
+
+// The node nearest to (x, y, z), and its distance.
+fn nearest_node(x: f64, y: f64, z: f64) -> i64, f64 {
+    var best = -1;
+    var d = 0.0;
+    for n in node_count() {
+        let e = norm(sub(node_point(n), [x, y, z]));
+        if best < 0 || e < d {
+            best = n;
+            d = e;
+        }
+    }
+    return best, d;
+}
 
 // The sum of the external loads on each dof kind (fx, fy, fz).
 fn load_sum() -> f64, f64, f64 {

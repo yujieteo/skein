@@ -182,4 +182,19 @@ fn reactions() -> f64[>..] {
     return r;
 }
 
+// The sum of the reaction forces r (from reactions) on the nodes.
+fn reaction_sum(r: f64[:], nodes: i64[:]) -> f64, f64, f64 {
+    var s: f64[3] = [0.0, 0.0, 0.0];
+    for n in nodes { for k in 3 { s[k] += r[6 * n + k]; } }
+    return s[0], s[1], s[2];
+}
+
+// The sizes of the loads and of the reactions, for the limit of the
+// equilibrium check.
+fn load_scale(r: f64[:]) -> f64 {
+    var s = 0.0;
+    for d in load.len { if d % 6 < 3 { s += abs(load[d]) + abs(r[d]); } }
+    return s;
+}
+
 fn profile_size() -> i64 { return sky.len; }

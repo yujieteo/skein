@@ -28,6 +28,8 @@ examples/elements/kirsch_plate_tri.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn
+examples/femahoy/scordelis_lo_roof.skn
+examples/shells/thin_cylinder_shell.skn
 "
 
 # The Goose that wrote the committed C.

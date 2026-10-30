@@ -452,17 +452,13 @@ fn test_b787(nx: i64, nt: i64) {
         failures++;
         print("FAIL C1: the hoop stress at P is out of the range");
     }
-    // C2: the sheet gives (pR/2)/(t + A_s/s_pitch), with the same axial
-    // strain in the skin and the stringers. But the skin also has the
-    // Poisson term: E eps_x = s_axial - nu s_hoop, while a stringer has
-    // E eps_x only. With this term, s_axial (t + A_s/s) = pR/2 + (A_s/s) nu s_hoop.
+    // C2: the sheet value (problem.md §7.3): the same axial strain in the
+    // skin and the stringers, with the Poisson term of the skin at the
+    // sheet hoop stress p_U R/t and nu = 0.326.
     let smear = 2.016e-4 / (2.0 * PI * B_R / 90.0);
-    let sheet_c2 = B_PU * B_R / 2.0 / (t_skin + smear);
-    let nu = shells::sections[skin].a[1] / shells::sections[skin].a[0];
-    print("  C2 of the sheet: ", s_axial, " Pa against ", sheet_c2, " Pa, ratio ", s_axial / sheet_c2,
-        " (the sheet leaves out the Poisson term)");
-    expect_near("C2 axial stress at P against (pR/2 + nu s_hoop A_s/s)/(t + A_s/s)", s_axial,
-                (B_PU * B_R / 2.0 + nu * s_hoop * smear) / (t_skin + smear), 0.05);
+    let sheet_c2 = (B_PU * B_R / 2.0 + 0.326 * hi * smear) / (t_skin + smear);
+    print("  C2 axial stress at P: ", s_axial, " Pa against the sheet ", sheet_c2, " Pa, ratio ", s_axial / sheet_c2);
+    expect_near("C2 axial stress at P against the sheet value", s_axial, sheet_c2, 0.05);
     expect_near("C3 sum of x reactions against -p pi R²/2", sum[0], -f_end, 0.001);
     print("  C4 sum of z reactions: ", sum[2], " N (limit ", f_end / 1000.0, " N)");
     if abs(sum[2]) > f_end / 1000.0 {
