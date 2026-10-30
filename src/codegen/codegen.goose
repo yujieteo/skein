@@ -15,6 +15,7 @@ import std;
 import math;
 namespace codegen;
 import syntax from "../syntax";
+import .dispatch;
 
 // --- errors ------------------------------------------------------------------
 
@@ -321,10 +322,14 @@ struct Shape {
 
 // A face of the meshed solid: the part of its boundary where lattice
 // coordinate `axis` (x, y, z for a box, r, θ, z for a sector) is `value`.
+// It is the node set and the face set `set` of the mesh
+// (src/runtime/api.goose): x0, x1, y0, y1, z0 or z1 on a box, r0, r1, t0,
+// t1, z0 or z1 on a sector. A surface of a lane's mesh has axis -1.
 struct Face {
     name: u8[..64],
     axis: i64,
     value: f64,
+    set: u8[..64],
 }
 
 // A boundary condition on a face: `u = 0` or `u.x = 0` (`fix` holds a bit
@@ -344,6 +349,9 @@ struct Report {
 
 struct Step {
     name: u8[..64],
+    procedure: i64, // the lane of the procedure (dispatch.goose)
+    solver: u8[..64],         // the linear solver and the preconditioner of `solve`
+    preconditioner: u8[..64],
     first_own: i64, // the bcs of the step itself: a range of `bcs`
     own_count: i64,
     first_bc: i64,  // all bcs that hold in the step: a range of `active`
@@ -396,6 +404,11 @@ var material_name: u8[..64];
 var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var physics_tok = -1;
+var template = CORE;            // the lane of the template (dispatch.goose)
+var mesh_lane = CORE;           // the lane that meshes the geometry: CORE (a box or a sector), MESHER or SHELLS
+var cell_name: u8[..64];        // the mesh setting `cell`
+var cell_tok = -1;
+var order_tok = -1;
 // The `bc` items outside the steps, which hold in each step.
 var global_bcs: i64[>..];
 
@@ -419,6 +432,11 @@ fn reset() {
     physics_name = [];
     unknown_name = [];
     physics_tok = -1;
+    template = CORE;
+    mesh_lane = CORE;
+    set64(cell_name, "hex");
+    cell_tok = -1;
+    order_tok = -1;
     mesh_size = 0.0;
     mesh_tok = -1;
     order = 2;
@@ -547,8 +565,23 @@ recursive fn shape_of(value: i64) -> Shape {
     return out;
 }
 
-// `let wall: Solid = ...`.
+// Whether `value` has the form of a solid that this package meshes: a
+// name, a box, a cylinder, or a - or & of them (shape_of).
+fn core_solid(value: i64) -> bool {
+    let k = kind(value);
+    if k == syntax::N_NAME || call_args(value, "box", 2) || call_args(value, "cylinder", 4) { return true; }
+    return k == syntax::N_BINARY && (syntax::text(tok(value)) == "-" || syntax::text(tok(value)) == "&");
+}
+
+// `let wall: Solid = ...`. A solid of another form goes to the mesher lane
+// (mesher_read in lane_mesher.goose), which then meshes the model.
 fn solid(n: i64, value: i64) {
+    if !core_solid(value) && solid_tok < 0 && mesher_read(n, value) {
+        mesh_lane = MESHER;
+        set64(solid_name, name(n));
+        solid_tok = tok(n);
+        return;
+    }
     let sh = shape_of(value);
     if !ok() { return; }
     var w: u8[..64] = [];
@@ -561,6 +594,12 @@ fn solid(n: i64, value: i64) {
 // of these to name a solid chooses it. It gives false, after an error, if
 // `region` is not that solid or cannot be meshed.
 fn on_domain(region: i64, what: u8[:]) -> bool {
+    if mesh_lane != CORE {
+        if kind(region) == syntax::N_NAME && name(region) == solid_name { return true; }
+        unsupported(tok(region), str(what, " is not on ", solid_name, ": this slice meshes one solid"),
+                    str("put it on ", solid_name));
+        return false;
+    }
     let i = if kind(region) == syntax::N_NAME { find_shape(name(region)) } else { -1 };
     if i < 0 {
         unsupported(tok(region), str(what, " is not on a solid that a let names"), BOX_FIX);
@@ -604,9 +643,27 @@ fn plane_face(axis: i64, v: f64) -> i64, f64 {
     return -1, 0.0;
 }
 
+// The names of the lattice axes in the set names of the mesh.
+let BOX_SETS = ["x", "y", "z"];
+let SECTOR_SETS = ["r", "t", "z"];
+
 // `let root: Surface = boundary(beam, x == value)`, or
-// `let inner: Surface = boundary(wall, bore)` with bore a cylinder.
+// `let inner: Surface = boundary(wall, bore)` with bore a cylinder. A
+// surface of a geometry of the mesher lane goes to mesher_surface
+// (lane_mesher.goose), and of the shells lane to shells_surface
+// (lane_shells.goose).
 fn surface(n: i64, value: i64) {
+    if mesh_lane != CORE {
+        var g = Face { name: [], axis: -1, value: 0.0, set: [] };
+        set64(g.name, name(n));
+        let found = if mesh_lane == MESHER { mesher_surface(n, value, g.set) } else { shells_surface(n, value, g.set) };
+        if !found {
+            unsupported(tok(value), str("the surface '", name(n), "' is not a surface of the mesh"), FACE_FIX);
+            return;
+        }
+        faces.push(g);
+        return;
+    }
     if !call_args(value, "boundary", 2) {
         unsupported(tok(value), str("the surface '", name(n), "' is not one face of the solid"), FACE_FIX);
         return;
@@ -636,8 +693,10 @@ fn surface(n: i64, value: i64) {
         unsupported(tok(cond), str("the surface is not on a face of ", solid_name), FACE_FIX);
         return;
     }
-    var f = Face { name: [], axis: axis, value: at };
+    var f = Face { name: [], axis: axis, value: at, set: [] };
     set64(f.name, name(n));
+    let side = if near(at, domain.lo[axis], domain.hi[axis] - domain.lo[axis]) { 0 } else { 1 };
+    set64(f.set, str(if domain.kind == SECTOR { SECTOR_SETS[axis] } else { BOX_SETS[axis] }, side));
     faces.push(f);
 }
 
@@ -646,8 +705,16 @@ fn value_item(n: i64) {
     let ty = syntax::child(n, 0);
     let value = syntax::child(n, 1);
     let t = if kind(ty) == syntax::N_TYPE_NAME { name(ty) } else { "" };
+    let shell_type = t == "Surface" || t == "Curve";
+    // A model with no solid can have a shell or beam geometry of the shells lane.
+    if shell_type && solid_tok < 0 && shells_read_geometry(n, value) {
+        mesh_lane = SHELLS;
+        set64(solid_name, name(n));
+        solid_tok = tok(n);
+        return;
+    }
     if t == "Solid" { solid(n, value); return; }
-    if t == "Surface" { surface(n, value); return; }
+    if t == "Surface" || (shell_type && mesh_lane == SHELLS) { surface(n, value); return; }
     if t == "Volume" || t == "Curve" || t == "Region" {
         unsupported(tok(n), str("a ", t, " is not in this slice"), "use a Solid box and Surface faces of it");
         return;
@@ -698,9 +765,11 @@ fn mesh(n: i64) {
         } else if name(s) == "size" {
             mesh_size = eval(value).v[0];
         } else if name(s) == "cell" {
-            if kind(value) != syntax::N_NAME || name(value) != "hex" {
+            if kind(value) != syntax::N_NAME {
                 unsupported(tok(value), "this slice meshes with hex cells only", "write cell: hex");
             }
+            set64(cell_name, name(value));
+            cell_tok = tok(value);
         } else {
             unsupported(tok(s), str("the mesh setting '", name(s), "' is not in this slice"), "use only size and cell");
         }
@@ -718,6 +787,19 @@ fn physics(n: i64) {
     }
     physics_tok = tok(n);
     set64(physics_name, name(n));
+    // A template of a lane goes to its generator (dispatch.goose).
+    var c0 = syntax::nodes[n].first;
+    while c0 >= 0 {
+        if kind(c0) == syntax::N_USES && template_lane(name(c0)) > CORE {
+            template = template_lane(name(c0));
+            if !read_template(template, name(c0), n) {
+                unsupported(tok(n), str("the template ", name(c0), " has no generator in this build"),
+                            PHYSICS_FIX);
+            }
+            return;
+        }
+        c0 = syntax::nodes[c0].next;
+    }
     var uses = false;
     var c = syntax::nodes[n].first;
     while c >= 0 {
@@ -753,10 +835,7 @@ fn method(n: i64) {
     while s >= 0 {
         if kind(s) == syntax::N_SETTING && name(s) == "order" {
             order = eval(syntax::nodes[s].first).v[0] as! i64;
-            if order != 2 {
-                unsupported(tok(s), "this slice has only order 2, because linear cells lock in bending",
-                            "write order: 2");
-            }
+            order_tok = tok(s);
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order");
         }
@@ -828,12 +907,25 @@ fn bc(n: i64) -> i64 {
 
 fn step(n: i64) {
     let proc = syntax::child(n, 0);
+    var s = Step { name: [], procedure: CORE, solver: [], preconditioner: [], first_own: bcs.len, own_count: 0,
+                   first_bc: 0, bc_count: 0, first_report: reports.len, report_count: 0, output: false };
+    set64(s.name, name(n));
+    set64(s.solver, "cg");
+    set64(s.preconditioner, "jacobi");
+    // A procedure of a lane goes to its generator (dispatch.goose).
+    let p = procedure_lane(name(proc));
+    if p > CORE {
+        s.procedure = p;
+        steps.push(s);
+        if !read_procedure(p, name(proc), n) {
+            unsupported(tok(proc), str("the procedure ", name(proc), " has no generator in this build"),
+                        "write step load: static { ... }");
+        }
+        return;
+    }
     if name(proc) != "static" || syntax::nodes[proc].first >= 0 {
         unsupported(tok(proc), "this slice has only static steps with no arguments", "write step load: static { ... }");
     }
-    var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                   first_report: reports.len, report_count: 0, output: false };
-    set64(s.name, name(n));
     var c = syntax::nodes[proc].next;
     while c >= 0 {
         let k = kind(c);
@@ -852,14 +944,40 @@ fn step(n: i64) {
                 report(r);
                 r = syntax::nodes[r].next;
             }
+        } else if k == syntax::N_SOLVE {
+            solve(c, s);
         } else {
-            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output and report");
+            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output, report and solve");
         }
         c = syntax::nodes[c].next;
     }
     s.own_count = bcs.len - s.first_own;
     s.report_count = reports.len - s.first_report;
     steps.push(s);
+}
+
+let SOLVE_FIX = "write solve { linear: cg, precond: jacobi }";
+
+// `solve { linear: <solver>, precond: <preconditioner> }`. A pair other
+// than cg with jacobi goes to the solvers lane (lane_solvers.goose).
+fn solve(n: i64, s: Step&) {
+    var c = syntax::nodes[syntax::nodes[n].first].first;
+    while c >= 0 {
+        let value = syntax::nodes[c].first;
+        let known = kind(c) == syntax::N_SETTING && (name(c) == "linear" || name(c) == "precond");
+        if !known || kind(value) != syntax::N_NAME {
+            unsupported(tok(c), "the solve setting is not in this slice", SOLVE_FIX);
+        } else if name(c) == "linear" {
+            set64(s.solver, name(value));
+        } else {
+            set64(s.preconditioner, name(value));
+        }
+        c = syntax::nodes[c].next;
+    }
+    if !(s.solver == "cg" && s.preconditioner == "jacobi") && !solvers_known(s.solver, s.preconditioner) {
+        unsupported(tok(n), str("the linear solver ", s.solver, " with the preconditioner ", s.preconditioner,
+                                " is not in this build"), SOLVE_FIX);
+    }
 }
 
 let REPORT_FIX = "write report reaction(root), or report u.z at (100, 5, 5) mm";
@@ -1019,6 +1137,19 @@ fn read(prog: i64) -> bool {
     if physics_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if material_name.len == 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
+    // A cell other than hex of order 2 goes to the lane that meshes the
+    // geometry: the mesher, the shells or the elements lane (lane_*.goose).
+    let lane_cell = if mesh_lane == MESHER { mesher_cell(cell_name, order) }
+                    else if mesh_lane == SHELLS { shells_cell(cell_name, order) }
+                    else { elements_cell(cell_name, order) };
+    if (cell_name != "hex" || order != 2) && !lane_cell {
+        if cell_name != "hex" {
+            unsupported(cell_tok, "this slice meshes with hex cells only", "write cell: hex");
+        } else {
+            unsupported(order_tok, "this slice has only order 2, because linear cells lock in bending",
+                        "write order: 2");
+        }
+    }
     if ok() {
         step_bcs();
         supports();
@@ -1052,9 +1183,7 @@ fn step_bcs() {
     }
 }
 
-fn same_plane(a: i64, b: i64) -> bool {
-    faces[a].axis == faces[b].axis && faces[a].value == faces[b].value
-}
+fn same_plane(a: i64, b: i64) -> bool { faces[a].set == faces[b].set }
 
 // A fixed face and its fixed components, one bit for each.
 struct Fixed {
@@ -1097,23 +1226,16 @@ fn same_fixed(a: Fixed[:], b: Fixed[:]) -> bool {
 }
 
 // The runtime keeps the supports from step to step, so each step must fix
-// the same faces. The reaction of a face sums the fixed dofs of its nodes,
-// so two fixed faces that share an edge must fix different components.
+// the same faces. The check equilibrium uses the total reaction, which
+// counts each fixed node once, so two fixed faces can share nodes. A
+// reaction of a fixed face that shares nodes with another fixed face that
+// fixes the same component fails when the program runs (emit_alone).
 fn supports() {
     let a = fixed_faces(0);
     if a.len == 0 {
         unsupported(physics_tok, str("no face is fixed, so ", solid_name, " can move as a rigid body"),
                     "add bc root: u = 0");
         return;
-    }
-    for f, i in a {
-        for g in a[i + 1..] {
-            if faces[f.face].axis != faces[g.face].axis && (f.mask & g.mask) != 0 {
-                unsupported(bc_tok(0, g.face), str("the fixed faces ", faces[f.face].name, " and ", faces[g.face].name,
-                                                   " share an edge, and this slice cannot sum their reaction"),
-                            "fix one face, two opposite faces, or different components of u on faces with an edge");
-            }
-        }
     }
     for si in 1..steps.len {
         let b = fixed_faces(si);
@@ -1157,7 +1279,6 @@ fn bc_tok(si: i64, f: i64) -> i64 {
 // --- the Goose program -------------------------------------------------------------
 
 let AXES = ["runtime::X", "runtime::Y", "runtime::Z"];
-let SECTOR_AXES = ["runtime::R", "runtime::THETA", "runtime::Z"];
 
 // The text of a Goose float literal.
 fn lit(out: u8[>..]&, x: f64) {
@@ -1246,7 +1367,21 @@ let PRELUDE = """
         }
     }
 
-    fn solve(step: u8[:]) {
+    // The reaction of a fixed face that shares nodes with another fixed
+    // face that fixes the same component is not the load on that face
+    // alone, so the run reports an error.
+    fn shared(face: u8[:], set: u8[:], other: u8[:], other_set: u8[:]) -> bool {
+        guard runtime::sets_share_nodes(set, other_set) else { return false; }
+        write_stderr(str("skein run: the fixed faces '", face, "' and '", other, "' share nodes and fix the ",
+                         "same component of u, so reaction(", face, ") is not the load on '", face, "' alone. ",
+                         "Report the reaction of a fixed face that shares no node with another fixed face. The ",
+                         "check equilibrium uses the total reaction of all fixed faces.\n"));
+        failed = true;
+        return true;
+    }
+
+    fn solve(step: u8[:], solver: u8[:], preconditioner: u8[:]) {
+        runtime::linear_solver(solver, preconditioner);
         let converged = runtime::solve_static();
         format(solves, "  ", step, ",", runtime::dof_count(), ",", runtime::cg_iterations(), ",",
                runtime::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
@@ -1297,14 +1432,9 @@ let PRELUDE = """
 
     """;
 
-// The runtime name of lattice axis `axis` of the domain.
-fn axis_const(axis: i64) -> const u8[:] {
-    return if domain.kind == SECTOR { SECTOR_AXES[axis] } else { AXES[axis] };
-}
-
 fn emit_face(out: u8[>..]&, call: u8[:], f: Face) {
-    format(out, "    face(runtime::", call, "(", axis_const(f.axis), ", ");
-    lit(out, f.value);
+    format(out, "    face(runtime::", call, "(");
+    quoted(out, f.set);
 }
 
 fn emit_face_end(out: u8[>..]&, f: Face) {
@@ -1316,55 +1446,41 @@ fn emit_face_end(out: u8[>..]&, f: Face) {
 fn emit_face_call(out: u8[>..]&, b: Bc) {
     let f = faces[b.face];
     if b.fix == 7 {
-        emit_face(out, "fix_face", f);
+        emit_face(out, "fix", f);
         emit_face_end(out, f);
     } else if b.fix != 0 {
         for c in 0..3 {
             if (b.fix & (1 << c)) == 0 { continue; }
-            emit_face(out, "fix_face_component", f);
+            emit_face(out, "fix_component", f);
             format(out, ", ", AXES[c]);
             emit_face_end(out, f);
         }
     } else if b.s != 0.0 {
-        emit_face(out, "normal_traction_face", f);
+        emit_face(out, "normal_traction", f);
         out.append(", ");
         lit(out, b.s);
         emit_face_end(out, f);
     } else {
-        emit_face(out, "traction_face", f);
+        emit_face(out, "traction", f);
         out.append(", ");
         lits(out, b.t);
         emit_face_end(out, f);
     }
 }
 
-// The area of face `fi` of the domain.
-fn face_area(fi: i64) -> f64 {
-    let d = domain;
-    let axis = faces[fi].axis;
-    if d.kind == BOX {
-        var area = 1.0;
-        for j in 0..3 { if j != axis { area *= d.hi[j] - d.lo[j]; } }
-        return area;
-    }
-    let dt = d.hi[1] - d.lo[1];
-    let dz = d.hi[2] - d.lo[2];
-    if axis == 0 { return faces[fi].value * dt * dz; }
-    if axis == 1 { return (d.hi[0] - d.lo[0]) * dz; }
-    return 0.5 * dt * (d.hi[0] * d.hi[0] - d.lo[0] * d.lo[0]);
-}
-
-// The largest load of step `si`: the size of a traction times the area of
-// its face.
-fn largest_load(si: i64) -> f64 {
+// The largest load of step `si`, in the variable `largest`: the size of a
+// traction times the area of its face (runtime::face_area).
+fn emit_largest_load(out: u8[>..]&, si: i64) {
     let s = steps[si];
-    var largest = 0.0;
+    out.append("    var largest = 0.0;\n");
     for b in active[s.first_bc..s.first_bc + s.bc_count] {
         if b.fix != 0 { continue; }
-        let t = sqrt(b.t[0] * b.t[0] + b.t[1] * b.t[1] + b.t[2] * b.t[2]) + abs(b.s);
-        largest = max(largest, t * face_area(b.face));
+        out.append("    largest = max(largest, ");
+        lit(out, sqrt(b.t[0] * b.t[0] + b.t[1] * b.t[1] + b.t[2] * b.t[2]) + abs(b.s));
+        out.append(" * runtime::face_area(");
+        quoted(out, faces[b.face].set);
+        out.append("));\n");
     }
-    return largest;
 }
 
 // The components of a reaction that the fixed components `mask` hold, with
@@ -1405,22 +1521,15 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     }
     out.append("    solve(");
     quoted(out, s.name);
+    out.append(", ");
+    quoted(out, s.solver);
+    out.append(", ");
+    quoted(out, s.preconditioner);
     out.append(");\n");
-    // The reaction on all fixed faces, for the check `equilibrium`.
-    out.append("    var rx, ry, rz = 0.0, 0.0, 0.0;\n");
-    for fx in fixed_faces(si) {
-        let f = faces[fx.face];
-        format(out, "    {\n        let x, y, z = runtime::reaction_face(", axis_const(f.axis), ", ");
-        lit(out, f.value);
-        out.append(");\n");
-        for c in 0..3 {
-            if (fx.mask & (1 << c)) != 0 { format(out, "        r", AXIS_NAMES[c], " += ", AXIS_NAMES[c], ";\n"); }
-        }
-        out.append("    }\n");
-    }
-    out.append("    equilibrium(rx, ry, rz, ");
-    lit(out, largest_load(si));
-    format(out, ", \"", system.force, "\");\n");
+    // The reaction on all fixed dofs, each once, for the check `equilibrium`.
+    out.append("    let rx, ry, rz = runtime::total_reaction();\n");
+    emit_largest_load(out, si);
+    format(out, "    equilibrium(rx, ry, rz, largest, \"", system.force, "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] {
         emit_report(out, si, r);
     }
@@ -1440,18 +1549,37 @@ fn emit_point(out: u8[>..]&, at: f64[3]) {
     out.append(");\n");
 }
 
+// Emits `alone`: false if face `fi` shares nodes with another fixed face of
+// step `si` that fixes a component in `mask`.
+fn emit_alone(out: u8[>..]&, si: i64, fi: i64, mask: i64) {
+    out.append("        var alone = true;\n");
+    for g in fixed_faces(si) {
+        if same_plane(g.face, fi) || (g.mask & mask) == 0 { continue; }
+        out.append("        if shared(");
+        quoted(out, faces[fi].name);
+        out.append(", ");
+        quoted(out, faces[fi].set);
+        out.append(", ");
+        quoted(out, faces[g.face].name);
+        out.append(", ");
+        quoted(out, faces[g.face].set);
+        out.append(") { alone = false; }\n");
+    }
+}
+
 fn emit_report(out: u8[>..]&, si: i64, r: Report) {
     let step = steps[si].name;
     format(out, "    // report ", r.label, "\n");
     out.append("    {\n    ");
     let e = r.expr;
+    let reaction = kind(e) == syntax::N_CALL;
     var value: u8[>..] = [];
-    if kind(e) == syntax::N_CALL {
+    if reaction {
         let fi = find_face(name(syntax::nodes[syntax::child(e, 1)].first));
-        let f = faces[fi];
-        format(out, "    let x, y, z = runtime::reaction_face(", axis_const(f.axis), ", ");
-        lit(out, f.value);
+        out.append("    let x, y, z = runtime::reaction(");
+        quoted(out, faces[fi].set);
         out.append(");\n");
+        emit_alone(out, si, fi, fixed_mask(si, fi));
         format(value, "vector(", reaction_parts(fixed_mask(si, fi)), ", \"", system.force, "\")");
     } else {
         let comp = point_field(e);
@@ -1463,11 +1591,11 @@ fn emit_report(out: u8[>..]&, si: i64, r: Report) {
             format(value, "quantity(u", AXIS_NAMES[comp], ", \"", system.length, "\")");
         }
     }
-    out.append("        report(");
+    out.append(if reaction { "        if alone { report(" } else { "        report(" });
     quoted(out, step);
     out.append(", ");
     quoted(out, r.label);
-    format(out, ", ", value, ");\n    }\n");
+    format(out, ", ", value, if reaction { "); }\n    }\n" } else { ");\n    }\n" });
 }
 
 let SIGMA_NAMES = ["sxx", "syy", "szz", "syz", "sxz", "sxy"];
@@ -1486,14 +1614,15 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         got.append(SIGMA_NAMES[x.comp]);
         unit = system.pressure;
     } else {
-        let f = faces[x.face];
-        format(out, "    let x, y, z = runtime::reaction_face(", axis_const(f.axis), ", ");
-        lit(out, f.value);
+        out.append("    let x, y, z = runtime::reaction(");
+        quoted(out, faces[x.face].set);
         out.append(");\n");
+        emit_alone(out, 0, x.face, 1 << x.comp);
         got.append(AXIS_NAMES[x.comp]);
         unit = system.force;
     }
-    format(out, "        expect(");
+    let reaction = x.kind == EXPECT_REACTION;
+    out.append(if reaction { "        if alone { expect(" } else { "        expect(" });
     quoted(out, x.name);
     format(out, ", ", got, ", ");
     lit(out, x.want);
@@ -1501,7 +1630,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.within);
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
-    out.append(");\n    }\n");
+    out.append(if reaction { "); }\n    }\n" } else { ");\n    }\n" });
 }
 
 // Writes the Goose program of the model that `read` read. The program
@@ -1515,8 +1644,44 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     quoted(out, runtime_path);
     out.append(";\n");
     out.append(PRELUDE);
-    for si in 0..steps.len { emit_step(out, si, results_dir); }
+    for si in 0..steps.len {
+        if steps[si].procedure == CORE {
+            emit_step(out, si, results_dir);
+        } else {
+            emit_procedure(out, steps[si].procedure, si, results_dir);
+        }
+    }
     out.append("fn main() {\n");
+    if mesh_lane == MESHER {
+        mesher_emit(out);
+    } else if mesh_lane == SHELLS {
+        shells_emit_mesh(out);
+    } else if !elements_emit_mesh(out) {
+        emit_core_mesh(out);
+    }
+    if template == CORE {
+        format(out, "    // material ", material_name, "\n    runtime::material(");
+        lit(out, young);
+        out.append(", ");
+        lit(out, poisson);
+        out.append(");\n");
+    } else {
+        emit_template(out, template);
+    }
+    for s in steps { format(out, "    step_", s.name, "();\n"); }
+    for x in expects { emit_expect(out, x); }
+    for s in skipped {
+        out.append("    not_run(");
+        quoted(out, s);
+        out.append(");\n");
+    }
+    out.append("    print_records();\n");
+    out.append("    if failed { exit(1); }\n");
+    out.append("}\n");
+}
+
+// The box or the sector of the domain, by the lattice mesher.
+fn emit_core_mesh(out: u8[>..]&) {
     let d = domain;
     if d.kind == SECTOR {
         format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ",
@@ -1551,19 +1716,4 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         out.append(")");
     }
     out.append(");\n");
-    format(out, "    // material ", material_name, "\n    runtime::material(");
-    lit(out, young);
-    out.append(", ");
-    lit(out, poisson);
-    out.append(");\n");
-    for s in steps { format(out, "    step_", s.name, "();\n"); }
-    for x in expects { emit_expect(out, x); }
-    for s in skipped {
-        out.append("    not_run(");
-        quoted(out, s);
-        out.append(");\n");
-    }
-    out.append("    print_records();\n");
-    out.append("    if failed { exit(1); }\n");
-    out.append("}\n");
 }

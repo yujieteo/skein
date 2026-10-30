@@ -1,0 +1,557 @@
+#!/usr/bin/env python3
+"""
+Boeing 787 forward fuselage pressurization (problem sheet sections 2-7) for CalculiX.
+
+  python3 b787_ccx.py gen [base]   -> <base>.inp  global quarter-barrel model, mesh inside
+                                      corner.inp  door-corner submodel (reads <base>.frd)
+                                      b787_meta.json (probe nodes, beam data for post)
+  python3 b787_ccx.py ladder       -> ladder-0.inp ... ladder-5.inp, coarse (0.2 m) decks
+                                      that add one feature each, to find a ccx crash
+  fh run <base>.inp
+  fh run corner.inp                 (run in the directory that holds <base>.frd)
+  python3 b787_ccx.py post          -> outputs 1-7 and checks C1-C6
+
+Element order: LINEAR (S4 shells -> C3D8I, B31 beams). Needs the gmsh Python API.
+Mesh is generated in the developed (x, s) plane and wrapped onto the cylinder.
+"""
+import sys, math, json
+from collections import defaultdict
+
+# ----------------------------------------------------------------- sheet data
+R, L = 2.883, 6.096
+SMAX = math.pi * R
+PU = 1.5 * 65.0e3                                  # ultimate pressure, Pa (6.2)
+TPLY = 0.191e-3
+T_SKIN, T_PAD = 24 * TPLY, 48 * TPLY               # [45/0/-45/90]3s, [45/0/-45/90]6s
+EQI, NUQI = 55.85e9, 0.326                         # 3.3 quasi-isotropic in-plane values
+XE, HD, RC = 0.5334, 1.829, 0.178                  # 2.3
+SM = R * math.radians(75.0)
+SU, SL = SM - HD / 2, SM + HD / 2
+XC, SC1, SC2 = XE - RC, SU + RC, SL - RC
+BAND = 0.150                                       # 2.4
+FRAMES = [0.3048 + 0.6096 * k for k in range(10)]
+STR_DEG = [2 + 4 * k for k in range(45)]           # 2..178 deg in the quarter
+SEC = {'S': (2.016e-4, 0.01750, 3.639e-8), 'F': (7.148e-4, 0.07415, 2.237e-6)}
+H_GLOBAL, H_SUB_EDGE, H_SUB_MAX = 0.050, 0.005, 0.020
+H_LADDER = 0.200
+SOLVER = 'SPOOLES'
+SUBBOX = (XC - 0.3, XC + 0.3, SC1 - 0.3, SC1 + 0.3)
+PPT = (4.8768, R * math.radians(140.0))
+C6A = (SUBBOX[1], SC1)                             # aft edge mid-point
+C6T = (XC, SUBBOX[2])                              # top edge mid-point
+EPS_ALLOW = 4000e-6
+META = 'b787_meta.json'
+
+def rect(kind):                                    # equivalent rectangle: A and I_radial
+    A, e, I = SEC[kind]
+    h = math.sqrt(12 * I / A)
+    return h, A / h, e / h
+
+# ----------------------------------------------------------------- geometry
+def hole_dist(x, s):
+    """signed distance in the x-s plane to the full rounded cutout (<0 inside)"""
+    dx = max(abs(x) - XC, 0.0)
+    ds = max(abs(s - SM) - (HD / 2 - RC), 0.0)
+    if dx == 0.0 and ds == 0.0:
+        return -min(XE - abs(x), HD / 2 - abs(s - SM))
+    return math.hypot(dx, ds) - RC
+
+def x_edge(s):
+    if s < SC1: return XC + math.sqrt(max(RC * RC - (s - SC1) ** 2, 0.0))
+    if s > SC2: return XC + math.sqrt(max(RC * RC - (s - SC2) ** 2, 0.0))
+    return XE
+
+def beam_segments():
+    segs = []
+    for k, xf in enumerate(FRAMES):
+        if xf < XE:                                # frame cut by the door
+            d = 0.0 if xf <= XC else RC - math.sqrt(RC * RC - (xf - XC) ** 2)
+            segs += [('F', k, xf, 0.0, xf, SU + d), ('F', k, xf, SL - d, xf, SMAX)]
+        else:
+            segs.append(('F', k, xf, 0.0, xf, SMAX))
+    for k, deg in enumerate(STR_DEG):
+        sk = R * math.radians(deg)
+        segs.append(('S', k, x_edge(sk) if SU < sk < SL else 0.0, sk, L, sk))
+    return segs
+
+def clip(seg, box):
+    kind, k, xa, sa, xb, sb = seg
+    bx0, bx1, bs0, bs1 = box
+    if kind == 'F':
+        if not bx0 < xa < bx1: return None
+        a, b = max(sa, bs0), min(sb, bs1)
+        return ('F', k, xa, a, xa, b) if b - a > 1e-6 else None
+    if not bs0 < sa < bs1: return None
+    a, b = max(xa, bx0), min(xb, bx1)
+    return ('S', k, a, sa, b, sa) if b - a > 1e-6 else None
+
+# ----------------------------------------------------------------- meshing
+def build_mesh(box, segs, probes, hmax, hedge=None):
+    import gmsh
+    gmsh.initialize()
+    gmsh.option.setNumber("General.Terminal", 0)
+    gmsh.model.add("b787")
+    occ = gmsh.model.occ
+    x0, x1, s0, s1 = box
+    dom = occ.addRectangle(x0, s0, 0, x1 - x0, s1 - s0)
+    hole = occ.addRectangle(-XE, SU, 0, 2 * XE, HD, roundedRadius=RC)
+    pad = occ.addRectangle(-XE - BAND, SU - BAND, 0, 2 * (XE + BAND), HD + 2 * BAND,
+                           roundedRadius=RC + BAND)
+    band, _ = occ.cut([(2, pad)], [(2, hole)], removeTool=False)
+    skin, _ = occ.cut([(2, dom)], [(2, hole)])
+    dom2 = occ.addRectangle(x0, s0, 0, x1 - x0, s1 - s0)
+    bandq, _ = occ.intersect(band, [(2, dom2)])
+    tools = list(bandq)
+    for (_, _, xa, sa, xb, sb) in segs:
+        tools.append((1, occ.addLine(occ.addPoint(xa, sa, 0), occ.addPoint(xb, sb, 0))))
+    for (px, ps) in probes:
+        tools.append((0, occ.addPoint(px, ps, 0)))
+    occ.fragment(skin, tools)
+    occ.synchronize()
+    gmsh.option.setNumber("Mesh.Algorithm", 8)
+    gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)    # all-quad; halves size
+    gmsh.option.setNumber("Mesh.MeshSizeMax", 2 * hmax)
+    gmsh.option.setNumber("Mesh.MeshSizeMin", 2e-4)
+    if hedge:
+        crv = []
+        for _, c in gmsh.model.getEntities(1):
+            lo, hi = gmsh.model.getParametrizationBounds(1, c)
+            v = gmsh.model.getValue(1, c, [0.5 * (lo[0] + hi[0])])
+            if abs(hole_dist(v[0], v[1])) < 1e-6: crv.append(c)
+        fld = gmsh.model.mesh.field
+        fd = fld.add("Distance")
+        fld.setNumbers(fd, "CurvesList", crv)
+        try: fld.setNumber(fd, "Sampling", 400)
+        except Exception: fld.setNumber(fd, "NumPointsPerCurve", 400)
+        ft = fld.add("Threshold")
+        fld.setNumber(ft, "InField", fd)
+        fld.setNumber(ft, "SizeMin", 2 * hedge); fld.setNumber(ft, "SizeMax", 2 * hmax)
+        fld.setNumber(ft, "DistMin", 0.002); fld.setNumber(ft, "DistMax", 0.06)
+        fld.setAsBackgroundMesh(ft)
+        for o in ("Mesh.MeshSizeExtendFromBoundary", "Mesh.MeshSizeFromPoints",
+                  "Mesh.MeshSizeFromCurvature"):
+            gmsh.option.setNumber(o, 0)
+    gmsh.model.mesh.generate(2)
+    tags, xyz, _ = gmsh.model.mesh.getNodes()
+    pos = {int(t): (float(xyz[3 * i]), float(xyz[3 * i + 1])) for i, t in enumerate(tags)}
+    raw = []
+    for et, nn in ((3, 4), (2, 3)):                          # quad4, tri3
+        _, nt = gmsh.model.mesh.getElementsByType(et)
+        nt = [int(v) for v in nt]
+        raw += [nt[i:i + nn] for i in range(0, len(nt), nn)]
+    gmsh.finalize()
+    used = sorted({n for e in raw for n in e})
+    newid = {t: i + 1 for i, t in enumerate(used)}
+    nodes = [None] + [pos[t] for t in used]
+    elems = []
+    for e in raw:
+        e = [newid[n] for n in e]
+        nc = len(e)
+        c = [nodes[n] for n in e]
+        area = sum(c[i][0] * c[(i + 1) % nc][1] - c[(i + 1) % nc][0] * c[i][1] for i in range(nc))
+        if area > 0:    # CCW in (x,s) = outward normal; reverse to inward normal
+            e = [e[0], e[3], e[2], e[1]] if nc == 4 else [e[0], e[2], e[1]]
+        elems.append(e)
+    return nodes, elems
+
+def edge_table(elems):
+    ed = {}
+    for e in elems:
+        nc = len(e)
+        for i in range(nc):
+            a, b = e[i], e[(i + 1) % nc]
+            key = (min(a, b), max(a, b))
+            if key in ed: ed[key][1] += 1
+            else: ed[key] = [(a, b), 1]
+    return ed
+
+def find_beams(nodes, ed, segs, tol=1e-7):
+    strs = [g for g in segs if g[0] == 'S']
+    frms = [g for g in segs if g[0] == 'F']
+    out = []
+    for (a, b), _c in ed.values():
+        (xa, sa), (xb, sb) = nodes[a], nodes[b]
+        if abs(sa - sb) < tol:
+            for g in strs:
+                if abs(sa - g[3]) < tol and min(xa, xb) > g[2] - tol and max(xa, xb) < g[4] + tol:
+                    out.append(('S', g[1], (a, b) if xa < xb else (b, a))); break
+        elif abs(xa - xb) < tol:
+            for g in frms:
+                if abs(xa - g[2]) < tol and min(sa, sb) > g[3] - tol and max(sa, sb) < g[5] + tol:
+                    out.append(('F', g[1], (a, b) if sa < sb else (b, a))); break   # tangent = +theta
+    out.sort(key=lambda r: (r[0], r[1], nodes[r[2][0]][0] + nodes[r[2][0]][1]))
+    return out
+
+# ----------------------------------------------------------------- shape functions
+NAT = {4: [(-1, -1), (1, -1), (1, 1), (-1, 1)], 3: [(0, 0), (1, 0), (0, 1)]}
+_g = [(-math.sqrt(0.6), 5 / 9), (0.0, 8 / 9), (math.sqrt(0.6), 5 / 9)]
+GQ = [(a, b, wa * wb) for a, wa in _g for b, wb in _g]
+GT = [(1 / 6, 1 / 6, 1 / 6), (2 / 3, 1 / 6, 1 / 6), (1 / 6, 2 / 3, 1 / 6)]
+G5 = [(-0.9061798459386640, 0.2369268850561891), (-0.5384693101056831, 0.4786286704993665),
+      (0.0, 0.5688888888888889), (0.5384693101056831, 0.4786286704993665),
+      (0.9061798459386640, 0.2369268850561891)]
+
+def shape(nn, xi, eta):
+    if nn == 4:
+        N = [0.25 * (1 + xi * a) * (1 + eta * b) for a, b in NAT[4]]
+        D = [(0.25 * a * (1 + eta * b), 0.25 * b * (1 + xi * a)) for a, b in NAT[4]]
+        return N, D
+    return [1 - xi - eta, xi, eta], [(-1.0, -1.0), (1.0, 0.0), (0.0, 1.0)]
+
+def jac(D, X):
+    xx = sum(d[0] * p[0] for d, p in zip(D, X)); sx = sum(d[0] * p[1] for d, p in zip(D, X))
+    xe = sum(d[1] * p[0] for d, p in zip(D, X)); se = sum(d[1] * p[1] for d, p in zip(D, X))
+    return xx, sx, xe, se
+
+# ----------------------------------------------------------------- loads
+def radial(x, s):
+    return (0.0, math.sin(s / R), math.cos(s / R))
+
+def pressure_loads(F, nodes, elems):
+    tot = [0.0] * 3
+    for e in elems:
+        X = [nodes[n] for n in e]
+        for xi, eta, w in (GQ if len(e) == 4 else GT):
+            N, D = shape(len(e), xi, eta)
+            xx, sx, xe, se = jac(D, X)
+            f = PU * w * abs(xx * se - sx * xe)       # mid-surface area (developable)
+            d = radial(0, sum(Ni * p[1] for Ni, p in zip(N, X)))
+            for Ni, n in zip(N, e):
+                for j in (1, 2): F[n][j] += f * Ni * d[j]
+            for j in (1, 2): tot[j] += f * d[j]
+    return tot
+
+def edge_loads(F, nodes, edges, q_of, dir_of):
+    tot = [0.0] * 3
+    for a, b in edges:
+        (xa, sa), (xb, sb) = nodes[a], nodes[b]
+        ds = abs(sb - sa) / 2                        # per unit arc length in s
+        for xi, w in G5:
+            Na, Nb = 0.5 * (1 - xi), 0.5 * (1 + xi)
+            x, s = Na * xa + Nb * xb, Na * sa + Nb * sb
+            q, d = q_of(x, s) * ds * w, dir_of(x, s)
+            for n, Nn in ((a, Na), (b, Nb)):
+                for j in range(3): F[n][j] += q * Nn * d[j]
+            for j in range(3): tot[j] += q * d[j]
+    return tot
+
+# ----------------------------------------------------------------- deck writer
+def ids_lines(ids):
+    ids = list(ids)
+    return [", ".join(str(i) for i in ids[k:k + 10]) for k in range(0, len(ids), 10)]
+
+NOTES = [
+    "Units SI (N, m, Pa). x aft, z up, y left (door side). theta from +z toward +y, s = R*theta.",
+    "Element order: LINEAR. Skin/pad-up S4 (expanded by ccx to C3D8I; S3 only if gmsh leaves",
+    "  triangles), stringers/frames B31. One beam element per skin element edge.",
+    "Skin 4.584 mm ([45/0/-45/90]3s) and pad-up 9.168 mm ([45/0/-45/90]6s) are HOMOGENEOUS",
+    "  shells of the quasi-isotropic laminate (E=55.85 GPa, nu=0.326, sheet 3.3): membrane",
+    "  stiffness exact; bending stiffness is the isotropic value (deviation).",
+    "Stringers/frames: isotropic E=55.85 GPa, nu=0.326, B31 SECTION=RECT. CalculiX beams need a",
+    "  shape: the rectangle matches A and I_radial of 4.2; I_lateral and J are NOT matched.",
+    "  Stringer: n1 = outward radial, dims (h_radial, b), OFFSET1 = +e/h.",
+    "  Frame: n1 = +x, tangent +theta, so n2 = t x n1 = inward radial; dims (b, h_radial),",
+    "  OFFSET2 = -e/h. OFFSET = position of the nodes relative to the section centre in units",
+    "  of the section dimension (assumed CalculiX convention): centroid e inward of the skin.",
+    "Pressure (p_U = 97.5 kPa on mid-surface area), door edge load p_U*x_e(s) per unit s and",
+    "  end closure p_U*R/2 per unit arc are consistent nodal forces (*CLOAD), not *DLOAD.",
+]
+
+def write_deck(path, title, nodes, elems, beams, model_extra, step, offsets=True):
+    out = []; w = out.append
+    w('*HEADING'); w(title)
+    for n in NOTES: w('** ' + n)
+    w('*NODE, NSET=NSHELL')
+    for i in range(1, len(nodes)):
+        x, s = nodes[i]
+        w(f'{i}, {x:.10f}, {R * math.sin(s / R):.10f}, {R * math.cos(s / R):.10f}')
+    groups = defaultdict(list)
+    for i, e in enumerate(elems):
+        nc = len(e)
+        cx = sum(nodes[n][0] for n in e) / nc
+        cs = sum(nodes[n][1] for n in e) / nc
+        groups[('EPAD' if hole_dist(cx, cs) <= BAND else 'ESKIN', nc)].append(i)
+    for (name, nn), ids in sorted(groups.items()):
+        w(f'*ELEMENT, TYPE={"S4" if nn == 4 else "S3"}, ELSET={name}{nn}')
+        for i in ids: w(', '.join(str(v) for v in [i + 1] + elems[i]))
+    eid, binfo, bysets = len(elems), {}, defaultdict(list)
+    for kind, k, (a, b) in beams:
+        eid += 1
+        name = f'S{STR_DEG[k]:03d}' if kind == 'S' else f'F{k}'
+        sm = 0.5 * (nodes[a][1] + nodes[b][1]); xm = 0.5 * (nodes[a][0] + nodes[b][0])
+        th = math.radians(STR_DEG[k]) if kind == 'S' else sm / R
+        t = (1.0, 0.0, 0.0) if kind == 'S' else (0.0, math.cos(th), -math.sin(th))
+        bysets[name].append((eid, a, b))
+        binfo[eid] = [name, kind, t[0], t[1], t[2], SEC[kind][0], xm, th]
+    for name, rows in bysets.items():
+        w(f'*ELEMENT, TYPE=B31, ELSET={name}')
+        for r in rows: w(f'{r[0]}, {r[1]}, {r[2]}')
+    if binfo:
+        w('*ELSET, ELSET=EBEAM'); out.extend(ids_lines(sorted(binfo)))
+    w('*MATERIAL, NAME=QI'); w('*ELASTIC'); w(f'{EQI:.5e}, {NUQI}')
+    for (name, nn) in sorted(groups):
+        w(f'*SHELL SECTION, ELSET={name}{nn}, MATERIAL=QI')
+        w(f'{T_PAD if name == "EPAD" else T_SKIN:.6e}')
+    for name in bysets:
+        kind = name[0]; h, b, off = rect(kind)
+        if kind == 'S':
+            th = math.radians(int(name[1:]))
+            otxt = f', OFFSET1={off:.6f}' if offsets else ''
+            w(f'*BEAM SECTION, ELSET={name}, MATERIAL=QI, SECTION=RECT{otxt}')
+            w(f'{h:.6e}, {b:.6e}'); w(f'0., {math.sin(th):.9f}, {math.cos(th):.9f}')
+        else:
+            otxt = f', OFFSET2={-off:.6f}' if offsets else ''
+            w(f'*BEAM SECTION, ELSET={name}, MATERIAL=QI, SECTION=RECT{otxt}')
+            w(f'{b:.6e}, {h:.6e}'); w('1., 0., 0.')
+    out.extend(model_extra); out.extend(step)
+    with open(path, 'w') as f: f.write('\n'.join(out) + '\n')
+    return binfo, sum(len(v) for v in groups.values())
+
+def cload_lines(F):
+    out = ['*CLOAD']
+    for n in sorted(F):
+        for j in range(3):
+            if abs(F[n][j]) > 0.0: out.append(f'{n}, {j + 1}, {F[n][j]:.8e}')
+    return out
+
+def nearest(nodes, p):
+    best = min(range(1, len(nodes)), key=lambda i: (nodes[i][0] - p[0]) ** 2 + (nodes[i][1] - p[1]) ** 2)
+    d = math.hypot(nodes[best][0] - p[0], nodes[best][1] - p[1])
+    assert d < 1e-6, f'probe {p} is not a mesh node ({d})'
+    return best
+
+# ----------------------------------------------------------------- global deck
+def gen_global(base, h=H_GLOBAL, kinds='SF', offsets=True, rot=True, full_out=True):
+    segs = beam_segments()
+    nodes, elems = build_mesh((0.0, L, 0.0, SMAX), segs, [PPT, C6A, C6T], h)
+    ed = edge_table(elems)
+    beams = [b for b in find_beams(nodes, ed, segs) if b[0] in kinds]
+    hole = [v[0] for v in ed.values() if v[1] == 1 and all(abs(hole_dist(*nodes[n])) < 1e-6 for n in v[0])]
+    endg = [v[0] for v in ed.values() if v[1] == 1 and all(abs(nodes[n][0] - L) < 1e-7 for n in v[0])]
+    F = defaultdict(lambda: [0.0, 0.0, 0.0])
+    tp = pressure_loads(F, nodes, elems)
+    td = edge_loads(F, nodes, hole, lambda x, s: PU * x, radial)
+    te = edge_loads(F, nodes, endg, lambda x, s: PU * R / 2, lambda x, s: (1.0, 0.0, 0.0))
+    nx = [i for i in range(1, len(nodes)) if abs(nodes[i][0]) < 1e-7]
+    ny = [i for i in range(1, len(nodes)) if nodes[i][1] < 1e-7 or abs(nodes[i][1] - SMAX) < 1e-7]
+    nz = [nearest(nodes, (0.0, SMAX))]
+    extra = ['*NSET, NSET=NSYMX'] + ids_lines(nx) + ['*NSET, NSET=NSYMY'] + ids_lines(ny) + \
+            ['*NSET, NSET=NPTZ', str(nz[0])] + ['*NSET, NSET=NBC'] + ids_lines(sorted(set(nx + ny + nz))) + \
+            ['** symmetry x=0: ux, rot y, rot z; symmetry y=0: uy, rot x, rot z; bottom point at x=0: uz',
+             '*BOUNDARY', 'NSYMX, 1, 1', 'NSYMY, 2, 2', 'NPTZ, 3, 3']
+    if rot:
+        extra += ['NSYMX, 5, 6', 'NSYMY, 4, 4', 'NSYMY, 6, 6']
+    outs = ['*NODE PRINT, NSET=NBC, TOTALS=ONLY', 'RF', '*NODE PRINT, NSET=NSHELL', 'U']
+    if beams:
+        outs += ['*EL PRINT, ELSET=EBEAM', 'S']
+    if full_out:
+        outs = ['*NODE FILE, OUTPUT=3D', 'U, RF', '*EL FILE, OUTPUT=3D', 'S, E'] + outs
+    step = ['*STEP', f'*STATIC, SOLVER={SOLVER}'] + cload_lines(F) + outs + ['*END STEP']
+    binfo, nsh = write_deck(f'{base}.inp', 'B787 forward fuselage quarter barrel, ultimate pressure 97.5 kPa',
+                            nodes, elems, beams, extra, step, offsets)
+    print(f'{base}.inp: {len(nodes) - 1} nodes, {nsh} shells, {len(beams)} beams')
+    print(f'  pressure   Fy={tp[1] / 1e3:10.2f} kN  Fz={tp[2] / 1e3:9.2f} kN')
+    print(f'  door edge  Fy={td[1] / 1e3:10.2f} kN  Fz={td[2] / 1e3:9.2f} kN  (sheet 89.12 / 23.88)')
+    print(f'  end load   Fx={te[0] / 1e3:10.2f} kN  (sheet 1273.0)')
+    print(f'  total      Fy={(tp[1] + td[1]) / 1e3:10.2f} kN (sheet 3427.1)  Fz={(tp[2] + td[2]) / 1e3:.3f} kN (sheet 0)')
+    probes = {'P': nearest(nodes, PPT), 'A': nearest(nodes, C6A), 'T': nearest(nodes, C6T)}
+    return binfo, probes
+
+LADDER = [  # name, beam kinds, offsets, rotational BCs, OUTPUT=3D result files
+    ('ladder-0', '',   False, False, False),
+    ('ladder-1', '',   False, True,  False),
+    ('ladder-2', 'S',  False, True,  False),
+    ('ladder-3', 'S',  True,  True,  False),
+    ('ladder-4', 'SF', True,  True,  False),
+    ('ladder-5', 'SF', True,  True,  True),
+]
+
+def ladder():
+    for name, kinds, off, rot, full in LADDER:
+        gen_global(name, H_LADDER, kinds, off, rot, full)
+
+# ----------------------------------------------------------------- gen
+def gen(base):
+    meta = {'base': base}
+    binfo, probes = gen_global(base)
+    meta['global'] = {'probes': probes}
+    meta['beams'] = binfo
+    # ---------------- submodel
+    segs = beam_segments()
+    ssegs = [c for c in (clip(g, SUBBOX) for g in segs) if c]
+    snodes, selems = build_mesh(SUBBOX, ssegs, [C6A, C6T], H_SUB_MAX, H_SUB_EDGE)
+    sed = edge_table(selems)
+    sbeams = find_beams(snodes, sed, ssegs)
+    shole = [v[0] for v in sed.values() if v[1] == 1 and all(abs(hole_dist(*snodes[n])) < 1e-6 for n in v[0])]
+    SF = defaultdict(lambda: [0.0, 0.0, 0.0])
+    pressure_loads(SF, snodes, selems)
+    sd = edge_loads(SF, snodes, shole, lambda x, s: PU * x, radial)
+    bx0, bx1, bs0, bs1 = SUBBOX
+    nb = [i for i in range(1, len(snodes)) if min(abs(snodes[i][0] - bx0), abs(snodes[i][0] - bx1),
+                                                  abs(snodes[i][1] - bs0), abs(snodes[i][1] - bs1)) < 1e-7]
+    sextra = ['*NSET, NSET=NSUB'] + ids_lines(nb) + [
+        '** boundary translations of the expanded shell/beam nodes are interpolated from the',
+        '** global OUTPUT=3D results, which carries the global rotations as well',
+        f'*SUBMODEL, TYPE=NODE, INPUT={base}.frd', 'NSUB']
+    sstep = ['*STEP', f'*STATIC, SOLVER={SOLVER}', '*BOUNDARY, SUBMODEL, STEP=1', 'NSUB, 1, 3'] + \
+            cload_lines(SF) + ['*NODE FILE, OUTPUT=3D', 'U', '*EL FILE, OUTPUT=3D', 'S, E',
+                               '*NODE PRINT, NSET=NSHELL', 'U', '*END STEP']
+    _, ssh = write_deck('corner.inp', 'B787 upper aft door corner submodel (0.6 m x 0.6 m)',
+                        snodes, selems, sbeams, sextra, sstep)
+    meta['sub'] = {'probes': {'A': nearest(snodes, C6A), 'T': nearest(snodes, C6T)},
+                   'edge_nodes': sorted({n for e in shole for n in e})}
+    print(f'corner.inp: {len(snodes) - 1} nodes, {ssh} shells, {len(sbeams)} beams, '
+          f'door edge load in region Fy={sd[1] / 1e3:.2f} kN, reads {base}.frd')
+    with open(META, 'w') as f: json.dump(meta, f)
+
+# ----------------------------------------------------------------- post
+def read_inp(path):
+    XS, conn, mode = {}, {}, None
+    with open(path) as f:
+        for line in f:
+            if line.startswith('**'): continue
+            if line.startswith('*'):
+                u = line.upper().replace(' ', '')
+                mode = 'N' if u.startswith('*NODE,') else \
+                       'S' if u.startswith('*ELEMENT,') and ('TYPE=S4' in u or 'TYPE=S3' in u) else None
+                continue
+            v = line.replace(',', ' ').split()
+            if mode == 'N':
+                x, y, z = map(float, v[1:4]); XS[int(v[0])] = (x, R * math.atan2(y, z))
+            elif mode == 'S':
+                conn[int(v[0])] = [int(t) for t in v[1:]]
+    return XS, conn
+
+def read_dat(path):
+    blocks, cur = {}, None
+    with open(path) as f:
+        for line in f:
+            t = line.strip()
+            if not t: continue
+            low = t.lower()
+            if ' for set ' in low:
+                cur = (low.split('(')[0].strip(), low.split(' for set ')[1].split()[0].upper())
+                blocks[cur] = []; continue
+            if cur is None: continue
+            try: blocks[cur].append([float(x) for x in t.split()])
+            except ValueError: cur = None
+    return blocks
+
+def membrane(c, xi, eta, XS, U):
+    N, D = shape(len(c), xi, eta)
+    X = [XS[n] for n in c]
+    xx, sx, xe, se = jac(D, X); det = xx * se - sx * xe
+    ea = eh = gam = ur = 0.0
+    for i, n in enumerate(c):
+        th = X[i][1] / R; ux, uy, uz = U[n]
+        ut = uy * math.cos(th) - uz * math.sin(th); urn = uy * math.sin(th) + uz * math.cos(th)
+        dx = (se * D[i][0] - sx * D[i][1]) / det; ds = (-xe * D[i][0] + xx * D[i][1]) / det
+        ea += dx * ux; eh += ds * ut; gam += ds * ux + dx * ut; ur += N[i] * urn
+    return ea, eh + ur / R, 0.5 * gam
+
+def node_strain(n, XS, conn, n2e, U):
+    acc = [0.0, 0.0, 0.0]
+    for e, li in n2e[n]:
+        r = membrane(conn[e], *NAT[len(conn[e])][li], XS, U)
+        for j in range(3): acc[j] += r[j] / len(n2e[n])
+    return acc
+
+def pmax(ea, eh, g):
+    return 0.5 * (ea + eh) + math.sqrt((0.5 * (ea - eh)) ** 2 + g * g)
+
+def sig(ea, eh):
+    q = EQI / (1 - NUQI ** 2)
+    return q * (ea + NUQI * eh), q * (eh + NUQI * ea)
+
+def load_model(inp, dat):
+    XS, conn = read_inp(inp); blk = read_dat(dat)
+    U = {int(r[0]): r[1:4] for r in blk[('displacements', 'NSHELL')]}
+    n2e = defaultdict(list)
+    for e, c in conn.items():
+        for li, n in enumerate(c): n2e[n].append((e, li))
+    return XS, conn, blk, U, n2e
+
+def post():
+    meta = json.load(open(META))
+    base = meta['base']
+    XS, conn, blk, U, n2e = load_model(f'{base}.inp', f'{base}.dat')
+    t = T_SKIN
+    # 1. radial displacement
+    ur = {n: u[1] * math.sin(XS[n][1] / R) + u[2] * math.cos(XS[n][1] / R) for n, u in U.items()}
+    nmax = max(ur, key=lambda n: abs(ur[n]))
+    print(f'1. max radial displacement {ur[nmax] * 1e3:.3f} mm at x={XS[nmax][0]:.4f} m, '
+          f'theta={math.degrees(XS[nmax][1] / R):.2f} deg')
+    # 2. skin membrane stress field (element centres) -> CSV
+    with open('skin_membrane_global.csv', 'w') as f:
+        f.write('elem,x,theta_deg,sigma_axial_MPa,sigma_hoop_MPa\n')
+        hmax = (-1e30, None)
+        for e, c in conn.items():
+            ea, eh, _ = membrane(c, *((0, 0) if len(c) == 4 else (1 / 3, 1 / 3)), XS, U)
+            sa, sh = sig(ea, eh)
+            xm = sum(XS[n][0] for n in c) / len(c); tm = math.degrees(sum(XS[n][1] for n in c) / len(c) / R)
+            f.write(f'{e},{xm:.4f},{tm:.3f},{sa / 1e6:.3f},{sh / 1e6:.3f}\n')
+            if sh > hmax[0]: hmax = (sh, (xm, tm))
+    print(f'2. skin membrane stresses -> skin_membrane_global.csv; max hoop {hmax[0] / 1e6:.1f} MPa '
+          f'at x={hmax[1][0]:.3f}, theta={hmax[1][1]:.2f}')
+    # 3. beam forces
+    acc = defaultdict(list)
+    for r in blk.get(('stresses', 'EBEAM'), []):
+        acc[int(r[0])].append(r[2:8])
+    best = {}
+    for e, rows in acc.items():
+        name, kind, tx, ty, tz, A, xm, th = meta['beams'][str(e)]
+        st = [tx * tx * s[0] + ty * ty * s[1] + tz * tz * s[2] +
+              2 * (tx * ty * s[3] + tx * tz * s[4] + ty * tz * s[5]) for s in rows]
+        Nf = A * sum(st) / len(st)
+        if name not in best or abs(Nf) > abs(best[name][0]):
+            best[name] = (Nf, xm, math.degrees(th))
+    print('3. beam axial (stringer) / hoop (frame) force, max per beam [kN]:')
+    for name in sorted(best, key=lambda n: (n[0], int(n[1:]))):
+        Nf, xm, thd = best[name]
+        print(f'   {name:5s} {Nf / 1e3:9.2f}  at x={xm:.3f} theta={thd:.2f}')
+    # 4. reactions, C1-C5
+    fx, fy, fz = blk[('total force', 'NBC')][0][:3]
+    print(f'4. reaction sums  Fx={fx / 1e3:.2f}  Fy={fy / 1e3:.2f}  Fz={fz / 1e3:.3f} kN')
+    gp = meta['global']['probes']
+    ea, eh, _ = node_strain(gp['P'], XS, conn, n2e, U)
+    sa, sh = sig(ea, eh)
+    lo, hi = PU * R / (t + SEC['F'][0] / 0.6096), PU * R / t
+    c2 = (PU * R / 2) / (t + SEC['S'][0] / (2 * math.pi * R / 90))
+    print(f'C1 hoop at P {sh / 1e6:.2f} MPa, range {lo / 1e6:.1f}-{hi / 1e6:.1f}: '
+          f'{"PASS" if lo <= sh <= hi else "FAIL"}, ratio to pR/t {sh / hi:.4f}')
+    print(f'C2 axial at P {sa / 1e6:.2f} MPa vs {c2 / 1e6:.2f}: dev {100 * (sa / c2 - 1):+.2f}% '
+          f'{"PASS" if abs(sa / c2 - 1) <= 0.05 else "FAIL"}, ratio to pR/2t {sa / (PU * R / 2 / t):.4f}')
+    fend = PU * math.pi * R * R / 2; fyx = -PU * 2 * R * L
+    print(f'C3 sum Fx {fx / 1e3:.2f} vs {-fend / 1e3:.2f} kN: {"PASS" if abs(fx / -fend - 1) <= 1e-3 else "FAIL"}')
+    print(f'C4 sum Fz {fz / 1e3:.3f} kN: {"PASS" if abs(fz) <= 1e-3 * fend else "FAIL"}')
+    print(f'C5 sum Fy {fy / 1e3:.2f} vs {fyx / 1e3:.2f} kN: {"PASS" if abs(fy / fyx - 1) <= 1e-3 else "FAIL"}')
+    gA = node_strain(gp['A'], XS, conn, n2e, U)[1]; gT = node_strain(gp['T'], XS, conn, n2e, U)[1]
+    # ---------------- submodel
+    try:
+        sXS, sconn, _, sU, sn2e = load_model('corner.inp', 'corner.dat')
+    except FileNotFoundError:
+        print('corner.dat not found: run fh run corner.inp'); return
+    emax, nloc = -1e30, None
+    for n in meta['sub']['edge_nodes']:
+        v = pmax(*node_strain(n, sXS, sconn, sn2e, sU))
+        if v > emax: emax, nloc = v, n
+    print(f'5. max principal membrane strain on cutout edge {emax * 1e6:.0f} microstrain at '
+          f'x={sXS[nloc][0]:.4f}, s={sXS[nloc][1]:.4f} (theta={math.degrees(sXS[nloc][1] / R):.2f})')
+    print(f'6. K = {emax / eh:.3f}  (global hoop strain at P {eh * 1e6:.0f} microstrain)')
+    print(f'7. MS = {EPS_ALLOW / emax - 1:+.3f}')
+    sp = meta['sub']['probes']
+    for key, g in (('A', gA), ('T', gT)):
+        sv = node_strain(sp[key], sXS, sconn, sn2e, sU)[1]
+        print(f'C6 {"aft" if key == "A" else "top"} edge mid-point hoop strain sub {sv * 1e6:.1f} vs '
+              f'global {g * 1e6:.1f} microstrain: dev {100 * (sv / g - 1):+.2f}% '
+              f'{"PASS" if abs(sv / g - 1) <= 0.05 else "FAIL"}')
+
+if __name__ == '__main__':
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'gen'
+    if cmd == 'post':
+        post()
+    elif cmd == 'ladder':
+        ladder()
+    else:
+        gen(sys.argv[2] if len(sys.argv) > 2 else 'round-1')

@@ -1,15 +1,22 @@
-// Linear static elasticity: the cell stiffness, the sparse matrix (CSR in
-// three arrays), CG with a Jacobi preconditioner and the reactions.
+// The dofs, the loads on face sets, the sparse matrix (CSR in three
+// arrays), the assembly over the cells of the mesh, the linear solver
+// interface with its first entry (CG with a Jacobi preconditioner), the
+// Newton interface, the reactions and the values at a point.
 //
 // The matrix holds all dofs, with the fixed dofs too, so that the
-// reactions are K u - f on the fixed dofs. CG solves the system of the
-// free dofs: it holds the residual and the search direction at 0 on the
-// fixed dofs.
+// reactions are K u - f on the fixed dofs. The linear operator of a solve
+// is K on the free dofs: it holds its result at 0 on the fixed dofs.
 import std;
 import math;
 import os;
 namespace runtime;
-import .mesh;
+import .fem;
+import .solid;
+import .lane_solvers;
+
+var fixed: u8[>..] = [];            // 1 for each dof that is held at 0
+var load: f64[>..] = [];            // the external force on each dof
+var disp: f64[>..] = [];            // the value of each dof: the displacement of a solid
 
 var row_start: i64[>..] = [];
 var col: i32[>..] = [];
@@ -20,48 +27,154 @@ var last_seconds = 0.0;
 
 let CG_TOLERANCE = 1.0e-10;   // the residual relative to the load
 
+// The linear solver and the preconditioner of the next solve, by name.
+// "cg" with "jacobi" is the built-in entry. The solvers lane gives the
+// others (lane_solvers.goose).
+var solver_name: u8[..64] = "cg";
+var preconditioner_name: u8[..64] = "jacobi";
+
+fn dof_total() -> i64 { return dofs_per_node * node_count(); }
+
+// Sets all dofs free, with no load and no solution, and clears the matrix.
+fn clear_dofs() {
+    fixed.clear();
+    load.clear();
+    disp.clear();
+    for d in dof_total() {
+        fixed.push(0);
+        load.push(0.0);
+        disp.push(0.0);
+    }
+    clear_matrix();
+}
+
 fn clear_matrix() {
     row_start.clear();
     col.clear();
     val.clear();
 }
 
-// --- the sparsity pattern ------------------------------------------------------
-
-// The lattice range of the nodes that share a cell with lattice node i,
-// along an axis of n cells.
-fn neighbour_range(i: i64, n: i64) -> i64, i64 {
-    let first = if i % 2 == 0 { max(i / 2 - 1, 0) } else { (i - 1) / 2 };
-    let last = if i % 2 == 0 { min(i / 2, n - 1) } else { (i - 1) / 2 };
-    return 2 * first, 2 * last + 2;
+fn clear_solution() {
+    for &v in disp { v = 0.0; }
 }
 
-// Two nodes share a cell if they share one along each axis. The 3 rows of
-// a node have the same columns, in increasing order.
+fn clear_load_vector() {
+    for &v in load { v = 0.0; }
+    clear_solution();
+}
+
+// The sum of the loads on the dofs 0 to 2 of each node.
+fn load_sum() -> f64, f64, f64 {
+    var s: f64[3] = [0.0, 0.0, 0.0];
+    for n in node_count() {
+        for k in min(dofs_per_node, 3) { s[k] += load[dofs_per_node * n + k]; }
+    }
+    return s[0], s[1], s[2];
+}
+
+// Holds all dofs of the nodes of node set s at 0.
+fn fix_set(s: i64, first: i64, last: i64) {
+    for n in set_members(s) {
+        for p in first..last { fixed[dofs_per_node * n + p] = 1; }
+    }
+    clear_solution();
+}
+
+// --- loads -------------------------------------------------------------------------
+
+var face_w: f64[>..] = [];
+
+// Adds a uniform traction (force per area) (tx, ty, tz) + sn n on the
+// faces of face set s, with n the unit normal out of the body: the
+// consistent nodal forces of cell_face_weights. False, with a message, if
+// a cell type has no face routine.
+fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64, sn: f64) -> bool {
+    let t: f64[3] = [tx, ty, tz];
+    for item in set_members(s) {
+        let c = item / FACE_STRIDE;
+        if !cell_face_weights(c, item % FACE_STRIDE, face_w) {
+            write_stderr(str("runtime: the cell type ", CELL_NAMES[cell_type[c]], " has no face routine\n"));
+            return false;
+        }
+        for a in face_w.len / 4 {
+            let d = dofs_per_node * cell_node(c, a);
+            for k in min(dofs_per_node, 3) { load[d + k] += face_w[4 * a] * t[k] + face_w[4 * a + 1 + k] * sn; }
+        }
+    }
+    clear_solution();
+    return true;
+}
+
+// The area of the faces of face set s that have a face routine.
+fn set_area(s: i64) -> f64 {
+    var area = 0.0;
+    for item in set_members(s) {
+        if cell_face_weights(item / FACE_STRIDE, item % FACE_STRIDE, face_w) {
+            for a in face_w.len / 4 { area += face_w[4 * a]; }
+        }
+    }
+    return area;
+}
+
+// Adds the force (fx, fy, fz) at the node nearest to (x, y, z).
+fn add_point_force(x: f64, y: f64, z: f64, fx: f64, fy: f64, fz: f64) {
+    var best = 0;
+    var best_d = -1.0;
+    for n in node_count() {
+        let dx = coords[3 * n] - x;
+        let dy = coords[3 * n + 1] - y;
+        let dz = coords[3 * n + 2] - z;
+        let d = dx * dx + dy * dy + dz * dz;
+        if best_d < 0.0 || d < best_d { best = n; best_d = d; }
+    }
+    let f: f64[3] = [fx, fy, fz];
+    for k in min(dofs_per_node, 3) { load[dofs_per_node * best + k] += f[k]; }
+    clear_solution();
+}
+
+// --- the sparsity pattern ------------------------------------------------------
+
+// Two nodes are coupled if they share a cell. All dofs of a node have the
+// same columns, in increasing order.
 fn build_pattern() {
     clear_matrix();
+    let nodes = node_count();
+    // The cells of each node, in CSR.
+    var first: i64[>..] = [];
+    for i in nodes + 1 { first.push(0); }
+    for n in cell_nodes { first[n + 1]++; }
+    for i in nodes { first[i + 1] += first[i]; }
+    var fill: i64[>..] = [];
+    for i in nodes { fill.push(first[i]); }
+    var cells_of: i64[>..] = [];
+    for i in cell_nodes.len { cells_of.push(0); }
+    for c in cell_count() {
+        for e in cell_start[c]..cell_start[c + 1] {
+            let n = cell_nodes[e];
+            cells_of[fill[n]] = c;
+            fill[n]++;
+        }
+    }
+    let dpn = dofs_per_node;
+    var near: i64[>..] = [];
     row_start.push(0);
-    for k in lattice[2] {
-        let k0, k1 = neighbour_range(k, cells[2]);
-        for j in lattice[1] {
-            let j0, j1 = neighbour_range(j, cells[1]);
-            for i in lattice[0] {
-                let i0, i1 = neighbour_range(i, cells[0]);
-                for c in 3 {
-                    for mk in k0..k1 + 1 {
-                        for mj in j0..j1 + 1 {
-                            for mi in i0..i1 + 1 {
-                                let m = node_at(mi, mj, mk);
-                                for q in 3 {
-                                    col.push((3 * m + q) as i32);
-                                    val.push(0.0);
-                                }
-                            }
-                        }
-                    }
-                    row_start.push(col.len);
+    for i in nodes {
+        near.clear();
+        for c in cells_of[first[i]..first[i + 1]] {
+            for e in cell_start[c]..cell_start[c + 1] { near.push(cell_nodes[e]); }
+        }
+        sort(near);
+        for p in dpn {
+            var last = -1;
+            for m in near {
+                if m == last { continue; }
+                last = m;
+                for q in dpn {
+                    col.push((dpn * m + q) as i32);
+                    val.push(0.0);
                 }
             }
+            row_start.push(col.len);
         }
     }
 }
@@ -78,110 +191,46 @@ fn entry(r: i64, c: i64) -> i64 {
     return lo;
 }
 
-// --- the cell stiffness ------------------------------------------------------------
+var ke: f64[>..] = [];
 
-var ke: f64[6561];      // 81 × 81, row 3 l + p for component p of local node l
-var grad: f64[81];      // the gradient of each shape function at a Gauss point
-var dref: f64[81];      // the same in the reference cell
-
-// Fills `grad` with the gradient of each shape function of cell
-// (cx, cy, cz) at the local point (s0, s1, s2), and gives the Jacobian
-// determinant there.
-fn shape_gradients(cx: i64, cy: i64, cz: i64, s0: f64, s1: f64, s2: f64) -> f64 {
-    // jac[3 r + t] = ∂x_t / ∂s_r
-    var jac: f64[9] = [0.0; 9];
-    for l in 27 {
-        let a = l % 3;
-        let b = l / 3 % 3;
-        let c = l / 9;
-        dref[3 * l] = shape_1d_ds(a, s0) * shape_1d(b, s1) * shape_1d(c, s2);
-        dref[3 * l + 1] = shape_1d(a, s0) * shape_1d_ds(b, s1) * shape_1d(c, s2);
-        dref[3 * l + 2] = shape_1d(a, s0) * shape_1d(b, s1) * shape_1d_ds(c, s2);
-        let n = cell_node(cx, cy, cz, l);
-        for r in 3 {
-            for t in 3 { jac[3 * r + t] += dref[3 * l + r] * coords[3 * n + t]; }
-        }
-    }
-    let det = jac[0] * (jac[4] * jac[8] - jac[5] * jac[7])
-        - jac[1] * (jac[3] * jac[8] - jac[5] * jac[6])
-        + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
-    assert(det > 0.0);
-    // inv = jac⁻¹, so ∂N/∂x_t = Σr inv[3 t + r] ∂N/∂s_r
-    var inv: f64[9] = [0.0; 9];
-    inv[0] = (jac[4] * jac[8] - jac[5] * jac[7]) / det;
-    inv[1] = (jac[2] * jac[7] - jac[1] * jac[8]) / det;
-    inv[2] = (jac[1] * jac[5] - jac[2] * jac[4]) / det;
-    inv[3] = (jac[5] * jac[6] - jac[3] * jac[8]) / det;
-    inv[4] = (jac[0] * jac[8] - jac[2] * jac[6]) / det;
-    inv[5] = (jac[2] * jac[3] - jac[0] * jac[5]) / det;
-    inv[6] = (jac[3] * jac[7] - jac[4] * jac[6]) / det;
-    inv[7] = (jac[1] * jac[6] - jac[0] * jac[7]) / det;
-    inv[8] = (jac[0] * jac[4] - jac[1] * jac[3]) / det;
-    for l in 27 {
-        for t in 3 {
-            grad[3 * l + t] = inv[3 * t] * dref[3 * l] + inv[3 * t + 1] * dref[3 * l + 1]
-                + inv[3 * t + 2] * dref[3 * l + 2];
-        }
-    }
-    return det;
-}
-
-fn lame_lambda() -> f64 { young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson)) }
-fn lame_mu() -> f64 { young / (2.0 * (1.0 + poisson)) }
-
-// The stiffness of cell (cx, cy, cz) by 3 × 3 × 3 Gauss points:
-// K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV.
-fn cell_stiffness(cx: i64, cy: i64, cz: i64) {
-    let lambda = lame_lambda();
-    let mu = lame_mu();
-    for &v in ke { v = 0.0; }
-    for gc in 3 {
-        for gb in 3 {
-            for ga in 3 {
-                let det = shape_gradients(cx, cy, cz, GAUSS_X[ga], GAUSS_X[gb], GAUSS_X[gc]);
-                let dv = GAUSS_W[ga] * GAUSS_W[gb] * GAUSS_W[gc] * det;
-                for i in 27 {
-                    for j in 27 {
-                        let dot = grad[3 * i] * grad[3 * j] + grad[3 * i + 1] * grad[3 * j + 1]
-                            + grad[3 * i + 2] * grad[3 * j + 2];
-                        for p in 3 {
-                            let row = 81 * (3 * i + p) + 3 * j;
-                            for q in 3 {
-                                var v = lambda * grad[3 * i + p] * grad[3 * j + q]
-                                    + mu * grad[3 * i + q] * grad[3 * j + p];
-                                if p == q { v += mu * dot; }
-                                ke[row + q] += v * dv;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn assemble() {
+// Adds the element matrix of each cell into the matrix. False, with a
+// message, if a cell type has no element routine in the registry.
+fn assemble() -> bool {
     build_pattern();
-    for cz in cells[2] {
-        for cy in cells[1] {
-            for cx in cells[0] {
-                cell_stiffness(cx, cy, cz);
-                for i in 27 {
-                    let ni = cell_node(cx, cy, cz, i);
-                    for j in 27 {
-                        let nj = cell_node(cx, cy, cz, j);
-                        for p in 3 {
-                            let e = entry(3 * ni + p, 3 * nj);
-                            for q in 3 { val[e + q] += ke[81 * (3 * i + p) + 3 * j + q]; }
-                        }
-                    }
+    let dpn = dofs_per_node;
+    for c in cell_count() {
+        if !cell_matrix(c, ke) {
+            write_stderr(str("runtime: the cell type ", CELL_NAMES[cell_type[c]], " has no element routine\n"));
+            return false;
+        }
+        let nn = cell_start[c + 1] - cell_start[c];
+        let size = dpn * nn;
+        for i in nn {
+            let ni = cell_node(c, i);
+            for j in nn {
+                let nj = cell_node(c, j);
+                for p in dpn {
+                    let e = entry(dpn * ni + p, dpn * nj);
+                    for q in dpn { val[e + q] += ke[size * (dpn * i + p) + dpn * j + q]; }
                 }
             }
         }
     }
+    return true;
 }
 
-// --- CG ------------------------------------------------------------------------
+// --- the linear solver interface -------------------------------------------------
+
+// A linear operator is a function op(x, y) that sets y = A x. A
+// preconditioner is a function pc(r, z) that sets z = M⁻¹ r. A Krylov
+// solver takes both as static function values, with this signature:
+//
+//     fn name<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64
+//
+// and a call passes the functions after the arguments, as in
+// `cg(b, x, tol, max_it, free_operator, jacobi)`.
+// It solves A x = b from the start value in x, until |b - A x| <= tol |b|,
+// and gives whether it converged and the number of iterations.
 
 // y = K x
 fn multiply(x: f64[:], y: f64[:]) {
@@ -190,6 +239,24 @@ fn multiply(x: f64[:], y: f64[:]) {
         for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
         y[r] = s;
     }
+}
+
+// y = K x on the free dofs, and 0 on the fixed dofs.
+fn free_operator(x: f64[:], y: f64[:]) {
+    multiply(x, y);
+    for d in y.len { if fixed[d] != 0 { y[d] = 0.0; } }
+}
+
+var inv_diag: f64[>..] = [];
+
+// z = D⁻¹ r on the free dofs, with D the diagonal of K, and 0 on the
+// fixed dofs.
+fn jacobi(r: f64[:], z: f64[:]) {
+    if inv_diag.len != r.len {
+        inv_diag.clear();
+        for d in r.len { inv_diag.push(if fixed[d] == 0 { 1.0 / val[entry(d, d)] } else { 0.0 }); }
+    }
+    for d in r.len { z[d] = inv_diag[d] * r[d]; }
 }
 
 fn dot(a: f64[:], b: f64[:]) -> f64 {
@@ -204,93 +271,249 @@ fn zeros(n: i64) -> f64[>..] {
     return v;
 }
 
-fn solve_linear_static() -> bool {
-    assert(young > 0.0);
-    let start = clock();
-    assemble();
-    let n = disp.len;
+// The preconditioned conjugate gradient method, for a symmetric positive
+// definite operator.
+fn cg<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
+    let n = b.len;
     var r = zeros(n);
     var z = zeros(n);
     var p = zeros(n);
     var q = zeros(n);
-    var inv_diag = zeros(n);
-    for d in n {
-        disp[d] = 0.0;
-        if fixed[d] == 0 {
-            r[d] = load[d];
-            inv_diag[d] = 1.0 / val[entry(d, d)];
-        }
-    }
-    let target = CG_TOLERANCE * sqrt(dot(r, r));
-    for d in n { z[d] = inv_diag[d] * r[d]; p[d] = z[d]; }
+    OP(x, q);
+    for d in n { r[d] = b[d] - q[d]; }
+    let target = tol * sqrt(dot(b, b));
+    PC(r, z);
+    for d in n { p[d] = z[d]; }
     var rz = dot(r, z);
-    var converged = target == 0.0;
+    var converged = sqrt(dot(r, r)) <= target;
     var it = 0;
-    while !converged && it < 10 * n {
-        multiply(p, q);
-        for d in n { if fixed[d] != 0 { q[d] = 0.0; } }
+    while !converged && it < max_it {
+        OP(p, q);
         let alpha = rz / dot(p, q);
         for d in n {
-            disp[d] += alpha * p[d];
+            x[d] += alpha * p[d];
             r[d] -= alpha * q[d];
         }
         it++;
         if sqrt(dot(r, r)) <= target { converged = true; break; }
-        for d in n { z[d] = inv_diag[d] * r[d]; }
+        PC(r, z);
         let rz_new = dot(r, z);
         let beta = rz_new / rz;
         rz = rz_new;
         for d in n { p[d] = z[d] + beta * p[d]; }
     }
-    last_iterations = it;
+    return converged, it;
+}
+
+// Solves K x = b on the free dofs with the solver and the preconditioner
+// of solver_name and preconditioner_name. b must be 0 on the fixed dofs.
+// It sets last_iterations.
+fn solve_free(b: f64[:], x: f64[>..]&) -> bool {
+    inv_diag.clear();
+    let max_it = 10 * b.len;
+    var converged = false;
+    if solver_name == "cg" && preconditioner_name == "jacobi" {
+        converged, last_iterations = cg(b, x, CG_TOLERANCE, max_it, free_operator, jacobi);
+        return converged;
+    }
+    var found = false;
+    found, converged, last_iterations = solvers_solve(solver_name, preconditioner_name, b, x, CG_TOLERANCE, max_it);
+    if !found {
+        write_stderr(str("runtime: no linear solver ", solver_name, " with the preconditioner ",
+                         preconditioner_name, "\n"));
+    }
+    return found && converged;
+}
+
+// Assembles the stiffness matrix and solves K u = f.
+fn solve_linear_static() -> bool {
+    assert(young > 0.0);
+    let start = clock();
+    var converged = assemble();
+    if converged {
+        var b = zeros(disp.len);
+        for d in disp.len {
+            disp[d] = 0.0;
+            if fixed[d] == 0 { b[d] = load[d]; }
+        }
+        converged = solve_free(b, disp);
+    }
     last_seconds = clock() - start;
     return converged;
+}
+
+// --- the Newton interface ----------------------------------------------------------
+
+// A nonlinear problem gives two functions as static function values:
+//
+//     res(u: f64[:], r: f64[:])   sets r = R(u), the residual, on all dofs
+//     jac(u: f64[:])              assembles K = ∂R/∂u into the matrix
+//
+// and a call passes them after the arguments: `newton(u, tol, max_it, res, jac)`.
+// newton solves R(u) = 0 on the free dofs from the start value in u, until
+// |R(u)| <= tol |R(u0)|, with the linear solver of solve_free. It gives
+// whether it converged and the number of Newton iterations.
+fn newton<RES, JAC>(u: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
+    let n = u.len;
+    var r = zeros(n);
+    var du = zeros(n);
+    var it = 0;
+    var r0 = -1.0;
+    while it < max_it {
+        RES(u, r);
+        for d in n { if fixed[d] != 0 { r[d] = 0.0; } }
+        let size = sqrt(dot(r, r));
+        if r0 < 0.0 { r0 = size; }
+        if size <= tol * r0 { return true, it; }
+        JAC(u);
+        for d in n {
+            r[d] = -r[d];
+            du[d] = 0.0;
+        }
+        if !solve_free(r, du) { return false, it; }
+        for d in n { u[d] += du[d]; }
+        it++;
+    }
+    return false, it;
 }
 
 // --- reactions -------------------------------------------------------------------
 
 // The force of the supports on the body: K u - f on the fixed dofs of the
-// nodes of the face. With equilibrium, the reactions and the loads sum to 0.
-fn face_reaction(axis: i64, value: f64) -> f64, f64, f64 {
-    let f = face_index(axis, value);
-    guard f >= 0 && row_start.len > 0 else { return 0.0, 0.0, 0.0; }
-    let a, b = other_axes(axis);
+// nodes of node set s. With equilibrium, the reactions and the loads sum
+// to 0.
+fn set_reaction(s: i64) -> f64, f64, f64 {
     var sum: f64[3] = [0.0, 0.0, 0.0];
-    for t in lattice[b] {
-        for s in lattice[a] {
-            let node = face_node(axis, f, s, t);
-            for c in 3 {
-                let d = 3 * node + c;
-                if fixed[d] == 0 { continue; }
-                var ku = 0.0;
-                for e in row_start[d]..row_start[d + 1] { ku += val[e] * disp[col[e]]; }
-                sum[c] += ku - load[d];
-            }
-        }
-    }
+    guard row_start.len > 0 else { return 0.0, 0.0, 0.0; }
+    for node in set_members(s) { add_node_reaction(node, sum); }
     return sum[0], sum[1], sum[2];
 }
 
-// --- stress ----------------------------------------------------------------------
+// The reaction on all fixed nodes. A node in two fixed sets counts once.
+fn fixed_reaction() -> f64, f64, f64 {
+    var sum: f64[3] = [0.0, 0.0, 0.0];
+    guard row_start.len > 0 else { return 0.0, 0.0, 0.0; }
+    for node in node_count() { add_node_reaction(node, sum); }
+    return sum[0], sum[1], sum[2];
+}
 
-// The stress at (x, y, z) from the gradient of u in the cell that holds the
-// point: xx, yy, zz, yz, xz and xy. A point outside the mesh gives 0.
-fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
-    guard disp.len > 0 && find_point(x, y, z) else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
-    let cx = point_cell[0];
-    let cy = point_cell[1];
-    let cz = point_cell[2];
-    shape_gradients(cx, cy, cz, point_local[0], point_local[1], point_local[2]);
-    // g[3 c + t] = ∂u_c / ∂x_t
-    var g: f64[9] = [0.0; 9];
-    for l in 27 {
-        let n = cell_node(cx, cy, cz, l);
-        for c in 3 {
-            for t in 3 { g[3 * c + t] += disp[3 * n + c] * grad[3 * l + t]; }
+// Adds K u - f on the fixed dofs 0 to 2 of `node` to sum.
+fn add_node_reaction(node: i64, sum: f64[3]&) {
+    for c in min(dofs_per_node, 3) {
+        let d = dofs_per_node * node + c;
+        if fixed[d] == 0 { continue; }
+        var ku = 0.0;
+        for e in row_start[d]..row_start[d + 1] { ku += val[e] * disp[col[e]]; }
+        sum[c] += ku - load[d];
+    }
+}
+
+// --- points ----------------------------------------------------------------------
+
+var point_n: f64[>..] = [];
+var point_dn: f64[>..] = [];
+
+// Whether p is in the box that holds the nodes of cell c.
+fn in_cell_bounds(c: i64, p: f64[3]) -> bool {
+    let first = cell_node(c, 0);
+    var lo: f64[3] = [coords[3 * first], coords[3 * first + 1], coords[3 * first + 2]];
+    var hi: f64[3] = lo;
+    for e in cell_start[c]..cell_start[c + 1] {
+        let n = cell_nodes[e];
+        for s in 3 {
+            lo[s] = min(lo[s], coords[3 * n + s]);
+            hi[s] = max(hi[s], coords[3 * n + s]);
         }
     }
-    let lambda = lame_lambda();
-    let mu = lame_mu();
+    let tol = 1.0e-9 * max(hi[0] - lo[0], max(hi[1] - lo[1], hi[2] - lo[2]));
+    for s in 3 {
+        if p[s] < lo[s] - tol || p[s] > hi[s] + tol { return false; }
+    }
+    return true;
+}
+
+// The reference point xi of p in the 3D cell c, by Newton's method from
+// xi = 0. False if it does not converge.
+fn reference_point(c: i64, p: f64[3], xi: f64[3]&) -> bool {
+    let t = cell_type[c] as i64;
+    xi = [0.0, 0.0, 0.0];
+    for it in 20 {
+        guard cell_shape(t, xi, point_n, point_dn) else { return false; }
+        var x: f64[3] = [0.0, 0.0, 0.0];
+        for w, a in point_n {
+            let n = cell_node(c, a);
+            for s in 3 { x[s] += w * coords[3 * n + s]; }
+        }
+        var jac: f64[9] = [0.0; 9];
+        cell_jacobian(c, point_dn, jac);
+        var inv: f64[9] = [0.0; 9];
+        guard inverse3(jac, inv) != 0.0 else { return false; }
+        var step = 0.0;
+        for r in 3 {
+            let d = inv[r] * (p[0] - x[0]) + inv[3 + r] * (p[1] - x[1]) + inv[6 + r] * (p[2] - x[2]);
+            xi[r] += d;
+            step = max(step, abs(d));
+        }
+        if step <= 1.0e-12 { return true; }
+    }
+    return false;
+}
+
+// The last 3D cell that holds (x, y, z), with the shape functions there in
+// point_n and point_dn, or -1. On a face between two cells of a lattice
+// mesh, the last cell is the cell on the high side of each axis.
+fn find_cell(x: f64, y: f64, z: f64) -> i64 {
+    let p: f64[3] = [x, y, z];
+    var xi: f64[3] = [0.0, 0.0, 0.0];
+    var c = cell_count() - 1;
+    while c >= 0 {
+        let t = cell_type[c] as i64;
+        if CELL_DIMS[t] == 3 && in_cell_bounds(c, p) && reference_point(c, p, xi) && cell_inside(t, xi) {
+            cell_shape(t, xi, point_n, point_dn);
+            return c;
+        }
+        c--;
+    }
+    return -1;
+}
+
+// The dofs 0 to 2 at (x, y, z), interpolated in the cell of find_cell. A
+// point outside the 3D cells gives 0, 0, 0.
+fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
+    guard disp.len > 0 else { return 0.0, 0.0, 0.0; }
+    let c = find_cell(x, y, z);
+    guard c >= 0 else { return 0.0, 0.0, 0.0; }
+    var u: f64[3] = [0.0, 0.0, 0.0];
+    for w, a in point_n {
+        let d = dofs_per_node * cell_node(c, a);
+        for k in min(dofs_per_node, 3) { u[k] += w * disp[d + k]; }
+    }
+    return u[0], u[1], u[2];
+}
+
+// The linear elastic stress at (x, y, z) from the gradient of the dofs 0
+// to 2 in the cell of find_cell: xx, yy, zz, yz, xz and xy. A point
+// outside the 3D cells gives 0.
+fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
+    guard disp.len > 0 && dofs_per_node >= 3 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    let c = find_cell(x, y, z);
+    guard c >= 0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    var jac: f64[9] = [0.0; 9];
+    cell_jacobian(c, point_dn, jac);
+    var inv: f64[9] = [0.0; 9];
+    guard inverse3(jac, inv) != 0.0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    // g[3 k + s] = ∂u_k / ∂x_s
+    var g: f64[9] = [0.0; 9];
+    for a in point_n.len {
+        let d = dofs_per_node * cell_node(c, a);
+        for s in 3 {
+            let ds = inv[3 * s] * point_dn[3 * a] + inv[3 * s + 1] * point_dn[3 * a + 1]
+                + inv[3 * s + 2] * point_dn[3 * a + 2];
+            for k in 3 { g[3 * k + s] += disp[d + k] * ds; }
+        }
+    }
+    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    let mu = young / (2.0 * (1.0 + poisson));
     let tr = lambda * (g[0] + g[4] + g[8]);
     return tr + 2.0 * mu * g[0], tr + 2.0 * mu * g[4], tr + 2.0 * mu * g[8],
         mu * (g[5] + g[7]), mu * (g[2] + g[6]), mu * (g[1] + g[3]);

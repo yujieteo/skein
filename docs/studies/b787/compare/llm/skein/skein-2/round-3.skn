@@ -1,0 +1,98 @@
+// Boeing 787 forward fuselage, cabin pressure at ultimate load.
+// Version reduced to one box, the only solid this Skein build meshes.
+//
+// Model: one plain skin bay at check point P (section 7.2), unrolled flat.
+//   x = fuselage axis (aft), y = hoop arc length s, z = through the skin
+//   thickness (z = 0 is the inner face).
+//   Size: one frame pitch (0.6096 m) x one stringer pitch (2 pi R / 90).
+// Loads: the membrane resultants of a closed cylinder under p_U:
+//   hoop N = p_U R and axial N = p_U R / 2, applied as edge tractions over
+//   the skin thickness. Curvature balances the pressure in the cylinder,
+//   so the flat panel carries no face pressure.
+// Material: quasi-isotropic in-plane values (section 3.3).
+// Element order: continuous Galerkin, order 2, hex cells.
+//
+// Not in this version (no single box can hold them):
+//   the curved barrel, the door cutout and door load, the pad-up,
+//   the stringers and frames, the corner refinement (items 5 to 7),
+//   and checks C4 and C6. Because the panel has no stiffeners, C2 is
+//   tested against p_U R / (2t) and not against the stiffened 25.2 MPa,
+//   and the C1 hoop stress is the upper limit p_U R / t of the range.
+
+model b787_skin_bay: 3d, SI
+
+// ---------- Loads (section 6.2) ----------
+param pL: Pressure = 65.0 kPa in 10 kPa..100 kPa
+let pU: Pressure = 1.5*pL
+
+// ---------- Geometry (sections 2.2, 3.2) ----------
+let R: Length = 2.883 m
+let t_sk: Length = 4.584 mm
+let a: Length = 0.6096 m
+let b: Length = 0.20127 m
+
+scales R, pU
+
+let E_qi: Pressure = 55.85 GPa
+let nu_qi: Real = 0.326
+
+let bay: Solid = box((0, 0, 0) m, (a, b, t_sk))
+let x0: Surface = boundary(bay, x == 0 m)
+let x1: Surface = boundary(bay, x == a)
+let y0: Surface = boundary(bay, y == 0 m)
+let y1: Surface = boundary(bay, y == b)
+let z0: Surface = boundary(bay, z == 0 m)
+
+material qi_cfrp {
+    E: Pressure = E_qi
+    nu: Real = nu_qi
+}
+
+mesh m on bay {
+    size: 20 mm
+    cell: hex
+}
+
+physics solid on bay: linear_elastic solves u: Vector<Length> {
+    material qi_cfrp
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+// membrane (plane-stress) hoop strain
+let e_hoop: Real = (sigma.yy - nu_qi*sigma.xx)/E_qi
+
+// symmetry-type supports: one roller on each of the three planes
+bc x0: u.x = 0
+bc y0: u.y = 0
+bc z0: u.z = 0
+
+step pressurize: static {
+    // end closure resultant per unit arc, p_U R / 2
+    bc x1: sigma*n = (pU*R/(2*t_sk), 0, 0)
+    // hoop resultant per unit length, p_U R
+    bc y1: sigma*n = (0, pU*R/t_sk, 0)
+
+    output u, sigma, von_mises(sigma)
+
+    // Output 2, checks C1 and C2: membrane stress at mid-bay, mid-thickness
+    report hoop_P = sigma.yy at (a/2, b/2, t_sk/2)
+    report axial_P = sigma.xx at (a/2, b/2, t_sk/2)
+    report C1_ratio = (sigma.yy at (a/2, b/2, t_sk/2))/(pU*R/t_sk)
+    report C2_ratio = (sigma.xx at (a/2, b/2, t_sk/2))/(pU*R/(2*t_sk))
+    report e_hoop_P = e_hoop at (a/2, b/2, t_sk/2)
+
+    // Output 4, checks C3 and C5 for one bay
+    report R_x0 = reaction(x0)
+    report R_y0 = reaction(y0)
+    report R_z0 = reaction(z0)
+}
+
+// C1 (upper limit of the range, plain skin)
+expect C1_hoop: sigma.yy at (a/2, b/2, t_sk/2) == pU*R/t_sk within 1%
+// C2 (unstiffened reference p_U R / (2t))
+expect C2_axial: sigma.xx at (a/2, b/2, t_sk/2) == pU*R/(2*t_sk) within 1%
+// C3 for one bay: end closure per unit arc times the arc width
+expect C3_bay_Rx: reaction(x0).x == -pU*R*b/2 within 0.1%
+// C5 for one bay: hoop resultant times the bay length
+expect C5_bay_Ry: reaction(y0).y == -pU*R*a within 0.1%

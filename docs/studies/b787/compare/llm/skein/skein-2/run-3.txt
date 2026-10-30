@@ -1,0 +1,12 @@
+diagnostics[10]{class,id,file,line,col,msg,fix}:
+  error,unsupported,round-3.skn,66,10,"the bc target 'u.x' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,67,10,"the bc target 'u.y' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,68,10,"the bc target 'u.z' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,79,27,"'sigma.yy' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,80,28,"'sigma.xx' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,81,55,"the report 'sigma.yy at (a/2, b/2, t_sk/2))/(pU*R/t_sk' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,82,55,"the report 'sigma.xx at (a/2, b/2, t_sk/2))/(pU*R/(2*t_sk' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,83,23,"'e_hoop' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,96,32,"this slice checks only u.x, u.y or u.z at a point","write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%"
+  error,unsupported,round-3.skn,98,32,"this slice checks only u.x, u.y or u.z at a point","write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%"
+summary: errors=10 lints=0

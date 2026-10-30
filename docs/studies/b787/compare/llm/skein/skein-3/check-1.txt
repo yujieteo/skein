@@ -1,0 +1,3 @@
+diagnostics[1]{class,id,file,line,col,msg,fix}:
+  error,geometry_dim,round-1.skn,159,21,"'bottom' is a Curve, but the value is a Surface","declare it as Surface"
+summary: errors=1 lints=0

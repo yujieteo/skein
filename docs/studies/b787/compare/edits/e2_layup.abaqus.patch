@@ -1,0 +1,57 @@
+diff --git a/base/abaqus/global.inp b/e2_layup/abaqus/global.inp
+index 363fcdc..1952eb6 100644
+--- a/base/abaqus/global.inp
++++ b/e2_layup/abaqus/global.inp
+@@ -41,9 +41,9 @@ SF
+ *ELEMENT OUTPUT, ELSET=FRAMES
+ SF
+ **
+-** Checks, printed to global.dat. Membrane stress = SF / 4.584E-3.
+-** C1: SF2 / t at P in 48.8 to 61.3 MPa; report SF2 / t / 61.3 MPa.
+-** C2: SF1 / t at P = 28.7 MPa within 5 %; report SF1 / t / 30.7 MPa.
++** Checks, printed to global.dat. Membrane stress = SF / 3.056E-3.
++** C1: SF2 / t at P in 66.5 to 92.0 MPa; report SF2 / t / 92.0 MPa.
++** C2: SF1 / t at P = 42.0 MPa within 5 %; report SF1 / t / 46.0 MPa.
+ ** P is the node common to the four elements of CHECK_P. Use their mean.
+ *EL PRINT, ELSET=CHECK_P, POSITION=CENTROIDAL
+ SF, SE
+diff --git a/base/abaqus/properties.inp b/e2_layup/abaqus/properties.inp
+index c3f214e..a2f0912 100644
+--- a/base/abaqus/properties.inp
++++ b/e2_layup/abaqus/properties.inp
+@@ -18,7 +18,7 @@
+ **
+ ** Plies are listed from SNEG (inner face) to SPOS (outer face). Each
+ ** laminate is symmetric, so the list is also the sheet order, outer to inner.
+-** Skin [45/0/-45/90]3s, 24 plies, 4.584 mm, on the mid-surface.
++** Skin [45/0/-45/90]2s, 16 plies, 3.056 mm, on the mid-surface.
+ *SHELL SECTION, ELSET=SKIN, COMPOSITE, ORIENTATION=AXIAL_HOOP, OFFSET=0.
+ 0.000191, 3, T800S_3900, 45., S01
+ 0.000191, 3, T800S_3900, 0., S02
+@@ -28,22 +28,14 @@
+ 0.000191, 3, T800S_3900, 0., S06
+ 0.000191, 3, T800S_3900, -45., S07
+ 0.000191, 3, T800S_3900, 90., S08
+-0.000191, 3, T800S_3900, 45., S09
+-0.000191, 3, T800S_3900, 0., S10
+-0.000191, 3, T800S_3900, -45., S11
+-0.000191, 3, T800S_3900, 90., S12
++0.000191, 3, T800S_3900, 90., S09
++0.000191, 3, T800S_3900, -45., S10
++0.000191, 3, T800S_3900, 0., S11
++0.000191, 3, T800S_3900, 45., S12
+ 0.000191, 3, T800S_3900, 90., S13
+ 0.000191, 3, T800S_3900, -45., S14
+ 0.000191, 3, T800S_3900, 0., S15
+ 0.000191, 3, T800S_3900, 45., S16
+-0.000191, 3, T800S_3900, 90., S17
+-0.000191, 3, T800S_3900, -45., S18
+-0.000191, 3, T800S_3900, 0., S19
+-0.000191, 3, T800S_3900, 45., S20
+-0.000191, 3, T800S_3900, 90., S21
+-0.000191, 3, T800S_3900, -45., S22
+-0.000191, 3, T800S_3900, 0., S23
+-0.000191, 3, T800S_3900, 45., S24
+ ** Pad-up [45/0/-45/90]6s, 48 plies, 9.168 mm, on the same mid-surface.
+ *SHELL SECTION, ELSET=PADUP, COMPOSITE, ORIENTATION=AXIAL_HOOP, OFFSET=0.
+ 0.000191, 3, T800S_3900, 45., P01
