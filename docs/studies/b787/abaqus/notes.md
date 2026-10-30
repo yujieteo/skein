@@ -26,10 +26,10 @@ abaqus job=door_corner globalmodel=global
 `mesh.py` gives the same output on each run. SHA-256 of the output:
 
 ```text
-68eeecb81b3d5f49b26e095fbe294b3094e93b83836e4ce5ca24bcc5d92101c1  global_mesh.inp
-e2a6ee110fff8ad6aea8537050e37dc8aabde82bb1f29c208696535e1565585d  global_loads.inp
-dac853cc6bd8169bd6d09918de979e547f12a3b37f09296d8eab167a32b4d92c  door_corner_mesh.inp
-f3f8c2aa5e86d66a8092e30ccaea9ec84d5ca203685048ac4396fa0ac37e1f35  door_corner_loads.inp
+76c0ef25277f7d8d76b031fba234e2b7a3007fb9ea2f2b033be9f7d5d9fb0729  global_mesh.inp
+3345e72d7c9be74570f9340f911e03e3641e16e09e4fe51a8d352216bb01bec4  global_loads.inp
+539656d15c1efc8c4821108b52abd71aad29e537c3df04b5e0be88ab2fe8e283  door_corner_mesh.inp
+8babba889635509a3a575871c355a1920e70b9d2bbf1c5ce8be3e2282f9b24e9  door_corner_loads.inp
 ```
 
 ## Size
@@ -38,9 +38,9 @@ Lines count non-blank lines. Tokens use tiktoken `o200k_base`.
 
 | Part | Lines | Lines without `**` comments | Tokens |
 |---|---|---|---|
-| Hand-written: `global.inp`, `door_corner.inp`, `properties.inp` | 237 | 164 | 3,580 |
-| Mesh script: `mesh.py` | 344 | 344 | 5,572 |
-| Generated: the four mesh and load files | 55,564 | 55,553 | 1,063,526 |
+| Hand-written: `global.inp`, `door_corner.inp`, `properties.inp` | 240 | 164 | 3,637 |
+| Mesh script: `mesh.py` | 352 | 352 | 5,690 |
+| Generated: the four mesh and load files | 55,847 | 55,836 | 1,067,377 |
 
 The 72 ply lines of the skin and pad-up sections are 72 of the 164
 keyword lines.
@@ -76,23 +76,26 @@ keyword lines.
 
 | Model | Fx | Fy | Fz |
 |---|---|---|---|
-| Global | 1272.96 kN | 3408.10 kN | −5.09 kN |
-| Submodel | 0 | 25.30 kN | 14.04 kN |
+| Global | 1272.96 kN | 3427.08 kN | −0.6 N |
+| Global, door load only | 0 | 89.05 kN | 23.86 kN |
+| Submodel | 0 | 32.72 kN | 18.55 kN |
 
-## Problems in the sheet
+The global values agree with C3 and C5 within 0.01 %, and with C4 within
+0.001 %. The door load agrees with the 89.12 kN and 23.88 kN of sheet
+6.2 within 0.1 %. Thus the reactions must agree with C3 to C5 when the
+solver balances the loads.
 
-1. **C5 and C4 cannot pass.** The sheet puts the door load only on the
-   straight part of the aft edge, so the door strips level with the two
-   corner radii (0.178 m high) send no load to the skin. Thus the applied Fy is
-   3408.1 kN, which is 0.55 % less than the 3427.1 kN in C5. The
-   tolerance is 0.1 %. The applied Fz is −5.09 kN, which is 0.40 % of
-   1273.0 kN. The C4 limit is 0.1 %. This deck applies the sheet loads as
-   written, so the reactions will equal the table above, not the C4 and
-   C5 values.
-2. **C6 has two points only.** The mid-points of the forward edge
-   (x = 0.0554) and the upper edge (s = 3.3376) of the submodel region are
-   in the cutout. Only the lower edge and the aft edge have skin at the
-   mid-point.
+## Sheet corrections from Firstmate
+
+The deck uses two corrections that Firstmate sent after the first sheet:
+
+1. The door load is p_U × x_e(s) per unit s, on the straight aft edge and
+   on the two aft corner arcs. The sheet copy in this branch has it.
+2. C6 uses only the mid-points of the region edges that have skin: the
+   top edge (s = 2.7373) and the aft edge (x = 0.6554). The mid-points of
+   the forward and the lower edge are in the cutout. The deck names the
+   sets `C6_TOP` and `C6_AFT`. The sheet copy in this branch does not yet
+   have this change.
 
 ## Not checked without Abaqus
 

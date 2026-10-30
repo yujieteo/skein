@@ -233,12 +233,12 @@ class Mesh:
             for k, v in ((0, x0), (1, s0)))]
         return [e[0] for e in near] or [ranked[0][0]]
 
-    def edge_loads(self, nodes, along, q, direction):
-        """Lumped nodal forces of a line load q (N/m) on a chain of nodes."""
-        chain = sorted(nodes, key=lambda n: self.xy[n][along])
+    def edge_loads(self, chain, along, q, direction):
+        """Lumped nodal forces of a line load q(x, s), per unit of coordinate
+        along (0 = x, 1 = s), on a chain of nodes (trapezoidal rule)."""
         f = {n: 0.0 for n in chain}
         for a, b in zip(chain, chain[1:]):
-            half = 0.5 * q * (self.xy[b][along] - self.xy[a][along])
+            half = 0.25 * (q(*self.xy[a]) + q(*self.xy[b])) * (self.xy[b][along] - self.xy[a][along])
             f[a] += half
             f[b] += half
         lines = []
@@ -291,6 +291,20 @@ class Mesh:
                 if door_distance(*[sum(self.xy[n][k] for n in c) / len(c) for k in (0, 1)]) <= PAD]
 
 
+DOOR_LOAD = ("Door load on the aft half of the cutout edge, p_U * x_e(s) per unit s, "
+             "along the radius (%.1f N/m on the straight edge)" % (P_U * DOOR_A))
+
+
+def door_edge(mesh):
+    """Cutout edge nodes in the order of s. The door strip from x = 0 to the
+    edge at each s loads that edge point, so the straight upper and lower
+    edges (one s each) get no load. Ties sort so that the chain goes from
+    the upper edge into the upper arc, and from the lower arc into the
+    lower edge, at the node nearest to the arc."""
+    nodes = mesh.nodes_where(lambda x, s: abs(door_distance(x, s)) < 1e-6)
+    return sorted(nodes, key=lambda n: (mesh.xy[n][1], mesh.xy[n][0] if mesh.xy[n][1] < DOOR_S0 else -mesh.xy[n][0]))
+
+
 def radial(x, s):
     return [(2, math.sin(s / R)), (3, math.cos(s / R))]
 
@@ -328,12 +342,11 @@ def global_model(here):
     tol = 1e-6
     p_x, p_s = 4.8768, R * math.radians(140.0)
     end = m.nodes_where(lambda x, s: abs(x - L_HALF) < tol)
-    door_aft = m.nodes_where(lambda x, s: abs(x - DOOR_A) < tol and S_UPPER + DOOR_R - tol <= s <= S_LOWER - DOOR_R + tol)
+    door = door_edge(m)
     cloads = [
         ("CLOAD", "End closure load, p_U R / 2 = %.1f N/m along +x" % (P_U * R / 2),
-         m.edge_loads(end, 1, P_U * R / 2, axial)),
-        ("CLOAD", "Door load on the aft cutout edge, p_U * 0.5334 = %.1f N/m along the radius" % (P_U * DOOR_A),
-         m.edge_loads(door_aft, 1, P_U * DOOR_A, radial)),
+         m.edge_loads(sorted(end, key=lambda n: m.xy[n][1]), 1, lambda x, s: P_U * R / 2, axial)),
+        ("CLOAD", DOOR_LOAD, m.edge_loads(door, 1, lambda x, s: P_U * x, radial)),
     ]
     sub_x0, sub_s0 = DOOR_A - DOOR_R - 0.3, S_UPPER + DOOR_R - 0.3
     sets = [
@@ -341,10 +354,10 @@ def global_model(here):
         ("NSET", "SYM_Y", m.nodes_where(lambda x, s: s < tol or abs(s - R * math.pi) < tol)),
         ("NSET", "RIGID_Z", m.nodes_where(lambda x, s: abs(x) < tol and abs(s - R * math.pi) < tol)),
         ("NSET", "END", end),
-        ("NSET", "DOOR_AFT_EDGE", door_aft),
+        ("NSET", "DOOR_EDGE", door),
         ("NSET", "CHECK_P", m.nodes_where(lambda x, s: abs(x - p_x) < tol and abs(s - p_s) < tol)),
         ("ELSET", "CHECK_P", m.elements_at(p_x, p_s)[:4]),
-        ("ELSET", "C6_LOWER", m.elements_at(sub_x0 + 0.3, sub_s0)[:2]),
+        ("ELSET", "C6_TOP", m.elements_at(sub_x0 + 0.3, sub_s0)[:2]),
         ("ELSET", "C6_AFT", m.elements_at(sub_x0 + 0.6, sub_s0 + 0.3)[:2]),
     ]
     m.write(os.path.join(here, "global"), "Global model mesh, quarter barrel", sets + cloads)
@@ -363,14 +376,13 @@ def submodel(here):
     m = Mesh(xs, ss, beam_x, beam_s)
 
     tol = 1e-6
-    door_aft = m.nodes_where(lambda x, s: abs(x - DOOR_A) < tol and s >= s_c - tol)
-    cloads = [("CLOAD", "Door load on the aft cutout edge, p_U * 0.5334 = %.1f N/m along the radius" % (P_U * DOOR_A),
-               m.edge_loads(door_aft, 1, P_U * DOOR_A, radial))]
+    door = door_edge(m)
+    cloads = [("CLOAD", DOOR_LOAD, m.edge_loads(door, 1, lambda x, s: P_U * x, radial))]
     sets = [
         ("NSET", "DRIVEN", m.nodes_where(lambda x, s: min(abs(x - x0), abs(x - x1), abs(s - s0), abs(s - s1)) < tol)),
-        ("NSET", "DOOR_AFT_EDGE", door_aft),
+        ("NSET", "DOOR_EDGE", door),
         ("NSET", "CUTOUT_EDGE", m.nodes_where(lambda x, s: abs(door_distance(x, s)) < 1e-6)),
-        ("ELSET", "C6_LOWER", m.elements_at(x0 + 0.3, s0)[:2]),
+        ("ELSET", "C6_TOP", m.elements_at(x0 + 0.3, s0)[:2]),
         ("ELSET", "C6_AFT", m.elements_at(x1, s0 + 0.3)[:2]),
     ]
     edge = set(sets[2][2])

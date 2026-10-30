@@ -94,7 +94,7 @@ cutouts of one shape, which give no new information.
 | Height, along the arc s | 1.829 m (72 in) | the Type A minimum, [3] 25.807(a) |
 | Corner radius | 0.178 m (7 in) | the Type A maximum, [3] 25.807(a) |
 | Centre | x = 0, θ = 75° | **[assumption]** 15° above the horizontal puts the sill near the cabin floor. |
-| Edges | x = ±0.5334, θ = 56.83° (upper) to 93.17° (lower) | from the size and the centre |
+| Edges | x = ±0.5334, s = 2.8593 (upper) to 4.6883 (lower), which is θ = 56.83° to 93.17° | from the size and the centre: s = R × 75° ∓ 1.829 / 2 |
 
 The skin cutout is equal to the clear opening. **[assumption]** The real
 cutout is larger, but its size is not public.
@@ -171,9 +171,10 @@ a negligible effect here.
   skin face. Two vertical webs, 25 mm apart (outer faces), are 35 mm
   high from the inner skin face. A crown joins the webs. All walls are
   1.528 mm thick.
-- **Frame:** a C-section. An outer flange, 50 mm wide, lies on the inner
-  skin face. A web is 150 mm high from the inner skin face. An inner
-  flange is 40 mm wide. All walls are 3.056 mm thick. The frame is
+- **Frame:** a J-section. An outer flange, 50 mm wide, lies on the inner
+  skin face, centred on the web. A web is 150 mm high from the inner skin
+  face. An inner flange, 40 mm wide, goes to one side of the web only.
+  All walls are 3.056 mm thick. The frame is
   continuous over the stringers (the model has no stringer
   clearance holes).
 
@@ -190,8 +191,8 @@ come from.
 | I about the centroidal axis normal to the skin (lateral bending) | 4.908e-8 m⁴ | 8.305e-8 m⁴ |
 | Torsion constant J (open section) | 1.569e-10 m⁴ | 2.225e-9 m⁴ |
 
-The frame centroid is 3.16 mm to the side of the web line. The model
-ignores this lateral offset. **[assumption]**
+The frame centroid is 3.16 mm from the web line, on the side of the
+inner flange. The model ignores this lateral offset. **[assumption]**
 
 ---
 
@@ -243,10 +244,16 @@ This sheet takes the maximum relief valve setting as equal to p_L.
    uniform per unit arc length, equal to p_U R / 2 = 140.5 kN/m. The
    total for the quarter model is p_U π R² / 2 = 1273.0 kN.
 3. **Door load:** the door is not in the model. A plug door transfers its
-   pressure load to the cutout edges. On the aft cutout edge (x = 0.5334,
-   between the corner radii), apply a force per unit length, outward
-   along the local radius, equal to p_U × 0.5334 = 52.01 kN/m. This is the
-   pressure on the half of the door in the quarter model.
+   pressure load to the cutout edges. Apply the door load on the aft half
+   of the cutout edge in the quarter model: the straight aft edge and the
+   two aft corner arcs. At each point, the load is outward along the local
+   radius. Its value per unit arc length in s (not per unit edge length) is
+   p_U × x_e(s). Here, x_e(s) is the x coordinate of the cutout edge at
+   that s. On the straight aft edge, this is p_U × 0.5334 = 52.01 kN/m.
+   The strip of the door from x = 0 to x_e(s) puts its pressure on the
+   edge at the same s, so the resultant is equal to the pressure on the
+   half door. The half door area is 0.9620 m², and the resultant is
+   89.12 kN along +y and 23.88 kN along +z.
 
 ### 6.3 Mesh
 
@@ -264,7 +271,7 @@ A second analysis gives a refined result at the upper aft door corner.
 
 | Item | Value |
 |---|---|
-| Region | a square in the x-s plane, 0.600 m × 0.600 m, centred on the centre of the corner radius: x_c = 0.5334 − 0.178 = 0.3554, s_c = s_upper + 0.178 = 3.0376 m, where s_upper = R × 56.83° = 2.8596 m. The region contains the skin, the pad-up and the parts of the stringers and frames in it. |
+| Region | a square in the x-s plane, 0.600 m × 0.600 m, centred on the centre of the corner radius: x_c = 0.5334 − 0.178 = 0.3554, s_c = s_upper + 0.178 = 3.0373 m, where s_upper = 2.8593 m (section 2.3). The region contains the skin, the pad-up and the parts of the stringers and frames in it. |
 | Idealization | the same as the global model: shells for the skin and pad-up, offset beams for the stringers and frames |
 | Mesh | about 0.005 m on the cutout edge, and not more than 0.020 m elsewhere |
 | Boundary | on the region boundary, the translations and rotations of the skin and the beam ends come from the global result |
