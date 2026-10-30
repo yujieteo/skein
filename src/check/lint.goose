@@ -399,11 +399,11 @@ fn dt_unstable_step(step: i64) {
             var nu, nok = prop_value(pm.mat, "nu");
             if !nok || nu < 0.0 || nu >= 0.5 { nu = 0.0; }
             if eok && rok && rho > 0.0 && e > 0.0 {
-                speed = max(speed, sqrt(e*(1.0 - nu)/(rho*(1.0 + nu)*(1.0 - 2.0*nu))));
+                speed = max(speed, sqrt(e * (1.0 - nu) / (rho * (1.0 + nu) * (1.0 - 2.0 * nu))));
             }
         }
         guard speed > 0.0 else { continue; };
-        let limit = h/(order_of(method_of(i), u)*speed);
+        let limit = h / (order_of(method_of(i), u) * speed);
         if dtv > limit {
             warn(first_tok(dt), "dt_unstable",
                  str("dt = ", approx(dtv), " s is above the estimated stable limit ", approx(limit), " s of physics '",
@@ -435,8 +435,8 @@ fn stabilization_missing() {
             let k, kok = prop_value(pm.mat, "k");
             var cp, cok = prop_value(pm.mat, "c_p");
             if !cok { cp, cok = prop_value(pm.mat, "cp"); }
-            if rok && mok && mu > 0.0 { cell = max(cell, rho*speed*h/mu); }
-            if rok && kok && cok && k > 0.0 { cell = max(cell, rho*cp*speed*h/k); }
+            if rok && mok && mu > 0.0 { cell = max(cell, rho * speed * h / mu); }
+            if rok && kok && cok && k > 0.0 { cell = max(cell, rho * cp * speed * h / k); }
         }
         if cell > 1.0 {
             warn(first_tok(stab), "stabilization_missing",
