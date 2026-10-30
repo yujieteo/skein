@@ -1,0 +1,65 @@
+diff --git a/base/skein/door_corner.skn b/e4_sweep/skein/door_corner.skn
+index 3262150..46efd44 100644
+--- a/base/skein/door_corner.skn
++++ b/e4_sweep/skein/door_corner.skn
+@@ -1,4 +1,4 @@
+-// blocked-by: G3 G31 G32 G33
++// blocked-by: G3 G31 G32 G33 G10 G34
+ // Boeing 787 forward fuselage under cabin pressure: the door-corner
+ // submodel of the problem sheet (../problem.md, 6.4). A 0.600 m square
+ // panel of the x-s plane, centred on the centre of the upper aft corner
+@@ -8,12 +8,14 @@
+ 
+ model b787_door_corner: 3d, SI
+ 
++// gap G34: results() takes no study case. Each case needs the global case
++// with the same p_U.
+ let global: Results = results("fuselage.skn", step: "pressurize")
+ 
+ let R: Length = 2.883 m
+ let x_end: Length = 6.096 m
+ let f_pitch: Length = 0.6096 m
+-let p_U: Pressure = 1.5*65.0 kPa
++param p_U: Pressure = 1.5*65.0 kPa
+ 
+ // Door 2, a Type A exit (sheet 2.3), and the pad-up band around it (2.4).
+ let w_d: Length = 1.067 m
+@@ -216,3 +218,9 @@ expect c6_aft: e_hoop at Q_aft == global.e_hoop at Q_aft within 5%
+ 
+ // gap G33: global.e_hoop is not a field of the results.
+ expect c6_top: e_hoop at Q_top == global.e_hoop at Q_top within 5%
++
++// The limit pressure, the pressure-only condition and p_U (sheet 5).
++// gap G10: each expect runs once, with the default p_U.
++study pressures: grid {
++    p_U: [65.0, 86.5, 97.5] kPa
++}
+diff --git a/base/skein/fuselage.skn b/e4_sweep/skein/fuselage.skn
+index d291778..a17ae77 100644
+--- a/base/skein/fuselage.skn
++++ b/e4_sweep/skein/fuselage.skn
+@@ -1,4 +1,4 @@
+-// blocked-by: G3 G31 G32 G33
++// blocked-by: G3 G31 G32 G33 G10
+ // Boeing 787 forward fuselage under cabin pressure: the global model of
+ // the problem sheet (../problem.md). One quarter of a 20-bay barrel,
+ // 0 <= x <= 6.096 m and 0 deg <= theta <= 180 deg, with the left door 2
+@@ -12,7 +12,7 @@ let R: Length = 2.883 m
+ let x_end: Length = 6.096 m
+ let f_pitch: Length = 0.6096 m
+ let s_pitch: Length = 2*pi*R/90
+-let p_U: Pressure = 1.5*65.0 kPa
++param p_U: Pressure = 1.5*65.0 kPa
+ 
+ // Door 2, a Type A exit (sheet 2.3), and the pad-up band around it (2.4).
+ let w_d: Length = 1.067 m
+@@ -230,3 +230,9 @@ expect c3_rx: (reaction(skin_x0)).x == -F_end within 0.1%
+ expect c4_rz: (reaction(bottom)).z == 0 N within F_end/1000
+ 
+ expect c5_ry: (reaction(skin_y0)).y == -p_U*2*R*x_end within 0.1%
++
++// The limit pressure, the pressure-only condition and p_U (sheet 5).
++// gap G10: each expect runs once, with the default p_U.
++study pressures: grid {
++    p_U: [65.0, 86.5, 97.5] kPa
++}

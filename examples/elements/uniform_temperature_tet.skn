@@ -1,0 +1,37 @@
+// The bar of heated_bar_template_tet.skn with no source and its sides at
+// 0 degC. Nothing drives the model, so T is 0 degC everywhere. The
+// reactions are only round-off of K times the fixed values (273.15 K), so
+// this model checks that the check `equilibrium` scales with that size.
+
+model uniform_temperature_tet: 3d, SI
+
+let a: Length = 0.02 m
+let lx: Length = 0.005 m
+
+scales a, 100 K, 20 W/(m*K)
+
+let bar: Solid = box((0, 0, 0) m, (lx, a, a))
+let sides: Surface = boundary(bar, y == 0 m || y == a || z == 0 m || z == a)
+
+material steel {
+    k: Conductivity = 20 W/(m*K)
+}
+
+mesh m on bar {
+    size: 0.00125 m
+    cell: tet
+}
+
+physics thermal on bar: heat solves T: Temperature {
+    material steel
+}
+
+method thermal: cg { mesh: m, order: 2 }
+
+step steady: static {
+    bc sides: T = 0 degC
+    output T
+    report heat_out = reaction(sides)
+}
+
+expect centre: T at (0.0025, 0.01, 0.01) m == 0 degC within 0.001 K

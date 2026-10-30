@@ -1,0 +1,97 @@
+// Boeing 787 forward fuselage, pressurization: REDUCED model for a box-only solver.
+//
+// This slice of skein run meshes only one box. So the barrel, the door cutout,
+// the pad-up, the stringers, the frames and the door-corner submodel (sheet
+// sections 2.3, 2.4, 4, 6.4) cannot be modelled here. The full model is the
+// earlier round-2 file, which passes skein check.
+//
+// This file is the quarter-barrel skin (0 <= x <= L, 0 <= theta <= 180 deg)
+// unrolled flat:
+//   x = fuselage axis, y = arc length s = R*theta from the top (0..pi*R),
+//   z = through the thickness, mid-surface at z = 0.
+// Membrane loads equal to those of the pressurized barrel:
+//   hoop:  the y = 0 edge (theta = 0) is a symmetry plane; the y = pi*R edge
+//          (theta = 180 deg) gets the hoop force pU*R per unit length, as the
+//          traction pU*R/t.
+//   axial: the x = 0 edge is a symmetry plane; the x = L edge gets the end
+//          closure load pU*R/2 per unit arc, as the traction pU*R/(2t).
+// The skin is the quasi-isotropic [45/0/-45/90]3s laminate as an isotropic
+// solid (E = 55.85 GPa, nu = 0.326), which is exact for membrane behaviour.
+// No stringers and no frames: hoop and axial stress are the bare-skin values
+// pU*R/t = 61.3 MPa and pU*R/(2t) = 30.7 MPa.
+// Element order: quadratic (cg order 2) hexahedra.
+
+model b787_skin_unrolled: 3d, SI
+
+let R: Length = 2.883 m
+let L: Length = 6.096 m
+let t_sk: Length = 4.584 mm
+let s_max: Length = 9.057079 m
+param pU: Pressure = 97.5 kPa in 10 kPa..200 kPa
+
+scales R, pU
+
+let E_q: Pressure = 55.85 GPa
+let nu_q: Real = 0.326
+
+let skin: Solid = box((0 m, 0 m, -t_sk/2), (L, s_max, t_sk/2))
+
+let xsym: Surface = boundary(skin, x == 0 m)
+let ysym: Surface = boundary(skin, y == 0 m)
+let zfix: Surface = boundary(skin, z == -t_sk/2)
+let aft_end: Surface = boundary(skin, x == L)
+let bottom_edge: Surface = boundary(skin, y == s_max)
+
+material cfrp_qi {
+    E: Pressure = E_q
+    nu: Real = nu_q
+}
+
+mesh m on skin {
+    size: 50 mm
+    cell: hex
+}
+
+physics solid on skin: linear_elastic solves u: Vector<Length> {
+    material cfrp_qi
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+// symmetry planes x = 0 and theta = 0; the inner face only removes the rigid motion along z
+bc xsym: u.x = 0
+bc ysym: u.y = 0
+bc zfix: u.z = 0
+
+step ultimate: static {
+    // hoop membrane force pU*R per unit length at theta = 180 deg
+    bc bottom_edge: sigma*n = (0 Pa, pU*R/t_sk, 0 Pa)
+    // end closure load pU*R/2 per unit arc at x = L
+    bc aft_end: sigma*n = (pU*R/(2*t_sk), 0 Pa, 0 Pa)
+
+    output u, sigma, von_mises(sigma)
+
+    // check point P: x = 4.8768 m, theta = 140 deg -> s = 7.044500 m, mid-surface
+    report c1_hoop_P = sigma.yy at (4.8768 m, 7.0445 m, 0 m)
+    report c1_ratio = (sigma.yy at (4.8768 m, 7.0445 m, 0 m)) / (pU*R/t_sk)
+    report c2_axial_P = sigma.xx at (4.8768 m, 7.0445 m, 0 m)
+    report c2_ratio = (sigma.xx at (4.8768 m, 7.0445 m, 0 m)) / (pU*R/(2*t_sk))
+    report hoop_eps_P = ((sigma.yy - nu_q*(sigma.xx + sigma.zz))/E_q) at (4.8768 m, 7.0445 m, 0 m)
+    report hoop_max = max(sigma.yy, skin)
+    report axial_max = max(sigma.xx, skin)
+
+    report R_xsym = reaction(xsym)
+    report R_ysym = reaction(ysym)
+    report R_zfix = reaction(zfix)
+    report R_sum = reaction(xsym) + reaction(ysym) + reaction(zfix)
+}
+
+// C1: sheet range 48.8..61.3 MPa (55.05 MPa +-11.4 %); the bare skin gives the upper end
+expect c1_hoop: sigma.yy at (4.8768 m, 7.0445 m, 0 m) == 55.05 MPa within 11.4%
+// C2 (25.2 MPa) needs the stringers, so it is not tested. The bare skin gives pU*R/(2t) = 30.7 MPa.
+expect c2_bare_skin: sigma.xx at (4.8768 m, 7.0445 m, 0 m) == 30.66 MPa within 1%
+expect c3_rx: (reaction(xsym) + reaction(ysym) + reaction(zfix)).x == -1273.0 kN within 0.1%
+// C4: |sum Rz| < 0.1 % of 1273.0 kN
+expect c4_rz: (reaction(xsym) + reaction(ysym) + reaction(zfix)).z == 0 kN within 1.273 kN
+// C5 does not apply to a flat panel: sum Ry = -pU*R*L = -1713.6 kN here, not the projected -3427.1 kN.
+// Items 5-7, C6 and the beam forces need the door and stiffener geometry (round-2 file).

@@ -1,0 +1,44 @@
+diff --git a/base/skein/door_corner.skn b/e2_layup/skein/door_corner.skn
+index 3262150..eb40729 100644
+--- a/base/skein/door_corner.skn
++++ b/e2_layup/skein/door_corner.skn
+@@ -28,7 +28,7 @@ let ply_E2: Pressure = 10.1 GPa
+ let ply_G12: Pressure = 3.94 GPa
+ let ply_nu12: Real = 0.32
+ let ply_t: Length = 0.191 mm
+-let t_skin: Length = 24*ply_t
++let t_skin: Length = 16*ply_t
+ 
+ // Beam sections (sheet 4.2). The other section values are in the materials.
+ let A_s: Area = 2.016e-4 m^2
+@@ -120,7 +120,7 @@ material pad_lam {
+     G12: Pressure = ply_G12
+     nu12: Real = ply_nu12
+     t_ply: Length = ply_t
+-    h: Length = 2*t_skin
++    h: Length = 48*ply_t
+ }
+ 
+ // The quasi-isotropic in-plane values of the walls (sheet 3.3).
+diff --git a/base/skein/fuselage.skn b/e2_layup/skein/fuselage.skn
+index d291778..7bc75be 100644
+--- a/base/skein/fuselage.skn
++++ b/e2_layup/skein/fuselage.skn
+@@ -27,7 +27,7 @@ let ply_E2: Pressure = 10.1 GPa
+ let ply_G12: Pressure = 3.94 GPa
+ let ply_nu12: Real = 0.32
+ let ply_t: Length = 0.191 mm
+-let t_skin: Length = 24*ply_t
++let t_skin: Length = 16*ply_t
+ 
+ // Beam sections (sheet 4.2). The other section values are in the materials.
+ let A_s: Area = 2.016e-4 m^2
+@@ -113,7 +113,7 @@ material pad_lam {
+     G12: Pressure = ply_G12
+     nu12: Real = ply_nu12
+     t_ply: Length = ply_t
+-    h: Length = 2*t_skin
++    h: Length = 48*ply_t
+ }
+ 
+ // The quasi-isotropic in-plane values of the walls (sheet 3.3).

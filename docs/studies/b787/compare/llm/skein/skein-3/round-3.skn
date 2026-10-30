@@ -1,0 +1,84 @@
+model b787_skin_bay: 3d, SI
+// This is a reduced model. The run slice meshes one box only, so the quarter
+// barrel, the door cutout, the pad-up, the stringers and the frames cannot be
+// built.
+// What is modelled: a flat, unrolled panel of plain skin at the check point P
+// (x = 4.8768 m, theta = 140 deg), one frame pitch long and one stringer pitch
+// wide. The panel carries the far-field membrane loads of the pressurized
+// barrel.
+//   panel x = fuselage axis
+//   panel y = arc length s (hoop)
+//   panel z = thickness, inner face at z = 0
+// The radial pressure is not applied. In the barrel the curvature balances it
+// (hoop force = p R), and a flat panel cannot do that.
+// The panel is skin only. C1 then gives p_U R / t exactly. The C2 check below
+// is against the skin-only value p_U R / (2 t). The sheet value of C2
+// (25.2 MPa) needs the stringers, so it is not checked here.
+// Elements: hexahedra, continuous Galerkin, order 2.
+
+let R: Length = 2.883 m                  // skin mid-surface radius
+let t_skin: Length = 4.584 mm            // [45/0/-45/90]3s
+let Lb: Length = 0.6096 m                // frame pitch
+let Wb: Length = 0.2013 m                // stringer pitch (2 pi R / 90)
+let E_qi: Pressure = 55.85 GPa           // QI laminate in-plane modulus (sec. 3.3)
+let nu_qi: Real = 0.326
+
+param p_L: Pressure = 65.0 kPa in 10 kPa..100 kPa
+let p_U: Pressure = 1.5*p_L              // ultimate, 25.303
+let N_hoop: Force/Length = p_U*R         // hoop force per unit length, 281.1 kN/m
+let N_ax: Force/Length = p_U*R/2         // axial force per unit length, 140.5 kN/m
+
+scales R, p_U
+
+let bay: Solid = box((0, 0, 0) m, (Lb, Wb, t_skin))
+let xsym: Surface = boundary(bay, x == 0 m)
+let ysym: Surface = boundary(bay, y == 0 m)
+let inner: Surface = boundary(bay, z == 0 m)
+let aft: Surface = boundary(bay, x == Lb)
+let side: Surface = boundary(bay, y == Wb)
+
+material cfrp_qi {
+    E: Pressure = E_qi
+    nu: Real = nu_qi
+}
+
+mesh msh on bay {
+    size: 25 mm
+    cell: hex
+}
+
+physics solid on bay: linear_elastic solves u: Vector<Length> {
+    material cfrp_qi
+}
+
+method solid: cg { mesh: msh, order: 2 }
+
+bc xsym: u.x = 0
+bc ysym: u.y = 0
+bc inner: u.z = 0
+
+step pressurize: static {
+    bc aft: sigma*n = (N_ax/t_skin, 0, 0)
+    bc side: sigma*n = (0, N_hoop/t_skin, 0)
+    output u, sigma, von_mises(sigma)
+
+    // Membrane stresses at P (panel centre, mid-thickness)
+    report c1_hoop_P = sigma.yy at (Lb/2, Wb/2, t_skin/2)
+    report c1_ratio = (sigma.yy at (Lb/2, Wb/2, t_skin/2)) / (p_U*R/t_skin)
+    report c2_axial_P = sigma.xx at (Lb/2, Wb/2, t_skin/2)
+    report c2_ratio = (sigma.xx at (Lb/2, Wb/2, t_skin/2)) / (p_U*R/(2*t_skin))
+    report eps_hoop_P = ((sigma.yy - nu_qi*(sigma.xx + sigma.zz))/E_qi) at (Lb/2, Wb/2, t_skin/2)
+
+    // Reactions for one bay
+    report reaction(xsym)
+    report reaction(ysym)
+    report reaction(inner)
+    report reaction_sum = reaction(xsym) + reaction(ysym) + reaction(inner)
+}
+
+// Skin-only membrane values: p_U R / t = 61.32 MPa, p_U R / (2 t) = 30.66 MPa
+expect c1_hoop: sigma.yy at (Lb/2, Wb/2, t_skin/2) == 61.32 MPa within 1%
+expect c2_axial_skin: sigma.xx at (Lb/2, Wb/2, t_skin/2) == 30.66 MPa within 1%
+// Equilibrium for one bay: Rx = -N_ax Wb = -28.29 kN, Ry = -N_hoop Lb = -171.35 kN
+expect c3_bay_rx: reaction(xsym).x == -28.29 kN within 0.1%
+expect c5_bay_ry: reaction(ysym).y == -171.35 kN within 0.1%

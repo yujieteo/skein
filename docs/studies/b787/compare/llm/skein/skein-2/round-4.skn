@@ -1,0 +1,94 @@
+// Boeing 787 forward fuselage, cabin pressure at ultimate load.
+// Version for a build that meshes one box, supports only u = 0 and
+// traction bcs, and checks only displacement components at a point.
+//
+// Model: one plain skin strip at check point P (section 7.2), unrolled
+// flat.
+//   x = fuselage axis (aft), y = hoop arc length s, z = through the skin
+//   thickness. Size: half the barrel length (6.096 m) x one stringer
+//   pitch (2 pi R / 90) x the skin thickness.
+// Loads: the membrane resultants of a closed cylinder under p_U:
+//   axial N = p_U R / 2 on the free end x = a, and
+//   hoop N = p_U R on both hoop edges (y = 0 and y = b), equal and
+//   opposite.
+// Supports: the root face x = 0 is fully fixed (u = 0).
+// Material: quasi-isotropic in-plane values (section 3.3).
+// Element order: continuous Galerkin, order 2, hex cells.
+//
+// Hand values (p_U = 97.5 kPa, R = 2.883 m, t = 4.584 mm,
+// E = 55.85 GPa, nu = 0.326):
+//   sigma_hoop  = p_U R / t       = 61.32 MPa
+//   sigma_axial = p_U R / (2 t)   = 30.66 MPa
+//   eps_hoop  = (sigma_hoop - nu sigma_axial)/E = 9.190e-4
+//   eps_axial = (sigma_axial - nu sigma_hoop)/E = 1.911e-4
+//   u.y at (x, b) far from the root = eps_hoop * b / 2 = 0.09248 mm
+//   eps_axial = 2 (u.x(a) - u.x(a/2)) / a   (both points far from the root)
+//   reaction(root) = (-p_U R b / 2, 0, 0) = (-28.29 kN, 0, 0)
+//
+// Not in this version (this build cannot express them): the curved
+// barrel, the door cutout and door load, the pad-up, the stringers and
+// frames, the corner refinement (items 5 to 7), checks C4 to C6, and
+// stress or strain reports.
+
+model b787_skin_strip: 3d, SI
+
+// ---------- Loads (section 6.2) ----------
+param pL: Pressure = 65.0 kPa in 10 kPa..100 kPa
+let pU: Pressure = 1.5*pL
+
+// ---------- Geometry (sections 2.2, 3.2) ----------
+let R: Length = 2.883 m
+let t_sk: Length = 4.584 mm
+let a: Length = 6.096 m
+let b: Length = 0.20127 m
+
+scales R, pU
+
+let strip: Solid = box((0, 0, 0) m, (a, b, t_sk))
+let root: Surface = boundary(strip, x == 0 m)
+let tip: Surface = boundary(strip, x == a)
+let edge0: Surface = boundary(strip, y == 0 m)
+let edge1: Surface = boundary(strip, y == b)
+
+material qi_cfrp {
+    E: Pressure = 55.85 GPa
+    nu: Real = 0.326
+}
+
+mesh m on strip {
+    size: 25 mm
+    cell: hex
+}
+
+physics solid on strip: linear_elastic solves u: Vector<Length> {
+    material qi_cfrp
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+bc root: u = 0
+
+step pressurize: static {
+    // end closure resultant per unit arc, p_U R / 2
+    bc tip: sigma*n = (pU*R/(2*t_sk), 0, 0)
+    // hoop resultant p_U R per unit length, on both hoop edges
+    bc edge1: sigma*n = (0, pU*R/t_sk, 0)
+    bc edge0: sigma*n = (0, -pU*R/t_sk, 0)
+
+    output u, sigma, von_mises(sigma)
+
+    // root reaction: the bay's share of C3
+    report reaction(root)
+
+    // hoop strain = 2 u.y(x, b) / b  (check C1)
+    report uy_tip_edge = u.y at (a, b, t_sk/2)
+    report uy_mid_edge = u.y at (a/2, b, t_sk/2)
+
+    // axial strain = 2 (ux_tip - ux_mid) / a  (check C2, plain skin)
+    report ux_tip = u.x at (a, b/2, t_sk/2)
+    report ux_mid = u.x at (a/2, b/2, t_sk/2)
+}
+
+// C1 at its plain-skin limit: sigma_hoop = p_U R / t gives
+// u.y = eps_hoop * b / 2 = 0.09248 mm
+expect C1_hoop_uy: u.y at (a, b, t_sk/2) == 0.09248 mm within 1%

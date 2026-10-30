@@ -1,0 +1,4 @@
+diagnostics[0]{class,id,file,line,col,msg,fix}:
+summary: errors=0 lints=0
+free_boundary[1]{physics,field,region,condition}:
+  solid,u,"boundary(skin) - patch - top_edge - bottom_edge - fwd_end - aft_end","sigma*n = 0"

@@ -1,0 +1,15 @@
+diagnostics[13]{class,id,file,line,col,msg,fix}:
+  error,unsupported,round-3.skn,62,12,"the bc target 'u.x' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,63,12,"the bc target 'u.y' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,64,12,"the bc target 'u.z' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,75,30,"'sigma.yy' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,76,63,"the report 'sigma.yy at (4.8768 m, 7.0445 m, 0 m)) / (pU*R/t_sk' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,77,31,"'sigma.xx' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,78,63,"the report 'sigma.xx at (4.8768 m, 7.0445 m, 0 m)) / (pU*R/(2*t_sk' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,79,65,"'sigma.yy - nu_q*(sigma.xx + sigma.zz))/E_q' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,80,26,"the report 'max(sigma.yy, skin)' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,81,27,"the report 'max(sigma.xx, skin)' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,86,52,"the report 'reaction(xsym) + reaction(ysym) + reaction(zfix)' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,93,66,"this slice checks only u.x, u.y or u.z at a point","write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%"
+  error,unsupported,round-3.skn,95,66,"this slice checks only u.x, u.y or u.z at a point","write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%"
+summary: errors=13 lints=0

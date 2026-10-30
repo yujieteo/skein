@@ -1,0 +1,547 @@
+#!/usr/bin/env python3
+"""
+Boeing 787 forward fuselage pressurization (problem sheet, sections 2-7).
+Writes complete CalculiX decks with the mesh inline, and evaluates the outputs.
+
+  python3 b787_fwd_fuselage.py gen NAME [--frd GLOBAL.frd] [--stage 1|2|3]
+        stage 3 (default): NAME.inp (global, full) and NAME_sub.inp (submodel)
+        stage 1: NAME_s1.inp  skin shells + pressure/end/door loads + symmetry, no beams
+        stage 2: NAME_s2.inp  + stringers/frames (B31) without centroid offsets, rotation supports
+  python3 b787_fwd_fuselage.py check NAME [--gdat F] [--sdat F]
+
+Element order: global LINEAR (S4, B31; ORDER_G), submodel QUADRATIC (S8R, B32R; ORDER_S).
+Units N, m, Pa.  x aft, z up, y left (door side); skin point y=R sin(th), z=R cos(th), s=R th.
+"""
+import math, sys
+
+# ----------------------------------------------------------------- sheet data
+R = 2.883
+P_U = 1.5 * 65.0e3
+T_PLY = 0.191e-3
+T_SKIN, T_PAD = 24 * T_PLY, 48 * T_PLY
+L_END = 6.096
+X_FRAMES = [0.3048 + 0.6096 * k for k in range(10)]
+STR_DEG = [2 + 4 * k for k in range(45)]
+XH, HH, RC = 0.5334, 1.829 / 2, 0.178
+S_MID = R * math.radians(75.0)
+S1, S2 = S_MID - HH, S_MID + HH
+XC, SC1, SC2 = XH - RC, S1 + RC, S2 - RC
+PAD_W = 0.150
+XM = 0.9144
+E_QI, NU_QI = 55.85e9, 0.326
+A_STR, I_STR, D_STR = 2.016e-4, 3.639e-8, 0.01750
+A_FRM, I_FRM, D_FRM = 7.148e-4, 2.237e-6, 0.07415
+P_CHK = (4.8768, 140.0)
+EPS_ALLOW = 4000e-6
+LAYUP = "equivalent"     # "composite" needs quadratic shells (S8R)
+ORDER_G = 1
+ORDER_S = 2
+TOL = 1e-7
+S_PI = R * math.pi
+G = 1 / math.sqrt(3)
+
+sd = lambda d: R * math.radians(d)
+
+def lin(a, b, n):
+    return [a + (b - a) * k / (2 * n) for k in range(2 * n + 1)]
+
+def degs(a, b):
+    return [sd(a + 0.5 * k) for k in range(2 * (b - a) + 1)]
+
+def cat(*ls):
+    out = list(ls[0])
+    for l in ls[1:]:
+        out += list(l[1:])
+    return out
+
+def graded(L, h0, hmax, q=1.15):
+    hs, tot, h = [], 0.0, h0
+    while tot < L - 1e-12:
+        hs.append(h); tot += h; h = min(h * q, hmax)
+    c = [0.0]
+    for h in hs:
+        c.append(c[-1] + h * L / tot)
+    out = []
+    for k in range(len(hs)):
+        out += [c[k] / L, 0.5 * (c[k] + c[k + 1]) / L]
+    return out + [1.0]
+
+def xedge(s):
+    if s < SC1:
+        return XC + math.sqrt(max(RC * RC - (SC1 - s) ** 2, 0.0))
+    if s > SC2:
+        return XC + math.sqrt(max(RC * RC - (s - SC2) ** 2, 0.0))
+    return XH
+
+def door_dist(x, s):
+    qx, qs = abs(x) - (XH - RC), abs(s - S_MID) - (HH - RC)
+    return math.hypot(max(qx, 0), max(qs, 0)) + min(max(qx, qs), 0) - RC
+
+def arc(sc, sign, p0, p1, n):
+    return [(XC + RC * math.cos(p0 + (p1 - p0) * k / (2 * n)),
+             sc + sign * RC * math.sin(p0 + (p1 - p0) * k / (2 * n))) for k in range(2 * n + 1)]
+
+def shape(nn, xi, et):
+    C = ((-1, -1), (1, -1), (1, 1), (-1, 1))
+    if nn == 4:
+        return ([0.25 * (1 + a * xi) * (1 + b * et) for a, b in C],
+                [0.25 * a * (1 + b * et) for a, b in C],
+                [0.25 * b * (1 + a * xi) for a, b in C])
+    N, dx, de = [0.0] * 8, [0.0] * 8, [0.0] * 8
+    for i, (a, b) in enumerate(C):
+        N[i] = 0.25 * (1 + a * xi) * (1 + b * et) * (a * xi + b * et - 1)
+        dx[i] = 0.25 * a * (1 + b * et) * (2 * a * xi + b * et)
+        de[i] = 0.25 * b * (1 + a * xi) * (a * xi + 2 * b * et)
+    for i, (a, b) in ((4, (0, -1)), (5, (1, 0)), (6, (0, 1)), (7, (-1, 0))):
+        if a == 0:
+            N[i] = 0.5 * (1 - xi * xi) * (1 + b * et); dx[i] = -xi * (1 + b * et); de[i] = 0.5 * b * (1 - xi * xi)
+        else:
+            N[i] = 0.5 * (1 + a * xi) * (1 - et * et); dx[i] = 0.5 * a * (1 - et * et); de[i] = -et * (1 + a * xi)
+    return N, dx, de
+
+def elem_edges(e):
+    if len(e) == 8:
+        return ((e[0], e[4], e[1]), (e[1], e[5], e[2]), (e[2], e[6], e[3]), (e[3], e[7], e[0]))
+    return ((e[0], e[1]), (e[1], e[2]), (e[2], e[3]), (e[3], e[0]))
+
+# ----------------------------------------------------------------- mesh
+class Mesh:
+    def __init__(self, order):
+        self.order, self.key, self.p, self.el = order, {}, [None], []
+    def node(self, x, s):
+        k = (round(x * 1e6), round(s * 1e6))
+        n = self.key.get(k)
+        if n is None:
+            n = len(self.p); self.key[k] = n; self.p.append((x, s))
+        return n
+    def find(self, x, s):
+        return self.key.get((round(x * 1e6), round(s * 1e6)))
+    def nearest(self, x, s):
+        return min(range(1, len(self.p)), key=lambda n: math.hypot(self.p[n][0] - x, self.p[n][1] - s))
+    def xyz(self, n):
+        x, s = self.p[n]
+        return (x, R * math.sin(s / R), R * math.cos(s / R))
+    def block(self, P):
+        q = lambda i, j: self.node(*P[i][j])
+        for i in range(0, len(P) - 2, 2):
+            for j in range(0, len(P[0]) - 2, 2):
+                c = (q(i, j), q(i + 2, j), q(i + 2, j + 2), q(i, j + 2))
+                if self.order == 2:
+                    c += (q(i + 1, j), q(i + 2, j + 1), q(i + 1, j + 2), q(i, j + 1))
+                self.el.append(c)
+    def edges(self):
+        d = {}
+        for e in self.el:
+            for ed in elem_edges(e):
+                k = (min(ed[0], ed[-1]), max(ed[0], ed[-1]))
+                d.setdefault(k, [ed, 0])[1] += 1
+        return d
+
+def tensor(xs, ss):
+    return [[(x, s) for s in ss] for x in xs]
+
+def cols(c0, c1, v):
+    return [[(c0[i][0], c0[i][1] + t * (c1[i][1] - c0[i][1])) for t in v] for i in range(len(c0))]
+
+def edge_rows(ss, xend, g):
+    return [[(xedge(s) + (xend - xedge(s)) * t, s) for s in ss] for t in g]
+
+def build_global():
+    m = Mesh(ORDER_G)
+    s54, s58, s90, s94 = sd(54), sd(58), sd(90), sd(94)
+    phis = math.asin((SC1 - s58) / RC)
+    s45 = SC2 + RC * math.sin(math.pi / 4)
+    xf = cat(lin(0.0, 0.3048, 6), lin(0.3048, XC, 1))
+    bA = cat([(x, S1) for x in xf], arc(SC1, -1, math.pi / 2, phis, 3),
+             [(x, s58) for x in lin(xedge(s58), XM, 8)])
+    m.block(cols([(x, s54) for x, _ in bA], bA, lin(0, 1, 4)))
+    m.block(edge_rows(cat(degs(58, 90), lin(s90, s45, 2)), XM, lin(0, 1, 8)))
+    bC = cat([(x, S2) for x in xf], arc(SC2, +1, math.pi / 2, math.pi / 4, 3),
+             [(x, s45) for x in lin(xedge(s45), XM, 8)])
+    m.block(cols(bC, [(x, s94) for x, _ in bC], lin(0, 1, 2)))
+    m.block(tensor([x for x, _ in bA], degs(0, 54)))
+    m.block(tensor([x for x, _ in bC], degs(94, 180)))
+    m.block(tensor(lin(XM, L_END, 102),
+                   cat(degs(0, 58), degs(58, 90), lin(s90, s45, 2), lin(s45, s94, 2), degs(94, 180))))
+    return m
+
+def sub_box():
+    return XC - 0.3, XC + 0.3, SC1 - 0.3, SC1 + 0.3
+
+def build_sub():
+    m = Mesh(ORDER_S)
+    X0, X1, ST, SB = sub_box()
+    s58, s62, s66 = sd(58), sd(62), sd(66)
+    phis = math.asin((SC1 - s58) / RC)
+    h0, hm = 0.005, 0.0135
+    n = lambda L: max(1, round(L / h0))
+    g = graded(X1 - XH, h0, hm)
+    x58 = xedge(s58)
+    bA = cat([(x, S1) for x in cat(lin(X0, 0.3048, n(0.3048 - X0)), lin(0.3048, XC, n(XC - 0.3048)))],
+             arc(SC1, -1, math.pi / 2, phis, n(RC * (math.pi / 2 - phis))),
+             [(x58 + (X1 - x58) * t, s58) for t in g])
+    v = [1 - t for t in reversed(graded(S1 - ST, h0, hm))]
+    m.block(cols([(x, ST) for x, _ in bA], bA, v))
+    ss = cat(lin(s58, s62, n(s62 - s58)), lin(s62, s66, n(s66 - s62)), lin(s66, SB, n(SB - s66)))
+    m.block(edge_rows(ss, X1, g))
+    return m
+
+def find_beams(m):
+    E = [v[0] for v in m.edges().values()]
+    groups, eid = [], len(m.el)
+    for d in STR_DEG:
+        sk, lst = sd(d), []
+        for ed in E:
+            if all(abs(m.p[q][1] - sk) < TOL for q in ed):
+                lst.append(ed[::-1] if m.p[ed[0]][0] > m.p[ed[-1]][0] else ed)
+        lst.sort(key=lambda t: m.p[t[0]][0])
+        if lst:
+            items = []
+            for t in lst:
+                eid += 1; items.append((eid, t))
+            groups.append(("STR%03d" % d, "stringer", d, items))
+    for k, xk in enumerate(X_FRAMES):
+        lst = []
+        for ed in E:
+            if all(abs(m.p[q][0] - xk) < TOL for q in ed):
+                lst.append(ed[::-1] if m.p[ed[0]][1] < m.p[ed[-1]][1] else ed)
+        lst.sort(key=lambda t: -m.p[t[0]][1])
+        if lst:
+            items = []
+            for t in lst:
+                eid += 1; items.append((eid, t))
+            groups.append(("FRM%02d" % (k + 1), "frame", xk, items))
+    return groups
+
+def free_edge_check(m, onb, label):
+    bad = sum(1 for ed, cnt in m.edges().values() if cnt == 1 and not all(onb(*m.p[q]) for q in ed))
+    if bad:
+        sys.exit("*** %s mesh: %d unexpected free edges (mesh not conforming)" % (label, bad))
+
+# ----------------------------------------------------------------- loads
+G3 = ((-math.sqrt(0.6), 5 / 9), (0.0, 8 / 9), (math.sqrt(0.6), 5 / 9))
+G5 = ((-0.9061798459, 0.2369268851), (-0.5384693101, 0.4786286705), (0.0, 0.5688888889),
+      (0.5384693101, 0.4786286705), (0.9061798459, 0.2369268851))
+
+def nodal_loads(m, end_load):
+    F = {}
+    def add(n, v):
+        a = F.setdefault(n, [0.0, 0.0, 0.0])
+        a[0] += v[0]; a[1] += v[1]; a[2] += v[2]
+    X = [None] + [m.xyz(n) for n in range(1, len(m.p))]
+    nn = 8 if m.order == 2 else 4
+    SH = [(shape(nn, a, b), wa * wb) for a, wa in G3 for b, wb in G3]
+    for e in m.el:
+        P = [X[n] for n in e]
+        for (N, dx, de), w in SH:
+            gx = [sum(dx[i] * P[i][k] for i in range(nn)) for k in range(3)]
+            ge = [sum(de[i] * P[i][k] for i in range(nn)) for k in range(3)]
+            nv = (gx[1] * ge[2] - gx[2] * ge[1], gx[2] * ge[0] - gx[0] * ge[2], gx[0] * ge[1] - gx[1] * ge[0])
+            for i in range(nn):
+                c = P_U * w * N[i]
+                add(e[i], (c * nv[0], c * nv[1], c * nv[2]))
+    def line(nodes, fun):
+        ss = [m.p[q][1] for q in nodes]
+        for xi, w in G5:
+            if len(nodes) == 3:
+                N, dN = (xi * (xi - 1) / 2, 1 - xi * xi, xi * (xi + 1) / 2), (xi - 0.5, -2 * xi, xi + 0.5)
+            else:
+                N, dN = ((1 - xi) / 2, (1 + xi) / 2), (-0.5, 0.5)
+            s = sum(N[i] * ss[i] for i in range(len(nodes)))
+            ds = abs(sum(dN[i] * ss[i] for i in range(len(nodes))))
+            v = fun(s)
+            for i in range(len(nodes)):
+                add(nodes[i], [w * ds * N[i] * c for c in v])
+    q_end = P_U * R / 2
+    door = lambda s: (0.0, P_U * xedge(s) * math.sin(s / R), P_U * xedge(s) * math.cos(s / R))
+    for ed, cnt in m.edges().values():
+        pts = [m.p[q] for q in ed]
+        if end_load and all(abs(x - L_END) < TOL for x, _ in pts):
+            line(ed, lambda s: (q_end, 0.0, 0.0))
+        if all(abs(door_dist(x, s)) < TOL for x, s in pts) and \
+           not all(abs(s - S1) < TOL for _, s in pts) and not all(abs(s - S2) < TOL for _, s in pts):
+            line(ed, door)
+    return F
+
+# ----------------------------------------------------------------- deck writer
+def wset(w, head, ids):
+    if not ids:
+        sys.exit("*** empty set: " + head)
+    w(head + "\n")
+    for k in range(0, len(ids), 16):
+        w(",".join(map(str, ids[k:k + 16])) + "\n")
+
+def sections(w, m, groups, offsets):
+    pad = [i for i, e in enumerate(m.el, 1)
+           if door_dist(sum(m.p[q][0] for q in e[:4]) / 4, sum(m.p[q][1] for q in e[:4]) / 4) < PAD_W]
+    ps = set(pad)
+    wset(w, "*ELSET,ELSET=PAD", pad)
+    wset(w, "*ELSET,ELSET=SKIN", [i for i in range(1, len(m.el) + 1) if i not in ps])
+    if groups:
+        wset(w, "*ELSET,ELSET=BEAMS", [eid for g in groups for eid, _ in g[3]])
+    w("*MATERIAL,NAME=QI\n*ELASTIC\n%.6E,%.4f\n" % (E_QI, NU_QI))
+    if LAYUP == "composite" and m.order == 2:
+        nu12, nu13 = 0.45, 0.32 * 10.1 / 148.0
+        w("*MATERIAL,NAME=T800S3900\n*ELASTIC,TYPE=ENGINEERING CONSTANTS\n")
+        w("10.1E9,10.1E9,148.0E9,%.4f,%.6f,%.6f,%.6E,3.94E9\n3.94E9\n" % (nu12, nu13, nu13, 10.1e9 / (2 * (1 + nu12))))
+        for nm, a in (("OR0", 0), ("ORP45", 45), ("ORM45", -45), ("OR90", 90)):
+            w("*ORIENTATION,NAME=%s,SYSTEM=CYLINDRICAL\n0.,0.,0.,1.,0.,0.\n1,%g.\n" % (nm, a))
+        orn = {0: "OR0", 45: "ORP45", -45: "ORM45", 90: "OR90"}
+        for name, rep in (("SKIN", 3), ("PAD", 6)):
+            half = [45, 0, -45, 90] * rep
+            w("*SHELL SECTION,ELSET=%s,COMPOSITE\n" % name)
+            for a in half + half[::-1]:
+                w("%.6E,,T800S3900,%s\n" % (T_PLY, orn[a]))
+    else:
+        w("*SHELL SECTION,ELSET=SKIN,MATERIAL=QI\n%.6E\n" % T_SKIN)
+        w("*SHELL SECTION,ELSET=PAD,MATERIAL=QI\n%.6E\n" % T_PAD)
+    hs, hf = math.sqrt(12 * I_STR / A_STR), math.sqrt(12 * I_FRM / A_FRM)
+    for name, kind, val, _ in groups:
+        h, A, d = (hs, A_STR, D_STR) if kind == "stringer" else (hf, A_FRM, D_FRM)
+        off = ",OFFSET2=%.6f" % (d / h) if offsets else ""
+        w("*BEAM SECTION,ELSET=%s,MATERIAL=QI,SECTION=RECT%s\n%.6E,%.6E\n" % (name, off, A / h, h))
+        if kind == "stringer":
+            th = math.radians(val)
+            w("0.,%.9f,%.9f\n" % (math.cos(th), -math.sin(th)))
+        else:
+            w("1.,0.,0.\n")
+
+def mesh_text(w, m, groups):
+    w("*NODE\n")
+    for n in range(1, len(m.p)):
+        w("%d,%.9f,%.9f,%.9f\n" % ((n,) + m.xyz(n)))
+    w("*ELEMENT,TYPE=%s,ELSET=SHELL\n" % ("S8R" if m.order == 2 else "S4"))
+    for i, e in enumerate(m.el, 1):
+        w("%d,%s\n" % (i, ",".join(map(str, e))))
+    for name, kind, val, items in groups:
+        w("*ELEMENT,TYPE=%s,ELSET=%s\n" % ("B32R" if m.order == 2 else "B31", name))
+        for eid, ed in items:
+            w("%d,%s\n" % (eid, ",".join(map(str, ed))))
+
+def cloads(w, F):
+    w("*CLOAD\n")
+    for n in sorted(F):
+        for d in range(3):
+            if abs(F[n][d]) > 1e-9:
+                w("%d,%d,%.8E\n" % (n, d + 1, F[n][d]))
+
+def top_comments(w, m, what, stage):
+    w("** Boeing 787 forward fuselage pressurization - problem sheet sections 2-7: %s\n" % what)
+    w("** units N, m, Pa; x aft, z up, y left (door side)\n")
+    w("** element order: %s\n" % ("QUADRATIC (S8R shells, B32R beams)" if m.order == 2
+                                  else "LINEAR (S4 shells, B31 beams)"))
+    w("** stage %d; layup %s; p_U = 97.5 kPa; linear static\n" % (stage, LAYUP if m.order == 2 else "equivalent"))
+    w("** loads: pressure, end closure and door load as consistent nodal forces at the mid-surface\n")
+    w("** supports: x=0 ux=0 (+rot y,z at beam nodes); y=0 uy=0 (+rot x,z at beam nodes); bottom point uz=0\n")
+
+def print_set(m):
+    ids = set()
+    for i, e in enumerate(m.el, 1):
+        if door_dist(sum(m.p[q][0] for q in e[:4]) / 4, sum(m.p[q][1] for q in e[:4]) / 4) < 0.45:
+            ids.add(i)
+    pn = m.find(P_CHK[0], sd(P_CHK[1]))
+    ids |= {i for i, e in enumerate(m.el, 1) if pn in e[:4]}
+    return sorted(ids)
+
+def gen(name, frd, stage):
+    gm = build_global()
+    free_edge_check(gm, lambda x, s: abs(x) < TOL or abs(x - L_END) < TOL or s < TOL or abs(s - S_PI) < 1e-6
+                    or abs(door_dist(x, s)) < TOL, "global")
+    gg = find_beams(gm) if stage >= 2 else []
+    F = nodal_loads(gm, True)
+    tot = [sum(v[d] for v in F.values()) / 1e3 for d in range(3)]
+    bn = {q for g in gg for _, t in g[3] for q in t}
+    nx = [n for n in range(1, len(gm.p)) if abs(gm.p[n][0]) < TOL]
+    ny = [n for n in range(1, len(gm.p)) if gm.p[n][1] < TOL or abs(gm.p[n][1] - S_PI) < 1e-6]
+    nzn = gm.nearest(0.0, S_PI)
+    if math.hypot(gm.p[nzn][0], gm.p[nzn][1] - S_PI) > 1e-6:
+        sys.exit("*** bottom support node not found")
+    fn = name + (".inp" if stage == 3 else "_s%d.inp" % stage)
+    with open(fn, "w") as f:
+        w = f.write
+        top_comments(w, gm, "global model", stage)
+        w("*HEADING\nB787 forward fuselage barrel with door 2 cutout - global model\n")
+        mesh_text(w, gm, gg)
+        sections(w, gm, gg, stage >= 3)
+        wset(w, "*NSET,NSET=NSKIN", list(range(1, len(gm.p))))
+        wset(w, "*NSET,NSET=NSYMX", nx)
+        wset(w, "*NSET,NSET=NSYMY", ny)
+        wset(w, "*NSET,NSET=NZ", [nzn])
+        if gg:
+            wset(w, "*NSET,NSET=NSYMXR", sorted(bn.intersection(nx)))
+            wset(w, "*NSET,NSET=NSYMYR", sorted(bn.intersection(ny)))
+        wset(w, "*NSET,NSET=NRF", sorted(set(nx + ny + [nzn])))
+        wset(w, "*ELSET,ELSET=EPRT", print_set(gm))
+        w("*STEP\n*STATIC\n*BOUNDARY\nNSYMX,1,1\nNSYMY,2,2\nNZ,3,3\n")
+        if gg:
+            w("NSYMXR,5,6\nNSYMYR,4,4\nNSYMYR,6,6\n")
+        cloads(w, F)
+        w("*NODE FILE%s\nU\n*EL FILE%s\nS,E\n" % ((",OUTPUT=3D",) * 2 if stage >= 3 else ("", "")))
+        w("*NODE PRINT,NSET=NRF,TOTALS=YES\nRF\n*NODE PRINT,NSET=NSKIN\nU\n*EL PRINT,ELSET=EPRT\nS,E\n")
+        if gg:
+            w("*EL PRINT,ELSET=BEAMS\nS\n")
+        w("*END STEP\n")
+    print("%s: %d nodes, %d shells, %d beams (order %d)" %
+          (fn, len(gm.p) - 1, len(gm.el), sum(len(g[3]) for g in gg), ORDER_G))
+    print("applied totals [kN]: Fx=%.2f (1273.0)  Fy=%.2f (3427.1)  Fz=%.3f (0)" % tuple(tot))
+    if stage < 3:
+        return
+
+    sm = build_sub()
+    X0, X1, ST, SB = sub_box()
+    onb = lambda x, s: abs(x - X0) < TOL or abs(x - X1) < TOL or abs(s - ST) < TOL or abs(s - SB) < TOL
+    free_edge_check(sm, lambda x, s: onb(x, s) or abs(door_dist(x, s)) < TOL, "submodel")
+    sg = find_beams(sm)
+    Fs = nodal_loads(sm, False)
+    with open(name + "_sub.inp", "w") as f:
+        w = f.write
+        top_comments(w, sm, "door-corner submodel; reads the global results " + frd, 3)
+        w("*HEADING\nB787 door 2 upper aft corner submodel\n")
+        mesh_text(w, sm, sg)
+        sections(w, sm, sg, True)
+        wset(w, "*NSET,NSET=NSKIN", list(range(1, len(sm.p))))
+        wset(w, "*NSET,NSET=NSUB", [n for n in range(1, len(sm.p)) if onb(*sm.p[n])])
+        w("*SUBMODEL,TYPE=NODE,INPUT=%s\nNSUB\n" % frd)
+        w("*STEP\n*STATIC\n*BOUNDARY,SUBMODEL,STEP=1\nNSUB,1,3\n")
+        cloads(w, Fs)
+        w("*NODE FILE\nU\n*EL FILE\nS,E\n*NODE PRINT,NSET=NSKIN\nU\n*EL PRINT,ELSET=SHELL\nS,E\n*END STEP\n")
+    print("%s_sub.inp: %d nodes, %d shells, %d beams (order %d); global results from %s" %
+          (name, len(sm.p) - 1, len(sm.el), sum(len(g[3]) for g in sg), ORDER_S, frd))
+
+# ----------------------------------------------------------------- checker
+def parse_dat(fn):
+    blocks, cur = {}, None
+    for line in open(fn):
+        t = line.split()
+        if not t:
+            continue
+        low = line.strip().lower()
+        if low.startswith(("displacements", "stresses", "strains", "forces", "total force")):
+            kind = "total" if low.startswith("total") else t[0].lower()
+            st = t[t.index("set") + 1].upper() if "set" in t else ""
+            cur = (kind, st); blocks.setdefault(cur, []); continue
+        if cur is None:
+            continue
+        try:
+            blocks[cur].append([float(v) for v in t])
+        except ValueError:
+            cur = None
+    return blocks
+
+def blk(d, kind, st):
+    return d.get((kind, st.upper()), [])
+
+def by_elem(rows):
+    d = {}
+    for r in rows:
+        d.setdefault(int(r[0]), []).append((int(r[1]), r[2:8]))
+    return {e: [c for _, c in sorted(v)] for e, v in d.items()}
+
+def mean(cs):
+    return [sum(c[i] for c in cs) / len(cs) for i in range(6)]
+
+def hoop(t, th):
+    c, s = math.cos(th), math.sin(th)
+    return c * c * t[1] + s * s * t[2] - 2 * c * s * t[5]
+
+def princ(t, th):
+    a, b = t[0], hoop(t, th)
+    g = math.cos(th) * t[3] - math.sin(th) * t[4]
+    return 0.5 * (a + b) + math.hypot(0.5 * (a - b), g)
+
+def ip_pairs(m, e, comps):
+    out = []
+    for k, (a, b) in enumerate(((-G, -G), (G, -G), (-G, G), (G, G))):
+        N = shape(len(e), a, b)[0]
+        x = sum(N[i] * m.p[e[i]][0] for i in range(len(e)))
+        s = sum(N[i] * m.p[e[i]][1] for i in range(len(e)))
+        out.append((x, s, [(comps[k][i] + comps[k + 4][i]) / 2 for i in range(6)]))
+    return out
+
+def nearest_hoop(m, E, pt):
+    best = None
+    for eid, cs in E.items():
+        if len(cs) < 8 or eid > len(m.el):
+            continue
+        for x, s, c in ip_pairs(m, m.el[eid - 1], cs):
+            d = math.hypot(x - pt[0], s - pt[1])
+            if best is None or d < best[0]:
+                best = (d, hoop(c, s / R))
+    return best[1]
+
+def check(gdat, sdat):
+    gm, sm = build_global(), build_sub()
+    gg = find_beams(gm)
+    gd, sdd = parse_dat(gdat), parse_dat(sdat)
+    print("=== Global model ===")
+    best = None
+    for r in blk(gd, "displacements", "NSKIN"):
+        x, s = gm.p[int(r[0])]; th = s / R
+        ur = r[2] * math.sin(th) + r[3] * math.cos(th)
+        if best is None or ur > best[0]:
+            best = (ur, x, math.degrees(th))
+    print("1. max radial displacement %.3f mm at x=%.4f m, th=%.2f deg" % (best[0] * 1e3, best[1], best[2]))
+    S, E = by_elem(blk(gd, "stresses", "EPRT")), by_elem(blk(gd, "strains", "EPRT"))
+    pn = gm.find(P_CHK[0], sd(P_CHK[1])); thP = math.radians(P_CHK[1])
+    pel = [i for i, e in enumerate(gm.el, 1) if pn in e[:4]]
+    sP = mean([mean(S[i]) for i in pel]); eP = mean([mean(E[i]) for i in pel])
+    hP, aP, epsP = hoop(sP, thP) / 1e6, sP[0] / 1e6, hoop(eP, thP)
+    pr_t = P_U * R / T_SKIN / 1e6
+    lo = P_U * R / (T_SKIN + A_FRM / 0.6096) / 1e6
+    c2 = (P_U * R / 2) / (T_SKIN + A_STR / (2 * math.pi * R / 90)) / 1e6
+    print("2. at P: hoop %.2f MPa, axial %.2f MPa (full field in the .frd)" % (hP, aP))
+    print("3. beam forces (max per beam):")
+    SBm = by_elem(blk(gd, "stresses", "BEAMS"))
+    for name, kind, val, items in gg:
+        fm = None
+        for eid, ed in items:
+            if eid not in SBm:
+                continue
+            st = mean(SBm[eid])
+            x = 0.5 * (gm.p[ed[0]][0] + gm.p[ed[-1]][0]); s = 0.5 * (gm.p[ed[0]][1] + gm.p[ed[-1]][1])
+            F = (st[0] * A_STR) if kind == "stringer" else hoop(st, s / R) * A_FRM
+            if fm is None or F > fm[0]:
+                fm = (F, x, math.degrees(s / R))
+        if fm:
+            print("   %s %-8s max %s %9.2f kN at x=%.3f, th=%.2f" %
+                  (name, kind, "axial" if kind == "stringer" else "hoop ", fm[0] / 1e3, fm[1], fm[2]))
+    t = blk(gd, "total", "NRF")
+    rx, ry, rz = [v / 1e3 for v in t[0][-3:]] if t else (float("nan"),) * 3
+    print("4. reactions [kN]: x=%.2f y=%.2f z=%.3f" % (rx, ry, rz))
+    fx, fy = P_U * math.pi * R * R / 2 / 1e3, -P_U * 2 * R * L_END / 1e3
+    print("C1 hoop %.2f MPa in [%.1f, %.1f]: %s; ratio to pR/t = %.3f" %
+          (hP, lo, pr_t, "PASS" if lo <= hP <= pr_t else "FAIL", hP / pr_t))
+    print("C2 axial %.2f MPa vs %.2f: %s; ratio to pR/2t = %.3f" %
+          (aP, c2, "PASS" if abs(aP / c2 - 1) < 0.05 else "FAIL", aP / (pr_t / 2)))
+    print("C3 sum Rx %.2f vs %.2f: %s" % (rx, -fx, "PASS" if abs(rx / -fx - 1) < 1e-3 else "FAIL"))
+    print("C4 sum Rz %.3f (limit %.3f): %s" % (rz, 1e-3 * fx, "PASS" if abs(rz) < 1e-3 * fx else "FAIL"))
+    print("C5 sum Ry %.2f vs %.2f: %s" % (ry, fy, "PASS" if abs(ry / fy - 1) < 1e-3 else "FAIL"))
+    print("=== Submodel ===")
+    Es = by_elem(blk(sdd, "strains", "SHELL"))
+    emax = None
+    for i, e in enumerate(sm.el, 1):
+        if i not in Es or sum(abs(door_dist(*sm.p[q])) < TOL for q in e) < 2:
+            continue
+        for x, s, c in ip_pairs(sm, e, Es[i]):
+            v = princ(c, s / R)
+            if emax is None or v > emax[0]:
+                emax = (v, x, s)
+    print("5. max principal membrane strain on cutout edge %.0f ue at x=%.4f, s=%.4f (th=%.2f deg)"
+          % (emax[0] * 1e6, emax[1], emax[2], math.degrees(emax[2] / R)))
+    print("6. K = %.3f (global hoop strain at P = %.0f ue)" % (emax[0] / epsP, epsP * 1e6))
+    print("7. MS = 4000/%.0f - 1 = %.3f" % (emax[0] * 1e6, EPS_ALLOW / emax[0] - 1))
+    X0, X1, ST, SB = sub_box()
+    for lab, pt in (("aft edge mid", (X1, SC1)), ("top edge mid", (XC, ST))):
+        a, b = nearest_hoop(gm, E, pt), nearest_hoop(sm, Es, pt)
+        print("C6 %s: global %.0f ue, submodel %.0f ue, diff %.2f%%: %s" %
+              (lab, a * 1e6, b * 1e6, 100 * (b / a - 1), "PASS" if abs(b / a - 1) < 0.05 else "FAIL"))
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    cmd = a[0] if a else "gen"
+    name = a[1] if len(a) > 1 and not a[1].startswith("--") else "deck"
+    opt = lambda k, d: a[a.index(k) + 1] if k in a else d
+    if cmd == "check":
+        check(opt("--gdat", name + ".dat"), opt("--sdat", name + "_sub.dat"))
+    else:
+        gen(name, opt("--frd", name + ".frd"), int(opt("--stage", "3")))

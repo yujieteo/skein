@@ -1,0 +1,4 @@
+diagnostics[0]{class,id,file,line,col,msg,fix}:
+summary: errors=0 lints=0
+free_boundary[1]{physics,field,region,condition}:
+  solid,u,"boundary(bay) - root_strip - root_lo - root_hi - aft - side_lo - side_hi","sigma*n = 0"

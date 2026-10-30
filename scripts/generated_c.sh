@@ -20,7 +20,14 @@ set -eu
 
 # The models that skein run can run. Add a model here when skein run can run it.
 models="
+examples/closed_cylinder.skn
+examples/elements/conduction_slab_tet.skn
+examples/elements/heated_bar_tet.skn
+examples/elements/heated_bar_template_tet.skn
+examples/elements/kirsch_plate_tri.skn
+examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
+examples/femahoy/grid_kirsch_hole.skn
 "
 
 # The Goose that wrote the committed C.
@@ -45,7 +52,8 @@ trap 'rm -rf "$work"' EXIT
 
 status=0
 for model in $models; do
-    name=$(basename "$model" .skn)
+    # skein run names the build directory after the `model <name>:` line.
+    name=$(sed -n 's/^model \([A-Za-z0-9_]*\):.*/\1/p' "$root/$model" | head -n 1)
     committed="$root/${model%.skn}.c"
     if ! (cd "$work" && "$root/build/skein" run "$root/$model" >/dev/null 2>"$work/run.err"); then
         cat "$work/run.err"

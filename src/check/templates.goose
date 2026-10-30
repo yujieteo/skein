@@ -2,9 +2,10 @@
 // source. The checker parses this text after the model, and a physics that
 // uses a template takes its statements from it.
 //
-// Only `linear_elastic` has its source in the spec. `navier_stokes` is the
-// source of this checker: the incompressible Newtonian equations of
-// sample 02. The other templates of spec §4.2 come with their solvers.
+// Only `linear_elastic` has its source in the spec. `heat` is the steady
+// conduction that src/elements solves. `navier_stokes` is the source of
+// this checker: the incompressible Newtonian equations of sample 02. The
+// other templates of spec §4.2 come with their solvers.
 import std;
 namespace check;
 
@@ -17,6 +18,12 @@ let STD_SOURCE = """
         assume small_strain, isotropic
         let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
         eq div(sigma) + b = 0
+    }
+
+    template physics heat(q_v: Power/Volume = 0) solves T: Temperature {
+        assume isotropic
+        let q: Vector<HeatFlux> = fourier(k, T)
+        eq div(q) = q_v
     }
 
     template physics navier_stokes(f: Vector<Force/Volume> = 0) solves v: Vector<Velocity>, p: Pressure {
