@@ -1,0 +1,10 @@
+diagnostics[8]{class,id,file,line,col,msg,fix}:
+  error,unit_fractional,round-1.skn,203,60,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,204,46,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,205,75,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,206,74,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,206,104,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,243,39,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,248,52,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+  error,unit_fractional,round-1.skn,249,52,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+summary: errors=8 lints=0

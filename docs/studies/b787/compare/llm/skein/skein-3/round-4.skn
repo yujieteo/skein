@@ -1,0 +1,97 @@
+model b787_skin_bay: 3d, SI
+// This is a reduced model. The run slice meshes one box only, supports only
+// "u = 0" and traction bcs, and reports or checks only reactions and u at a
+// point.
+// What is modelled: a flat, unrolled panel of plain skin at the check point P
+// (x = 4.8768 m, theta = 140 deg), two frame pitches long and one stringer
+// pitch wide, under the far-field membrane loads of the pressurized barrel at
+// p_U.
+//   panel x = fuselage axis
+//   panel y = arc length s (hoop)
+//   panel z = thickness, inner face at z = 0
+// The radial pressure is not applied. In the barrel the curvature balances it.
+// The panel is skin only (no stringers or frames).
+// Constraint: one strip of the x = 0 face, one element wide either side of
+// y = Wb/2, through the full thickness, is fixed (u = 0). The rest of that
+// face carries the axial traction. By symmetry about y = Wb/2, u.y = 0 on
+// that line. In the uniform field u.x = 0 on all of x = 0.
+// Elements: hexahedra, continuous Galerkin, order 2. The mesh has 20
+// divisions across Wb, so the strip edges are element edges.
+//
+// Hand values (E = 55.85 GPa, nu = 0.326):
+//   sigma_hoop = p_U R / t = 61.32 MPa, sigma_ax = p_U R / (2 t) = 30.66 MPa
+//   eps_hoop = (sigma_hoop - nu sigma_ax)/E = 9.190e-4
+//   eps_ax   = (sigma_ax - nu sigma_hoop)/E = 1.910e-4
+//   u.y(L/2, Wb, t/2)   = +eps_hoop Wb/2 = +0.09250 mm
+//   u.y(L/2, 0, t/2)    = -0.09250 mm
+//   u.x(L, Wb/2, t/2)   = eps_ax L     = 0.2329 mm
+//   u.x(L/2, Wb/2, t/2) = eps_ax L/2   = 0.1165 mm
+//   reaction(root_strip) = (-N_ax Wb/10, 0, 0) = (-2.829 kN, 0, 0)
+// Stresses back from the strains: E/(1-nu^2) = 62.49 GPa,
+//   sigma_hoop = 62.49 GPa * (eps_hoop + nu eps_ax)   (check C1, skin only)
+//   sigma_ax   = 62.49 GPa * (eps_ax + nu eps_hoop)   (check C2, skin only)
+// with eps_hoop = [u.y(L/2,Wb) - u.y(L/2,0)]/Wb and
+//      eps_ax   = [u.x(L,Wb/2) - u.x(L/2,Wb/2)]/(L/2).
+
+let R: Length = 2.883 m                  // skin mid-surface radius
+let t_skin: Length = 4.584 mm            // [45/0/-45/90]3s
+let L: Length = 1.2192 m                 // two frame pitches
+let Wb: Length = 0.2013 m                // stringer pitch (2 pi R / 90)
+let E_qi: Pressure = 55.85 GPa           // QI laminate in-plane modulus (sec. 3.3)
+let nu_qi: Real = 0.326
+
+param p_L: Pressure = 65.0 kPa in 10 kPa..100 kPa
+let p_U: Pressure = 1.5*p_L              // ultimate, 25.303
+let N_hoop: Force/Length = p_U*R         // 281.1 kN/m
+let N_ax: Force/Length = p_U*R/2         // 140.5 kN/m
+
+scales R, p_U
+
+let bay: Solid = box((0, 0, 0) m, (L, Wb, t_skin))
+let root_strip: Surface = boundary(bay, x == 0 m && y > Wb/2 - 10.1 mm && y < Wb/2 + 10.1 mm)
+let root_lo: Surface = boundary(bay, x == 0 m && y < Wb/2 - 10.0 mm)
+let root_hi: Surface = boundary(bay, x == 0 m && y > Wb/2 + 10.0 mm)
+let aft: Surface = boundary(bay, x == L)
+let side_lo: Surface = boundary(bay, y == 0 m)
+let side_hi: Surface = boundary(bay, y == Wb)
+
+material cfrp_qi {
+    E: Pressure = E_qi
+    nu: Real = nu_qi
+}
+
+mesh msh on bay {
+    size: 10.07 mm
+    cell: hex
+}
+
+physics solid on bay: linear_elastic solves u: Vector<Length> {
+    material cfrp_qi
+}
+
+method solid: cg { mesh: msh, order: 2 }
+
+bc root_strip: u = 0
+
+step pressurize: static {
+    bc root_lo: sigma*n = (-N_ax/t_skin, 0, 0)
+    bc root_hi: sigma*n = (-N_ax/t_skin, 0, 0)
+    bc aft: sigma*n = (N_ax/t_skin, 0, 0)
+    bc side_lo: sigma*n = (0, -N_hoop/t_skin, 0)
+    bc side_hi: sigma*n = (0, N_hoop/t_skin, 0)
+    output u, sigma, von_mises(sigma)
+
+    report reaction(root_strip)
+    report uy_side_hi = u.y at (L/2, Wb, t_skin/2)
+    report uy_side_lo = u.y at (L/2, 0 m, t_skin/2)
+    report ux_aft = u.x at (L, Wb/2, t_skin/2)
+    report ux_mid = u.x at (L/2, Wb/2, t_skin/2)
+    report uz_P_outer = u.z at (L/2, Wb/2, t_skin)
+}
+
+// C1 (skin-only hoop membrane) through the hoop strain
+expect c1_hoop_strain: u.y at (L/2, Wb, t_skin/2) == 0.09250 mm within 2%
+expect c1_hoop_strain_lo: u.y at (L/2, 0 m, t_skin/2) == -0.09250 mm within 2%
+// C2 (skin-only axial membrane) through the axial strain
+expect c2_axial_strain: u.x at (L, Wb/2, t_skin/2) == 0.2329 mm within 2%
+expect c2_axial_strain_mid: u.x at (L/2, Wb/2, t_skin/2) == 0.1165 mm within 2%
