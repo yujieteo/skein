@@ -52,10 +52,14 @@ def ask_model(model, cwd, session, first, prompt):
            "--disable-slash-commands", "--system-prompt", SYSTEM]
     cmd += ["--session-id", session] if first else ["--resume", session]
     out = subprocess.run(cmd + [prompt], cwd=cwd, capture_output=True,
-                         text=True, check=True)
-    reply = json.loads(out.stdout)
-    if reply.get("is_error"):
-        sys.exit(f"workflow: the model call failed: {reply.get('result')}")
+                         text=True)
+    try:
+        reply = json.loads(out.stdout)
+    except ValueError:
+        reply = {}
+    if out.returncode or reply.get("is_error") or "result" not in reply:
+        sys.exit(f"workflow: the model call failed (exit {out.returncode}): "
+                 f"{reply.get('result') or out.stderr or out.stdout}")
     return reply["result"], reply
 
 
@@ -99,9 +103,10 @@ def inp_value(text):
         return "", ""
     value, force, block, done = 0.0, [0.0, 0.0, 0.0], "", False
     for line in Path(m.group(1)).read_text().splitlines():
-        if "displacements" in line or "force" in line:
+        if " for set " in line and "time" in line:
             done = done or block == "f"
-            block = "u" if "displacements" in line else "f"
+            block = ("u" if "displacements" in line
+                     else "f" if "force" in line else "")
             continue
         nums = line.split()
         try:
@@ -194,7 +199,7 @@ def main():
     for n in range(1, args.runs + 1):
         records.append(one_run(args.path, n, args, card))
         print(toon(records[-1:]).splitlines()[-1], flush=True)
-    (args.out / f"results-{args.path}.toon").write_text(toon(records))
+        (args.out / f"results-{args.path}.toon").write_text(toon(records))
     print(toon(records), end="")
 
 
