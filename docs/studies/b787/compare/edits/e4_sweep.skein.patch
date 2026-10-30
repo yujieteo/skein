@@ -4,7 +4,7 @@ index 3262150..46efd44 100644
 +++ b/e4_sweep/skein/door_corner.skn
 @@ -1,4 +1,4 @@
 -// blocked-by: G3 G31 G32 G33
-+// blocked-by: G3 G31 G32 G33 G10 N4
++// blocked-by: G3 G31 G32 G33 G10 G34
  // Boeing 787 forward fuselage under cabin pressure: the door-corner
  // submodel of the problem sheet (../problem.md, 6.4). A 0.600 m square
  // panel of the x-s plane, centred on the centre of the upper aft corner
@@ -12,7 +12,7 @@ index 3262150..46efd44 100644
  
  model b787_door_corner: 3d, SI
  
-+// gap N4: results() takes no study case. Each case needs the global case
++// gap G34: results() takes no study case. Each case needs the global case
 +// with the same p_U.
  let global: Results = results("fuselage.skn", step: "pressurize")
  

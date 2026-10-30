@@ -1,5 +1,5 @@
 fh run: preview: the page shows round-5.inp (preview 27) with its supports and loads
-fh run: run-000033 solves /home/yj/src/fm-desktop/data/b787-compare/llm/inp/inp-2/round-5.inp
+fh run: run-000033 solves docs/studies/b787/compare/llm/inp/inp-2/round-5.inp
 fh run: run-000033 succeeded in 1.03 s
-fh run: results in /home/yj/.local/state/femahoy/runs/run-000033/out
-fh run: text results /home/yj/.local/state/femahoy/runs/run-000033/out/ccx/job.dat (print requests), /home/yj/.local/state/femahoy/runs/run-000033/out/ccx/job.sta (steps)
+fh run: results in <run-dir>/run-000033/out
+fh run: text results <run-dir>/run-000033/out/ccx/job.dat (print requests), <run-dir>/run-000033/out/ccx/job.sta (steps)

@@ -15,8 +15,9 @@ in Skein ([`skein/`](skein/)) and once as an Abaqus deck with a mesh script
   formats: 25 Skein lines, and 72 lines of `mesh.py`.
 - **Check.** `skein check` stops each Skein file with 15 errors. Each error
   comes from one of the gaps G3, G31, G32 and G33 that line 1 of the file
-  names. No edit added a new error id. The edits found 2 new gaps, N4 and
-  N5.
+  names. No edit added a new error id. The edits found 2 new gaps, G34 and
+  G35. The [coverage record](../../femahoy_coverage.md#gaps-of-the-787-study)
+  holds them. It also renamed N1 to N3 of `skein/notes.md` (N1 became G31).
 - **LLM runs.** All 3 Skein runs gave a result, and 1 of 3 Abaqus-path runs
   gave a result. But no run modelled the barrel and also gave a correct
   result. Each Skein run first wrote a barrel of 3D solids that passed
@@ -196,7 +197,7 @@ Gap ids and findings for each edit:
   13 of the 24 ply lines change, and 3 check values in comments change
   (C2 becomes 42.0 MPa).
 - **E3.** Skein: 2 more errors, both G33 (`N` is not declared, `N*n` is not
-  a flux). New gap **N5**: a `pattern` gives no value for each copy, so the
+  a flux). New gap **G35**: a `pattern` gives no value for each copy, so the
   load cannot name the centre of each window. The edit computes x − x_w
   with `atan2(sin(a), cos(a))`, which is correct but hard to read. The
   submodel does not change, because no window is in its region. Abaqus: the
@@ -208,7 +209,7 @@ Gap ids and findings for each edit:
   before, so the window load is correct. The smallest shell corner angle
   falls from 15.8° to 11.4°, and no shell is inverted.
 - **E4.** Skein: `param` and a 4-line `study` in each file. 2 gaps: **G10**
-  (each `expect` runs once, with the default value) and new gap **N4**
+  (each `expect` runs once, with the default value) and new gap **G34**
   (`results()` takes no study case, so the submodel cannot take the global
   case with the same pressure). Abaqus: 2 more steps in each deck, and
   `mesh.py` writes 1 load file for each step. The `.gitignore` pattern

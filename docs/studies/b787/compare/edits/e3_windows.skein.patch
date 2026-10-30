@@ -50,7 +50,7 @@ index d291778..f0f075e 100644
  let door_aft: Curve = boundary(skin, door_box(0 m)) & aft_of_x_c
 +// The window edges. The pane load goes to them by the rule of the door,
 +// with x - x_w in place of x. x_w is the centre of the nearest window.
-+// gap N5: a pattern gives no value for each copy, so x - x_w comes from atan2.
++// gap G35: a pattern gives no value for each copy, so x - x_w comes from atan2.
 +let window_edge: Curve = boundary(skin, windows)
 +let dx_w: Length = f_pitch*atan2(sin(2*pi*x/f_pitch), cos(2*pi*x/f_pitch))/(2*pi)
  let bottom: Point = point((0 m, 0 m, -R))
