@@ -77,6 +77,7 @@ The list of these models is in `scripts/generated_c.sh`.
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
+| `src/shells/` | the shell, beam and laminate solver (roadmap lane 5), not yet called by `skein run`: the MITC4 shell (`mitc4.goose`), the Timoshenko beam with offsets (`beam.goose`), laminate sections (`laminate.goose`), a cylinder mesher (`mesh.goose`) and a skyline LDLᵀ solve (`solve.goose`) |
 
 ## Why Skein
 
