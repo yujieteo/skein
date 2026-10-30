@@ -59,6 +59,7 @@ Goose source tree at the same commit as the compiler.
 | `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
 | `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron box mesher (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
+| `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 
 ## Why Skein
 
