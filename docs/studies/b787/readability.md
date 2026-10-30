@@ -45,13 +45,13 @@ these commits and commands.
 
 | Item | Source |
 |---|---|
-| Skein model | `skein/barrel.skn`, `skein/fuselage.skn`, `skein/door_corner.skn`: the `use` commit on `baa29da` (PR 12, gap marks of PR 15, C2 fix of PR 24, shells of PR 25, `use` library) |
+| Skein model | `skein/barrel.skn`, `skein/fuselage.skn`, `skein/door_corner.skn`: `4747a9b`, the `use` commit (PR 12, gap marks of PR 15, C2 fix of PR 24, shells of PR 25, `use` library) |
 | Abaqus deck and mesh script | `abaqus/*.inp`, `abaqus/mesh.py` at `2de58a4` (PR 13, C2 fix of PR 24) |
-| `skein` | `./build.sh` at the `use` commit on `baa29da` |
+| `skein` | `./build.sh` at `4747a9b` (the `use` commit) |
 | Generated mesh | `python3 abaqus/mesh.py`. The SHA-256 values agree with [`abaqus/notes.md`](abaqus/notes.md). |
 | Size | [`compare/size.py`](compare/size.py), tiktoken 0.14.0, `o200k_base` |
 | Edits | [`compare/edits/`](compare/edits/), `git diff --no-index --numstat` against the files at `2de58a4` |
-| LLM runs | [`compare/llm_run.py`](compare/llm_run.py) on `scripts/llm/workflow.py`. Skein: workflow, `skein` and sheet at the `use` commit on `baa29da`. Abaqus: workflow at `fe4fe23` (PR 14), sheet at `5d032bf` |
+| LLM runs | [`compare/llm_run.py`](compare/llm_run.py) on `scripts/llm/workflow.py`. Skein: workflow, `skein` and sheet at `4747a9b` (the `use` commit). Abaqus: workflow at `fe4fe23` (PR 14), sheet at `5d032bf` |
 
 ## 1. `skein check` on the Skein model
 
