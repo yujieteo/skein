@@ -26,7 +26,8 @@ Ultimate cabin pressure p_U = 1.5 x 65.0 kPa, linear static
 *STATIC
 *DSLOAD
 CABIN_FACE, P, 97500.
-** End closure load at x = 6.096 and door load on the aft cutout edge.
+** End closure load at x = 6.096. Door load p_U * x_e(s) per unit s on the
+** straight aft edge and the two aft corner arcs.
 *INCLUDE, INPUT=global_loads.inp
 **
 ** The submodel reads U and UR from the output database.
@@ -53,9 +54,10 @@ U
 ** C5: total RF2 = -3427.1 kN within 0.1 %.
 *NODE PRINT, NSET=NALL, TOTALS=ONLY
 RF
-** C6: hoop membrane strain SE2 at the mid-points of the submodel edges.
+** C6: hoop membrane strain SE2 at the mid-points of the submodel edges that
+** have skin: the top edge (s = 2.7373) and the aft edge (x = 0.6554).
 ** Compare with the same sets in door_corner.dat.
-*EL PRINT, ELSET=C6_LOWER, POSITION=CENTROIDAL
+*EL PRINT, ELSET=C6_TOP, POSITION=CENTROIDAL
 SE
 *EL PRINT, ELSET=C6_AFT, POSITION=CENTROIDAL
 SE
