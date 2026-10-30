@@ -8,6 +8,7 @@ import fmt.fmt;
 import cli.card;
 import codegen.run;
 import check.check;
+import mesher.verify;   // mesher lane: skein verify
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -17,6 +18,7 @@ let USAGE = """
       fmt     rewrite files in the standard layout
       help    print this text
       run     build and run a model (only a linear static box for now)
+      verify  check a model, mesh it and report mesh_quality
     """;
 
 fn main() {
@@ -45,6 +47,7 @@ fn main() {
         exit(codegen::run(rest));
     }
     if command == "check" { exit(check::command(args)); }
+    if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
     write_stderr(str("skein: unknown command '", command, "'\n", USAGE, "\n"));
     exit(2);
 }
