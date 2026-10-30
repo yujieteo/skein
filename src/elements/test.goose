@@ -283,6 +283,7 @@ let MODELS = [
     "examples/femahoy/grid_kirsch_hole.skn",
     "examples/elements/kirsch_plate_tri.skn",
     "examples/elements/heated_bar_tet.skn",
+    "examples/elements/heated_bar_template_tet.skn",
 ];
 
 fn test_runs() {

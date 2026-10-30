@@ -570,6 +570,7 @@ fn physics_item(n: i64) {
     physics_tok = tok(n);
     set64(physics_name, name(n));
     var eq_count = 0;
+    var uses_template = false;
     var c = first(n);
     while c >= 0 {
         let k = kind(c);
@@ -578,9 +579,11 @@ fn physics_item(n: i64) {
         } else if k == syntax::N_USES {
             if name(c) == "linear_elastic" && first(c) < 0 {
                 physics = ELASTIC;
+                uses_template = true;
                 set64(flux_name, "sigma");
             } else if name(c) == "heat" && syntax::child_count(c) <= 1 {
                 physics = HEAT;
+                uses_template = true;
                 set64(flux_name, "q");
                 if first(c) >= 0 { source_node = first(first(c)); }
             } else {
@@ -621,6 +624,9 @@ fn physics_item(n: i64) {
         c = next(c);
     }
     if physics < 0 { unsupported(tok(n), "the physics is neither linear elastic nor heat", PHYSICS_FIX); }
+    if physics >= 0 && !uses_template && eq_count != 1 {
+        unsupported(tok(n), "a written-out physics needs one eq", "add eq div(sigma) = 0 or eq div(q) = q_v");
+    }
     if dim == 2 && physics == ELASTIC && plane == SOLID_3D {
         unsupported(tok(n), "a 2d elastic physics needs plane_stress(t) or plane_strain", "add assume plane_stress(1 mm)");
     }
@@ -647,7 +653,12 @@ fn assumptions(n: i64) {
 
 // The source of the heat equation: a value, or the material property q_v.
 fn heat_source() {
-    guard physics == HEAT && source_node >= 0 else { return; }
+    guard physics == HEAT else { return; }
+    if source_node < 0 {
+        let p = property("q_v");
+        if p >= 0 { source = scalar_value(p); }
+        return;
+    }
     if kind(source_node) == syntax::N_NAME && codegen::find_value(name(source_node)) < 0 {
         let p = property(name(source_node));
         if p < 0 {
