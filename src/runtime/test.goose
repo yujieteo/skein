@@ -92,9 +92,57 @@ fn test_second_step() {
     expect_near("second step tip uz", uz, 2.0 * FEMAHOY_TIP, 0.02);
 }
 
+// The linear problem through the Newton interface: R(u) = K u - f, with
+// the Jacobian K. One Newton iteration solves it.
+fn linear_residual(u: f64[:], r: f64[:]) {
+    runtime::multiply(u, r);
+    for d in r.len { r[d] -= runtime::load[d]; }
+}
+
+fn linear_jacobian(u: f64[:]) { assert(runtime::assemble()); }
+
+fn test_newton() {
+    runtime::clear_loads();
+    assert(runtime::traction_face(runtime::X, L, 0.0, 0.0, -P / (B * H)));
+    assert(runtime::assemble());
+    let converged, it = runtime::newton(runtime::disp, 1.0e-8, 5, linear_residual, linear_jacobian);
+    let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
+    print("newton: ", it, " iterations, tip uz ", uz, " mm");
+    if !converged || it != 1 {
+        failures++;
+        print("FAIL newton: converged ", converged, " in ", it, " iterations, want 1");
+    }
+    expect_near("newton tip uz against the linear solve", uz, -0.1905018167560175, 1.0e-6);
+}
+
+// The face sets of the box, and a cell type with no registry entry.
+fn test_registry() {
+    runtime::mesh_box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 2, 1, 1);
+    let s = runtime::find_set("x1", true);
+    if s < 0 || runtime::set_members(s).len != 1 || runtime::set_members(s)[0] != 6 * 1 + 1 {
+        failures++;
+        print("FAIL face set x1: want cell 1, local face 1");
+    }
+    let n = runtime::find_set("z0", false);
+    if n < 0 || runtime::set_members(n).len != 5 * 3 {
+        failures++;
+        print("FAIL node set z0: want 15 nodes");
+    }
+    var nodes: i64[4] = [0, 1, 5, 25];
+    runtime::add_cell(runtime::TET4, nodes);
+    runtime::material(E, NU);
+    assert(runtime::fix_face(runtime::X, 0.0));
+    if runtime::solve_static() {
+        failures++;
+        print("FAIL registry: a tet4 cell with no element routine solves");
+    }
+}
+
 fn main() {
     test_cantilever();
     test_second_step();
+    test_newton();
+    test_registry();
     if failures > 0 { exit(1); }
     print("runtime: all tests pass");
 }

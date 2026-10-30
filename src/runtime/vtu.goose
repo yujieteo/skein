@@ -4,7 +4,9 @@
 import std;
 import os;
 namespace runtime;
+import .fem;
 import .mesh;
+import .solve;
 
 let VTK_HEXAHEDRON = 12;
 

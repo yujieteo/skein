@@ -14,6 +14,7 @@ import std;
 import math;
 namespace codegen;
 import syntax from "../syntax";
+import .dispatch;
 
 // --- errors ------------------------------------------------------------------
 
@@ -300,6 +301,7 @@ struct Report {
 
 struct Step {
     name: u8[..64],
+    procedure: i64, // index in PROCEDURES
     first_own: i64, // the bcs of the step itself: a range of `bcs`
     own_count: i64,
     first_bc: i64,  // all bcs that hold in the step: a range of `active`
@@ -342,6 +344,8 @@ var material_name: u8[..64];
 var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var physics_tok = -1;
+var template = LINEAR_ELASTIC;  // index in TEMPLATES
+var lane_mesh = false;          // the mesher lane meshes the solid (lane_mesher.goose)
 // The `bc` items outside the steps, which hold in each step.
 var global_bcs: i64[>..];
 
@@ -363,6 +367,8 @@ fn reset() {
     physics_name = [];
     unknown_name = [];
     physics_tok = -1;
+    template = LINEAR_ELASTIC;
+    lane_mesh = false;
     mesh_size = 0.0;
     mesh_tok = -1;
     order = 2;
@@ -401,6 +407,12 @@ let BOX_FIX = "write the solid as box((x0, y0, z0) mm, (x1, y1, z1) mm)";
 // `let beam: Solid = box(a, b)`.
 fn solid(n: i64, value: i64) {
     if kind(value) != syntax::N_CALL || name(syntax::child(value, 0)) != "box" || syntax::child_count(value) != 3 {
+        if solid_tok < 0 && mesher_read(n, value) {
+            lane_mesh = true;
+            set64(solid_name, name(n));
+            solid_tok = tok(n);
+            return;
+        }
         unsupported(tok(value), str("the solid '", name(n), "' is not one box: this slice meshes only a box"), BOX_FIX);
         return;
     }
@@ -533,6 +545,20 @@ fn physics(n: i64) {
     }
     physics_tok = tok(n);
     set64(physics_name, name(n));
+    // A template other than linear_elastic goes to its generator (dispatch.goose).
+    var c0 = syntax::nodes[n].first;
+    while c0 >= 0 {
+        if kind(c0) == syntax::N_USES { template = table_index(TEMPLATES, name(c0)); }
+        c0 = syntax::nodes[c0].next;
+    }
+    if template > LINEAR_ELASTIC {
+        if !read_template(template, n) {
+            unsupported(tok(n), str("the template ", TEMPLATES[template], " has no generator in this build"),
+                        PHYSICS_FIX);
+        }
+        return;
+    }
+    template = LINEAR_ELASTIC;
     var uses = false;
     var c = syntax::nodes[n].first;
     while c >= 0 {
@@ -616,10 +642,23 @@ fn bc(n: i64) -> i64 {
 
 fn step(n: i64) {
     let proc = syntax::child(n, 0);
+    // A procedure other than static goes to its generator (dispatch.goose).
+    let p = table_index(PROCEDURES, name(proc));
+    if p > STATIC {
+        var other = Step { name: [], procedure: p, first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
+                           first_report: reports.len, report_count: 0, output: false };
+        set64(other.name, name(n));
+        steps.push(other);
+        if !read_procedure(p, n) {
+            unsupported(tok(proc), str("the procedure ", PROCEDURES[p], " has no generator in this build"),
+                        "write step load: static { ... }");
+        }
+        return;
+    }
     if name(proc) != "static" || syntax::nodes[proc].first >= 0 {
         unsupported(tok(proc), "this slice has only static steps with no arguments", "write step load: static { ... }");
     }
-    var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
+    var s = Step { name: [], procedure: STATIC, first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
                    first_report: reports.len, report_count: 0, output: false };
     set64(s.name, name(n));
     var c = syntax::nodes[proc].next;
@@ -1161,27 +1200,41 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     quoted(out, runtime_path);
     out.append(";\n");
     out.append(PRELUDE);
-    for si in 0..steps.len { emit_step(out, si, results_dir); }
-    out.append("fn main() {\n");
-    format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ",
-           system.length, "\n");
-    out.append("    runtime::mesh_box(");
-    lits(out, lo);
-    out.append(", ");
-    lits(out, hi);
-    for j in 0..3 {
-        out.append(",\n                     runtime::cells_for(");
-        lit(out, hi[j] - lo[j]);
-        out.append(", ");
-        lit(out, mesh_size);
-        out.append(")");
+    for si in 0..steps.len {
+        if steps[si].procedure == STATIC {
+            emit_step(out, si, results_dir);
+        } else {
+            emit_procedure(out, steps[si].procedure, si, results_dir);
+        }
     }
-    out.append(");\n");
-    format(out, "    // material ", material_name, "\n    runtime::material(");
-    lit(out, young);
-    out.append(", ");
-    lit(out, poisson);
-    out.append(");\n");
+    out.append("fn main() {\n");
+    if lane_mesh {
+        mesher_emit(out);
+    } else {
+        format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ",
+               system.length, "\n");
+        out.append("    runtime::mesh_box(");
+        lits(out, lo);
+        out.append(", ");
+        lits(out, hi);
+        for j in 0..3 {
+            out.append(",\n                     runtime::cells_for(");
+            lit(out, hi[j] - lo[j]);
+            out.append(", ");
+            lit(out, mesh_size);
+            out.append(")");
+        }
+        out.append(");\n");
+    }
+    if template == LINEAR_ELASTIC {
+        format(out, "    // material ", material_name, "\n    runtime::material(");
+        lit(out, young);
+        out.append(", ");
+        lit(out, poisson);
+        out.append(");\n");
+    } else {
+        emit_template(out, template);
+    }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { emit_expect(out, x); }
     for s in skipped {

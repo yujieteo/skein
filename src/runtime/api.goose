@@ -20,13 +20,16 @@
 // that is not on a face of the box selects no nodes, and the call returns
 // false.
 //
-// The state is global: one mesh, one material, one set of supports and one
+// The mesh is the unstructured mesh of fem.goose, and mesh_box is its
+// first mesher. The state is global: one mesh, one material, one set of supports and one
 // set of loads. A second load step calls `clear_loads`, applies its loads
 // and solves again. A second mesh (a sweep over a dimension) starts again
 // at `mesh_box`, which clears all of the state.
 import std;
 namespace runtime;
+import .fem;
 import .mesh;
+import .solid;
 import .solve;
 import .vtu;
 
@@ -75,8 +78,19 @@ fn clear_loads() {
     clear_load_vector();
 }
 
-// Assembles the stiffness matrix and solves K u = f by CG with a Jacobi
-// preconditioner. Returns false if CG does not converge.
+// Sets the linear solver and the preconditioner of the next solves by
+// name. "cg" with "jacobi" is the default. The solvers lane registers the
+// others in lane_solvers.goose.
+fn linear_solver(solver: const u8[:], preconditioner: const u8[:]) {
+    solver_name = [];
+    solver_name.append(solver[..min(solver.len, 64)]);
+    preconditioner_name = [];
+    preconditioner_name.append(preconditioner[..min(preconditioner.len, 64)]);
+}
+
+// Assembles the stiffness matrix and solves K u = f by the linear solver
+// (CG with a Jacobi preconditioner by default). Returns false if the solver
+// does not converge.
 fn solve_static() -> bool {
     return solve_linear_static();
 }
@@ -103,6 +117,6 @@ fn write_vtu(path: const u8[:]) -> bool {
 }
 
 // Facts about the last solve, for the report.
-fn dof_count() -> i64 { return 3 * node_count(); }
+fn dof_count() -> i64 { return dof_total(); }
 fn cg_iterations() -> i64 { return last_iterations; }
 fn solve_seconds() -> f64 { return last_seconds; }

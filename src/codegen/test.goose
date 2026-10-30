@@ -267,8 +267,18 @@ fn test_unsupported() {
     expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
 }
 
+// The dispatch tables: a template or a procedure of a lane that has no
+// generator yet gives an error at its item.
+fn test_dispatch() {
+    expect_error("the heat template", replace(model(MM, str(MESH, STEP)), "linear_elastic", "heat"),
+                 "error unsupported 16:9 the template heat has no generator in this build");
+    expect_error("a transient step", replace(model(MM, str(MESH, STEP)), "load: static", "load: transient"),
+                 "error unsupported 19:12 the procedure transient has no generator in this build");
+}
+
 fn main() {
     test_grid_cantilever();
+    test_dispatch();
     test_units();
     test_two_steps();
     test_bc_scope();

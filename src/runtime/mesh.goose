@@ -1,46 +1,39 @@
-// The structured mesh of a box, the supports and the loads.
+// The box mesher: a structured mesh of 27-node hexahedra in the
+// unstructured mesh of fem.goose, the supports and the loads on the faces
+// of the box.
 //
-// The cells are 27-node hexahedra. Their nodes are the points of a lattice
-// with 2n + 1 points along an edge of n cells, so node (i, j, k) of the
-// lattice has the index i + lx (j + ly k). The local node l of a cell is
-// at lattice offset (l % 3, l / 3 % 3, l / 9) from the first corner of the
-// cell. Each dof d is component d % 3 of node d / 3.
+// The nodes are the points of a lattice with 2n + 1 points along an edge of
+// n cells, so node (i, j, k) of the lattice has the index i + lx (j + ly k).
+// Cell (cx, cy, cz) has the index cx + nx (cy + ny cz). Each face of the
+// box has a node set and a face set, named x0, x1, y0, y1, z0 and z1 (the
+// low and the high face along each axis).
 import std;
 import math;
 namespace runtime;
-
-// --- the mesh ----------------------------------------------------------------
+import .fem;
+import .solid;
+import .solve;
 
 var box_lo: f64[3] = [0.0, 0.0, 0.0];
 var box_hi: f64[3] = [0.0, 0.0, 0.0];
 var cells: i64[3] = [0, 0, 0];      // cells along x, y and z
 var lattice: i64[3] = [0, 0, 0];    // nodes along x, y and z: 2 cells + 1
 var spacing: f64[3] = [0.0, 0.0, 0.0];   // the size of a cell
-var coords: f64[>..] = [];          // x, y and z of each node
 
-// --- the material, the supports, the loads and the solution ------------------
-
-var young = 0.0;
-var poisson = 0.0;
-var fixed: u8[>..] = [];            // 1 for each dof that is held at 0
-var load: f64[>..] = [];            // the external force on each dof
-var disp: f64[>..] = [];            // the displacement of each dof
-
-fn node_count() -> i64 { return lattice[0] * lattice[1] * lattice[2]; }
-fn cell_count() -> i64 { return cells[0] * cells[1] * cells[2]; }
+let FACE_NAMES = ["x0", "x1", "y0", "y1", "z0", "z1"];
 
 fn node_at(i: i64, j: i64, k: i64) -> i64 {
     return i + lattice[0] * (j + lattice[1] * k);
 }
 
-// The node of local index l in cell (cx, cy, cz).
-fn cell_node(cx: i64, cy: i64, cz: i64, l: i64) -> i64 {
-    return node_at(2 * cx + l % 3, 2 * cy + l / 3 % 3, 2 * cz + l / 9);
+fn box_cell(cx: i64, cy: i64, cz: i64) -> i64 {
+    return cx + cells[0] * (cy + cells[1] * cz);
 }
 
 fn build_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
              nx: i64, ny: i64, nz: i64) {
     assert(nx > 0 && ny > 0 && nz > 0);
+    mesh_clear();
     box_lo = [x0, y0, z0];
     box_hi = [x1, y1, z1];
     cells = [nx, ny, nz];
@@ -48,27 +41,49 @@ fn build_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
         lattice[a] = 2 * cells[a] + 1;
         spacing[a] = (box_hi[a] - box_lo[a]) / cells[a];
     }
-    coords.clear();
     for k in lattice[2] {
         for j in lattice[1] {
             for i in lattice[0] {
-                coords.push(x0 + 0.5 * i * spacing[0]);
-                coords.push(y0 + 0.5 * j * spacing[1]);
-                coords.push(z0 + 0.5 * k * spacing[2]);
+                add_node(x0 + 0.5 * i * spacing[0], y0 + 0.5 * j * spacing[1], z0 + 0.5 * k * spacing[2]);
             }
+        }
+    }
+    var nodes: i64[27] = [0; 27];
+    for cz in nz {
+        for cy in ny {
+            for cx in nx {
+                for l in 27 { nodes[l] = node_at(2 * cx + l % 3, 2 * cy + l / 3 % 3, 2 * cz + l / 9); }
+                add_cell(HEX27, nodes);
+            }
+        }
+    }
+    var members: i64[>..] = [];
+    for axis in 3 {
+        let a, b = other_axes(axis);
+        for side in 2 {
+            let f = side * (lattice[axis] - 1);
+            members.clear();
+            for t in lattice[b] {
+                for s in lattice[a] { members.push(face_node(axis, f, s, t)); }
+            }
+            add_node_set(FACE_NAMES[2 * axis + side], members);
+            members.clear();
+            let cf = side * (cells[axis] - 1);
+            for tb in cells[b] {
+                for ta in cells[a] {
+                    var c: i64[3] = [0, 0, 0];
+                    c[axis] = cf;
+                    c[a] = ta;
+                    c[b] = tb;
+                    members.push(FACE_STRIDE * box_cell(c[0], c[1], c[2]) + 2 * axis + side);
+                }
+            }
+            add_face_set(FACE_NAMES[2 * axis + side], members);
         }
     }
     young = 0.0;
     poisson = 0.0;
-    fixed.clear();
-    load.clear();
-    disp.clear();
-    for d in 3 * node_count() {
-        fixed.push(0);
-        load.push(0.0);
-        disp.push(0.0);
-    }
-    clear_matrix();
+    clear_dofs();
 }
 
 // --- faces -------------------------------------------------------------------
@@ -98,18 +113,24 @@ fn other_axes(axis: i64) -> i64, i64 {
     return 0, 1;
 }
 
-fn mark_fixed(axis: i64, value: f64) -> bool {
+// The node set of the face where coordinate `axis` is `value`, or -1.
+fn face_set(axis: i64, value: f64) -> i64 {
     let f = face_index(axis, value);
-    guard f >= 0 else { return false; }
-    let a, b = other_axes(axis);
-    for t in lattice[b] {
-        for s in lattice[a] {
-            let n = face_node(axis, f, s, t);
-            for c in 3 { fixed[3 * n + c] = 1; }
-        }
-    }
-    clear_solution();
+    guard f >= 0 else { return -1; }
+    return find_set(FACE_NAMES[2 * axis + (if f == 0 { 0 } else { 1 })], false);
+}
+
+fn mark_fixed(axis: i64, value: f64) -> bool {
+    let s = face_set(axis, value);
+    guard s >= 0 else { return false; }
+    fix_set(s);
     return true;
+}
+
+fn face_reaction(axis: i64, value: f64) -> f64, f64, f64 {
+    let s = face_set(axis, value);
+    guard s >= 0 else { return 0.0, 0.0, 0.0; }
+    return set_reaction(s);
 }
 
 // The consistent nodal forces of a uniform traction: the integral of each
@@ -127,8 +148,8 @@ fn add_traction(axis: i64, value: f64, tx: f64, ty: f64, tz: f64) -> bool {
                 var w = 0.0;
                 for gb in 3 {
                     for ga in 3 {
-                        w += GAUSS_W[ga] * GAUSS_W[gb]
-                            * shape_1d(la, GAUSS_X[ga]) * shape_1d(lb, GAUSS_X[gb]);
+                        w += GAUSS3_W[ga] * GAUSS3_W[gb]
+                            * shape_1d(la, GAUSS3_X[ga]) * shape_1d(lb, GAUSS3_X[gb]);
                     }
                 }
                 let n = face_node(axis, f, 2 * ca + la, 2 * cb + lb);
@@ -158,38 +179,7 @@ fn add_point_force(x: f64, y: f64, z: f64, fx: f64, fy: f64, fz: f64) {
     clear_solution();
 }
 
-fn clear_load_vector() {
-    for &v in load { v = 0.0; }
-    clear_solution();
-}
-
-fn clear_solution() {
-    for &v in disp { v = 0.0; }
-}
-
-fn load_sum() -> f64, f64, f64 {
-    var s: f64[3] = [0.0, 0.0, 0.0];
-    for v, d in load { s[d % 3] += v; }
-    return s[0], s[1], s[2];
-}
-
-// --- shape functions -----------------------------------------------------------
-
-let GAUSS_X: f64[3] = [-0.7745966692414834, 0.0, 0.7745966692414834];
-let GAUSS_W: f64[3] = [0.5555555555555556, 0.8888888888888888, 0.5555555555555556];
-
-// The quadratic Lagrange function of node a (at -1, 0 and 1) at s.
-fn shape_1d(a: i64, s: f64) -> f64 {
-    if a == 0 { return 0.5 * s * (s - 1.0); }
-    if a == 1 { return 1.0 - s * s; }
-    return 0.5 * s * (s + 1.0);
-}
-
-fn shape_1d_ds(a: i64, s: f64) -> f64 {
-    if a == 0 { return s - 0.5; }
-    if a == 1 { return -2.0 * s; }
-    return s + 0.5;
-}
+// --- points ---------------------------------------------------------------------
 
 // The cell that holds coordinate v along axis a, and the local coordinate
 // of v in it (-1 to 1).
@@ -212,7 +202,7 @@ fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
     var u: f64[3] = [0.0, 0.0, 0.0];
     for l in 27 {
         let w = shape_1d(l % 3, sx) * shape_1d(l / 3 % 3, sy) * shape_1d(l / 9, sz);
-        let n = cell_node(cx, cy, cz, l);
+        let n = cell_node(box_cell(cx, cy, cz), l);
         for c in 3 { u[c] += w * disp[3 * n + c]; }
     }
     return u[0], u[1], u[2];
