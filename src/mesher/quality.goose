@@ -23,7 +23,7 @@ fn quality_passes(q: Quality) -> bool {
     return q.inverted == 0 && q.min_angle >= 5.0 && q.max_angle <= 175.0;
 }
 
-fn vertex(n: i64) -> f64[3] { return [points[3 * n], points[3 * n + 1], points[3 * n + 2]]; }
+fn vertex(n: i64) -> f64[3] { return point(n); }
 
 fn sub3(a: f64[3], b: f64[3]) -> f64[3] { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 fn dot3(a: f64[3], b: f64[3]) -> f64 { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
@@ -38,7 +38,7 @@ fn mesh_quality() -> Quality {
     let k = mesh_dim + 1;
     for c in cell_count() {
         var v: f64[3][4] = default<f64[3][4]>();
-        for i in k { v[i] = vertex(cells[k * c + i]); }
+        for i in k { v[i] = vertex(cell_node(c, i)); }
         var longest = 0.0;
         for i in k {
             for j in i + 1..k { longest = max(longest, norm3(sub3(v[i], v[j]))); }

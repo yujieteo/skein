@@ -143,9 +143,9 @@ fn add_tet(a: i64, b: i64, c: i64, d: i64) {
     let v = sub3(vertex(c), pa);
     let w = sub3(vertex(d), pa);
     if dot3(u, cross3(v, w)) < 0.0 {
-        cells.push(a); cells.push(c); cells.push(b); cells.push(d);
+        add_simplex([a, c, b, d]);
     } else {
-        cells.push(a); cells.push(b); cells.push(c); cells.push(d);
+        add_simplex([a, b, c, d]);
     }
 }
 

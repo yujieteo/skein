@@ -831,7 +831,7 @@ mesh m on beam {
 | Setting | Type | Default | Meaning |
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
-| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` need a `box` or `rect` region |
+| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` need a `box` or `rect` region, and `hex` can also mesh a quarter of a tube |
 | `grade` | `Real` | 1.3 | largest ratio of the size of two neighbour cells |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
@@ -852,7 +852,7 @@ licences are not compatible with Apache 2.0.
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
-| `quad`, `hex` | a structured grid on a `box` or `rect` |
+| `quad`, `hex` | a structured grid on a `box` or `rect`, or in r, θ and z on a quarter of a tube: `(cylinder - cylinder) & box`, with the box corner on the axis |
 | boundary layers | prisms or quads extruded along the normal of the surface, then the core mesh |
 
 The sharp edges come from the CSG tree: each intersection of the surfaces
@@ -1322,6 +1322,12 @@ Each setting is optional. The defaults:
 
 All solvers are in Goose (§18.4).
 
+`linear: gmres` with `precond: ilu0` uses GMRES with a fixed restart of
+300. It is for small models only, because each solve holds about 301 basis
+vectors of n doubles for n unknowns. A finer mesh needs more iterations,
+and the restart can then make GMRES stall. A solve that does not converge
+writes the solver, the iterations and the restart to stderr.
+
 ### 14.5 `output` and `report`
 
 `output e1, e2, …` writes the fields or field expressions to the result
@@ -1634,8 +1640,10 @@ thread_fn assemble_worker() {
 
 ### 18.4 The runtime
 
-`runtime` is a Goose package in `src/runtime/`. It holds no C, except the C
-that the Goose standard library uses for files and the clock. The
+`runtime` is a Goose package in `src/runtime/`. GMRES(m), ILU(0) and
+Newton are in the package `solvers` in `src/solvers/`. `runtime` calls its
+GMRES(m) and ILU(0). `runtime` holds no C, except the C that the Goose
+standard library uses for files and the clock. The
 [end-to-end slice](roadmap.md#the-end-to-end-slice) ships a box mesher, CG
 with Jacobi and the VTU writer before phase 2.
 

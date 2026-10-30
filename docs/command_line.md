@@ -13,6 +13,7 @@
 - [8. The language server](#8-the-language-server)
 - [9. Files](#9-files)
 - [10. Exit status](#10-exit-status)
+- [11. The Markdown document](#11-the-markdown-document)
 
 </details>
 
@@ -36,6 +37,7 @@ verification.
 | `skein run model.skn` | builds and runs the model, with all verification |
 | `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) |
 | `skein view model.skn` | opens the results in the WebGL viewer |
+| `skein md model.skn` | `check`, then writes the model as a Markdown document (§11) |
 | `skein lsp` | serves an editor over the Language Server Protocol |
 | `skein help [command]` | prints help |
 | `skein help --llm` | prints the language card for an LLM: the grammar, the keywords, the standard library and one example, in about 2000 tokens |
@@ -296,3 +298,45 @@ no solve.
 | 1 | an error, a failed verification check, or a failed `expect` |
 | 2 | wrong use of the command line |
 | 3 | an internal fault of `skein`. Please report it. |
+
+---
+
+## 11. The Markdown document
+
+```
+skein md samples/01_cantilever.skn > cantilever.md
+```
+
+`md` checks the model, then writes one Markdown document to standard
+output. A person reads it as the write-up of the model. The math is TeX
+inside `$...$` and `$$...$$`, which GitHub and the common Markdown readers
+render. The tables are Markdown tables. The document contains:
+
+- the comment at the top of the file, as the introduction;
+- the space, the unit system and the `scales` line;
+- tables of the `param` and `let` values and of each material, with their
+  types and units;
+- the geometry and the regions in words;
+- the mesh and method settings;
+- each physics: its unknowns, its material, its named assumptions, and its
+  `let` and `eq` statements as equations in strong form. A physics that
+  uses a template also shows the statements of the template;
+- the boundary conditions as equations;
+- the steps in order;
+- the checks: each `expect` with its expected value and its limit.
+
+The items are in the order of the file, with the names of the file, and
+each item gives its line, so that a reader can find each part in the
+source. Reason: the document is for a review of the model, and the
+reviewer changes the source.
+
+The document contains no results and no date. The same model always gives
+the same document.
+
+The math has no backslash before a punctuation character, so it has no
+`\,` and no `\_`. Reason: GitHub applies the Markdown escapes inside
+`$...$`, and the other readers do not. A name such as `h_air` is h with
+the subscript "air".
+
+A model with errors gives no document: `md` writes the diagnostics of
+`check` to standard error and exits 1.

@@ -1,0 +1,9 @@
+diagnostics[7]{class,id,file,line,col,msg,fix}:
+  error,duplicate_name,round-1.skn,103,5,"'shell' is a built-in name (Appendix A)","rename 'shell'"
+  error,geometry_dim,round-1.skn,180,19,"'zpin' is a Curve, but the value is a Surface","declare it as Surface"
+  error,geometry_dim,round-1.skn,182,25,"'end_skin' is a Surface, but the value is a Solid","declare it as Solid"
+  error,geometry_dim,round-1.skn,185,26,"'door_aft' is a Surface, but the value is a Solid","declare it as Solid"
+  error,geometry_dim,round-1.skn,187,23,"'inner' is a Surface, but the value is a Solid","declare it as Solid"
+  error,geometry_dim,round-1.skn,193,28,"'corner_edge' is a Surface, but the value is a Solid","declare it as Solid"
+  error,unit_fractional,round-1.skn,215,29,"a quantity of dimension Area has an exponent that is not an integer constant","use an integer constant exponent, or divide the base by a reference value"
+summary: errors=7 lints=0

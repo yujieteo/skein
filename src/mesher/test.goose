@@ -10,6 +10,8 @@ import math;
 import dictionary;
 import os;
 import mesher from "../mesher";
+import runtime from "../runtime";   // the mesher imports it
+import solvers from "../solvers";   // the runtime imports it
 
 var failures = 0;
 
@@ -28,7 +30,7 @@ fn expect_conforming(what: u8[:], g: i64) {
         for skip in k {
             var f: i64[..3] = [];
             for i in k {
-                if i != skip { f.push(mesher::cells[k * c + i]); }
+                if i != skip { f.push(mesher::cell_node(c, i)); }
             }
             sort(f);
             let key = if k == 3 { f[0] * n + f[1] } else { (f[0] * n + f[1]) * n + f[2] };
@@ -83,8 +85,8 @@ fn chord_area(w: f64, h: f64, cx: f64, cy: f64, r: f64) -> f64 {
     let n = mesher::point_count();
     for c in mesher::cell_count() {
         for i in 3 {
-            let a = mesher::cells[3 * c + i];
-            let b = mesher::cells[3 * c + (i + 1) % 3];
+            let a = mesher::cell_node(c, i);
+            let b = mesher::cell_node(c, (i + 1) % 3);
             edges.update(min(a, b) * n + max(a, b), 0) { it += 1; };
         }
     }

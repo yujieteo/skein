@@ -13,7 +13,7 @@ import math;
 namespace mesher;
 import syntax from "../syntax";
 import fmt.fmt;
-import check.check;
+import check from "../check";
 import .geometry;
 import .mesh;
 import .quality;
@@ -242,7 +242,10 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
         return false;
     }
     var size = 0.0;
-    var cell = if dim == 2 { "tri" } else { "tet" };
+    // A copy, not a slice of a string: mesh_3d and mesh_2d reallocate the
+    // byte arrays of the runtime mesh.
+    var cell: u8[..3] = [];
+    cell.append(if dim == 2 { "tri" } else { "tet" });
     var s = syntax::nodes[syntax::child(n, 1)].first;
     while s >= 0 {
         let value = syntax::nodes[s].first;

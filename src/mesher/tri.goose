@@ -597,11 +597,13 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     for v in px.len { index.push(-1); }
     for t in talive.len {
         if !talive[t] || !tin[t] { continue; }
+        var nodes: i64[3] = [0, 0, 0];
         for k in 3 {
             let v = tv[3 * t + k];
             if index[v] < 0 { index[v] = add_point(px[v], py[v], 0.0); }
-            cells.push(index[v]);
+            nodes[k] = index[v];
         }
+        add_simplex(nodes);
     }
     return done;
 }
