@@ -158,8 +158,8 @@ fn name_ty(tok: i64) -> Ty {
             }
             return p.ty;
         }
-        // A property outside a physics: in an `output`, `report` or `expect`.
-        if cur_step >= 0 || in_expect { return p.ty; }
+        // A property outside a physics: in a `bc`, `output`, `report` or `expect`.
+        if cur_step >= 0 || in_expect || in_bc { return p.ty; }
         break;
     }
     if setting_mode { return kind_ty(K_WORD); }

@@ -454,8 +454,10 @@ fn check_bc(n: i64) {
         }
     }
     guard unknown >= 0 else {
+        in_bc = true;
         expr_ty(lhs);
         expr_ty(rhs);
+        in_bc = false;
         error(first_tok(lhs), "bc_form", str("the left side '", node_text(lhs), "' is not an unknown or a flux"),
               "write an unknown (u = …), a component (u.x = …), or a flux F*n where div(F) is in an eq");
         return;

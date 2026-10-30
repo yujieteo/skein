@@ -76,6 +76,14 @@ fn expect_free(what: u8[:], src: u8[:], want: u8[:]) {
     print("FAIL ", what, ": got [", got, "] and ", check::diags.len, " diagnostics");
 }
 
+// `src` gives exactly the ids `want`, one per line.
+fn expect_ids(what: u8[:], src: u8[:], want: u8[:]) {
+    let got = ids(src);
+    if got == want { return; }
+    failures++;
+    print("FAIL ", what, ": got [", got, "]");
+}
+
 // `src` gives no diagnostic.
 fn expect_clean(what: u8[:], src: u8[:]) {
     let got = ids(src);
@@ -134,6 +142,7 @@ fn test_physics() {
 fn test_conditions() {
     let elastic = str(H, SOLID, "\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n");
     expect_id("bc_form", str(elastic, "bc f: sigma = 0\n"));
+    expect_ids("a bc with a property and no flux", str(elastic, "bc f: E*n = 0\n"), "bc_form\n");
     expect_id("bc_conflict", str(elastic, "bc f: u = 0\nbc f: sigma*n = (0, 0, 1) MPa\n"));
     expect_id("bc_off_boundary", str(elastic, "bc b: u = 0\n"));
     expect_clean("G16 a point force", str(elastic, "let tip: Point = point((1, 1, 1) m)\nbc tip: sigma*n = (0, 0, -1) kN\n"));
