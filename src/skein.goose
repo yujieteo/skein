@@ -3,7 +3,8 @@
 // are not implemented.
 import std;
 import os;
-import syntax.tree;
+import syntax from "./syntax";
+import fmt.fmt;
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -25,7 +26,12 @@ fn main() {
         print(USAGE);
         exit(0);
     }
-    if command == "check" || command == "fmt" {
+    if command == "fmt" {
+        var rest: const u8[:][>..] = [];
+        for a in args[2..] { rest.push(a); }
+        exit(fmt::run(rest));
+    }
+    if command == "check" {
         write_stderr(str("skein: ", command, " is not implemented yet\n"));
         exit(1);
     }
