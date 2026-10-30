@@ -221,7 +221,9 @@ let s_hoop_hi: Pressure = p_U*R/t_skin
 
 expect c1_hoop: s_hoop at P == (s_hoop_lo + s_hoop_hi)/2 within (s_hoop_hi - s_hoop_lo)/2
 
-expect c2_axial: s_axial at P == p_U*R/2/(t_skin + A_s/s_pitch) within 5%
+// Sheet 7.3: equal axial strain in skin and stringers, nu = 0.326.
+expect c2_axial: s_axial at P ==
+    (p_U*R/2 + 0.326*s_hoop_hi*A_s/s_pitch)/(t_skin + A_s/s_pitch) within 5%
 
 expect c3_rx: (reaction(skin_x0)).x == -F_end within 0.1%
 
