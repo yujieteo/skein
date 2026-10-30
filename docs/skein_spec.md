@@ -141,7 +141,8 @@ string     = '"' { any char except '"' and newline | '\"' | '\\' } '"'
 percent    = number "%"
 ```
 
-A number has no sign. A minus sign before a number is the unary operator.
+A number has no sign. A minus sign before a number is the unary operator,
+except before a `degC` literal (§6.3).
 
 ### 2.5 Keywords
 
@@ -156,14 +157,16 @@ study       symmetry    table       template    tol         tolerance
 true        use         where       within
 ```
 
-A keyword is not an identifier. The names of types, units, built-in
+A keyword is not an identifier, except as the name before the `:` of a
+setting, a named argument or a record entry (§3): `mesh: m`,
+`step: "load"`. The names of types, units, built-in
 functions and assumptions are not keywords. But a declaration with the name
 of a built-in function or constant is an error [`duplicate_name`] (§4).
 
 ### 2.6 Unit names
 
 The lexer reads a **unit expression** (§6.3) in these places: after a
-number literal, after a vector literal, after the `]` of a study list,
+number literal, after a vector literal, after the `]` of a list,
 after the keyword `in` in a table column, and after the `:` of a field in
 the header unit system. After each other `in`, an
 expression follows. In the unit places, an identifier is a unit name, not
@@ -211,7 +214,8 @@ material    = "material" ident "{" NL { prop NL } "}" NL ;
 prop        = ident ":" type "=" expr ;
 
 block       = "{" [ NL ] [ entry { ( "," | NL ) entry } [ NL ] ] "}" ;
-setting     = ident ":" expr ;
+setting     = name ":" expr ;
+name        = ident | keyword ;   (* a keyword only before ":" *)
 
 meshdecl    = "mesh" ident "on" region block NL ;    (* entry = setting | refine | layers *)
 pointsdecl  = "points" ident "on" region block NL ;  (* entry = setting | refine *)
@@ -241,7 +245,7 @@ interface   = "interface" ident ":" region "," region block NL ;
 symmetry    = "symmetry" ident ":" procedure block NL ;  (* entry = setting *)
 
 step        = "step" ident ":" procedure "{" NL { stepstmt NL } "}" NL ;
-procedure   = ident [ "(" [ namedargs ] ")" ] ;
+procedure   = ident [ "(" [ args ] ")" ] ;
 stepstmt    = bcdecl | "release" region
             | "birth" region { "," region } [ "where" expr ]
             | "death" region { "," region } [ "where" expr ]
@@ -274,8 +278,8 @@ primary     = number [ unitexpr ] | percent | string | "true" | "false"
             | ident | "(" expr ")" | "(" expr "," expr { "," expr } ")" [ unitexpr ]
             | "{" namedargs "}" ;
 args        = arg { "," arg } [ "," ] ;
-arg         = expr | ident ":" expr ;
-namedargs   = ident ":" expr { "," ident ":" expr } ;
+arg         = [ name ":" ] ( expr | list ) ;
+namedargs   = name ":" expr { "," name ":" expr } ;
 
 unitexpr    = unitfactor { ("*" | "/") unitfactor } ;
 unitfactor  = unitname [ "^" ["-"] digits ] | "(" unitexpr ")" ;
@@ -300,6 +304,10 @@ Notes on the grammar:
   `region` is any `expr`. §5 and §8 give the rules.
 - `|` and `&` are geometry union and intersection. `||` and `&&` are the
   Boolean operators. The two pairs have the same precedence.
+- An argument may be a list, for example `harmonic(freq: [f0])`. A
+  function takes no list literal `[...]` [`type_mismatch`]. A table
+  column (§5.6) stays a valid function argument, for example
+  `interp(t.col1, t.col2, x)`.
 - An argument list and a study list may end with a comma. `skein fmt`
   writes a list that does not fit on one line with one item on each line
   and a comma after each item (§3.2).
@@ -540,13 +548,16 @@ dimensions: mass M, length L, time T, temperature Θ, current I, amount N and
 luminous intensity J. The checker does arithmetic on these vectors:
 
 - `a*b` adds the exponents, `a/b` subtracts them, `a^k` multiplies them by
-  `k`. `k` must be an integer constant.
+  `k`. `k` must be an integer constant, except when `a` is `Real`. Then `k`
+  may be any constant `Real`, not a varying value (§7.6) [`not_constant`].
+  A function parameter is constant when each call gives it a constant.
 - `a + b`, `a - b`, `a == b` and the other comparisons need equal
   dimensions [`unit_mismatch`].
 - `sqrt(a)` halves the exponents. Each exponent must be even
   [`unit_fractional`].
 - `exp`, `ln`, `sin`, `cos`, `tan`, `tanh` take `Real` or `Angle`
-  [`unit_transcendental`].
+  [`unit_transcendental`]. `atan` takes `Real`. `atan2(y, x)` takes two
+  values of one dimension [`unit_mismatch`]. Both give an `Angle`.
 - `grad`, `div` and `curl` divide by L. `ddt` divides by T. `ddt2` divides
   by T².
 
@@ -598,7 +609,8 @@ literal in parentheses to avoid this: `(2 kN)*L`.
 `degC` is an affine unit. It is valid only alone, after a literal of
 dimension `Temperature`: `20 degC` is 293.15 K. `degC` in a compound unit
 is an error [`unit_affine`]. Write temperature differences and
-coefficients in `K`.
+coefficients in `K`. A unary `-` directly before a `degC` literal is part of
+the literal: `-5 degC` is 268.15 K, not −278.15 K.
 
 ### 6.4 Literals
 
@@ -1081,6 +1093,11 @@ A `bc` names a region and states an equation on it. The checker sorts each
 A natural condition on the flux of the equation paired with unknown `u` is a
 condition for `u`.
 
+On a `Point` region, `n` has no value. There the checker reads a natural
+condition `F*n = P` as the force `P` at the point. `P` has the dimension of
+`F` times area in a `3d` model, and of `F` times length in a `2d` or `axi`
+model.
+
 ### 12.2 Where `bc` may stand
 
 A `bc` at the top level applies in all steps. A `bc` in a step applies from
@@ -1310,7 +1327,17 @@ All solvers are in Goose (§18.4).
 `output e1, e2, …` writes the fields or field expressions to the result
 file at the end of the step, or each `every k` time steps. `report e` prints
 a scalar or a vector to the run log in TOON. Functions for `report`:
-`reaction(r)`, `max(f, r)`, `min(f, r)`, `integral(f, r)`, `mean(f, r)`.
+`reaction(r)`, `max(f, r)`, `min(f, r)`, `integral(f, r)`, `mean(f, r)`,
+`eigenvalue(k)`.
+
+`eigenvalue(k: Int)` is the eigenvalue of mode `k` of a `modal` step, or
+of a `buckling` step. For a `modal` step, it is the natural frequency
+f = ω/(2π) in Hz, a `Frequency`. For a `buckling` step, it is a `Real` load
+factor. Mode 1 is the lowest. In a `report`, the step is the step of the
+report. In an `expect`, the step is the last `modal` or `buckling` step. A
+use in another place, or with no such step, is an error
+[`eigenvalue_step`]. A `k` outside `1..count` of the step is also an error
+[`eigenvalue_step`].
 
 `report cd = expr` gives the value a name. A study (§20) uses the name as
 the column of its results table. A report with no name gets its source
@@ -2044,9 +2071,10 @@ project of its own size, and Skein is a simulation language first. See the
 | `interp(xs, ys, x)` | piecewise linear function from two table columns |
 | `von_mises(sigma)`, `tresca(sigma)`, `principal(sigma)` | stress measures |
 | `fourier(k, T)` | heat flux `−k grad(T)` |
-| `abs`, `sqrt`, `exp`, `ln`, `sin`, `cos`, `tan`, `tanh`, `min`, `max`, `pi` | scalar math |
+| `abs`, `sqrt`, `exp`, `ln`, `sin`, `cos`, `tan`, `tanh`, `atan`, `atan2(y, x)`, `min`, `max`, `pi` | scalar math |
+| `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
-| `reaction(r)`, `integral(f, r)`, `mean(f, r)` | reports |
+| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `eigenvalue(k)` | reports (§14.5) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 

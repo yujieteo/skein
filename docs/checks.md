@@ -76,7 +76,7 @@ in the file stays in the review.
 | `rank_mismatch` | §7.2 | a sum or an equation joins two ranks | `div(sigma) = 0 Pa` | the rank of each side |
 | `ambiguous_product` | §7.2 | `*` between two vectors | `v*n` | `dot(v, n)` |
 | `unit_fractional` | §6.1 | `sqrt` or `^` gives a fractional exponent | `sqrt(E)` | the exponents |
-| `unit_transcendental` | §6.1 | `exp`, `ln` or a trigonometric function takes a quantity with a dimension | `exp(T)` | divide by a reference value |
+| `unit_transcendental` | §6.1 | `exp`, `ln` or a trigonometric function other than `atan2` takes a quantity with a dimension | `exp(T)` | divide by a reference value |
 | `unit_affine` | §6.3 | `degC` in a compound unit | `1.2 W/(m*degC)` | `W/(m*K)` |
 | `not_constant` | §7.6 | a varying value where a constant must be | `size: 1 mm*(1 + x/L)` | `refine` for local size |
 
@@ -136,6 +136,7 @@ in the file stays in the review.
 | `results_missing` | §15.1 | the file or the step of a `results` does not exist | | the steps in that file |
 | `submodel_outside` | §15.2 | the cut region is not inside the global field region | | the bounding box of the global region |
 | `expect_form` | §15.3 | the two sides of an `expect` are not comparable | a field and a point value | `at` |
+| `eigenvalue_step` | §14.5 | `eigenvalue(k)` is not in a `report` or an `expect`, has no `modal` or `buckling` step, or `k` is outside `1..count` of the step | `report eigenvalue(1)` in a `static` step, `report eigenvalue(13)` in `modal(count: 12)` | a `modal` or `buckling` step, or a `k` in `1..count` |
 
 ### 2.9 Parameters, scales, studies and manufacture
 
