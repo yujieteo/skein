@@ -437,7 +437,9 @@ so a user can read it and copy it into a model to change it.
 
 A shell is a physics on a `Surface`, and a beam is a physics on a `Curve`
 (§8.3). Both solve a displacement `w: Vector<Length>` and a rotation vector
-`theta: Vector<Angle>`. These are the two templates:
+`theta: Vector<Angle>`. A physics that uses `reissner_mindlin` on a region
+that is not a `Surface`, or `timoshenko` on a region that is not a `Curve`,
+is an error [`geometry_dim`]. These are the two templates:
 
 ```skein
 template physics reissner_mindlin(layup: Angle = 0 deg, mirror: Bool = false, axis: Vector<Real> = (1, 0, 0), top: Vector<Real>, q: Vector<Pressure> = 0) solves w: Vector<Length>, theta: Vector<Angle> {
