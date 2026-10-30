@@ -19,10 +19,10 @@ The build order of the methods is `cg`, `fv`, `dg`, then meshless
 
 One thin slice of phase 2 lands before phase 1 is complete. Reason: a Skein
 model must give a measured result early. The slice is the package `runtime`
-in `src/runtime/`. It has a mesher with 27-node hexahedra (Q2) for a box or a sector of an
-annulus, CG with a Jacobi preconditioner, reactions, stresses and VTU
-output. The package `codegen` in `src/codegen/` gives `skein run` for one
-linear static box or quarter of a tube: it generates a
+in `src/runtime/`. It has a mesher with 27-node hexahedra (Q2) for a box
+or a sector of an annulus, CG with a Jacobi preconditioner, reactions,
+stresses and VTU output. The package `codegen` in `src/codegen/` gives
+`skein run` for one linear static box or quarter of a tube: it generates a
 Goose program that calls `runtime`. Phase 2 widens the slice to the
 full runtime of [spec §18.4](skein_spec.md#184-the-runtime).
 
