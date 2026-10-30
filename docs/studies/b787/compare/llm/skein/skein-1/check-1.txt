@@ -1,4 +1,8 @@
-diagnostics[2]{class,id,file,line,col,msg,fix}:
-  error,geometry_dim,round-1.skn,76,29,"'corner_patch' is a Surface, but the value is a Solid","declare it as Solid"
-  error,duplicate_name,round-1.skn,110,9,"'shell' is a built-in name (Appendix A)","rename 'shell'"
-summary: errors=2 lints=0
+diagnostics[6]{class,id,file,line,col,msg,fix}:
+  error,geometry_dim,round-1.skn,54,21,"'pad' is a Surface, but the value is a Solid","declare it as Solid"
+  error,geometry_dim,round-1.skn,61,27,"'sub_square' is a Surface, but the value is a Solid","declare it as Solid"
+  error,geometry_dim,round-1.skn,70,23,"'door_aft' is a Curve, but the value is a Solid","declare it as Solid"
+  error,duplicate_name,round-1.skn,125,27,"'eps_m' is already declared on line 24","rename one of the two declarations of 'eps_m'"
+  error,duplicate_name,round-1.skn,125,103,"'w' is already declared on line 117","rename one of the two declarations of 'w'"
+  error,duplicate_name,round-1.skn,126,5,"'theta' is already declared on line 118","rename one of the two declarations of 'theta'"
+summary: errors=6 lints=0

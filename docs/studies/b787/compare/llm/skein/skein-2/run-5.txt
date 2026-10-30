@@ -1,19 +1,25 @@
-diagnostics[17]{class,id,file,line,col,msg,fix}:
-  error,unsupported,round-5.skn,129,25,"the value 'max(u_r, wall)' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,132,33,"'pP' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-5.skn,133,29,"'pP' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-5.skn,134,33,"'pP' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-5.skn,135,21,"the value 'C1_lo' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,136,22,"the value 's_h_ref' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,137,37,"the value '(s_hoop at pP)/s_h_ref' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,138,26,"the value 'C2_val' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,139,35,"the value '(s_ax at pP)/s_a_ref' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,145,70,"the value '(reaction(x0) + reaction(ysym) + reaction(pin)).x' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,146,70,"the value '(reaction(x0) + reaction(ysym) + reaction(pin)).y' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,147,70,"the value '(reaction(x0) + reaction(ysym) + reaction(pin)).z' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,152,22,"'pP' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-5.skn,153,20,"'pP' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-5.skn,154,60,"the value '(reaction(x0) + reaction(ysym) + reaction(pin)).x' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,156,62,"the value '(reaction(x0) + reaction(ysym) + reaction(pin)).z + 1273.0 kN' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-5.skn,157,60,"the value '(reaction(x0) + reaction(ysym) + reaction(pin)).y' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-summary: errors=17 lints=0
+report[13]{step,expr,value}:
+  pressurize,"w_r_side_x0 = w.y at (0, 2883, 0) mm","0.0026493627238364766 m"
+  pressurize,"w_r_side_mid = w.y at (3048, 2883, 0) mm","0.002649362862047634 m"
+  pressurize,"w_r_side_end = w.y at (6096, 2883, 0) mm","0.0026497755603753317 m"
+  pressurize,"w_r_top_end = w.z at (6096, 0, 2883) mm","0.005297315424687421 m"
+  pressurize,"w_y_P = w.y at (4876.8, 1853.158, -2208.505) mm","0.0017029768079712968 m"
+  pressurize,"w_z_P = w.z at (4876.8, 1853.158, -2208.505) mm","0.0006191812132429944 m"
+  pressurize,"C1_s_hoop_P = s_hoop at (4876.8, 1853.158, -2208.505) mm","61318001.055391446 Pa"
+  pressurize,"C2_s_ax_P = s_ax at (4876.8, 1853.158, -2208.505) mm","30660183.534716498 Pa"
+  pressurize,"eps_hoop_P = eps_h at (4876.8, 1853.158, -2208.505) mm","0.0009189855207128156 "
+  pressurize,"eps_ax_P = eps_a at (4876.8, 1853.158, -2208.505) mm","0.00019104361571722732 "
+  pressurize,reaction(x0),"(-1272941.3250211326, -14045.413519755219, 3.486273811859064e-07) N"
+  pressurize,reaction(ysym),"(-6994.191580599258, -3427079.76000023, 3.486273811859064e-07) N"
+  pressurize,reaction(bot),"(-3496.985865173177, -7022.610735063433, 3.486273811859064e-07) N"
+verify[5]{stage,id,result,value,limit}:
+  post,equilibrium,pass,"8.305567684978028e-07 N","12.826866653795996 N"
+  post,expect,fail,"c1_hoop: 61318001.055391446 Pa","55.05 MPa within 11.35%"
+  post,expect,fail,"c2_axial: 30660183.534716498 Pa","28.7 MPa within 5%"
+  post,expect,pass,"c3_rx: -1272941.3250211326 N","-1273.0 kN within 0.1%"
+  post,expect,pass,"c5_ry: -3427079.76000023 N","-3427.1 kN within 0.1%"
+solve[1]{step,cells,dofs,cg_iterations,seconds,converged}:
+  pressurize,22204,135054,0,25.547455706997425,yes
+results[1]:
+  .skein/results/fuselage787/pressurize.vtu
+built .skein/build/fuselage787/fuselage787

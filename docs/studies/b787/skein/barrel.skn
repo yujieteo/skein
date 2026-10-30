@@ -1,0 +1,100 @@
+// The items that the two models of the B787 study share (spec 4.1):
+// the dimensions, the geometry of the barrel and the door, and the
+// materials. fuselage.skn and door_corner.skn use this file.
+// theta turns from +z to +y. A skin point is (x, R*sin(theta), R*cos(theta)).
+
+let R: Length = 2.883 m
+let x_end: Length = 6.096 m
+let f_pitch: Length = 0.6096 m
+let p_U: Pressure = 1.5*65.0 kPa
+
+// Door 2, a Type A exit (sheet 2.3), and the pad-up band around it (2.4).
+let w_d: Length = 1.067 m
+let h_d: Length = 1.829 m
+let r_c: Length = 0.178 m
+let theta_d: Angle = 75 deg
+let pad_w: Length = 0.150 m
+
+// T800S/3900 tape, RTA (sheet 1.2). nu12 is the assumption of the sheet.
+let ply_E1: Pressure = 148 GPa
+let ply_E2: Pressure = 10.1 GPa
+let ply_G12: Pressure = 3.94 GPa
+let ply_nu12: Real = 0.32
+let ply_t: Length = 0.191 mm
+let t_skin: Length = 24*ply_t
+
+// Beam sections (sheet 4.2). The other section values are in the materials.
+let A_s: Area = 2.016e-4 m^2
+let A_f: Area = 7.148e-4 m^2
+
+// Unit vectors at a skin point: axial, radial (outward) and hoop (theta).
+let e_x: Vector<Real> = (1, 0, 0)
+let e_r: Vector<Real> = (0, y/R, z/R)
+let e_t: Vector<Real> = (0, z/R, -y/R)
+
+// A panel of the barrel wall: x0 - a <= x <= x0 + a, and the arc +-b
+// about the angle th. A box in the frame of the panel centre, turned about
+// x. rotate turns by the right-hand rule, so -th takes +z to theta = th.
+// The side faces cut the skin at theta = th +- b/R.
+fn panel(x0: Length, a: Length, th: Angle, b: Length) -> Solid = rotate(
+    box((x0 - a, -R*sin(b/R), R - 1 m), (x0 + a, R*sin(b/R), R + 1 m)),
+    (1, 0, 0),
+    -th,
+)
+
+// The door cutout grown by g in the x-s plane. The fillet of the radial
+// edges of the panel gives the corner radius r_c + g. On the curved skin
+// this is the nearest form of a corner radius in the x-s plane.
+fn door_box(g: Length) -> Solid = fillet(panel(0 m, w_d/2 + g, theta_d, h_d/2 + g), r_c + g)
+
+let barrel: Solid = cylinder((0, 0, 0) m, e_x, R, x_end)
+let wall: Surface = boundary(barrel, y^2 + z^2 == R^2 && y >= 0 m)
+
+// 90 stringers at theta = 2 deg + 4 deg*k, 45 on the left half. Frames at
+// x = f_pitch/2 + f_pitch*k. The cutout cuts both (sheet 2.3).
+let stringer_0: Curve = line((0 m, R*sin(2 deg), R*cos(2 deg)), (x_end, R*sin(2 deg), R*cos(2 deg)))
+let left: Solid = box((0 m, 0 m, -2*R), (x_end, 2*R, 2*R))
+let ring_0: Curve = boundary(wall, x == 0 m)
+
+// The check point P (sheet 7.2): plain skin, mid-bay and mid-pitch.
+let P: Vector<Length> = (4.8768 m, R*sin(140 deg), R*cos(140 deg))
+
+material skin_lam {
+    E1: Pressure = ply_E1
+    E2: Pressure = ply_E2
+    G12: Pressure = ply_G12
+    nu12: Real = ply_nu12
+    t_ply: Length = ply_t
+    h: Length = t_skin
+}
+
+material pad_lam {
+    E1: Pressure = ply_E1
+    E2: Pressure = ply_E2
+    G12: Pressure = ply_G12
+    nu12: Real = ply_nu12
+    t_ply: Length = ply_t
+    h: Length = 2*t_skin
+}
+
+// The quasi-isotropic in-plane values of the walls (sheet 3.3).
+// y_axis of a section is radial, so I_z is the radial bending (sheet 4.2).
+material stringer_sec {
+    E: Pressure = 55.85 GPa
+    nu: Real = 0.326
+    A: Area = A_s
+    I_y: Length^4 = 4.908e-8 m^4
+    I_z: Length^4 = 3.639e-8 m^4
+    J: Length^4 = 1.569e-10 m^4
+    off: Length = 17.50 mm
+}
+
+material frame_sec {
+    E: Pressure = 55.85 GPa
+    nu: Real = 0.326
+    A: Area = A_f
+    I_y: Length^4 = 8.305e-8 m^4
+    I_z: Length^4 = 2.237e-6 m^4
+    J: Length^4 = 2.225e-9 m^4
+    off: Length = 74.15 mm
+}

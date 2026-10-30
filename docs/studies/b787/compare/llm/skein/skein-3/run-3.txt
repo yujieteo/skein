@@ -1,15 +1,3 @@
-diagnostics[13]{class,id,file,line,col,msg,fix}:
-  error,unsupported,round-3.skn,109,25,"the value 'max(w_r, wall)' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,110,25,"the value 'min(w_r, wall)' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,113,33,"'P' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-3.skn,114,35,"'P' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-3.skn,115,37,"'P' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-3.skn,121,56,"the value 'reaction(x0).x + reaction(ysym).x + reaction(bottom).x' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,122,56,"the value 'reaction(x0).y + reaction(ysym).y + reaction(bottom).y' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,123,56,"the value 'reaction(x0).z + reaction(ysym).z + reaction(bottom).z' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,126,36,"the value '(s_hoop at P)/(p_U*R/t_skin)' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,127,37,"the value '(s_axial at P)/(p_U*R/(2*t_skin))' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-  error,unsupported,round-3.skn,132,22,"'P' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-3.skn,134,23,"'P' is not a value that this slice knows","declare it before, with let or param and a number"
-  error,unsupported,round-3.skn,138,14,"the value '1 + reaction(bottom).z/(1273.0 kN)' is not in this slice","write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)"
-summary: errors=13 lints=0
+diagnostics[1]{class,id,file,line,col,msg,fix}:
+  error,unsupported,round-3.skn,88,65,"the condition is not comparisons joined by &&","write the shell as boundary(c, y^2 + z^2 == R^2 && z >= 0 m), with c = cylinder((0, 0, 0) m, (1, 0, 0), R, L)"
+summary: errors=1 lints=0

@@ -297,9 +297,9 @@ fn verify(args: u8[:][:]) -> i64 {
         write_stderr(str("skein verify: cannot read '", path, "'\n"));
         return 1;
     }
-    let prog = fmt::parse_text(path, text);
+    let prog = syntax::parse_model(path, text);
     guard prog >= 0 else {
-        fmt::write_errors(path);
+        fmt::write_errors();
         return 1;
     }
     clear_shapes();
@@ -336,7 +336,7 @@ fn verify(args: u8[:][:]) -> i64 {
         item = syntax::nodes[item].next;
     }
     if syntax::errors.len > 0 {
-        fmt::write_errors(path);
+        fmt::write_errors();
         return 1;
     }
     let unit = length_name;

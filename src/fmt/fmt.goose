@@ -734,7 +734,7 @@ fn toon_value(into: u8[>..]&, s: u8[:], quote: bool) {
 
 // Writes the errors of the last parse as TOON diagnostics (command_line.md
 // §6.1).
-fn write_errors(path: u8[:]) {
+fn write_errors() {
     var s: u8[>..] = [];
     format(s, "diagnostics[", syntax::errors.len, "]{class,id,file,line,col,msg,fix}:\n");
     for e in syntax::errors {
@@ -742,7 +742,7 @@ fn write_errors(path: u8[:]) {
         s.append("  error,");
         s.append(e.id);
         s.push(',');
-        toon_value(s, path, false);
+        toon_value(s, syntax::files[t.file].path, false);
         format(s, ",", t.line, ",", t.col, ",");
         toon_value(s, e.msg, true);
         s.push(',');
@@ -784,7 +784,7 @@ fn run(args: const u8[:][:]) -> i64 {
         var result: u8[>..] = [];
         let r = format_text(path, text, result);
         if r == SYNTAX_ERROR {
-            write_errors(path);
+            write_errors();
             status = max(status, 1);
             continue;
         }

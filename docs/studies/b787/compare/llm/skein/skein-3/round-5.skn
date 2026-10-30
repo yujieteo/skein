@@ -1,72 +1,78 @@
-// Boeing 787 forward fuselage barrel under ultimate cabin pressure.
-// Quarter model: 0 <= x <= 6.096 m, 0 deg <= theta <= 180 deg (y >= 0).
+// Boeing 787 forward fuselage barrel under cabin pressure: one quarter
+// (0 <= x <= 6.096 m, 0 deg <= theta <= 180 deg).
 //
-// Gaps between the problem sheet and what this Skein runner supports:
-//  - Door cutout (section 2.3): the shell must be one region that
-//    comparisons joined by && define, so it cannot have a hole. The barrel
-//    is closed. Pressure acts on the full half skin, which has the same
-//    resultant as the plug-door load of section 6.2, so C5 still holds.
-//    The door edge load is not applied.
-//  - Because there is no cutout, outputs 5 to 7 (door-edge strain, K, MS)
-//    and check C6 cannot be computed. They are left out.
-//  - Pad-up (section 2.4): there is no cutout to surround, and one physics
-//    block takes one laminate.
-//  - Stringers and frames (section 4): the card has no beam elements, so
-//    the barrel is plain skin. C1 falls in its range (at the upper end).
-//    C2 is expected near p_U*R/(2t) = 30.7 MPa, which is about 7 % above
-//    the sheet value of 28.7 MPa, so expect c2 will fail. Output 3 (beam
-//    forces) cannot be reported.
-//  - Submodel (section 6.4): not available.
-//  - Output 1: a physics let cannot use the solution w, so the radial
-//    displacement is w_r = R * eps_hoop. On a cylinder,
-//    eps_hoop = (dv/dtheta + w_r)/R, and the loads here do not vary with
-//    theta, so dv/dtheta = 0. As a direct check, w.z is reported at the
-//    top (w_r = w.z) and at the bottom (w_r = -w.z). The runner has no max
-//    or min, so values are given at points. The full fields are in the
-//    output file.
-//  - Output 4: each direction has one constraint region. Only x0 holds x,
-//    only ysym holds y, and only the bottom point holds z. Each reaction
-//    sum is therefore one of the reactions below.
-//  - C4: a zero target has no percent tolerance, so C4 is a report only.
-//    It passes when |reaction(bottom).z| < 1.273 kN.
-//  - Element order: MITC4 shell quads, order 1.
-// Limit pressure p_L = 65.0 kPa. Ultimate p_U = 1.5 p_L = 97.5 kPa.
-// Check point P: x = 4.8768 m, theta = 140 deg, which is
-// (4876.8, 1853.158, -2208.506) mm.
+// Deviations from the problem sheet, because of the Skein shell solver:
+//  D1. No beam template. The stringers (90, theta = 2 + 4k deg) and the
+//      frames (x = 0.3048 + 0.6096k m) are not in this model.
+//      Section 4.2 data for a later beam model:
+//        stringer: A 2.016e-4 m^2, offset 0.01750 m, I_r 3.639e-8 m^4,
+//                  I_l 4.908e-8 m^4, J 1.569e-10 m^4
+//        frame:    A 7.148e-4 m^2, offset 0.07415 m, I_r 2.237e-6 m^4,
+//                  I_l 8.305e-8 m^4, J 2.225e-9 m^4
+//        both:     E 55.85 GPa, nu 0.326
+//      Because of this, C1 gives about p_U R / t (top of its range).
+//      C2 gives about 30.7 MPa instead of 28.7 MPa, so C2 is expected to
+//      FAIL. That failure shows the missing stringers.
+//      Output item 3 (beam forces) is not available.
+//  D2. The shell must be a plain cylinder sector, with a condition of
+//      comparisons joined by &&. A cutout cannot be described, so the
+//      model has NO door cutout, NO pad-up and NO corner refinement.
+//      Door data for a later model:
+//        |x| <= 0.5334 m, s = 2.8593 m to 4.6883 m (theta = 56.83 deg to
+//        93.17 deg), corner radius 0.178 m, pad-up [45/0/-45/90]6s
+//        within 0.150 m of the cutout edge.
+//      The pressure acts on the full left half, including the door area.
+//      This takes the place of the door edge load, with the same
+//      resultant (89.12 kN along +y and 23.88 kN along +z on the half
+//      door), so C5 is unchanged.
+//      Outputs 5 to 7 (corner strain, K, MS) and check C6 are not
+//      available.
+//  D3. Reports can only be values at literal points or reactions.
+//      - The maximum radial displacement is read from the u_r field in the
+//        VTU output.
+//      - The ratios are worked out by hand:
+//          c1_ratio = hoop_P / 61.32 MPa   (p_U R / t)
+//          c2_ratio = axial_P / 30.66 MPa  (p_U R / 2t)
+// Check point P: x = 4.8768 m, theta = 140 deg ->
+//   (4876.8, 1853.157, -2208.506) mm
+// Element order: MITC4 quadrilateral shells, order 1.
 
-model fuselage_787: 3d, SI
+model fuselage787_barrel: 3d, SI
 
-// ---------------- parameters ----------------
+// ---- Loads (section 6.2) ----
+param p_L: Pressure = 65.0 kPa in 10 kPa..100 kPa
+let p_U: Pressure = 1.5*p_L
+
+// ---- Barrel (section 2.2) ----
 let R: Length = 2.883 m
 let L: Length = 6.096 m
-param p_U: Pressure = 97.5 kPa in 10 kPa..200 kPa
-let t_skin: Length = 4.584 mm
 
 scales R, p_U
 
-// ---------------- barrel skin ----------------
+// ---- Local directions on the skin ----
+let e_x: Vector<Real> = (1, 0, 0)
+let e_t: Vector<Real> = (0, z/R, -y/R)
+let e_r: Vector<Real> = (0, y/R, z/R)
+
+// ---- Geometry: the left half barrel, 0 <= x <= L ----
 let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
 let wall: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m)
 
-// Sides and points
+// ---- Edges and points ----
 let x0: Curve = boundary(wall, x == 0 m)
-let ysym: Curve = boundary(wall, y == 0 m)
 let x_end: Curve = boundary(wall, x == L)
-let bottom: Point = point((0 m, 0 m, -R))
+let ysym: Curve = boundary(wall, y == 0 m)
 
-// ---------------- local directions on the skin ----------------
-let e_x: Vector<Real> = (1, 0, 0)
-let e_t: Vector<Real> = (0, z/R, -y/R)
+let p_bot: Point = point((0 m, 0 m, -R))
 
-// ---------------- laminate (sections 1.2, 3.2) ----------------
-// Skin [45/0/-45/90]3s, from the outer face
+// ---- Laminate (section 3): skin [45/0/-45/90]3s, from the outer face ----
 table plies{angle: Angle in deg}:
     45
     0
     -45
     90
 
-material ply {
+material skin_ply {
     E1: Pressure = 148 GPa
     E2: Pressure = 10.1 GPa
     G12: Pressure = 3.94 GPa
@@ -75,81 +81,64 @@ material ply {
     h: Length = 24*0.191 mm
 }
 
-// ---------------- mesh (section 6.3) ----------------
-// 0.0508 m (2 in) divides the barrel length and the frame pitch exactly
+// ---- Mesh (section 6.3) ----
 mesh m on wall {
-    size: 0.0508 m
+    size: 50 mm
     cell: quad
 }
 
-// ---------------- physics ----------------
-// Internal pressure p_U acts outward, normal to the mid-surface
+// ---- Shell physics: internal pressure p_U, outward ----
 physics skin on wall: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: p_U*n) solves w: Vector<Length>,
     theta: Vector<Angle> {
-    material ply
+    material skin_ply
     let s_hoop: Pressure = dot(e_t, N*e_t)/h
     let s_axial: Pressure = dot(e_x, N*e_x)/h
-    let eps_hoop: Real = dot(e_t, eps_m*e_t)
-    let w_r: Length = R*dot(e_t, eps_m*e_t)
-    // C1: ratio to p_U R / t = 61.3 MPa. C2: ratio to p_U R / (2t) = 30.7 MPa.
-    let c1_ratio: Real = s_hoop/(p_U*R/t_skin)
-    let c2_ratio: Real = s_axial/(p_U*R/(2*t_skin))
+    let eps_h: Real = dot(e_t, eps_m*e_t)
+    let eps_a: Real = dot(e_x, eps_m*e_x)
+    let u_r: Length = dot(e_r, w)
 }
 
 method skin: cg { mesh: m, order: 1 }
 
-// ---------------- symmetry and support (section 5) ----------------
+// ---- Symmetry (section 5) ----
 bc x0: w.x = 0
 bc x0: theta.y = 0
 bc x0: theta.z = 0
 bc ysym: w.y = 0
 bc ysym: theta.x = 0
 bc ysym: theta.z = 0
-bc bottom: w.z = 0
+bc p_bot: w.z = 0
 
-// ---------------- analysis (section 6) ----------------
+// ---- Analysis ----
 step pressurize: static {
-    // End closure load: p_U R / 2 = 140.5 kN/m along +x
+    // End closure: p_U R / 2 = 140.5 kN/m along +x
     bc x_end: N*n = (p_U*R/2, 0, 0)
+    output w, theta, u_r, s_hoop, s_axial, eps_h, eps_a
 
-    output w, theta, s_hoop, s_axial, eps_hoop
-
-    // Output 1: radial displacement w_r = R * eps_hoop at P, at the side
-    // (theta = 90 deg) at x = 0 and x = L, and at the top at mid-length
-    report w_r_P = w_r at (4876.8, 1853.158, -2208.506) mm
-    report w_r_side_x0 = w_r at (0, 2883, 0) mm
-    report w_r_side_end = w_r at (6096, 2883, 0) mm
-    report w_r_top_mid = w_r at (3048, 0, 2883) mm
-    // Direct check: at the top, w_r = w.z. At the bottom, w_r = -w.z
-    // (relative to the fixed bottom point at x = 0).
-    report w_z_top_mid = w.z at (3048, 0, 2883) mm
-    report w_z_top_end = w.z at (6096, 0, 2883) mm
-    report w_z_bottom_mid = w.z at (3048, 0, -2883) mm
-
-    // Output 2: membrane stresses and the hoop strain at P
-    report s_hoop_P = s_hoop at (4876.8, 1853.158, -2208.506) mm
-    report s_axial_P = s_axial at (4876.8, 1853.158, -2208.506) mm
-    report eps_hoop_P = eps_hoop at (4876.8, 1853.158, -2208.506) mm
-
-    // Output 4 and checks C3 to C5
-    // Expected: reaction(x0).x = -1273.0 kN, reaction(ysym).y = -3427.1 kN, |reaction(bottom).z| < 1.273 kN
+    // Output 1: radial displacement at sample points (the maximum is in the u_r field)
+    report u_r_P = u_r at (4876.8, 1853.157, -2208.506) mm
+    report u_r_top_mid = u_r at (3048, 0, 2883) mm
+    report u_r_side_mid = u_r at (3048, 2883, 0) mm
+    report u_r_top_end = u_r at (6096, 0, 2883) mm
+    // Output 2 and checks C1, C2 at P
+    report hoop_P = s_hoop at (4876.8, 1853.157, -2208.506) mm
+    report axial_P = s_axial at (4876.8, 1853.157, -2208.506) mm
+    report eps_hoop_P = eps_h at (4876.8, 1853.157, -2208.506) mm
+    report eps_axial_P = eps_a at (4876.8, 1853.157, -2208.506) mm
+    // Output 4 and checks C3, C4, C5
     report reaction(x0)
     report reaction(ysym)
-    report reaction(bottom)
-
-    // C1 and C2 ratios
-    report C1_ratio = c1_ratio at (4876.8, 1853.158, -2208.506) mm
-    report C2_ratio = c2_ratio at (4876.8, 1853.158, -2208.506) mm
+    report reaction(p_bot)
+    report rx_sum = reaction(x0).x
+    report ry_sum = reaction(ysym).y
+    report rz_sum = reaction(p_bot).z
 }
 
-// ---------------- checks (section 7.2) ----------------
-// C1: 48.8..61.3 MPa, written as 55.05 MPa +- 11.35 %
-expect c1: s_hoop at (4876.8, 1853.158, -2208.506) mm == 55.05 MPa within 11.35%
-// C2: 28.7 MPa within 5 %. Without stringers, this is expected near 30.7 MPa and to fail.
-expect c2: s_axial at (4876.8, 1853.158, -2208.506) mm == 28.7 MPa within 5%
-// C3: sum of x reactions = -1273.0 kN
-expect c3: reaction(x0).x == -1273.0 kN within 0.1%
-// C4: a report only (see the header).
-// C5: sum of y reactions = -p_U * 2R * L = -3427.1 kN
-expect c5: reaction(ysym).y == -3427.1 kN within 0.1%
-// C6 (submodel boundary) is left out: there is no cutout and no submodel.
+// ---- Checks (section 7.2) ----
+// C1: the range 48.8 to 61.3 MPa is the midpoint 55.05 MPa +/- 11.35 %
+expect c1_hoop: s_hoop at (4876.8, 1853.157, -2208.506) mm == 55.05 MPa within 11.35%
+// C2: this check is expected to FAIL without the stringers (see D1)
+expect c2_axial: s_axial at (4876.8, 1853.157, -2208.506) mm == 28.7 MPa within 5%
+expect c3_rx: reaction(x0).x == -1273.0 kN within 0.1%
+expect c4_rz: reaction(p_bot).z == 0 N within 1.273 kN
+expect c5_ry: reaction(ysym).y == -3427.1 kN within 0.1%

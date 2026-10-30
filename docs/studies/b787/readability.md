@@ -6,7 +6,7 @@ in Skein ([`skein/`](skein/)) and once as an Abaqus deck with a mesh script
 
 ## Result
 
-- **Size.** The Skein model is 287 code lines and 5,491 tokens. The Abaqus
+- **Size.** The Skein model is 223 code lines and 4,251 tokens. The Abaqus
   input is 164 deck lines and 349 script lines, 9,329 tokens in all. The
   script generates 55,836 more lines (1,067,377 tokens).
 - **Edits.** For the 4 edits, Skein changed 8 to 25 lines (added plus
@@ -18,13 +18,13 @@ in Skein ([`skein/`](skein/)) and once as an Abaqus deck with a mesh script
   line 1 of the file names. §4.3, §12.1 and §15.1 closed G3, G31 and G33. No edit added a new error id. The edits found 2 new gaps, G34 and
   G35. The [coverage record](../../femahoy_coverage.md#gaps-of-the-787-study)
   holds them. Before, N1 of `skein/notes.md` became G31. §14.5 and §9.1 closed N2 and N3.
-- **LLM runs.** 2 of 3 Skein runs solved a shell barrel, and 1 of 3
+- **LLM runs.** 1 of 3 Skein runs solved a shell barrel, and 1 of 3
   Abaqus-path runs gave a result. But no run modelled the full barrel and
-  also gave a correct result. The 2 Skein barrels have skin only, with no
+  also gave a correct result. The Skein barrel has skin only, with no
   door, stringers or frames, because `skein run` has no cutout and no beam.
-  Their hoop and axial stress at P agree with p_U R / t and p_U R / (2t),
-  and C3 and C5 pass. C1 and C2 fail, as the comments of the models say.
-  The third Skein run stopped at the reports. 2 Abaqus-path runs sent a Python mesh script to ccx in each round. The
+  Its hoop and axial stress at P agree with p_U R / t and p_U R / (2t),
+  and C3 and C5 pass. C1 and C2 fail, as the comments of the model say.
+  One Skein run stopped at a second shell surface, and one at the reports. 2 Abaqus-path runs sent a Python mesh script to ccx in each round. The
   third run solved a coarse barrel deck, but the pressure acts
   inward, and the deck fails C3, C4 and C5. Nothing in that path told the
   model.
@@ -45,13 +45,13 @@ these commits and commands.
 
 | Item | Source |
 |---|---|
-| Skein model | `skein/fuselage.skn`, `skein/door_corner.skn` at `d367c0c` (PR 12, gap marks of PR 15, C2 fix of PR 24, shells of PR 25) |
+| Skein model | `skein/barrel.skn`, `skein/fuselage.skn`, `skein/door_corner.skn`: `4747a9b`, the `use` commit (PR 12, gap marks of PR 15, C2 fix of PR 24, shells of PR 25, `use` library) |
 | Abaqus deck and mesh script | `abaqus/*.inp`, `abaqus/mesh.py` at `2de58a4` (PR 13, C2 fix of PR 24) |
-| `skein` | `./build.sh` at `d367c0c` |
+| `skein` | `./build.sh` at `4747a9b` (the `use` commit) |
 | Generated mesh | `python3 abaqus/mesh.py`. The SHA-256 values agree with [`abaqus/notes.md`](abaqus/notes.md). |
 | Size | [`compare/size.py`](compare/size.py), tiktoken 0.14.0, `o200k_base` |
 | Edits | [`compare/edits/`](compare/edits/), `git diff --no-index --numstat` against the files at `2de58a4` |
-| LLM runs | [`compare/llm_run.py`](compare/llm_run.py) on `scripts/llm/workflow.py`. Skein: workflow, `skein` and sheet at `d367c0c`. Abaqus: workflow at `fe4fe23` (PR 14), sheet at `5d032bf` |
+| LLM runs | [`compare/llm_run.py`](compare/llm_run.py) on `scripts/llm/workflow.py`. Skein: workflow, `skein` and sheet at `4747a9b` (the `use` commit). Abaqus: workflow at `fe4fe23` (PR 14), sheet at `5d032bf` |
 
 ## 1. `skein check` on the Skein model
 
@@ -75,13 +75,16 @@ Lines are non-blank lines. Code lines also drop the full-line comments
 
 | Part | Files | Lines | Code lines | Tokens |
 |---|---|---|---|---|
-| Skein model | `fuselage.skn`, `door_corner.skn` | 379 | 287 | 5,491 |
+| Skein model | `barrel.skn`, `fuselage.skn`, `door_corner.skn` | 298 | 223 | 4,251 |
 | Abaqus deck, hand-written | `global.inp`, `door_corner.inp`, `properties.inp` | 240 | 164 | 3,639 |
 | Mesh script | `mesh.py` | 352 | 349 | 5,690 |
 | Generated mesh and loads | `*_mesh.inp`, `*_loads.inp` | 55,847 | 55,836 | 1,067,377 |
 
-The Skein files repeat about 165 lines, because the parser rejects a `use`
-library file (see [`skein/notes.md`](skein/notes.md)). The Abaqus deck has
+The two Skein models `use` one library file, `barrel.skn`, for the
+dimensions, the geometry and the materials. They still repeat the ply
+table, the mesh, the physics and the conditions, because a library file
+holds only `material`, `param`, `let` and `fn` items (see
+[`skein/notes.md`](skein/notes.md)). The Abaqus deck has
 72 ply lines out of 164 code lines.
 
 The Skein model also holds what the deck keeps in comments. The deck gives
@@ -104,9 +107,9 @@ back to the model, for 5 rounds at most. Command:
 
 | Run | Rounds | Check pass at round | Result | Tokens in | Tokens out | Wall time |
 |---|---|---|---|---|---|---|
-| Skein 1 | 5 | 2 | skin barrel, 22,204 cells, C1, C2 fail | 141,505 | 26,917 | 282 s |
-| Skein 2 | 5 | 3 | none, 17 report errors | 179,554 | 43,140 | 380 s |
-| Skein 3 | 5 | 1 | skin barrel, 21,480 cells, C3, C5 pass, C1, C2 fail | 149,370 | 31,818 | 318 s |
+| Skein 1 | 5 | 3 | none, a second shell surface | 156,891 | 38,161 | 330 s |
+| Skein 2 | 5 | 1 | skin barrel, 22,204 cells, C3, C5 pass, C1, C2 fail | 166,821 | 35,238 | 340 s |
+| Skein 3 | 5 | 2 | none, 40 report errors | 158,466 | 36,342 | 322 s |
 | Abaqus 1 | 5 | never | none | 492,306 | 164,668 | 1,385 s |
 | Abaqus 2 | 5 | 5 | coarse barrel, fails C3, C4, C5 | 544,186 | 230,109 | 2,055 s |
 | Abaqus 3 | 5 | never | none | 524,611 | 172,331 | 1,483 s |
@@ -115,20 +118,19 @@ For the Abaqus path, check and run are one `fh run`. No run passed on the
 first round.
 
 **Skein runs.** In round 1, each model was a quarter barrel of
-`reissner_mindlin` shells with the ply table (175 to 255 lines). No model
-used `timoshenko`, because the card has no beam: each model named the
-stringers and frames as left out. The `skein check` errors were
-`geometry_dim` (G32, runs 1 and 2), `duplicate_name` (`shell`) and a unit
-after a number (`syntax`). Then `skein run` asked for one surface on one
-cylinder, so each model removed the door and the pad-up. In rounds 3 and
-4, `skein run` also stopped on reports that it cannot compute: a sum of
-reactions, `dot(w, e_r)` and a point name `P`. In round 5, runs 1 and 3
-solved a skin barrel of about 22,000 cells (116 and 155 lines) in about
-25 s. At P, the hoop stress is 61.32 MPa (p_U R / t) and the axial stress
-is 30.66 MPa (p_U R / (2t)). Each run expected these values to fail C1 and
-C2 with no stringers and frames, and they fail. C3 (−1272.94 kN) and C5
-(−3427.08 kN) pass in run 3. The equilibrium check passes in both. Run 2
-stopped in round 5 with 17 report errors.
+`reissner_mindlin` shells with the ply table (187 to 201 lines). No model
+used `timoshenko`, because the card has no beam. The `skein check` errors
+were `geometry_dim` (G32, run 1), `duplicate_name` (`eps_m`, `w`, `theta`,
+run 1) and `unknown_name` (`acos`, run 3). Then `skein run` asked for one
+surface on one cylinder, so each model removed the door and the pad-up.
+In rounds 3 to 5, `skein run` also stopped on reports that it cannot
+compute: `max(w_r, wall)`, `dot(w, e_r)` and a name `p_chk`. In round 5,
+run 2 solved a skin barrel of 22,204 cells (137 lines) in 25.5 s. At P,
+the hoop stress is 61.32 MPa (p_U R / t) and the axial stress is
+30.66 MPa (p_U R / (2t)). The run expected these values to fail C1 and C2
+with no stringers and frames, and they fail. C3 (−1272.94 kN) and C5
+(−3427.08 kN) pass, and the equilibrium check passes. In round 5, run 1
+stopped at a second shell surface, and run 3 with 40 report errors.
 
 **Abaqus runs.** The driver asks for one deck with the mesh in it. In 14 of
 15 rounds, the model sent a Python script that writes the deck. `fh run`
@@ -148,7 +150,7 @@ solves in 1.03 s. The reaction sums in `compare/llm/inp/inp-2/job.dat` are:
 The sign of C5 shows that the pressure acts inward. The deck has no
 assertion, so nothing in this path finds the error.
 
-**Gap ids hit by the runs:** G32 (Skein runs 1 and 2). The `skein run`
+**Gap ids hit by the runs:** G32 (Skein run 1). The `skein run`
 limits (one cylinder surface, no beam, no cutout, a short list of report
 values) stopped each full barrel. These are not gaps of the spec.
 

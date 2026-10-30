@@ -941,14 +941,20 @@ fn recover(start: i64) {
     while !at(TK_EOF) && !at_item() { advance(); }
 }
 
-// Parses file `f`, which `lex` has read. It gives the N_PROGRAM node.
-fn parse(f: i64) -> i64 {
+// Starts the parse of file `f`, which `lex` has read. It gives a new
+// N_PROGRAM node.
+fn begin_file(f: i64) -> i64 {
     ptoks.clear();
     for t, i in tokens {
         if t.file == f && t.kind != TK_COMMENT && t.kind != TK_DOC_COMMENT { ptoks.push(i); }
     }
     pos = 0;
-    let prog = node(N_PROGRAM, tok());
+    return node(N_PROGRAM, tok());
+}
+
+// Parses file `f`, which `lex` has read. It gives the N_PROGRAM node.
+fn parse(f: i64) -> i64 {
+    let prog = begin_file(f);
     skip_newlines();
     if at(TK_EOF) {
         error_at(tok(), "header_order", "the file is empty", "start the file with a header, for example 'model name: 3d, SI'");
@@ -963,6 +969,32 @@ fn parse(f: i64) -> i64 {
             recover(start);
         }
         first = false;
+        skip_newlines();
+    }
+    return prog;
+}
+
+// Parses the library file `f` of a `use` line (spec §4.1). It gives an
+// N_PROGRAM node with the `material`, `param`, `let` and `fn` items. Each
+// other item, also a header or a `use` line, is a `use_item` error.
+fn parse_library(f: i64) -> i64 {
+    let prog = begin_file(f);
+    skip_newlines();
+    while !at(TK_EOF) {
+        let at_start = pos;
+        let k = kind();
+        if k == KW_PARAM || k == KW_LET || k == KW_FN || k == KW_MATERIAL {
+            let n = parse_item(false);
+            if n > 0 {
+                add(prog, n);
+            } else if n < 0 || pos == at_start {
+                recover(at_start);
+            }
+        } else {
+            error_at(tok(), "use_item", str("a library file holds only material, param, let and fn items, not '", text(tok()), "'"),
+                     "move the item to the model");
+            recover(at_start);
+        }
         skip_newlines();
     }
     return prog;

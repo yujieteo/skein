@@ -1,4 +1,13 @@
-diagnostics[2]{class,id,file,line,col,msg,fix}:
-  error,syntax,round-1.skn,102,83,"expected the end of the statement, found 'm'","put the rest on a new line, or remove it"
-  error,syntax,round-1.skn,109,88,"expected the end of the statement, found 'm'","put the rest on a new line, or remove it"
-summary: errors=2 lints=0
+diagnostics[0]{class,id,file,line,col,msg,fix}:
+summary: errors=0 lints=0
+free_boundary[10]{physics,field,region,condition}:
+  skin,w,"boundary(wall) - x0 - ysym - bot - end - door_aft","N*n = 0"
+  skin,w.y,"x0","(N*n).y = 0"
+  skin,w.z,"x0","(N*n).z = 0"
+  skin,w.x,"ysym","(N*n).x = 0"
+  skin,w.z,"ysym","(N*n).z = 0"
+  skin,w.x,"bot","(N*n).x = 0"
+  skin,w.y,"bot","(N*n).y = 0"
+  skin,theta,"boundary(wall) - x0 - ysym","M*n = 0"
+  skin,theta.x,"x0","(M*n).x = 0"
+  skin,theta.y,"ysym","(M*n).y = 0"
