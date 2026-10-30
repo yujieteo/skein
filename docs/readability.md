@@ -348,12 +348,6 @@ the task asks for.
 `skein run` refuses the `study` of E3 with the error `unsupported`, because
 this slice runs one linear static model. The E3 file passes `skein check`.
 
----|---|---|
-| E1 | −0.285612 mm, 150.000 N | −0.285169 mm, 150.000 N |
-| E2, step 2 | −0.380815 mm, 200.000 N | −0.380225 mm, 200.000 N |
-| E3, H = 15 mm | −0.056905 mm, 100.000 N | −0.056823 mm, 100.000 N |
-| E3, H = 20 mm | −0.024300 mm, 100.000 N | −0.024266 mm, 100.000 N |
-
 ---
 
 ## 3. Repeat the counts
