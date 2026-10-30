@@ -17,7 +17,7 @@ in Skein ([`skein/`](skein/)) and once as an Abaqus deck with a mesh script
   comes from one of the gaps G3, G31, G32 and G33 that line 1 of the file
   names. No edit added a new error id. The edits found 2 new gaps, G34 and
   G35. The [coverage record](../../femahoy_coverage.md#gaps-of-the-787-study)
-  holds them. It also renamed N1 to N3 of `skein/notes.md` (N1 became G31).
+  holds them. Before, N1 of `skein/notes.md` became G31. N2 and N3 stay on that page.
 - **LLM runs.** All 3 Skein runs gave a result, and 1 of 3 Abaqus-path runs
   gave a result. But no run modelled the barrel and also gave a correct
   result. Each Skein run first wrote a barrel of 3D solids that passed
