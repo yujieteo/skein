@@ -1226,26 +1226,16 @@ fn same_fixed(a: Fixed[:], b: Fixed[:]) -> bool {
 }
 
 // The runtime keeps the supports from step to step, so each step must fix
-// the same faces. The reaction of a face sums the fixed dofs of its nodes,
-// so two fixed faces that share an edge must fix different components.
+// the same faces. The check equilibrium uses the total reaction, which
+// counts each fixed node once, so two fixed faces can share nodes. A
+// reaction of a fixed face that shares nodes with another fixed face that
+// fixes the same component fails when the program runs (emit_alone).
 fn supports() {
     let a = fixed_faces(0);
     if a.len == 0 {
         unsupported(physics_tok, str("no face is fixed, so ", solid_name, " can move as a rigid body"),
                     "add bc root: u = 0");
         return;
-    }
-    for f, i in a {
-        for g in a[i + 1..] {
-            // A lane's mesh gives no axis: generate emits a run-time check.
-            let fa = faces[f.face].axis;
-            let ga = faces[g.face].axis;
-            if fa >= 0 && ga >= 0 && fa != ga && (f.mask & g.mask) != 0 {
-                unsupported(bc_tok(0, g.face), str("the fixed faces ", faces[f.face].name, " and ", faces[g.face].name,
-                                                   " share an edge, and this slice cannot sum their reaction"),
-                            "fix one face, two opposite faces, or different components of u on faces with an edge");
-            }
-        }
     }
     for si in 1..steps.len {
         let b = fixed_faces(si);
@@ -1377,14 +1367,17 @@ let PRELUDE = """
         }
     }
 
-    // Two fixed faces of a lane's mesh that share nodes and fix the same
-    // component: the reaction of each face holds the dofs of the other.
-    fn shared(face: u8[:], set: u8[:], other: u8[:], other_set: u8[:]) {
-        guard runtime::sets_share_nodes(set, other_set) else { return; }
+    // The reaction of a fixed face that shares nodes with another fixed
+    // face that fixes the same component is not the load on that face
+    // alone, so the run reports an error.
+    fn shared(face: u8[:], set: u8[:], other: u8[:], other_set: u8[:]) -> bool {
+        guard runtime::sets_share_nodes(set, other_set) else { return false; }
         write_stderr(str("skein run: the fixed faces '", face, "' and '", other, "' share nodes and fix the ",
-                         "same component of u, and this slice cannot sum their reaction. Fix one face, two ",
-                         "faces with no common node, or different components of u.\n"));
+                         "same component of u, so reaction(", face, ") is not the load on '", face, "' alone. ",
+                         "Report the reaction of a fixed face that shares no node with another fixed face. The ",
+                         "check equilibrium uses the total reaction of all fixed faces.\n"));
         failed = true;
+        return true;
     }
 
     fn solve(step: u8[:], solver: u8[:], preconditioner: u8[:]) {
@@ -1556,17 +1549,37 @@ fn emit_point(out: u8[>..]&, at: f64[3]) {
     out.append(");\n");
 }
 
+// Emits `alone`: false if face `fi` shares nodes with another fixed face of
+// step `si` that fixes a component in `mask`.
+fn emit_alone(out: u8[>..]&, si: i64, fi: i64, mask: i64) {
+    out.append("        var alone = true;\n");
+    for g in fixed_faces(si) {
+        if same_plane(g.face, fi) || (g.mask & mask) == 0 { continue; }
+        out.append("        if shared(");
+        quoted(out, faces[fi].name);
+        out.append(", ");
+        quoted(out, faces[fi].set);
+        out.append(", ");
+        quoted(out, faces[g.face].name);
+        out.append(", ");
+        quoted(out, faces[g.face].set);
+        out.append(") { alone = false; }\n");
+    }
+}
+
 fn emit_report(out: u8[>..]&, si: i64, r: Report) {
     let step = steps[si].name;
     format(out, "    // report ", r.label, "\n");
     out.append("    {\n    ");
     let e = r.expr;
+    let reaction = kind(e) == syntax::N_CALL;
     var value: u8[>..] = [];
-    if kind(e) == syntax::N_CALL {
+    if reaction {
         let fi = find_face(name(syntax::nodes[syntax::child(e, 1)].first));
         out.append("    let x, y, z = runtime::reaction(");
         quoted(out, faces[fi].set);
         out.append(");\n");
+        emit_alone(out, si, fi, fixed_mask(si, fi));
         format(value, "vector(", reaction_parts(fixed_mask(si, fi)), ", \"", system.force, "\")");
     } else {
         let comp = point_field(e);
@@ -1578,11 +1591,11 @@ fn emit_report(out: u8[>..]&, si: i64, r: Report) {
             format(value, "quantity(u", AXIS_NAMES[comp], ", \"", system.length, "\")");
         }
     }
-    out.append("        report(");
+    out.append(if reaction { "        if alone { report(" } else { "        report(" });
     quoted(out, step);
     out.append(", ");
     quoted(out, r.label);
-    format(out, ", ", value, ");\n    }\n");
+    format(out, ", ", value, if reaction { "); }\n    }\n" } else { ");\n    }\n" });
 }
 
 let SIGMA_NAMES = ["sxx", "syy", "szz", "syz", "sxz", "sxy"];
@@ -1604,10 +1617,12 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         out.append("    let x, y, z = runtime::reaction(");
         quoted(out, faces[x.face].set);
         out.append(");\n");
+        emit_alone(out, 0, x.face, 1 << x.comp);
         got.append(AXIS_NAMES[x.comp]);
         unit = system.force;
     }
-    format(out, "        expect(");
+    let reaction = x.kind == EXPECT_REACTION;
+    out.append(if reaction { "        if alone { expect(" } else { "        expect(" });
     quoted(out, x.name);
     format(out, ", ", got, ", ");
     lit(out, x.want);
@@ -1615,7 +1630,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.within);
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
-    out.append(");\n    }\n");
+    out.append(if reaction { "); }\n    }\n" } else { ");\n    }\n" });
 }
 
 // Writes the Goose program of the model that `read` read. The program
@@ -1652,22 +1667,6 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         out.append(");\n");
     } else {
         emit_template(out, template);
-    }
-    // The fixed faces of a lane's mesh that must share no node.
-    let fixed = fixed_faces(0);
-    for f, i in fixed {
-        for g in fixed[i + 1..] {
-            if (faces[f.face].axis >= 0 && faces[g.face].axis >= 0) || (f.mask & g.mask) == 0 { continue; }
-            out.append("    shared(");
-            quoted(out, faces[f.face].name);
-            out.append(", ");
-            quoted(out, faces[f.face].set);
-            out.append(", ");
-            quoted(out, faces[g.face].name);
-            out.append(", ");
-            quoted(out, faces[g.face].set);
-            out.append(");\n");
-        }
     }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { emit_expect(out, x); }

@@ -156,8 +156,10 @@ fn test_closed_cylinder() {
                  "error unsupported 28:31 the solid 'wall' is not a box or a quarter of a tube");
     expect_error("a cut off the centre", replace(text, "box((0, 0, 0) mm, (b, b, L))", "box((1, 0, 0) mm, (b, b, L))"),
                  "error unsupported 27:35 this slice cuts only the quarter x >= cx, y >= cy of a tube");
-    expect_error("an edge with the same fixed component", replace(text, "bc bottom: u.z = 0", "bc bottom: u = 0"),
-                 "error unsupported 51:5 the fixed faces sym_x and bottom share an edge");
+    expect_lines("an edge with the same fixed component", replace(text, "bc bottom: u.z = 0", "bc bottom: u = 0"), [
+        "let x, y, z = runtime::reaction(\"z0\");\n        var alone = true;\n        if shared(\"bottom\", \"z0\", \"sym_x\", \"t1\") { alone = false; }\n        if shared(\"bottom\", \"z0\", \"sym_y\", \"t0\") { alone = false; }\n        if alone { report(",
+        "let x, y, z = runtime::reaction(\"z0\");\n        var alone = true;\n        if alone { expect(\"axial_force\"",
+    ]);
     expect_error("a reaction with no support", replace(text, "reaction(bottom).z", "reaction(bottom).x"),
                  "error unsupported 76:8 expect axial_force: the face bottom does not fix u.x");
     expect_error("a transposed sigma component", replace(text, "sigma.zz at (r_m, 0 mm, L/2) == p*a/(2", "sigma.zy at (r_m, 0 mm, L/2) == p*a/(2"),
@@ -269,14 +271,25 @@ fn test_reaction() {
         """)), [
         "largest = max(largest, 1.0 * runtime::face_area(\"z0\"));\n    largest = max(largest, 1.0 * runtime::face_area(\"z1\"));\n    equilibrium(rx, ry, rz, largest, \"N\");",
     ]);
-    expect_error("fixed faces with an edge", model(MM, str(MESH, """
+    expect_lines("fixed faces with an edge", model(MM, str(MESH, """
         let bottom: Surface = boundary(beam, z == 0 mm)
 
         step load: static {
             bc root: u = 0
             bc bottom: u = 0
         }
-        """)), "error unsupported 23:5 the fixed faces root and bottom share an edge");
+        """)), ["face(runtime::fix(\"x0\"), \"root\");\n    // bc bottom: u = 0\n    face(runtime::fix(\"z0\"), \"bottom\");",
+                "let rx, ry, rz = runtime::total_reaction();"]);
+    expect_lines("the reaction of a face with a shared edge", model(MM, str(MESH, """
+        let bottom: Surface = boundary(beam, z == 0 mm)
+
+        step load: static {
+            bc root: u = 0
+            bc bottom: u.x = 0
+            bc tip: u = 0
+            report reaction(root)
+        }
+        """)), ["let x, y, z = runtime::reaction(\"x0\");\n        var alone = true;\n        if shared(\"root\", \"x0\", \"bottom\", \"z0\") { alone = false; }\n        if shared(\"root\", \"x0\", \"tip\", \"x1\") { alone = false; }\n        if alone { report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\")); }"]);
     expect_error("a later step fixes a new face", model(MM, str(MESH, """
         step one: static {
             bc root: u = 0
