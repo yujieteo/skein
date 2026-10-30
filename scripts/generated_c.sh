@@ -10,8 +10,10 @@
 # which is the same C that the build of skein run compiles.
 #
 # Goose writes the absolute path of each imported file into the C. This
-# script removes the repository directory from these paths, so the C is the
-# same on each machine. That is the only change to the C.
+# script removes the repository directory from these paths. That is the only
+# change to the C. The C is then the same on each machine with the Goose
+# version in goose_version. After you change Goose, set goose_version to the
+# output of `goose --version` and write the C again.
 #
 # Needs build/skein (./build.sh), and goose on PATH or in $GOOSE.
 set -eu
@@ -21,13 +23,22 @@ models="
 examples/femahoy/grid_cantilever.skn
 "
 
-root=$(cd "$(dirname "$0")/.." && pwd)
+# The Goose that wrote the committed C.
+goose_version="goose v2026.3-120-ga108677d (runtime fba599d313fe)"
+
+root=$(cd "$(dirname "$0")/.." && pwd -P)
 goose=${GOOSE:-goose}
 mode=${1:-check}
 case "$mode" in
     check|write) ;;
     *) echo "usage: scripts/generated_c.sh [check|write]" >&2; exit 2 ;;
 esac
+
+local_version=$("$goose" --version)
+if [ "$local_version" != "$goose_version" ]; then
+    echo "FAIL: goose is \"$local_version\", the committed C needs \"$goose_version\". Build goose at that commit and set GOOSE to it."
+    exit 1
+fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

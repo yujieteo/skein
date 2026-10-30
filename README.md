@@ -58,7 +58,8 @@ The C that Goose generates from each model that `skein run` can run is in
 the repository next to the model, for audit. For example,
 `examples/femahoy/grid_cantilever.c` is the C of
 `examples/femahoy/grid_cantilever.skn`. `./build.sh test` runs each of
-these models and fails if the C differs. After a change to the code
+these models and fails if the C differs. It needs the Goose version in
+`goose_version` in `scripts/generated_c.sh`. After a change to the code
 generator, the runtime or Goose, write the C again:
 
 ```
