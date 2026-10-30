@@ -12,6 +12,7 @@ namespace codegen;
 import syntax from "../syntax";
 import fmt.fmt;
 import .codegen;
+import elements.gen;   // skein-elements: the simplex models
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -61,7 +62,9 @@ fn run(args: const u8[:][:]) -> i64 {
         return 1;
     }
     let prog = fmt::parse_text(path, text);
-    if prog < 0 || !read(prog) {
+    // skein-elements: a simplex model goes to src/elements/gen.goose.
+    let simplex = prog >= 0 && elements_gen::claims(prog);
+    if prog < 0 || !(if simplex { elements_gen::read(prog) } else { read(prog) }) {
         fmt::write_errors(path);
         return 1;
     }
@@ -73,9 +76,9 @@ fn run(args: const u8[:][:]) -> i64 {
     }
     // The skein executable is build/skein in the repository, so the runtime
     // is in src/runtime beside it.
-    let runtime_path = str(resource_dir(), "../src/runtime");
+    let runtime_path = str(resource_dir(), if simplex { "../src/elements" } else { "../src/runtime" });
     var program: u8[>..] = [];
-    generate(runtime_path, results_dir, program);
+    if simplex { elements_gen::generate(runtime_path, results_dir, program); } else { generate(runtime_path, results_dir, program); }
     let source = str(build_dir, "/main.goose");
     let exe = str(build_dir, "/", model_name);
     if !write_file(source, program) {

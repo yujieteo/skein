@@ -43,7 +43,7 @@ SF
 **
 ** Checks, printed to global.dat. Membrane stress = SF / 4.584E-3.
 ** C1: SF2 / t at P in 48.8 to 61.3 MPa; report SF2 / t / 61.3 MPa.
-** C2: SF1 / t at P = 25.2 MPa within 5 %; report SF1 / t / 30.7 MPa.
+** C2: SF1 / t at P = 28.7 MPa within 5 %; report SF1 / t / 30.7 MPa.
 ** P is the node common to the four elements of CHECK_P. Use their mean.
 *EL PRINT, ELSET=CHECK_P, POSITION=CENTROIDAL
 SF, SE

@@ -68,14 +68,26 @@ generator, the runtime or Goose, write the C again:
 
 The list of these models is in `scripts/generated_c.sh`.
 
+The test of `src/md/` compares the documents of two models with the
+golden files in `tests/md/`. After a change to `skein md`, write the
+golden files again and read the diff:
+
+```
+./build.sh
+./build/skein md samples/01_cantilever.skn > tests/md/01_cantilever.md
+./build/skein md examples/femahoy/heat_fin.skn > tests/md/heat_fin.md
+```
+
 | Directory | Contents |
 |---|---|
 | `src/skein.goose` | the command line |
 | `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
-| `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron box mesher (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
+| `src/runtime/` | the solver that generated code calls (`api.goose`): the unstructured mesh, the node and face sets and the element registry (`fem.goose`), a 27-node hexahedron mesher for a box or a sector of an annulus (`mesh.goose`), the linear elastic solid (`solid.goose`), the assembly, the linear solver interface with CG and Jacobi, and the Newton interface (`solve.goose`), VTU output (`vtu.goose`), and one registration file for each phase 2 lane (`lane_*.goose`) |
+| `src/solvers/` | the sparse solvers of `solve { linear: gmres, precond: ilu0 }`, which `src/runtime/lane_solvers.goose` calls: CSR operations (`sparse.goose`), ILU(0) (`ilu.goose`), GMRES(m) (`krylov.goose`) and Newton with a backtracking line search (`newton.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
-| `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
+| `src/codegen/` | `skein run` for one linear static box or quarter of a tube: the Goose code generator (`codegen.goose`), the template and procedure dispatch tables (`dispatch.goose`) with one registration file for each phase 2 lane (`lane_*.goose`), and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
+| `src/elements/` | `skein run` for a simplex model (`gen.goose`): P1 and P2 triangles and tetrahedra (`shape.goose`, `mesh.goose`) for the `linear_elastic` and `heat` templates, with assembly (`assemble.goose`), CG with Jacobi (`solve.goose`) and output (`post.goose`) |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
 | `src/shells/` | the shell, beam and laminate solver (roadmap lane 5), not yet called by `skein run`: the MITC4 shell (`mitc4.goose`), the Timoshenko beam with offsets (`beam.goose`), laminate sections (`laminate.goose`), a cylinder mesher (`mesh.goose`) and a skyline LDLᵀ solve (`solve.goose`) |
 

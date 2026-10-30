@@ -1,0 +1,13 @@
+diagnostics[11]{class,id,file,line,col,msg,fix}:
+  error,unsupported,round-3.skn,56,12,"the bc target 'u.x' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,57,12,"the bc target 'u.y' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,58,13,"the bc target 'u.z' is not in this slice","write bc root: u = 0, or bc tip: sigma*n = (0, 0, -1) MPa"
+  error,unsupported,round-3.skn,66,30,"'sigma.yy' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,67,60,"the report 'sigma.yy at (Lb/2, Wb/2, t_skin/2)) / (p_U*R/t_skin' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,68,31,"'sigma.xx' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,69,60,"the report 'sigma.xx at (Lb/2, Wb/2, t_skin/2)) / (p_U*R/(2*t_skin' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,70,66,"'sigma.yy - nu_qi*(sigma.xx + sigma.zz))/E_qi' at a point is not in this slice","use u or u.x, .y or .z at a point"
+  error,unsupported,round-3.skn,76,59,"the report 'reaction(xsym) + reaction(ysym) + reaction(inner)' is not in this slice","write report reaction(root), or report u.z at (100, 5, 5) mm"
+  error,unsupported,round-3.skn,83,34,"this slice checks only u.x, u.y or u.z at a point","write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%"
+  error,unsupported,round-3.skn,84,34,"this slice checks only u.x, u.y or u.z at a point","write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%"
+summary: errors=11 lints=0

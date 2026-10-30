@@ -1,0 +1,100 @@
+// Boeing 787 forward fuselage, pressurization: REDUCED model for this skein run slice.
+//
+// This slice meshes one box. It clamps only whole box faces (u = 0) or loads
+// them with tractions. It reports reaction(face) and u.x, u.y or u.z at a
+// point. So the barrel, the door cutout, the pad-up, the stringers, the frames
+// and the door-corner submodel cannot be modelled here. The full model is the
+// round-2 file, which passes skein check.
+//
+// This file is a strip of plain skin (t = 4.584 mm), unrolled flat:
+//   x = fuselage axis, 0..L (the full barrel half-length, 6.096 m)
+//   y = arc length s = R*theta; the strip is one stringer pitch (0.2013 m)
+//       wide, centred on P: s = 6.94385..7.14515 m (P at theta = 140 deg)
+//   z = through the thickness, mid-surface at z = 0
+// Loads: the ultimate-pressure membrane state of the plain barrel skin
+//   axial sigma_a = pU*R/(2t) = 30.66 MPa on x = L (end closure), reacted by the clamp
+//   hoop  sigma_h = pU*R/t    = 61.32 MPa on both long edges (they balance)
+// The clamp on x = 0 blocks the strain only within about one strip width
+// (0.2 m) of x = 0. P is 4.9 m away, where the field is uniform.
+//
+// Material: quasi-isotropic laminate as isotropic, E = 55.85 GPa, nu = 0.326.
+// Element order: quadratic (cg order 2) hexahedra.
+//
+// Expected displacements (uniform field, symmetric about the strip centre line):
+//   eps_a = (sigma_a - nu*sigma_h)/E = 1.91044e-4,  u.x = eps_a*x
+//   eps_h = (sigma_h - nu*sigma_a)/E = 9.18980e-4,  u.y = eps_h*(y - 7.0445 m)
+// Membrane stresses from the reported displacements:
+//   eps_a = u.x(B) - u.x(A)                (A, B 1 m apart about P)
+//   eps_h = (u.y(D) - u.y(C)) / 0.2013 m   (C, D on the two long edges at P)
+//   sigma_h = E/(1-nu^2)*(eps_h + nu*eps_a) -> C1: 61.3 MPa (bare skin; ratio 1.00)
+//   sigma_a = E/(1-nu^2)*(eps_a + nu*eps_h) -> C2: 30.7 MPa (bare skin; 25.2 needs stringers)
+// C3: reaction(fwd_end).x = -pU*R/2 * 0.2013 m = -28.292 kN for this strip.
+//     Times pi*R/0.2013 m = -1273.0 kN for the quarter barrel.
+// C4: reaction(fwd_end).z = 0.
+
+model b787_skin_strip: 3d, SI
+
+let R: Length = 2.883 m
+let L: Length = 6.096 m
+let t_sk: Length = 4.584 mm
+let s_lo: Length = 6.94385 m
+let s_hi: Length = 7.14515 m
+param pU: Pressure = 97.5 kPa in 10 kPa..200 kPa
+
+scales R, pU
+
+let E_q: Pressure = 55.85 GPa
+let nu_q: Real = 0.326
+
+let skin: Solid = box((0 m, s_lo, -t_sk/2), (L, s_hi, t_sk/2))
+
+let fwd_end: Surface = boundary(skin, x == 0 m)
+let aft_end: Surface = boundary(skin, x == L)
+let upper_edge: Surface = boundary(skin, y == s_lo)
+let lower_edge: Surface = boundary(skin, y == s_hi)
+
+material cfrp_qi {
+    E: Pressure = E_q
+    nu: Real = nu_q
+}
+
+mesh m on skin {
+    size: 25 mm
+    cell: hex
+}
+
+physics solid on skin: linear_elastic solves u: Vector<Length> {
+    material cfrp_qi
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+bc fwd_end: u = 0
+
+step ultimate: static {
+    // end closure load pU*R/2 per unit arc
+    bc aft_end: sigma*n = (pU*R/(2*t_sk), 0 Pa, 0 Pa)
+    // hoop membrane force pU*R per unit length, on both long edges
+    bc upper_edge: sigma*n = (0 Pa, -pU*R/t_sk, 0 Pa)
+    bc lower_edge: sigma*n = (0 Pa, pU*R/t_sk, 0 Pa)
+
+    output u, sigma, von_mises(sigma)
+
+    // C3/C4: expect (-28.292 kN, 0, 0) for the strip
+    report reaction(fwd_end)
+
+    // displacement at P
+    report uxP = u.x at (4.8768 m, 7.0445 m, 0 m)
+    // axial gauge, 1 m about P
+    report uxA = u.x at (4.3768 m, 7.0445 m, 0 m)
+    report uxB = u.x at (5.3768 m, 7.0445 m, 0 m)
+    // hoop gauge across the strip at P
+    report uyC = u.y at (4.8768 m, 6.94385 m, 0 m)
+    report uyD = u.y at (4.8768 m, 7.14515 m, 0 m)
+}
+
+expect axial_P: u.x at (4.8768 m, 7.0445 m, 0 m) == 0.93168 mm within 2%
+expect axial_A: u.x at (4.3768 m, 7.0445 m, 0 m) == 0.83616 mm within 2%
+expect axial_B: u.x at (5.3768 m, 7.0445 m, 0 m) == 1.02720 mm within 2%
+expect hoop_C: u.y at (4.8768 m, 6.94385 m, 0 m) == -0.092495 mm within 2%
+expect hoop_D: u.y at (4.8768 m, 7.14515 m, 0 m) == 0.092495 mm within 2%
