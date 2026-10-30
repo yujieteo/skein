@@ -246,6 +246,7 @@ fn main() {
     test_studies();
     test_output();
     test_corpus("samples");
+    test_corpus("examples");
     test_corpus("examples/femahoy");
     if failures > 0 {
         print(failures, " failed");

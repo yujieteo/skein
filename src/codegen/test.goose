@@ -121,8 +121,38 @@ fn test_grid_cantilever() {
         "output(\"RESULTS/load.vtu\");",
         "let ux, uy, uz = runtime::displacement_at(100.0, 5.0, 5.0);",
         "expect(\"tip_uz\", uz, -0.191933, 0.015, true, \"mm\", \"-0.191933 mm within 1.5%\");",
-        "not_run(\"top_sxx: sigma.xx at (51.25, 5, 10) mm is not in this slice\");",
+        "let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(51.25, 5.0, 10.0);",
+        "expect(\"top_sxx\", sxx, 29.25, 0.015, true, \"MPa\", \"29.25 MPa within 1.5%\");",
     ]);
+}
+
+fn test_closed_cylinder() {
+    var text: u8[>..] = [];
+    read_file("examples/closed_cylinder.skn", text);
+    expect_lines("closed_cylinder", text, [
+        "runtime::mesh_annulus(0.0, 0.0, 100.0, 105.0, 0.0, 1.5707963267948966, 0.0, 40.0,",
+        "runtime::cells_for(1.5707963267948966 * 105.0, 2.5),",
+        "face(runtime::fix_face_component(runtime::THETA, 1.5707963267948966, runtime::X), \"sym_x\");",
+        "face(runtime::fix_face_component(runtime::THETA, 0.0, runtime::Y), \"sym_y\");",
+        "face(runtime::fix_face_component(runtime::Z, 0.0, runtime::Z), \"bottom\");",
+        "face(runtime::normal_traction_face(runtime::R, 100.0, -1.0), \"inner\");",
+        "face(runtime::traction_face(runtime::Z, 40.0, 0.0, 0.0, 9.75609756097561), \"cap\");",
+        "let x, y, z = runtime::reaction_face(runtime::Z, 0.0);\n        rz += z;\n    }",
+        "equilibrium(rx, ry, rz, 7853.981633974482, \"N\");",
+        "report(\"press\", \"reaction(bottom)\", vector(0.0, 0.0, z, \"N\"));",
+        "let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(102.5, 0.0, 20.0);",
+        "expect(\"hoop_lame\", syy, 19.993906066365838, 0.001, true, \"MPa\", \"p*a^2/(b^2 - a^2)*(1 + b^2/r_m^2) within 0.1%\");",
+        "expect(\"axial_force\", z, -7853.981633974483, 1e-06, true, \"N\", \"-p*pi*a^2/4 within 0.0001%\");",
+    ]);
+    let tube = "let wall: Solid = (barrel - bore) & quarter";
+    expect_error("a full tube", replace(text, tube, "let wall: Solid = barrel - bore"),
+                 "error unsupported 28:31 the solid 'wall' is not a box or a quarter of a tube");
+    expect_error("a cut off the centre", replace(text, "box((0, 0, 0) mm, (b, b, L))", "box((1, 0, 0) mm, (b, b, L))"),
+                 "error unsupported 27:35 this slice cuts only the quarter x >= cx, y >= cy of a tube");
+    expect_error("an edge with the same fixed component", replace(text, "bc bottom: u.z = 0", "bc bottom: u = 0"),
+                 "error unsupported 51:5 the fixed faces sym_x and bottom share an edge");
+    expect_error("a reaction with no support", replace(text, "reaction(bottom).z", "reaction(bottom).x"),
+                 "error unsupported 76:8 expect axial_force: the face bottom does not fix u.x");
 }
 
 fn test_units() {
@@ -253,13 +283,13 @@ fn test_unsupported() {
     expect_error("a cylinder", str(MM, """
 
         let bore: Solid = cylinder((40, 0, 20) mm, (0, 1, 0), 6 mm, 20 mm)
-        """), "error unsupported 2:27 the solid 'bore' is not one box");
+        """), "error unsupported 2:27 this slice has cylinders on the axis (0, 0, 1) only");
     expect_error("tet cells", replace(model(MM, str(MESH, STEP)), "cell: hex", "cell: tet"),
-                 "error unsupported 13:11 this slice meshes a box with hex cells only");
+                 "error unsupported 13:11 this slice meshes with hex cells only");
     expect_error("order 1", model(MM, str(MESH, "method solid: cg { order: 1 }\n", STEP)),
                  "error unsupported 19:20 this slice has only order 2");
     expect_error("a face off the box", replace(model(MM, str(MESH, STEP)), "x == L", "x == 50 mm"),
-                 "error unsupported 5:37 the surface is not on a face of the box");
+                 "error unsupported 5:37 the surface is not on a face of beam");
     expect_error("no support", replace(model(MM, str(MESH, STEP)), "bc root: u = 0\n", ""),
                  "error unsupported 16:9 no face is fixed");
     expect_error("a unit outside the slice", replace(model(MM, str(MESH, STEP)), "-1) MPa", "-1) J"),
@@ -269,6 +299,7 @@ fn test_unsupported() {
 
 fn main() {
     test_grid_cantilever();
+    test_closed_cylinder();
     test_units();
     test_two_steps();
     test_bc_scope();

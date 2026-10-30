@@ -51,7 +51,7 @@ Goose source tree at the same commit as the compiler.
 
 ```
 ./build.sh          # writes build/skein
-./build.sh test     # builds, then runs each src/<part>/test.goose and checks the generated C
+./build.sh test     # builds, runs each src/<part>/test.goose and examples/*.skn, and checks the generated C
 ```
 
 The C that Goose generates from each model that `skein run` can run is in
@@ -73,9 +73,9 @@ The list of these models is in `scripts/generated_c.sh`.
 | `src/skein.goose` | the command line |
 | `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
-| `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron box mesher (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
+| `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron mesher for a box or a sector of an annulus (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
-| `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
+| `src/codegen/` | `skein run` for one linear static box or quarter of a tube: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
 
 ## Why Skein
