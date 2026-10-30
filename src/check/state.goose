@@ -17,6 +17,7 @@ struct Diag {
     col: i64,
     msg: u8[..512],
     fix: u8[..512],
+    lint: bool = false,   // a lint warning (docs/checks.md §3), else an error
 }
 
 var diags: Diag[>..];
@@ -26,13 +27,16 @@ var diags: Diag[>..];
 var report_tok = -1;
 
 // Records the error `id` at token `tok`. `fix` is never empty.
-fn error(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
+fn error(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) { add_diag(tok, id, msg, fix, false); }
+
+// Records the error or, when `lint` is true, the lint warning `id` at token `tok`.
+fn add_diag(tok: i64, id: u8[:], msg: u8[:], fix: u8[:], lint: bool) {
     let at = if report_tok >= 0 { report_tok } else { tok };
     let k = syntax::tokens[max(at, 0)];
     for d in diags {
         if d.fnum == k.file && d.line == k.line && d.col == k.col && d.id == id { return; }
     }
-    var d = Diag { id: [], file: [], fnum: k.file, line: k.line, col: k.col, msg: [], fix: [] };
+    var d = Diag { id: [], file: [], fnum: k.file, line: k.line, col: k.col, msg: [], fix: [], lint: lint };
     let path = syntax::files[k.file].path;
     d.id.append(id[..min(id.len, 32)]);
     d.file.append(path[..min(path.len, 256)]);
@@ -152,6 +156,7 @@ var nondim = false;
 var has_scales = false;
 var thickness = false;    // 2D with a thickness (plane stress or strain), or `axi`
 var model_file = 0;
+var model_prog = -1;      // the N_PROGRAM of the model file
 var header_tok = 0;
 var cur_phys = -1;        // the physics that the checker is in, or -1
 var cur_step = -1;        // the step that the checker is in, or -1
@@ -196,6 +201,7 @@ fn reset_state() {
     set_nondim(false);
     has_scales = false;
     thickness = false;
+    model_prog = -1;
     cur_phys = -1;
     cur_step = -1;
     cur_proc.clear();

@@ -20,6 +20,7 @@ let USAGE = """
       check   parse and type-check a model
       fmt     rewrite files in the standard layout
       help    print this text
+      lint    check a model, then give the lint warnings
       run     build and run a model (linear static or steady heat: a box, a quarter of a tube, a plate with a hole or a cylindrical shell)
       md      write a model as a Markdown document
       verify  check a model, mesh it and report mesh_quality
@@ -50,7 +51,7 @@ fn main() {
         for a in args[2..] { rest.push(a); }
         exit(codegen::run(rest));
     }
-    if command == "check" { exit(check::command(args)); }
+    if command == "check" || command == "lint" { exit(check::command(args)); }
     if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
     if command == "md" {
         var rest: const u8[:][>..] = [];

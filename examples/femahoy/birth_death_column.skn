@@ -14,7 +14,6 @@ let rho_c: Density = 2400 kg/m^3
 scales h, E_c, rho_c
 
 let column: Solid = box((0, 0, 0) mm, (a, a, 10*h))
-let lift1: Solid = box((0, 0, 0) mm, (a, a, h))
 let lift2: Solid = box((0, 0, h), (a, a, 2*h))
 let lift3: Solid = box((0, 0, 2*h), (a, a, 3*h))
 let lift4: Solid = box((0, 0, 3*h), (a, a, 4*h))
