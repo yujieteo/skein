@@ -38,7 +38,8 @@ step load: static {
 
 **Status:** this repository holds the specification and the start of the
 compiler. `skein check` parses and type-checks a model. `skein lint` checks
-it and gives the lint warnings. `skein fmt` rewrites a file in the standard
+it and gives the lint warnings, and with `--mesh` the warnings that need the
+mesh. `skein fmt` rewrites a file in the standard
 layout. The [roadmap](docs/roadmap.md) gives the phases.
 Phase 1 is the front end: the parser, the type and unit checker,
 `skein fmt` and `skein check`.

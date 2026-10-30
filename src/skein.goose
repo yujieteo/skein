@@ -10,6 +10,7 @@ import codegen.run;
 import check from "./check";
 import md from "./md";
 import mesher.verify;   // mesher lane: skein verify
+import mesher.lint;     // skein lint, with the rules that need the mesh
 import runtime from "./runtime";   // mesher lane: the mesh type of the mesher
 import solvers from "./solvers";   // the runtime imports it
 
@@ -51,7 +52,8 @@ fn main() {
         for a in args[2..] { rest.push(a); }
         exit(codegen::run(rest));
     }
-    if command == "check" || command == "lint" { exit(check::command(args)); }
+    if command == "check" { exit(check::command(args)); }
+    if command == "lint" { exit(mesher::lint(args)); }
     if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
     if command == "md" {
         var rest: const u8[:][>..] = [];

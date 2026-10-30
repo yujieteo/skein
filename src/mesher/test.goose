@@ -9,7 +9,10 @@ import std;
 import math;
 import dictionary;
 import os;
-import mesher from "../mesher";
+import .mesher;
+import .lint;
+import syntax from "../syntax";   // the lint imports it
+import check from "../check";     // the lint imports it
 import runtime from "../runtime";   // the mesher imports it
 import solvers from "../solvers";   // the runtime imports it
 
@@ -129,6 +132,54 @@ fn tolerance(curved_area: f64, radius: f64, edge_length: f64, size: f64, volume:
     return loss / volume;
 }
 
+// The ids of the diagnostics of `skein lint --mesh` on `src`, one per line.
+fn mesh_lint_ids(src: u8[:]) -> u8[>..] {
+    check::lint_text("t.skn", src);
+    mesher::mesh_lint();
+    var out: u8[>..] = [];
+    for d in check::diags {
+        out.append(d.id);
+        out.push('\n');
+    }
+    return out;
+}
+
+fn expect_mesh_lints(what: u8[:], src: u8[:], want: u8[:]) {
+    let got = mesh_lint_ids(src);
+    if got != want { fail(str("lint --mesh ", what, ": got [", got, "]")); }
+}
+
+// The lint rules that need the mesh (docs/checks.md §3) on a strip of
+// 1 m by 50 mm, in plane stress, with a load on its tip.
+fn test_lint() {
+    fn strip(hole: u8[:], order: u8[:]) -> u8[>..] {
+        return str("model t: 2d, SI\nscales 1 m, 1 MPa\nlet plate: Surface = rect((0, 0) m, (1, 0.05) m)", hole,
+                   "\nlet root: Curve = boundary(plate, x == 0 m)\nlet tip: Curve = boundary(plate, x == 1 m)\n",
+                   "material steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n}\n",
+                   "mesh m on plate {\n    size: 0.02 m\n    cell: tri\n}\n",
+                   "physics s on plate: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_stress(1 mm)\n}\n",
+                   "method s: cg { mesh: m, order: ", order, " }\n",
+                   "step go: static {\n    bc root: u = 0\n    bc tip: sigma*n = (0, -1) MPa\n    output u\n}\n");
+    }
+    expect_mesh_lints("bending_lock", strip("", "1"), "bending_lock\n");
+    expect_mesh_lints("order 2 does not lock", strip("", "2"), "");
+    expect_mesh_lints("mesh_feature_small", strip(" - circle((0.5, 0.025) m, 5 mm)", "2"), "mesh_feature_small\n");
+    // The rules need --mesh.
+    check::lint_text("t.skn", strip("", "1"));
+    if check::diags.len != 0 { fail("lint with no --mesh gives a mesh rule"); }
+    // `skein lint --mesh` reads its option.
+    var words: u8[..64][>..] = [];
+    for w in ["skein", "lint", "--mesh", "examples/elements/conduction_slab_tet.skn"] {
+        var c: u8[..64] = [];
+        c.append(w);
+        words.push(c);
+    }
+    var args: u8[:][>..] = [];
+    for &w in words { args.push(w[..]); }
+    let status = mesher::lint(args[..]);
+    if status != 0 { fail(str("skein lint --mesh: the exit status is ", status, ", not 0")); }
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -246,6 +297,8 @@ fn main() {
     let quarter = mesher::revolve(section, 0.5 * PI);
     mesh_case("quarter tube", quarter, 1.0, 0.25 * tube_volume,
               tolerance(0.25 * TAU * 16.0 * 30.0, 6.0, 4.0 * 0.25 * TAU * 8.0 + 4.0 * 30.0 + 4.0 * 4.0, 1.0, 0.25 * tube_volume));
+
+    test_lint();
 
     if failures > 0 { exit(1); }
     print("mesher: all tests pass");

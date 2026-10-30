@@ -1,10 +1,12 @@
-// The lint rules of `skein lint` (docs/checks.md §3). Each one is a warning
-// on a model with no error. `allow <id>: "reason"` in the model turns a
-// rule off.
+// The lint rules of `skein lint` (docs/checks.md §3) that need no mesh.
+// Each one is a warning on a model with no error. `allow <id>: "reason"` in
+// the model turns a rule off. The rules that need the mesh, `bending_lock`
+// and `mesh_feature_small`, are in src/mesher/lint.goose and run only with
+// `--mesh`.
 //
-// The rules that need the mesh (`bending_lock`, `mesh_feature_small`) are
-// not in this version. `dt_unstable` estimates the stable limit of solids
-// only, and `stabilization_missing` needs a velocity in the `scales` line.
+// `dt_unstable` estimates the stable limit of solids only, and
+// `stabilization_missing` needs a velocity in the `scales` line: flow
+// physics is phase 3 (docs/roadmap.md).
 import std;
 import dictionary;
 import math;
@@ -48,7 +50,7 @@ fn warn(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
 recursive fn note_names(n: i64, skip: i64, targets: bool) {
     if n == skip { return; }
     let k = syntax::nodes[n];
-    if k.kind == syntax::N_NAME || k.kind == syntax::N_MATON { used_names.insert(key(tok_text(k.tok)), 1); }
+    if k.kind == syntax::N_NAME { used_names.insert(key(tok_text(k.tok)), 1); }
     var c = k.first;
     var i = 0;
     while c >= 0 {
@@ -86,12 +88,14 @@ fn unused_let_at(n: i64) {
 
 // `unused_material`: a material of the model that no physics assigns.
 fn unused_material() {
-    used_names.clear();
-    note_names(model_prog, -1, true);
     var c = syntax::nodes[model_prog].first;
     while c >= 0 {
         let k = syntax::nodes[c];
-        if k.kind == syntax::N_MATERIAL && !used_names.contains(key(tok_text(k.tok))) {
+        var assigned = false;
+        for pm in phys_mats {
+            if syms[pm.mat].node == c { assigned = true; }
+        }
+        if k.kind == syntax::N_MATERIAL && !assigned {
             warn(k.tok, "unused_material", str("material ", tok_text(k.tok), " is not assigned"),
                  "assign it in a physics block or remove it");
         }
@@ -275,10 +279,9 @@ fn prop_value(mat: i64, name: u8[:]) -> f64, bool {
     return 0.0, false;
 }
 
-// The smallest constant cell size of the mesh of physics `p`: the `size`
-// and each `refine` of the mesh that its method names, or else of the one
-// mesh that the default method takes (spec §13). False when it is unknown.
-fn cell_size(p: i64) -> f64, bool {
+// The mesh item of physics `p`: the mesh that its method names, or else the
+// one mesh that the default method takes (spec §13), or -1.
+fn mesh_of(p: i64) -> i64 {
     var mesh = -1;
     let m = method_of(p);
     let ms = if m >= 0 { setting(syntax::nodes[m].first, "mesh") } else { -1 };
@@ -295,6 +298,13 @@ fn cell_size(p: i64) -> f64, bool {
             }
         }
     }
+    return mesh;
+}
+
+// The smallest constant cell size of the mesh of physics `p`: the `size`
+// and each `refine` of its mesh. False when it is unknown.
+fn cell_size(p: i64) -> f64, bool {
+    let mesh = mesh_of(p);
     guard mesh >= 0 else { return 0.0, false; };
     let b = syntax::child_of_kind(mesh, syntax::N_BLOCK);
     let size = setting(b, "size");
