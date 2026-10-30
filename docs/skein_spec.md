@@ -1640,8 +1640,10 @@ thread_fn assemble_worker() {
 
 ### 18.4 The runtime
 
-`runtime` is a Goose package in `src/runtime/`. It holds no C, except the C
-that the Goose standard library uses for files and the clock. The
+`runtime` is a Goose package in `src/runtime/`. GMRES(m), ILU(0) and
+Newton are in the package `solvers` in `src/solvers/`. `runtime` calls its
+GMRES(m) and ILU(0). `runtime` holds no C, except the C that the Goose
+standard library uses for files and the clock. The
 [end-to-end slice](roadmap.md#the-end-to-end-slice) ships a box mesher, CG
 with Jacobi and the VTU writer before phase 2.
 
