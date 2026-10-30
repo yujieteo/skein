@@ -87,6 +87,7 @@ golden files again and read the diff:
 | `src/solvers/` | the sparse solvers of `solve { linear: gmres, precond: ilu0 }`, which `src/runtime/lane_solvers.goose` calls: CSR operations (`sparse.goose`), ILU(0) (`ilu.goose`), GMRES(m) (`krylov.goose`) and Newton with a backtracking line search (`newton.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box or quarter of a tube: the Goose code generator (`codegen.goose`), the template and procedure dispatch tables (`dispatch.goose`) with one registration file for each phase 2 lane (`lane_*.goose`), and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
+| `src/elements/` | `skein run` for a simplex model (`gen.goose`): P1 and P2 triangles and tetrahedra (`shape.goose`, `mesh.goose`) for the `linear_elastic` and `heat` templates, with assembly (`assemble.goose`), CG with Jacobi (`solve.goose`) and output (`post.goose`) |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
 
 ## Why Skein

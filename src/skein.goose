@@ -20,7 +20,7 @@ let USAGE = """
       check   parse and type-check a model
       fmt     rewrite files in the standard layout
       help    print this text
-      run     build and run a model (only a linear static box or quarter of a tube for now)
+      run     build and run a model (linear static or steady heat: a box, a quarter of a tube or a plate with a hole)
       md      write a model as a Markdown document
       verify  check a model, mesh it and report mesh_quality
     """;

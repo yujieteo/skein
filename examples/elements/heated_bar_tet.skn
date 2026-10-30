@@ -1,0 +1,42 @@
+// The heated square bar of examples/femahoy/grid_heated_bar.skn on P2
+// tetrahedra. A uniform heat source and the 4 long sides at 0 degC. The
+// ends are adiabatic, so the field is the 2D field of the section. The
+// centre temperature is checked against the series of Timoshenko and
+// Goodier (1970), section 109: 14.734270656 degC.
+
+model heated_bar_tet: 3d, SI
+
+let a: Length = 0.02 m
+let lx: Length = 0.005 m
+let qv: Power/Volume = 1e7 W/m^3
+
+scales a, 100 K, 20 W/(m*K)
+
+let bar: Solid = box((0, 0, 0) m, (lx, a, a))
+let sides: Surface = boundary(bar, y == 0 m || y == a || z == 0 m || z == a)
+
+material steel {
+    k: Conductivity = 20 W/(m*K)
+}
+
+mesh m on bar {
+    size: 0.00125 m
+    cell: tet
+}
+
+physics thermal on bar solves T: Temperature {
+    material steel
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = qv
+}
+
+method thermal: cg { mesh: m, order: 2 }
+
+step steady: static {
+    bc sides: T = 0 degC
+    output T
+    report heat_out = reaction(sides)
+}
+
+// 0.1 % of the value in degC, as femahoy. A % in Skein is of the value in K, so the tolerance is absolute.
+expect centre: T at (0.0025, 0.01, 0.01) m == 14.734270656 degC within 0.0147 K
