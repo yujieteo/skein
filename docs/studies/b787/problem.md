@@ -94,7 +94,7 @@ cutouts of one shape, which give no new information.
 | Height, along the arc s | 1.829 m (72 in) | the Type A minimum, [3] 25.807(a) |
 | Corner radius | 0.178 m (7 in) | the Type A maximum, [3] 25.807(a) |
 | Centre | x = 0, θ = 75° | **[assumption]** 15° above the horizontal puts the sill near the cabin floor. |
-| Edges | x = ±0.5334, θ = 56.83° (upper) to 93.17° (lower) | from the size and the centre |
+| Edges | x = ±0.5334, s = 2.8593 (upper) to 4.6883 (lower), which is θ = 56.83° to 93.17° | from the size and the centre: s = R × 75° ∓ 1.829 / 2 |
 
 The skin cutout is equal to the clear opening. **[assumption]** The real
 cutout is larger, but its size is not public.
@@ -270,7 +270,7 @@ A second analysis gives a refined result at the upper aft door corner.
 
 | Item | Value |
 |---|---|
-| Region | a square in the x-s plane, 0.600 m × 0.600 m, centred on the centre of the corner radius: x_c = 0.5334 − 0.178 = 0.3554, s_c = s_upper + 0.178 = 3.0376 m, where s_upper = R × 56.83° = 2.8596 m. The region contains the skin, the pad-up and the parts of the stringers and frames in it. |
+| Region | a square in the x-s plane, 0.600 m × 0.600 m, centred on the centre of the corner radius: x_c = 0.5334 − 0.178 = 0.3554, s_c = s_upper + 0.178 = 3.0373 m, where s_upper = 2.8593 m (section 2.3). The region contains the skin, the pad-up and the parts of the stringers and frames in it. |
 | Idealization | the same as the global model: shells for the skin and pad-up, offset beams for the stringers and frames |
 | Mesh | about 0.005 m on the cutout edge, and not more than 0.020 m elsewhere |
 | Boundary | on the region boundary, the translations and rotations of the skin and the beam ends come from the global result |
