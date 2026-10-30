@@ -2,8 +2,8 @@
 // dofs. M and K are sparse (CSR) with the same pattern, and they hold all
 // dofs, with the fixed dofs too.
 //
-// Each step solves A u_new = M w + K v by CG with a Jacobi preconditioner,
-// where A = cm M + ck K:
+// Each step solves A u_new = M w + K v by CG (runtime::cg) with a Jacobi
+// preconditioner, where A = cm M + ck K:
 //
 //     scheme           cm          ck     w                      v
 //     backward_euler   1/dt        1      u/dt                   0
@@ -15,6 +15,8 @@
 import std;
 import math;
 namespace transient;
+import runtime from "../runtime";
+import solvers from "../solvers";
 
 var row_start: i64[>..] = [];
 var col: i32[>..] = [];
@@ -38,73 +40,38 @@ fn clear_matrices() {
     stiff.clear();
 }
 
-fn zeros(n: i64) -> f64[>..] {
-    var v: f64[>..] = [];
-    for i in n { v.push(0.0); }
-    return v;
+// The scheme of the current step: A = cm M + ck K in a_val, and the
+// inverse of its diagonal on the free dofs (0 on the fixed dofs).
+var a_val: f64[>..] = [];
+var inv_diag: f64[>..] = [];
+
+// y = A x on the free dofs, and 0 on the fixed dofs.
+fn free_operator(x: f64[:], y: f64[:]) {
+    solvers::multiply(row_start, col, a_val, x, y);
+    for d in y.len { if fixed[d] != 0 { y[d] = 0.0; } }
 }
 
-fn dot(a: f64[:], b: f64[:]) -> f64 {
-    var s = 0.0;
-    for v, i in a { s += v * b[i]; }
-    return s;
-}
-
-// y = (cm M + ck K) x
-fn multiply(cm: f64, ck: f64, x: f64[:], y: f64[:]) {
-    for r in y.len {
-        var s = 0.0;
-        for e in row_start[r]..row_start[r + 1] {
-            s += (cm * mass[e] + ck * stiff[e]) * x[col[e]];
-        }
-        y[r] = s;
-    }
+fn jacobi(r: f64[:], z: f64[:]) {
+    for d in r.len { z[d] = inv_diag[d] * r[d]; }
 }
 
 // Solves (cm M + ck K) temp = b on the free dofs, with temp = fixed_value
-// on the fixed dofs. Starts from the current temp. Returns false if CG
-// does not converge.
-fn solve_step(cm: f64, ck: f64, b: f64[:]) -> bool {
+// on the fixed dofs, by runtime::cg. Starts from the current temp. Returns
+// false if CG does not converge.
+fn solve_step(cm: f64, ck: f64, b: f64[>..]&) -> bool {
     let n = temp.len;
-    var r = zeros(n);
-    var z = zeros(n);
-    var p = zeros(n);
-    var q = zeros(n);
-    var inv_diag = zeros(n);
+    a_val.clear();
+    for e in mass.len { a_val.push(cm * mass[e] + ck * stiff[e]); }
+    solvers::zeros(inv_diag, n);
     for d in n {
-        if fixed[d] != 0 { temp[d] = fixed_value[d]; }
-    }
-    multiply(cm, ck, temp, q);
-    var bnorm = 0.0;
-    for d in n {
-        if fixed[d] != 0 { continue; }
-        r[d] = b[d] - q[d];
-        bnorm += b[d] * b[d];
-        for e in row_start[d]..row_start[d + 1] {
-            if col[e] == d { inv_diag[d] = 1.0 / (cm * mass[e] + ck * stiff[e]); }
+        if fixed[d] != 0 {
+            temp[d] = fixed_value[d];
+            b[d] = 0.0;
+        } else {
+            inv_diag[d] = 1.0 / a_val[solvers::entry(row_start, col, d, d)];
         }
     }
-    let target = CG_TOLERANCE * sqrt(bnorm);
-    for d in n { z[d] = inv_diag[d] * r[d]; p[d] = z[d]; }
-    var rz = dot(r, z);
-    var converged = sqrt(dot(r, r)) <= target;
-    var it = 0;
-    while !converged && it < 10 * n {
-        multiply(cm, ck, p, q);
-        for d in n { if fixed[d] != 0 { q[d] = 0.0; } }
-        let alpha = rz / dot(p, q);
-        for d in n {
-            temp[d] += alpha * p[d];
-            r[d] -= alpha * q[d];
-        }
-        it++;
-        if sqrt(dot(r, r)) <= target { converged = true; break; }
-        for d in n { z[d] = inv_diag[d] * r[d]; }
-        let rz_new = dot(r, z);
-        let beta = rz_new / rz;
-        rz = rz_new;
-        for d in n { p[d] = z[d] + beta * p[d]; }
-    }
+    let converged, it = runtime::cg(b, temp, CG_TOLERANCE, 10 * n, free_operator, jacobi);
     last_iterations += it;
     return converged;
 }
@@ -114,11 +81,16 @@ fn advance(end: f64, dt_max: f64, scheme: i64) -> bool {
     assert(dt_max > 0.0 && scheme >= 0 && scheme <= 2);
     let steps = max(ceil((end - now) / dt_max - 1.0e-9) as i64, 0);
     let n = temp.len;
-    var old = zeros(n);
-    var w = zeros(n);
-    var v = zeros(n);
-    var b = zeros(n);
-    var mw = zeros(n);
+    var old: f64[>..] = [];
+    var w: f64[>..] = [];
+    var v: f64[>..] = [];
+    var b: f64[>..] = [];
+    var mw: f64[>..] = [];
+    solvers::zeros(old, n);
+    solvers::zeros(w, n);
+    solvers::zeros(v, n);
+    solvers::zeros(b, n);
+    solvers::zeros(mw, n);
     last_steps = 0;
     last_iterations = 0;
     guard steps > 0 else { return true; }
@@ -136,8 +108,8 @@ fn advance(end: f64, dt_max: f64, scheme: i64) -> bool {
             cm = 1.5 / dt;
             for d in n { w[d] = (4.0 * temp[d] - old[d]) / (2.0 * dt); }
         }
-        multiply(1.0, 0.0, w, mw);
-        multiply(0.0, 1.0, v, b);
+        solvers::multiply(row_start, col, mass, w, mw);
+        solvers::multiply(row_start, col, stiff, v, b);
         for d in n {
             b[d] += mw[d];
             old[d] = temp[d];

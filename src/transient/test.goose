@@ -11,6 +11,8 @@
 // with α = k / (rho cp). Units: m, s, K.
 import std;
 import math;
+import runtime from "../runtime";
+import solvers from "../solvers";
 import transient from "../transient";
 
 var failures = 0;

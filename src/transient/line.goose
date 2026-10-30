@@ -6,6 +6,7 @@ import std;
 import math;
 namespace transient;
 import .step;
+import solvers from "../solvers";
 
 var line_lo = 0.0;
 var line_hi = 0.0;
@@ -84,21 +85,12 @@ fn assemble_line() {
         for a in 3 {
             let r = 2 * c + a;
             for bb in 3 {
-                let e = entry(r, 2 * c + bb);
+                let e = solvers::entry(row_start, col, r, 2 * c + bb);
                 stiff[e] += kf * KE[3 * a + bb];
                 mass[e] += mf * ME[3 * a + bb];
             }
         }
     }
-}
-
-// The position of column c in row r.
-fn entry(r: i64, c: i64) -> i64 {
-    for e in row_start[r]..row_start[r + 1] {
-        if col[e] == c { return e; }
-    }
-    assert(false);
-    return -1;
 }
 
 fn interpolate_T(x: f64) -> f64 {
