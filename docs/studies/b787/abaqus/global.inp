@@ -46,7 +46,7 @@ SF
 ** C2: SF1 / t at P = 25.2 MPa within 5 %; report SF1 / t / 30.7 MPa.
 ** P is the node common to the four elements of CHECK_P. Use their mean.
 *EL PRINT, ELSET=CHECK_P, POSITION=CENTROIDAL
-SF
+SF, SE
 *NODE PRINT, NSET=CHECK_P
 U
 ** C3: total RF1 = -1273.0 kN within 0.1 %.

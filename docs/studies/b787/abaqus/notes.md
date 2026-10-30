@@ -38,7 +38,7 @@ Lines count non-blank lines. Tokens use tiktoken `o200k_base`.
 
 | Part | Lines | Lines without `**` comments | Tokens |
 |---|---|---|---|
-| Hand-written: `global.inp`, `door_corner.inp`, `properties.inp` | 240 | 164 | 3,637 |
+| Hand-written: `global.inp`, `door_corner.inp`, `properties.inp` | 240 | 164 | 3,639 |
 | Mesh script: `mesh.py` | 352 | 352 | 5,690 |
 | Generated: the four mesh and load files | 55,847 | 55,836 | 1,067,377 |
 
