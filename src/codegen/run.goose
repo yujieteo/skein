@@ -62,13 +62,13 @@ fn run(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein run: cannot read '", path, "'\n"));
         return 1;
     }
-    let prog = fmt::parse_text(path, text);
+    let prog = syntax::parse_model(path, text);
     // skein-elements: a simplex model goes to src/elements/gen.goose.
     // skein-shells: a shell model goes to src/shells/gen.goose.
     let shell_model = prog >= 0 && shells_gen::claims(prog);
     let simplex = prog >= 0 && !shell_model && elements_gen::claims(prog);
     if prog < 0 || !(if shell_model { shells_gen::read(prog) } else if simplex { elements_gen::read(prog) } else { read(prog) }) {
-        fmt::write_errors(path);
+        fmt::write_errors();
         return 1;
     }
     let build_dir = str(".skein/build/", model_name);

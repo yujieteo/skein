@@ -26,10 +26,12 @@ fn check_text(path: u8[:], text: u8[:]) {
     let f = syntax::add_file(path, text);
     syntax::lex(f);
     let prog = syntax::parse(f);
+    syntax::read_uses(prog);
     for e in syntax::errors {
         let k = syntax::tokens[e.tok];
         var d = Diag { id: e.id, file: [], line: k.line, col: k.col, msg: e.msg, fix: e.fix };
-        d.file.append(path[..min(path.len, 256)]);
+        let file = syntax::files[k.file].path;
+        d.file.append(file[..min(file.len, 256)]);
         diags.push(d);
     }
     // The other rules need a tree with no syntax errors (spec §19).
@@ -56,10 +58,6 @@ fn check_text(path: u8[:], text: u8[:]) {
 
 fn check_item(n: i64) {
     match syntax::nodes[n].kind {
-        syntax::N_USE => {
-            error(syntax::nodes[n].tok, "use_item", "use is not in this version (phase 2)",
-                  "copy the items of the file into the model");
-        },
         syntax::N_PARAM => { check_value_decl(n, S_PARAM); },
         syntax::N_LET => { check_value_decl(n, S_LET); },
         syntax::N_FN => { check_fn(n); },

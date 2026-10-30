@@ -73,10 +73,10 @@ These gaps are closed:
 
 ## Parser and formatter findings
 
-- A `use` library file (§4.1) has no header, and the parser rejects it
-  with `header_order`. Thus each file holds its own copy of the dimensions,
-  the materials, the geometry and the physics: about 165 shared lines.
-  With `use`, one library file can hold them.
+- The library file `barrel.skn` (§4.1) holds the dimensions, the
+  geometry and the materials that both models use. A library file holds
+  only `material`, `param`, `let` and `fn` items, so each model keeps its
+  own copy of the ply table, the mesh, the physics and the conditions.
 - The parser accepts a list `[...]` only in a procedure argument, not in a
   template argument. The layup is a table for this reason.
 - `skein fmt` breaks a physics header at a `|` in its region, and it

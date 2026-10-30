@@ -163,9 +163,33 @@ fn test_names() {
     expect_id("use_before_decl", str(H, "let a: Real = bb\nlet bb: Real = 1\n"));
     expect_id("duplicate_name", str(H, "let a: Real = 1\nlet a: Real = 2\n"));
     expect_id("duplicate_name", str(H, "let t: Time = 1 s\n"));
-    expect_id("use_item", str(H, "use \"lib.skn\"\n"));
     expect_id("unknown_unit", str(H, "let a: Length = 5 mms\n"));
     expect_id("table_row_width", str(H, "table tb{a: Length in m, b: Real}:\n    1, 2, 3\n"));
+}
+
+// `use` library files (spec §4.1). The test writes them into build/.
+fn test_use() {
+    write_file("build/use_ok.skn", """
+        // The steel of the tests.
+        let E_s: Pressure = 200 GPa
+        param rho_s: Density = 7800 kg/m^3
+        fn twice(a: Length) -> Length = 2*a
+        material steel {
+            E: Pressure = E_s
+            nu: Real = 0.3
+            rho: Density = rho_s
+        }
+        """);
+    write_file("build/use_header.skn", "model lib: 3d, SI\nlet a: Real = 1\n");
+    write_file("build/use_table.skn", "let a: Real = 1\ntable tb{a: Real}:\n    1\n");
+    write_file("build/use_use.skn", "use \"use_ok.skn\"\n");
+    expect_clean("use", str(H, "use \"build/use_ok.skn\"\nlet L: Length = twice(1 m)\nlet E2: Pressure = 2*E_s\n"));
+    expect_id("use_item", str(H, "use \"build/no_such_file.skn\"\n"));
+    expect_id("use_item", str(H, "use \"build/use_header.skn\"\n"));
+    expect_id("use_item", str(H, "use \"build/use_table.skn\"\n"));
+    expect_id("use_item", str(H, "use \"build/use_use.skn\"\n"));
+    expect_id("duplicate_name", str(H, "use \"build/use_ok.skn\"\nlet E_s: Pressure = 1 GPa\n"));
+    expect_id("duplicate_name", str(H, "use \"build/use_ok.skn\"\nuse \"build/use_ok.skn\"\n"));
 }
 
 fn test_types() {
@@ -317,6 +341,7 @@ fn test_shells() {
 
 fn main() {
     test_names();
+    test_use();
     test_types();
     test_physics();
     test_conditions();

@@ -886,7 +886,7 @@ fn read(prog: i64) -> bool {
             step(c);
         } else if k == syntax::N_EXPECT {
             expect(c);
-        } else if k != syntax::N_SCALES {
+        } else if k != syntax::N_SCALES && k != syntax::N_USE {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this slice"),
                         "remove it: this slice runs one linear static shell");
         }
