@@ -1,9 +1,10 @@
 # Notes on the Skein model
 
-The Skein model of the [problem sheet](../problem.md) has two files:
+The Skein model of the [problem sheet](../problem.md) has three files:
 
 | File | Contents |
 |---|---|
+| `barrel.skn` | the library file (§4.1) with the dimensions, the geometry and the materials that both models use |
 | `fuselage.skn` | the global model (sheet 2 to 6.3, checks C1 to C5) |
 | `door_corner.skn` | the door-corner submodel (sheet 6.4, check C6, outputs 5 to 7) |
 
@@ -15,8 +16,9 @@ The element order is 2 for the shells and the beams (the `method` lines).
 Each error is on a line under a `// gap G32` comment, and line 1 of each
 file names G32. Thus both files pass the phase 1 gate of the
 [femahoy coverage](../../../femahoy_coverage.md): a model passes `skein
-check`, or it has a `// blocked-by:` mark. Both files also pass `skein fmt
---check`.
+check`, or it has a `// blocked-by:` mark. Both models also pass `skein fmt
+--check`. `skein fmt` does not read the library file `barrel.skn`, because
+it has no header.
 
 ## Run status
 
