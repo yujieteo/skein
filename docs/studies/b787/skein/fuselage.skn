@@ -199,8 +199,6 @@ step pressurize: static {
     bc skin_end: N*n = (p_U*R/2, 0, 0)
     bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
     output w, dot(w, e_r), s_hoop, s_axial, Nx
-    // gap N2: max gives the value, not its point, and one value for all
-    // the beams, not one for each beam.
     report w_r_max = max(dot(w, e_r), skin)
     report stringer_max = max(Nx, stringers)
     report frame_max = max(Nx, frames)

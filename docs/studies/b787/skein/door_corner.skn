@@ -200,7 +200,6 @@ step pressurize: static {
     // length, because ds = |n.x|*dl.
     bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
     output w, e_1, e_hoop
-    // gap N2: max gives the value, not its point.
     report e_1_max = max(e_1, door_edge)
     report K = max(e_1, door_edge)/(global.e_hoop at P)
     report MS = 4000e-6/max(e_1, door_edge) - 1

@@ -743,7 +743,7 @@ fn bc(n: i64) {
         for j in 9 {
             if x.v[j] != 0.0 { unsupported(tok(v), "this slice fixes a value of 0 only", BC_FIX_TEXT); }
         }
-        if x.n != (if count == 1 { 1 } else { 3 }) { unsupported(tok(v), "the value has the wrong size", BC_FIX_TEXT); }
+        if x.n != 1 && (count == 1 || x.n != 3) { unsupported(tok(v), "the value has the wrong size", BC_FIX_TEXT); }
         for j in count {
             bcs.push(Bc { region: r, kind: BC_FIX, dof: d + j, load: [0.0, 0.0, 0.0] });
             if !in_step { global_bcs.push(bcs.len - 1); }

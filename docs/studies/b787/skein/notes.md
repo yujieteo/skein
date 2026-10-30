@@ -38,13 +38,11 @@ C5.
 Each file names its open gaps on line 1 (`// blocked-by:`), and puts a
 `// gap` comment where the gap applies. G32 is in the
 [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study),
-with the spec change that closes it. N2 does not make `check` fail, so it
-is only on this page.
+with the spec change that closes it.
 
 | Gap | Feature | Why the spec cannot state it | Smallest spec change |
 |---|---|---|---|
 | G32 | The skin, the pad-up, the stringers, the frames and the door edge cut by a `Solid` | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G32 change. |
-| N2 | Outputs 1, 3 and 5: the point of a maximum, and the maximum of each beam | `max(f, r)` gives one value on one region (§14.5). | A report function `argmax(f, r)` that gives the point. `max(f, r)` on a `pattern` gives one value for each copy. |
 
 These gaps are closed:
 
@@ -53,6 +51,7 @@ These gaps are closed:
 | G3 | Composite shells: the skin and the pad-up, with a ply axis, the outer face and a load per area | spec §4.3: `reissner_mindlin(layup, mirror, axis, top, q)` |
 | G31 (N1) | Offset beams on the skin and their axial force `Nx` | spec §4.3: `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` and `let Nx`; spec §12.1: the tie |
 | G33 | The shell resultants `N` and `eps_m`, the edge loads `N*n`, and `global.e_hoop` in the submodel | spec §4.3: `let N` and `let eps_m`; spec §15.1: the `let` fields of a `Results` value |
+| N2 | Outputs 1, 3 and 5: the point of a maximum, and the maximum of each beam | spec §14.5: `argmax(f, r)` gives the point, and `max(f, r)` on a `pattern` gives one value for each copy |
 | N3 | Quadrilateral shells (sheet 6.3) | spec §9.1: `cell: quad` on each `Surface`, with triangles where the shape needs them. The models use `cell: quad`. |
 
 ## Nearest forms and choices

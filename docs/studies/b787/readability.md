@@ -17,7 +17,7 @@ in Skein ([`skein/`](skein/)) and once as an Abaqus deck with a mesh script
   `door_corner.skn` with 5 errors. Each error comes from gap G32, which
   line 1 of the file names. §4.3, §12.1 and §15.1 closed G3, G31 and G33. No edit added a new error id. The edits found 2 new gaps, G34 and
   G35. The [coverage record](../../femahoy_coverage.md#gaps-of-the-787-study)
-  holds them. Before, N1 of `skein/notes.md` became G31. N2 and N3 stay on that page.
+  holds them. Before, N1 of `skein/notes.md` became G31. §14.5 and §9.1 closed N2 and N3.
 - **LLM runs.** 2 of 3 Skein runs solved a shell barrel, and 1 of 3
   Abaqus-path runs gave a result. But no run modelled the full barrel and
   also gave a correct result. The 2 Skein barrels have skin only, with no
