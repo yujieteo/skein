@@ -1643,6 +1643,10 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append("import std;\nimport os;\nimport runtime from ");
     quoted(out, runtime_path);
     out.append(";\n");
+    // solvers lane: the runtime imports the package solvers (lane_solvers.goose).
+    out.append("import solvers from ");
+    quoted(out, str(runtime_path, "/../solvers"));
+    out.append(";\n");
     out.append(PRELUDE);
     for si in 0..steps.len {
         if steps[si].procedure == CORE {

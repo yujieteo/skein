@@ -9,6 +9,7 @@ import std;
 import math;
 import os;
 import runtime from "../runtime";
+import solvers from "../solvers";   // the runtime imports it (lane_solvers.goose)
 
 var failures = 0;
 
