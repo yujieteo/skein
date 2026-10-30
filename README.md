@@ -63,6 +63,7 @@ Goose source tree at the same commit as the compiler.
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
+| `src/mesher/` | the mesher of spec §9.2: the CSG shapes and their distance functions (`geometry.goose`), 2D Delaunay refinement (`tri.goose`), 3D isosurface stuffing (`tet.goose`), the unstructured mesh (`mesh.goose`) and `mesh_quality` (`quality.goose`) |
 
 ## Why Skein
 
