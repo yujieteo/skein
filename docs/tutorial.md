@@ -310,8 +310,10 @@ A part of the boundary with no condition is free: zero traction, zero heat
 flux. `check` lists each free part, so you see what you did not write:
 
 ```toon
-free_boundary[1]{physics,field,region,condition}:
-  solid,u,"boundary(beam) - root - tip","sigma*n = 0"
+free_boundary[3]{physics,field,region,condition}:
+  solid,u,"boundary(beam) - root - sym - tip","sigma*n = 0"
+  solid,u.y,"sym","(sigma*n).y = 0"
+  solid,u.z,"sym","(sigma*n).z = 0"
 ```
 
 ---
