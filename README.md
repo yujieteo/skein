@@ -84,6 +84,7 @@ golden files again and read the diff:
 | `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
 | `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron mesher for a box or a sector of an annulus (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
+| `src/solvers/` | the sparse solvers that `skein run` does not call yet: CSR operations (`sparse.goose`), ILU(0) (`ilu.goose`), GMRES(m) (`krylov.goose`) and Newton with a backtracking line search (`newton.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box or quarter of a tube: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
