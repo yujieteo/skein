@@ -71,23 +71,13 @@ struct BaseUnit {
     u: Unit,
 }
 
-let PI = 3.141592653589793;
-
 let BASE_UNITS = [
     BaseUnit { name: "m", u: Unit { f: 1.0, l: 1, m: 0, t: 0 } },
     BaseUnit { name: "g", u: Unit { f: 1.0e-3, l: 0, m: 1, t: 0 } },
     BaseUnit { name: "s", u: Unit { f: 1.0, l: 0, m: 0, t: 1 } },
     BaseUnit { name: "N", u: Unit { f: 1.0, l: 1, m: 1, t: -2 } },
     BaseUnit { name: "Pa", u: Unit { f: 1.0, l: -1, m: 1, t: -2 } },
-    BaseUnit { name: "J", u: Unit { f: 1.0, l: 2, m: 1, t: -2 } },
-    BaseUnit { name: "W", u: Unit { f: 1.0, l: 2, m: 1, t: -3 } },
-    BaseUnit { name: "Hz", u: Unit { f: 1.0, l: 0, m: 0, t: -1 } },
-    BaseUnit { name: "rad", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
-    BaseUnit { name: "deg", u: Unit { f: PI / 180.0, l: 0, m: 0, t: 0 } },
-    BaseUnit { name: "L", u: Unit { f: 1.0e-3, l: 3, m: 0, t: 0 } },
     BaseUnit { name: "t", u: Unit { f: 1000.0, l: 0, m: 1, t: 0 } },
-    BaseUnit { name: "min", u: Unit { f: 60.0, l: 0, m: 0, t: 1 } },
-    BaseUnit { name: "h", u: Unit { f: 3600.0, l: 0, m: 0, t: 1 } },
     BaseUnit { name: "bar", u: Unit { f: 1.0e5, l: -1, m: 1, t: -2 } },
 ];
 
@@ -135,7 +125,7 @@ fn unit_name(t: i64) -> Unit {
         }
     }
     unsupported(t, str("the unit '", word, "' is not in this slice"),
-                "use a unit of length, mass, time, force or pressure, for example mm, kN or GPa");
+                "use m, g, t, s, N, Pa or bar, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
     return Unit { f: 1.0, l: 0, m: 0, t: 0 };
 }
 
@@ -300,6 +290,7 @@ struct Bc {
     face: i64,      // index in `faces`
     fix: bool,
     t: f64[3],
+    tok: i64,
 }
 
 struct Report {
@@ -309,7 +300,9 @@ struct Report {
 
 struct Step {
     name: u8[..64],
-    first_bc: i64,  // a range of `bcs`
+    first_own: i64, // the bcs of the step itself: a range of `bcs`
+    own_count: i64,
+    first_bc: i64,  // all bcs that hold in the step: a range of `active`
     bc_count: i64,
     first_report: i64,
     report_count: i64,
@@ -334,6 +327,7 @@ var lo: f64[3];
 var hi: f64[3];
 var faces: Face[>..];
 var bcs: Bc[>..];
+var active: Bc[>..];
 var reports: Report[>..];
 var steps: Step[>..];
 var expects: Expect[>..];
@@ -356,6 +350,7 @@ fn reset() {
     value_nodes.clear();
     faces.clear();
     bcs.clear();
+    active.clear();
     reports.clear();
     steps.clear();
     expects.clear();
@@ -598,7 +593,7 @@ fn bc(n: i64) -> i64 {
         unsupported(tok(region), "the region of the bc is not a face of the box that a let names", FACE_FIX);
         return -1;
     }
-    var b = Bc { face: face, fix: false, t: [0.0, 0.0, 0.0] };
+    var b = Bc { face: face, fix: false, t: [0.0, 0.0, 0.0], tok: tok(n) };
     if kind(target) == syntax::N_NAME && name(target) == unknown_name {
         let v = eval(value);
         b.fix = true;
@@ -624,11 +619,9 @@ fn step(n: i64) {
     if name(proc) != "static" || syntax::nodes[proc].first >= 0 {
         unsupported(tok(proc), "this slice has only static steps with no arguments", "write step load: static { ... }");
     }
-    var s = Step { name: [], first_bc: bcs.len, bc_count: 0, first_report: reports.len, report_count: 0,
-                   output: false };
+    var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
+                   first_report: reports.len, report_count: 0, output: false };
     set64(s.name, name(n));
-    // The global bcs hold in each step.
-    for g in global_bcs { bcs.push(bcs[g]); }
     var c = syntax::nodes[proc].next;
     while c >= 0 {
         let k = kind(c);
@@ -652,7 +645,7 @@ fn step(n: i64) {
         }
         c = syntax::nodes[c].next;
     }
-    s.bc_count = bcs.len - s.first_bc;
+    s.own_count = bcs.len - s.first_own;
     s.report_count = reports.len - s.first_report;
     steps.push(s);
 }
@@ -788,27 +781,104 @@ fn read(prog: i64) -> bool {
     if physics_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if material_name.len == 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
-    if ok() { same_supports(); }
+    if ok() {
+        step_bcs();
+        supports();
+    }
     return ok();
 }
 
-// The runtime keeps the supports from step to step, so each step must fix
-// the same faces.
-fn same_supports() {
-    let s0 = steps[0];
-    for s in steps[1..] {
-        var a: i64[>..] = [];
-        var b: i64[>..] = [];
-        for i in s0.first_bc..s0.first_bc + s0.bc_count { if bcs[i].fix { a.push(bcs[i].face); } }
-        for i in s.first_bc..s.first_bc + s.bc_count { if bcs[i].fix { b.push(bcs[i].face); } }
-        if a != b {
-            unsupported(physics_tok, str("step ", s.name, " fixes other faces than step ", s0.name),
-                        "fix the same faces in each step, or put the bc u = 0 outside the steps");
+// Puts `b` in `set`, in place of a bc on the same face and target.
+fn merge(set: Bc[>..]&, b: Bc) {
+    for i in 0..set.len {
+        if set[i].face == b.face && set[i].fix == b.fix {
+            set[i] = b;
+            return;
         }
     }
-    var any = false;
-    for i in s0.first_bc..s0.first_bc + s0.bc_count { if bcs[i].fix { any = true; } }
-    if !any { unsupported(physics_tok, "no face is fixed, so the box can move as a rigid body", "add bc root: u = 0"); }
+    set.push(b);
+}
+
+// The bcs that hold in each step (spec §12.2): the top-level bcs, wherever
+// they are in the file, then the bcs of each step from that step on. A
+// later bc replaces an earlier one on the same face and target.
+fn step_bcs() {
+    var set: Bc[>..] = [];
+    for g in global_bcs { merge(set, bcs[g]); }
+    for i in 0..steps.len {
+        let s = steps[i];
+        for b in bcs[s.first_own..s.first_own + s.own_count] { merge(set, b); }
+        steps[i].first_bc = active.len;
+        steps[i].bc_count = set.len;
+        for b in set { active.push(b); }
+    }
+}
+
+fn same_plane(a: i64, b: i64) -> bool {
+    faces[a].axis == faces[b].axis && faces[a].value == faces[b].value
+}
+
+// The fixed faces of step `si`, one for each plane.
+fn fixed_faces(si: i64) -> i64[>..] {
+    let s = steps[si];
+    var out: i64[>..] = [];
+    for b in active[s.first_bc..s.first_bc + s.bc_count] {
+        if !b.fix { continue; }
+        var seen = false;
+        for f in out { if same_plane(f, b.face) { seen = true; } }
+        if !seen { out.push(b.face); }
+    }
+    return out;
+}
+
+// The runtime keeps the supports from step to step, so each step must fix
+// the same faces. The reaction sums each fixed face once, so two fixed
+// faces must not share an edge.
+fn supports() {
+    let a = fixed_faces(0);
+    if a.len == 0 {
+        unsupported(physics_tok, "no face is fixed, so the box can move as a rigid body", "add bc root: u = 0");
+        return;
+    }
+    for f in a[1..] {
+        if faces[f].axis != faces[a[0]].axis {
+            unsupported(bc_tok(0, f), str("the fixed faces ", faces[a[0]].name, " and ", faces[f].name,
+                                          " share an edge, and this slice cannot sum their reaction"),
+                        "fix one face, or two opposite faces");
+        }
+    }
+    for si in 1..steps.len {
+        let b = fixed_faces(si);
+        if a != b {
+            unsupported(bc_tok(si, b[b.len - 1]), str("step ", steps[si].name, " fixes a face that step ",
+                                                      steps[0].name, " does not fix"),
+                        "fix each face in the first step, or put the bc u = 0 outside the steps");
+        }
+    }
+    for si in 0..steps.len {
+        let s = steps[si];
+        let fixed = fixed_faces(si);
+        for r in reports[s.first_report..s.first_report + s.report_count] {
+            if kind(r.expr) != syntax::N_CALL { continue; }
+            let arg = syntax::nodes[syntax::child(r.expr, 1)].first;
+            var on = false;
+            for f in fixed { if same_plane(f, find_face(name(arg))) { on = true; } }
+            if !on {
+                unsupported(tok(arg), str("the face ", name(arg), " is not fixed in step ", s.name,
+                                          ", so it has no reaction"),
+                            "report the reaction of a face with bc u = 0");
+            }
+        }
+    }
+}
+
+// The token of the fixed bc on face `f` in step `si`.
+fn bc_tok(si: i64, f: i64) -> i64 {
+    let s = steps[si];
+    for b in active[s.first_bc..s.first_bc + s.bc_count] {
+        if b.fix && b.face == f { return b.tok; }
+    }
+    return physics_tok;
 }
 
 // --- the Goose program -------------------------------------------------------------
@@ -912,11 +982,11 @@ let PRELUDE = """
     }
 
     // The sum of the reactions and the applied loads is 0 (checks.md,
-    // `equilibrium`), to 1e-6 of the applied load.
+    // `equilibrium`), to 1e-6 of the largest component of the applied load.
     fn equilibrium(rx: f64, ry: f64, rz: f64, unit: u8[:]) {
         let fx, fy, fz = runtime::applied_load();
         let r = sqrt((rx + fx) * (rx + fx) + (ry + fy) * (ry + fy) + (rz + fz) * (rz + fz));
-        let limit = 1.0e-6 * sqrt(fx * fx + fy * fy + fz * fz);
+        let limit = 1.0e-6 * max(abs(fx), max(abs(fy), abs(fz)));
         check("equilibrium", r <= limit, quantity(r, unit), quantity(limit, unit));
     }
 
@@ -978,8 +1048,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
         out.append("    // The supports of the first step stay.\n");
         out.append("    runtime::clear_loads();\n");
     }
-    for i in s.first_bc..s.first_bc + s.bc_count {
-        let b = bcs[i];
+    for b in active[s.first_bc..s.first_bc + s.bc_count] {
         if b.fix && si > 0 { continue; }
         let f = faces[b.face];
         if b.fix {
@@ -995,10 +1064,8 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append(");\n");
     // The reaction on all fixed faces, for the check `equilibrium`.
     out.append("    var rx, ry, rz = 0.0, 0.0, 0.0;\n");
-    let s0 = steps[0];
-    for b in bcs[s0.first_bc..s0.first_bc + s0.bc_count] {
-        if !b.fix { continue; }
-        let f = faces[b.face];
+    for fi in fixed_faces(si) {
+        let f = faces[fi];
         format(out, "    {\n        let x, y, z = runtime::reaction_face(", AXES[f.axis], ", ");
         lit(out, f.value);
         out.append(");\n        rx += x;\n        ry += y;\n        rz += z;\n    }\n");

@@ -44,6 +44,19 @@ fn expect_error(what: u8[:], text: u8[:], want: u8[:]) {
     }
 }
 
+// The number of times `w` is in `s`.
+fn occurrences(s: u8[:], w: u8[:]) -> i64 {
+    var n = 0;
+    var at = 0;
+    while true {
+        let i = find(s[at..], w);
+        if i < 0 { return n; }
+        n++;
+        at += i + w.len;
+    }
+    return n;
+}
+
 // `s` with each `from` changed to `to`.
 fn replace(s: u8[:], from: u8[:], to: u8[:]) -> u8[>..] {
     var out: u8[>..] = [];
@@ -152,6 +165,77 @@ fn test_two_steps() {
     ]);
 }
 
+// Spec §12.2: a top-level bc holds in each step wherever it is in the
+// file, and a step bc holds from its step on.
+fn test_bc_scope() {
+    let after = """
+        step load: static {
+            bc root: u = 0
+        }
+
+        bc tip: sigma*n = (0, 0, -1) MPa
+        """;
+    expect_lines("a top-level bc after the step", model(MM, str(MESH, after)), [
+        "fn step_load() {\n    // bc tip: sigma*n = (0.0, 0.0, -1.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0), \"tip\");",
+    ]);
+    let carry = """
+        let bottom: Surface = boundary(beam, z == 0 mm)
+
+        step one: static {
+            bc root: u = 0
+            bc tip: sigma*n = (0, 0, -1) MPa
+        }
+
+        step two: static {
+            bc bottom: sigma*n = (0, 0, 1) MPa
+        }
+
+        step three: static {
+            bc tip: sigma*n = (0, 0, -3) MPa
+        }
+        """;
+    expect_lines("step bcs carry on", model(MM, str(MESH, carry)), [
+        "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -1.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0), \"tip\");\n    // bc bottom: sigma*n = (0.0, 0.0, 1.0) MPa\n    face(runtime::traction_face(runtime::Z, 0.0, 0.0, 0.0, 1.0), \"bottom\");\n    solve(",
+        "fn step_three() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -3.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -3.0), \"tip\");\n    // bc bottom:",
+    ]);
+}
+
+// The equilibrium check sums the reaction of each fixed face once.
+fn test_reaction() {
+    let twice = """
+        bc root: u = 0
+
+        step load: static {
+            bc root: u = 0
+            bc tip: sigma*n = (0, 0, -1) MPa
+        }
+        """;
+    let got = generate(model(MM, str(MESH, twice)));
+    if occurrences(got, "runtime::reaction_face(") != 1 || occurrences(got, "fix_face(") != 1 {
+        failures++;
+        print("FAIL a face fixed twice: not one fix and one reaction in:\n", got);
+    }
+    expect_error("fixed faces with an edge", model(MM, str(MESH, """
+        let bottom: Surface = boundary(beam, z == 0 mm)
+
+        step load: static {
+            bc root: u = 0
+            bc bottom: u = 0
+        }
+        """)), "error unsupported 23:5 the fixed faces root and bottom share an edge");
+    expect_error("a later step fixes a new face", model(MM, str(MESH, """
+        step one: static {
+            bc root: u = 0
+        }
+
+        step two: static {
+            bc tip: u = 0
+        }
+        """)), "error unsupported 24:5 step two fixes a face that step one does not fix");
+    expect_error("the reaction of a loaded face", replace(model(MM, str(MESH, STEP)), "reaction(root)", "reaction(tip)"),
+                 "error unsupported 23:21 the face tip is not fixed in step load");
+}
+
 fn test_unsupported() {
     expect_error("a cylinder", str(MM, """
 
@@ -165,6 +249,8 @@ fn test_unsupported() {
                  "error unsupported 5:37 the surface is not on a face of the box");
     expect_error("no support", replace(model(MM, str(MESH, STEP)), "bc root: u = 0\n", ""),
                  "error unsupported 16:9 no face is fixed");
+    expect_error("a unit outside the slice", replace(model(MM, str(MESH, STEP)), "-1) MPa", "-1) J"),
+                 "error unsupported 21:34 the unit 'J' is not in this slice");
     expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
 }
 
@@ -172,6 +258,8 @@ fn main() {
     test_grid_cantilever();
     test_units();
     test_two_steps();
+    test_bc_scope();
+    test_reaction();
     test_unsupported();
     if failures > 0 {
         print(failures, " codegen tests failed");
