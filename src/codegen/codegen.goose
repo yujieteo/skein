@@ -35,16 +35,28 @@ fn source_of(n: i64) -> const u8[:] {
     span(n, lo, hi);
     // Parentheses make no node, so add the ones that the span cuts.
     let src = syntax::source;
-    var open = 0;
+    var depth = 0;
+    var least = 0;
     for c in src[lo..hi] {
-        if c == '(' { open++; }
-        if c == ')' { open--; }
+        if c == '(' { depth++; }
+        if c == ')' { depth--; }
+        if depth < least { least = depth; }
     }
-    while open != 0 {
-        var e = if open > 0 { hi } else { lo - 1 };
-        while e >= 0 && e < src.len && src[e] == ' ' { e += if open > 0 { 1 } else { -1 }; }
-        if e < 0 || e >= src.len || src[e] != (if open > 0 { ')' } else { '(' }) { break; }
-        if open > 0 { hi = e + 1; open--; } else { lo = e; open++; }
+    var closes = -least;
+    var opens = depth - least;
+    while closes > 0 {
+        var e = lo - 1;
+        while e >= 0 && src[e] == ' ' { e--; }
+        if e < 0 || src[e] != '(' { break; }
+        lo = e;
+        closes--;
+    }
+    while opens > 0 {
+        var e = hi;
+        while e < src.len && src[e] == ' ' { e++; }
+        if e >= src.len || src[e] != ')' { break; }
+        hi = e + 1;
+        opens--;
     }
     return syntax::source[lo..hi];
 }

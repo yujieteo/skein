@@ -144,6 +144,9 @@ fn test_closed_cylinder() {
         "expect(\"hoop_lame\", syy, 19.993906066365838, 0.001, true, \"MPa\", \"p*a^2/(b^2 - a^2)*(1 + b^2/r_m^2) within 0.1%\");",
         "expect(\"axial_force\", z, -7853.981633974483, 1e-06, true, \"N\", \"-p*pi*a^2/4 within 0.0001%\");",
     ]);
+    expect_lines("a label that starts and ends with a group",
+                 replace(text, "== p*a^2/(b^2 - a^2)*(1 + b^2/r_m^2)", "== (p*a^2/(b^2 - a^2))*(1 + b^2/r_m^2)"),
+                 ["\"(p*a^2/(b^2 - a^2))*(1 + b^2/r_m^2) within 0.1%\""]);
     let tube = "let wall: Solid = (barrel - bore) & quarter";
     expect_error("a full tube", replace(text, tube, "let wall: Solid = barrel - bore"),
                  "error unsupported 28:31 the solid 'wall' is not a box or a quarter of a tube");
