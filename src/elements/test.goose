@@ -274,6 +274,42 @@ fn test_heated_bar() {
     heated_bar(3, 2, 8, 0.002);
 }
 
+// --- the scale of the check `equilibrium` -----------------------------------------
+
+// One nonzero temperature at all fixed nodes and no source: the reactions
+// are round-off of K u, and they are inside the limit. A solution that is
+// not the solve of K u = f (one free node moved by 10 K) is outside it.
+fn test_equilibrium_scale() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, BAR_A, BAR_A, 0.25 * BAR_A, 8, 8, 2);
+    elements::heat(BAR_K, 0.0, 1.0);
+    for axis in 2 {
+        for v in [0.0, BAR_A] {
+            assert(elements::plane(axis, v));
+            elements::fix(0, 273.15);
+        }
+    }
+    if !elements::solve() {
+        failures++;
+        print("FAIL equilibrium scale: CG does not converge");
+    }
+    for moved in [false, true] {
+        if moved {
+            var n = 0;
+            while elements::fixed[n] != 0 { n++; }
+            elements::sol[n] += 10.0;
+        }
+        let rx, ry, rz = elements::total_reaction();
+        let fx, fy, fz = elements::applied_load();
+        let r = abs(rx + fx);
+        let limit = 1.0e-6 * elements::load_scale();
+        print("equilibrium scale, ", if moved { "one node moved" } else { "solved" }, ": ", r, " W, limit ", limit, " W");
+        if (r <= limit) == moved {
+            failures++;
+            print("FAIL equilibrium scale: ", if moved { "a real imbalance passes" } else { "round-off fails" });
+        }
+    }
+}
+
 // --- skein run ------------------------------------------------------------------
 
 // `skein run` of the gate models: each model holds its own `expect`, so a
@@ -285,6 +321,7 @@ let MODELS = [
     "examples/elements/heated_bar_tet.skn",
     "examples/elements/heated_bar_template_tet.skn",
     "examples/elements/conduction_slab_tet.skn",
+    "examples/elements/uniform_temperature_tet.skn",
 ];
 
 fn test_runs() {
@@ -304,6 +341,7 @@ fn main() {
     test_patches();
     test_kirsch();
     test_heated_bar();
+    test_equilibrium_scale();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");

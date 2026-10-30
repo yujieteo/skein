@@ -140,7 +140,9 @@ fn applied_load() -> f64, f64, f64 {
     return f[0], f[1], f[2];
 }
 
-// The sum of the sizes of the nodal loads, sources and reactions.
+// The scale of the check `equilibrium`: the larger of the sum of the sizes
+// of the nodal loads, sources and reactions, and of the terms of K u on the
+// fixed rows.
 fn load_scale() -> f64 { return load_magnitude(); }
 
 // Writes the mesh and the solution, with the name `field`, to a VTU file.
