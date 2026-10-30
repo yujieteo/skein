@@ -13,8 +13,9 @@
 //    Each encroached segment is split at the midpoint of its parameter on
 //    the true curve, or on a concentric shell next to a corner below
 //    60 degrees, until all segments are edges of the triangulation.
-// 4. Each triangle inside the polygon of the segments with an angle below MIN_ANGLE, or a
-//    circumradius above size / sqrt(3), gets a point at its circumcentre.
+// 4. Each triangle inside the polygon of the segments with an angle below
+//    MIN_ANGLE, or a circumradius above size / sqrt(3), gets a point at
+//    its circumcentre.
 //    If that point encroaches a segment, the segment is split instead. A
 //    triangle whose smallest angle is at a corner of 2 segments below
 //    MIN_ANGLE cannot reach it, so only its circumradius counts.
