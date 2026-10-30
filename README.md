@@ -51,8 +51,22 @@ Goose source tree at the same commit as the compiler.
 
 ```
 ./build.sh          # writes build/skein
-./build.sh test     # builds, then runs each src/<part>/test.goose
+./build.sh test     # builds, then runs each src/<part>/test.goose and checks the generated C
 ```
+
+The C that Goose generates from each model that `skein run` can run is in
+the repository next to the model, for audit. For example,
+`examples/femahoy/grid_cantilever.c` is the C of
+`examples/femahoy/grid_cantilever.skn`. `./build.sh test` runs each of
+these models and fails if the C differs. It needs the Goose version in
+`goose_version` in `scripts/generated_c.sh`. After a change to the code
+generator, the runtime or Goose, write the C again:
+
+```
+./build.sh && scripts/generated_c.sh write
+```
+
+The list of these models is in `scripts/generated_c.sh`.
 
 | Directory | Contents |
 |---|---|

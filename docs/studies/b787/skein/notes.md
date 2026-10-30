@@ -11,20 +11,27 @@ The element order is 2 for the shells and the beams (the `method` lines).
 
 ## Check status
 
-`skein check` is not built yet. It prints "check is not implemented yet"
-for each file. The model uses `skein fmt --check` in its place. That
-command parses each file and compares it with the standard layout. Both
-files pass it.
+`skein check` gives 15 errors in each file. Each error is on a line under
+a `// gap` comment, and line 1 of each file names these gaps. Thus both
+files pass the phase 1 gate of the
+[femahoy coverage](../../../femahoy_coverage.md): a model passes `skein
+check`, or it has a `// blocked-by:` mark. Both files also pass `skein fmt
+--check`.
 
 ## Gaps
 
-Each file names its open gaps on line 2 (`// blocked-by:`), and puts a
-`// gap` comment where the gap applies.
+Each file names its open gaps on line 1 (`// blocked-by:`), and puts a
+`// gap` comment where the gap applies. G31, G32 and G33 are in the
+[femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study),
+with the spec changes that close them. N2 and N3 do not make `check` fail,
+so they are only on this page.
 
 | Gap | Feature | Why the spec cannot state it | Smallest spec change |
 |---|---|---|---|
 | G3 | Composite shells: the skin and the pad-up | [femahoy coverage](../../../femahoy_coverage.md#gaps-that-block-a-case). The model also needs a ply axis, the outer face and a load per area. | The G3 change, with these template arguments: `layup` (a table column of ply angles), `mirror`, `axis`, `top` and `q`. The thickness `h` and the ply values come from the material. The template gives `N` (force per length, membrane and transverse shear) and `eps_m` (membrane strain). |
-| N1 | Offset beams on the skin: the stringers and the frames | §4.2 gives `timoshenko(A, I_y, I_z)` with no source, no torsion constant, no section axis and no offset. No rule ties a beam to the shell points on its line. | `timoshenko` arguments `J`, `y_axis` and `offset`, and a let `Nx` (axial force). In §12.1, let the right side of an essential `bc` be an unknown of another physics on the same points (a tie). |
+| G31 | Offset beams on the skin: the stringers and the frames, and their axial force `Nx` | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G31 change. |
+| G32 | The skin, the pad-up, the stringers, the frames and the door edge cut by a `Solid` | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G32 change. |
+| G33 | The shell resultants `N` and `eps_m`, the edge loads `N*n`, and `global.e_hoop` in the submodel | [femahoy coverage](../../../femahoy_coverage.md#gaps-of-the-787-study) | The G33 change. |
 | N2 | Outputs 1, 3 and 5: the point of a maximum, and the maximum of each beam | `max(f, r)` gives one value on one region (§14.5). | A report function `argmax(f, r)` that gives the point. `max(f, r)` on a `pattern` gives one value for each copy. |
 | N3 | Quadrilateral shells (sheet 6.3) | `cell: quad` needs a `box` or a `rect` (§9.1). | Let `cell: quad` apply to each `Surface`, with triangles where the shape needs them. The model uses `cell: tri`, the nearest valid form, so N3 is not in `blocked-by`. |
 
@@ -64,6 +71,6 @@ Counted with tiktoken `o200k_base`:
 
 | File | Lines | Tokens |
 |---|---|---|
-| `fuselage.skn` | 222 | 2787 |
-| `door_corner.skn` | 207 | 2591 |
-| Total | 429 | 5378 |
+| `fuselage.skn` | 230 | 2914 |
+| `door_corner.skn` | 218 | 2766 |
+| Total | 448 | 5680 |
