@@ -140,7 +140,7 @@ except the names of the kernels.
 
 ## 6. The runtime
 
-`skein_rt` is a Goose package. It uses the Goose data stacks for all arrays.
+`runtime` is a Goose package (spec §18.4). It uses the Goose data stacks for all arrays.
 A mesh is a set of flat arrays (coordinates, connectivity, region tags).
 A sparse matrix is CSR in three arrays. The solvers use no other storage.
 

@@ -1577,7 +1577,7 @@ target does not depend on a WebAssembly back end in Goose.
 | File | Contents |
 |---|---|
 | `model.goose` | the kernels and the plan of the model |
-| `skein_rt` (package) | the runtime: mesher, sparse matrices, solvers, output writers. The same for each model. |
+| `runtime` (package) | the runtime: mesher, sparse matrices, solvers, output writers. The same for each model. |
 
 ### 18.3 The shape of the generated code
 
@@ -1607,7 +1607,7 @@ inline fn comp(v: double3, i: i64) -> f64 {
 
 // Stiffness of one linear tetrahedron, 12 x 12, row-major into k.
 simd fn k_solid_tet4(x: double3[4], lam: f64, mu: f64, k: f64[144]&) {
-    let gn = skein_rt::tet4_gradients(x);          // double3[4], and the volume
+    let gn = runtime::tet4_gradients(x);             // double3[4], and the volume
     for a in 4 {
         for b in 4 {
             let ga = gn.g[a];
@@ -1625,17 +1625,19 @@ simd fn k_solid_tet4(x: double3[4], lam: f64, mu: f64, k: f64[144]&) {
 
 thread_fn assemble_worker() {
     loop {
-        let job = qget<skein_rt::ColourJob>();
+        let job = qget<runtime::ColourJob>();
         guard job.first >= 0 else { break; }
-        qput(skein_rt::assemble_range(job, k_solid_tet4));
+        qput(runtime::assemble_range(job, k_solid_tet4));
     }
 }
 ```
 
 ### 18.4 The runtime
 
-`skein_rt` is a Goose package. It holds no C, except the C that the Goose
-standard library uses for files and the clock.
+`runtime` is a Goose package in `src/runtime/`. It holds no C, except the C
+that the Goose standard library uses for files and the clock. The
+[end-to-end slice](roadmap.md#the-end-to-end-slice) ships a box mesher, CG
+with Jacobi and the VTU writer before phase 2.
 
 | Part | Contents | Phase |
 |---|---|---|

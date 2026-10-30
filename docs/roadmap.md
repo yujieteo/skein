@@ -15,9 +15,17 @@ phase starts only after the gate passes.
 The build order of the methods is `cg`, `fv`, `dg`, then meshless
 (decision 5 in [decisions.md](decisions.md)).
 
+## The end-to-end slice
+
+One thin slice of phase 2 lands before phase 1 is complete. Reason: a Skein
+model must give a measured result early. The slice is the package `runtime`
+in `src/runtime/`. It has a box mesher with 27-node hexahedra (Q2), CG with
+a Jacobi preconditioner, reactions and VTU output. Phase 2 widens it to the
+full runtime of [spec §18.4](skein_spec.md#184-the-runtime).
+
 ## Phase 1 in detail
 
-Phase 1 has no solver. Reason: the language is the product, and the
+Phase 1 adds no solver, except the end-to-end slice. Reason: the language is the product, and the
 [LLM test](llm_test.md) can show a bad syntax before the solver costs time.
 
 Phase 1 delivers:
