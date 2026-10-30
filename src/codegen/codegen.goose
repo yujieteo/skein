@@ -982,11 +982,11 @@ let PRELUDE = """
     }
 
     // The sum of the reactions and the applied loads is 0 (checks.md,
-    // `equilibrium`), to 1e-6 of the largest component of the applied load.
-    fn equilibrium(rx: f64, ry: f64, rz: f64, unit: u8[:]) {
+    // `equilibrium`), to 1e-6 of the largest applied load.
+    fn equilibrium(rx: f64, ry: f64, rz: f64, largest: f64, unit: u8[:]) {
         let fx, fy, fz = runtime::applied_load();
         let r = sqrt((rx + fx) * (rx + fx) + (ry + fy) * (ry + fy) + (rz + fz) * (rz + fz));
-        let limit = 1.0e-6 * max(abs(fx), max(abs(fy), abs(fz)));
+        let limit = 1.0e-6 * largest;
         check("equilibrium", r <= limit, quantity(r, unit), quantity(limit, unit));
     }
 
@@ -1040,6 +1040,22 @@ fn emit_face_call(out: u8[>..]&, b: Bc) {
     out.append(");\n");
 }
 
+// The largest load of step `si`: the size of a traction times the area of
+// its face.
+fn largest_load(si: i64) -> f64 {
+    let s = steps[si];
+    var largest = 0.0;
+    for b in active[s.first_bc..s.first_bc + s.bc_count] {
+        if b.fix { continue; }
+        let axis = faces[b.face].axis;
+        var area = 1.0;
+        for j in 0..3 { if j != axis { area *= hi[j] - lo[j]; } }
+        let t = sqrt(b.t[0] * b.t[0] + b.t[1] * b.t[1] + b.t[2] * b.t[2]);
+        largest = max(largest, t * area);
+    }
+    return largest;
+}
+
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
     format(out, "// step ", s.name, ": static\n");
@@ -1070,7 +1086,9 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
         lit(out, f.value);
         out.append(");\n        rx += x;\n        ry += y;\n        rz += z;\n    }\n");
     }
-    format(out, "    equilibrium(rx, ry, rz, \"", system.force, "\");\n");
+    out.append("    equilibrium(rx, ry, rz, ");
+    lit(out, largest_load(si));
+    format(out, ", \"", system.force, "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] {
         emit_report(out, s.name, r);
     }

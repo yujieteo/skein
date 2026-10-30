@@ -116,6 +116,7 @@ fn test_grid_cantilever() {
         "runtime::material(210000.0, 0.3);",
         "face(runtime::fix_face(runtime::X, 0.0), \"root\");",
         "face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0), \"tip\");",
+        "equilibrium(rx, ry, rz, 100.0, \"N\");",
         "report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\"));",
         "output(\"RESULTS/load.vtu\");",
         "let ux, uy, uz = runtime::displacement_at(100.0, 5.0, 5.0);",
@@ -215,6 +216,18 @@ fn test_reaction() {
         failures++;
         print("FAIL a face fixed twice: not one fix and one reaction in:\n", got);
     }
+    // Loads that cancel: the limit is 1e-6 of the largest load, 1 MPa on
+    // 100 mm x 10 mm, not of the resultant 0.
+    expect_lines("loads that cancel", model(MM, str(MESH, """
+        let bottom: Surface = boundary(beam, z == 0 mm)
+        let top: Surface = boundary(beam, z == 10 mm)
+
+        step load: static {
+            bc root: u = 0
+            bc bottom: sigma*n = (0, 0, 1) MPa
+            bc top: sigma*n = (0, 0, -1) MPa
+        }
+        """)), ["equilibrium(rx, ry, rz, 1000.0, \"N\");"]);
     expect_error("fixed faces with an edge", model(MM, str(MESH, """
         let bottom: Surface = boundary(beam, z == 0 mm)
 
