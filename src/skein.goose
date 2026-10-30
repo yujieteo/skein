@@ -5,6 +5,7 @@ import std;
 import os;
 import syntax from "./syntax";
 import fmt.fmt;
+import cli.card;
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -22,6 +23,10 @@ fn main() {
         exit(2);
     }
     let command = args[1];
+    if command == "help" && args.len > 2 && args[2] == "--llm" {
+        print(cli::CARD);
+        exit(0);
+    }
     if command == "help" || command == "--help" || command == "-h" {
         print(USAGE);
         exit(0);
