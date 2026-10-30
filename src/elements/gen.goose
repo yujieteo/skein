@@ -308,6 +308,11 @@ fn geometry_call(n: i64) -> i64 {
     return n;
 }
 
+fn is_shape(n: i64) -> bool {
+    return n >= 0 &&
+        (is_call(n, "box") || is_call(n, "rect") || is_call(n, "cylinder") || is_call(n, "circle"));
+}
+
 fn header(n: i64) {
     set64(codegen::model_name, name(n));
     let space = syntax::text(tok(child(n, 0)));
@@ -328,9 +333,8 @@ fn header(n: i64) {
 // `let` and `param`: a geometry value, a boundary, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
-    let geometric = kind(v) == syntax::N_CALL &&
-        (is_call(v, "box") || is_call(v, "rect") || is_call(v, "cylinder") || is_call(v, "circle")) ||
-        kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-";
+    let geometric = is_shape(v) ||
+        kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-" && is_shape(geometry_call(child(v, 0)));
     var w: u8[..64] = [];
     set64(w, name(n));
     if geometric {

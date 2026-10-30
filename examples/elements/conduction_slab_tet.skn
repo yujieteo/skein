@@ -1,12 +1,13 @@
 // A slab with fixed temperatures on two faces and no source. The exact
 // field is linear in x, so the mid-plane temperature is 50 degC. The
 // reactions cancel and no load is applied, so this model checks that the
-// check `equilibrium` scales with the sizes of the reactions.
+// check `equilibrium` scales with the sizes of the reactions. The length l
+// is a difference of values, so it stays a value and not a geometry.
 
 model conduction_slab_tet: 3d, SI
 
-let l: Length = 0.01 m
 let a: Length = 0.02 m
+let l: Length = a - 0.01 m
 
 scales l, 100 K, 20 W/(m*K)
 

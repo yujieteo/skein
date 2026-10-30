@@ -232,14 +232,13 @@ fn test_registry() {
         failures++;
         print("FAIL node set z0: want 15 nodes");
     }
-    // skein-elements: tet4 has an element routine (lane_elements.goose), tri3 has none.
-    var nodes: i64[3] = [0, 1, 5];
-    runtime::add_cell(runtime::TRI3, nodes);
+    var nodes: i64[4] = [0, 1, 5, 25];
+    runtime::add_cell(runtime::TET4, nodes);
     runtime::material(E, NU);
     assert(runtime::fix("x0"));
     if runtime::solve_static() {
         failures++;
-        print("FAIL registry: a tri3 cell with no element routine solves");
+        print("FAIL registry: a tet4 cell with no element routine solves");
     }
 }
 

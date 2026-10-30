@@ -296,88 +296,6 @@ fn test_kirsch() {
     expect_near("kirsch mesher tri6 against the structured mesh", kirsch_mesher(2, small, 0.2), structured, 0.02);
 }
 
-// --- the registry entries in src/runtime/ -----------------------------------------
-
-// The box 0 <= x <= L, 0 <= y, z <= 1 of src/mesher/ in tet4 cells, or in
-// tet10 cells through mesh_simplices, solved by the runtime with the
-// registry entries of src/runtime/lane_elements.goose. A tension S on
-// x = L, with each of x = 0, y = 0 and z = 0 held only along its normal,
-// gives u_x = S x / E and sigma_xx = S in the whole box. Each element
-// holds this linear field, so the error is round-off.
-let BOX_L = 4.0;
-let BOX_E = 200000.0;
-
-fn runtime_tets(ord: i64) {
-    mesher::clear_shapes();
-    if !mesher::mesh_3d(mesher::box(0.0, 0.0, 0.0, BOX_L, 1.0, 1.0), 0.5) {
-        failures++;
-        print("FAIL runtime tets: the mesher does not finish");
-        return;
-    }
-    var xyz: f64[>..] = [];
-    xyz.append(runtime::coords);
-    var vertices: i64[>..] = [];
-    vertices.append(runtime::cell_nodes);
-    elements::mesh_simplices(3, ord, xyz, vertices);
-    let t = if ord == 1 { runtime::TET4 } else { runtime::TET10 };
-    runtime::mesh_clear();
-    for n in elements::node_count() {
-        runtime::add_node(elements::coords[3 * n], elements::coords[3 * n + 1], elements::coords[3 * n + 2]);
-    }
-    let nn = elements::node_count_of(3, ord);
-    for c in elements::cell_count() { runtime::add_cell(t, elements::conn[nn * c..nn * (c + 1)]); }
-    runtime::clear_dofs();
-    let tol = 1.0e-9;
-    for axis in 3 {
-        var nodes: i64[>..] = [];
-        for n in runtime::node_count() {
-            if abs(runtime::coords[3 * n + axis]) <= tol { nodes.push(n); }
-        }
-        runtime::add_node_set(str("low", axis), nodes);
-    }
-    var faces: i64[>..] = [];
-    for c in runtime::cell_count() {
-        for f in 4 {
-            var all = true;
-            for a in 3 {
-                let n = runtime::cell_node(c, elements::facet_node(3, f, a));
-                if abs(runtime::coords[3 * n] - BOX_L) > tol { all = false; }
-            }
-            if all { faces.push(runtime::FACE_STRIDE * c + f); }
-        }
-    }
-    runtime::add_face_set("end", faces);
-    runtime::material(BOX_E, 0.3);
-    for axis in 3 { assert(runtime::fix_component(str("low", axis), axis)); }
-    assert(runtime::traction("end", S, 0.0, 0.0));
-    let name = str("runtime ", runtime::CELL_NAMES[t]);
-    if !runtime::solve_static() {
-        failures++;
-        print("FAIL ", name, ": the runtime does not solve");
-        return;
-    }
-    var eu = 0.0;
-    for n in runtime::node_count() {
-        let want = S * runtime::coords[3 * n] / BOX_E;
-        eu = max(eu, abs(runtime::disp[3 * n] - want) / (S * BOX_L / BOX_E));
-    }
-    let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(0.3 * BOX_L, 0.4, 0.6);
-    let es = max(abs(sxx - S), max(abs(syy), abs(sxy))) / S;
-    let fx, fy, fz = runtime::applied_load();
-    print(name, ": ", runtime::cell_count(), " cells, ", runtime::dof_count(), " dofs, error of u ", eu,
-          ", of the stress ", es, ", load x ", fx);
-    expect_near(str(name, " load"), fx, S, 1.0e-12);
-    if !(eu <= 1.0e-8) || !(es <= 1.0e-8) {
-        failures++;
-        print("FAIL ", name, ": the linear field is not exact");
-    }
-}
-
-fn test_runtime_tets() {
-    runtime_tets(1);
-    runtime_tets(2);
-}
-
 // --- the heated bar --------------------------------------------------------------
 
 // The section a × a of a long bar with a uniform source q and its sides at
@@ -501,7 +419,6 @@ fn test_runs() {
 fn main() {
     test_patches();
     test_kirsch();
-    test_runtime_tets();
     test_heated_bar();
     test_equilibrium_scale();
     test_runs();
