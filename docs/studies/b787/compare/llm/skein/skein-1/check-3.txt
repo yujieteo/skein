@@ -1,13 +1,13 @@
 diagnostics[0]{class,id,file,line,col,msg,fix}:
 summary: errors=0 lints=0
 free_boundary[10]{physics,field,region,condition}:
-  skin_shell,w,"boundary(skin) - x0 - y0 - pbot - xend","N*n = 0"
-  skin_shell,w.y,"x0","(N*n).y = 0"
-  skin_shell,w.z,"x0","(N*n).z = 0"
-  skin_shell,w.x,"y0","(N*n).x = 0"
-  skin_shell,w.z,"y0","(N*n).z = 0"
-  skin_shell,w.x,"pbot","(N*n).x = 0"
-  skin_shell,w.y,"pbot","(N*n).y = 0"
-  skin_shell,theta,"boundary(skin) - x0 - y0","M*n = 0"
-  skin_shell,theta.x,"x0","(M*n).x = 0"
-  skin_shell,theta.y,"y0","(M*n).y = 0"
+  skin,w,"boundary(wall) - x0 - ysym - pin - x_end - door_aft","N*n = 0"
+  skin,w.y,"x0","(N*n).y = 0"
+  skin,w.z,"x0","(N*n).z = 0"
+  skin,w.x,"ysym","(N*n).x = 0"
+  skin,w.z,"ysym","(N*n).z = 0"
+  skin,w.x,"pin","(N*n).x = 0"
+  skin,w.y,"pin","(N*n).y = 0"
+  skin,theta,"boundary(wall) - x0 - ysym","M*n = 0"
+  skin,theta.x,"x0","(M*n).x = 0"
+  skin,theta.y,"ysym","(M*n).y = 0"

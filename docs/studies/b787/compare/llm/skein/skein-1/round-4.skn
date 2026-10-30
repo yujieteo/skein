@@ -1,64 +1,92 @@
-// Boeing 787 forward fuselage pressurization: quarter barrel, 0 <= theta <= 180 deg.
-// Source: problem sheet, sections 2 to 7. Linear static, ultimate pressure p_U.
+// Boeing 787 forward fuselage, quarter barrel under ultimate cabin pressure,
+// with the Type A door cutout (door 2, left side) and a refined door corner.
+// Source: "Boeing 787 forward fuselage pressurization: problem sheet".
 //
-// Element order: MITC4 shells, order 1 (the only shell method in skein run).
-//
-// What this model does not include, because this slice of skein run cannot
-// express it:
-//   - Door cutout (section 2.3) and door load (section 6.2 item 3): the shell
-//     must be a plain part of the side of a cylinder, so the skin cannot have
-//     a hole. The door's pressure acts on the skin where the door would be,
-//     so the pressure resultants still match the sheet.
-//   - Door-corner submodel (section 6.4), outputs 5 to 7 and check C6: these
-//     need the cutout.
-//   - Stringers and frames (sections 4, 7.1 item 3): no offset-beam elements.
-//     The barrel is skin only. Check C1 should then sit at its upper bound,
-//     p_U R / t. Check C2 is expected to give about 30.7 MPa, so it should
-//     fail its 5 % band around 28.7 MPa.
-//   - Pad-up band (section 2.4): one laminate per shell, and no cutout.
-//   - Maximum over the skin, and sums of reactions: reports can only be a
-//     value at a point or reaction(region). The model reports the radial
-//     displacement at P. Add the reactions below by hand for the checks:
-//       C3  sum of x reactions = -1273.0 kN  (within 0.1 %)
-//       C4  sum of z reactions = 0           (|sum| < 1.273 kN)
-//       C5  sum of y reactions = -3427.1 kN  (within 0.1 %)
-//
-// Check point P: x = 4.8768 m, theta = 140 deg
-//   y = R sin(140 deg) = 1.853158 m, z = R cos(140 deg) = -2.208506 m
+// Gaps against the sheet (features the Skein card does not define):
+//  - Stringers and frames (offset beams, sec. 4) are not modelled. The skin
+//    carries all load, so C1 reads near p_U R/t and C2 near 30.7 MPa (fails 5 %).
+//  - Beam forces (output 3) cannot be reported.
+//  - Pad-up laminate (sec. 2.4): one shell physics holds one laminate, so the
+//    skin laminate [45/0/-45/90]3s is used everywhere. Corner strains are too high.
+//  - The door-corner submodel (sec. 6.4) is replaced by local refinement of
+//    the global mesh: 5 mm on the cutout edge, 20 mm near the corner.
+//    C6 has no submodel boundary and is not run.
+//  - The location of a maximum cannot be reported, only its value.
+// Element: MITC4 shell, order 1 (the writer's choice, sec. 6.3).
 
-model b787_fwd_fuselage: 3d, SI
+model fuselage_787: 3d, SI
 
-// ---- Barrel (section 2.2) ----
+// ---- Loads (sec. 6.2) ----
+let p_L: Pressure = 65.0 kPa
+param p_U: Pressure = 97.5 kPa in 50 kPa..150 kPa
+
+// ---- Barrel (sec. 2.2, 5): quarter model, 0 <= x <= 6.096 m, 0 <= theta <= 180 deg ----
 let R: Length = 2.883 m
 let L: Length = 6.096 m
 
-// ---- Loads (section 6.2) ----
-param pL: Pressure = 65.0 kPa in 10 kPa..100 kPa
-let pU: Pressure = 1.5*pL
+scales R, p_U
 
-scales R, pU
-
-// ---- Skin surface: 0 <= x <= L, left half (y >= 0) ----
 let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
-let skin: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m)
 
-let x0: Curve = boundary(skin, x == 0 m)
-let y0: Curve = boundary(skin, y == 0 m)
-let xend: Curve = boundary(skin, x == L)
-let pbot: Point = point((0 m, 0 m, -R))
+// ---- Door cutout (sec. 2.3) ----
+// x = +-0.5334 m; s = 2.8593 m (theta 56.83 deg, z 1.577572) to 4.6883 m (theta 93.17 deg, z -0.159629).
+// On the skin y >= 0, so a theta range is a z range: z = R cos(theta).
+// Corner radius 0.178 m; aft corner centres at x = 0.3554 m,
+// theta 60.362 deg (y 2.505809, z 1.425696) and 89.636 deg (y 2.882942, z 0.018316).
+// A sphere of radius r_c about a corner centre cuts the skin in the corner circle
+// (the chord differs from the arc by 0.03 mm).
+let x_c: Length = 0.3554 m
+let r_c: Length = 0.178 m
+let door_wide: Solid = box((-0.5334, 0, 0.018316) m, (0.5334, 3.9, 1.425696) m)
+let door_tall: Solid = box((-0.3554, 0, -0.159629) m, (0.3554, 3.9, 1.577572) m)
+let door_c1: Solid = sphere((0.3554, 2.505809, 1.425696) m, r_c)
+let door_c2: Solid = sphere((0.3554, 2.882942, 0.018316) m, r_c)
+let door: Solid = door_wide | door_tall | door_c1 | door_c2
+
+// ---- Skin: half barrel minus the cutout, as five patches ----
+// Aft of the door
+let sk_aft: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x >= 0.5334 m)
+// Above the door (theta 0 to 56.83 deg)
+let sk_top: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x <= 0.5334 m && z >= 1.577572 m)
+// Below the door (theta 93.17 to 180 deg)
+let sk_bot: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x <= 0.5334 m && z <= -0.159629 m)
+// Upper aft corner fill, outside the corner circle
+let sk_cu: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x >= 0.3554 m && x <= 0.5334 m && z >= 1.425696 m && z <= 1.577572 m && (x - 0.3554 m)^2 + (y - 2.505809 m)^2 + (z - 1.425696 m)^2 >= r_c^2)
+// Lower aft corner fill, outside the corner circle
+let sk_cl: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x >= 0.3554 m && x <= 0.5334 m && z >= -0.159629 m && z <= 0.018316 m && (x - 0.3554 m)^2 + (y - 2.882942 m)^2 + (z - 0.018316 m)^2 >= r_c^2)
+let wall: Surface = sk_aft | sk_top | sk_bot | sk_cu | sk_cl
+
+// ---- Refinement regions (sec. 2.4, 6.4) ----
+// Pad-up band bounds: x <= 0.6834 m, theta 53.844 to 96.155 deg.
+let pad: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x <= 0.6834 m && z >= -0.309110 m && z <= 1.700928 m)
+// Corner square: x = 0.0554 to 0.6554 m; s = 2.7373 to 3.3373 m (theta 54.40 to 66.325 deg).
+let sub_square: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m && x >= 0.0554 m && x <= 0.6554 m && z >= 1.157663 m && z <= 1.678261 m)
+
+// ---- Edges and points ----
+let x0: Curve = boundary(wall, x == 0 m)
+let ysym: Curve = boundary(wall, y == 0 m)
+let x_end: Curve = boundary(wall, x == L)
+let pin: Point = point((0 m, 0 m, -R))
+let door_edge: Curve = boundary(wall, door)
+// The aft half of the cutout edge: the straight aft edge and the two aft corner arcs.
+// The only wall edges with x_c <= x <= 0.6 m and y >= 1 m are on the cutout.
+let door_aft: Curve = boundary(wall, x >= x_c && x <= 0.6 m && y >= 1 m)
+// Check point P: x = 4.8768 m, theta = 140 deg.
+let P: Point = point((4.8768, 1.853158, -2.208506) m)
 
 // ---- Local directions ----
 let e_x: Vector<Real> = (1, 0, 0)
 let e_t: Vector<Real> = (0, z/R, -y/R)
 let e_r: Vector<Real> = (0, y/R, z/R)
 
-// ---- Laminate: skin [45/0/-45/90]3s, outer to inner (section 3.2) ----
+// ---- Plies and laminate (sec. 1.2, 3) ----
 table plies{angle: Angle in deg}:
     45
     0
     -45
     90
 
+// Skin [45/0/-45/90]3s, 24 plies, 4.584 mm
 material ply_skin {
     E1: Pressure = 148 GPa
     E2: Pressure = 10.1 GPa
@@ -68,49 +96,86 @@ material ply_skin {
     h: Length = 24*0.191 mm
 }
 
-mesh m on skin {
-    size: 50 mm
+// ---- Mesh (sec. 6.3, 6.4) ----
+// 50.8 mm = frame pitch / 12, so frame lines and P can fall on nodes.
+mesh m on wall {
+    size: 50.8 mm
     cell: quad
+    refine pad: 20 mm
+    refine sub_square: 20 mm
+    refine door_edge: 5 mm
 }
 
-physics skin_shell on skin: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: pU*n) solves w: Vector<Length>,
+// ---- Shell ----
+// q: internal pressure, outward on the mid-surface. The cutout carries no pressure.
+physics skin on wall: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: p_U*n) solves w: Vector<Length>,
     theta: Vector<Angle> {
     material ply_skin
     let s_hoop: Pressure = dot(e_t, N*e_t)/h
     let s_axial: Pressure = dot(e_x, N*e_x)/h
-    let u_r: Length = dot(w, e_r)
-    let eps_t: Real = dot(e_t, eps_m*e_t)
+    let eps_hoop: Real = dot(e_t, eps_m*e_t)
+    let eps_ax: Real = dot(e_x, eps_m*e_x)
+    let eps_xt: Real = dot(e_x, eps_m*e_t)
+    // Maximum principal membrane strain
+    let eps1: Real = (eps_ax + eps_hoop)/2 + (((eps_ax - eps_hoop)/2)^2 + eps_xt^2)^0.5
 }
 
-method skin_shell: cg { mesh: m, order: 1 }
+method skin: cg { mesh: m, order: 1 }
 
-// ---- Symmetry and support (section 5) ----
+let w_r: Length = dot(e_r, w)
+
+// ---- Symmetry (sec. 5) ----
 bc x0: w.x = 0
 bc x0: theta.y = 0
 bc x0: theta.z = 0
-bc y0: w.y = 0
-bc y0: theta.x = 0
-bc y0: theta.z = 0
-bc pbot: w.z = 0
+bc ysym: w.y = 0
+bc ysym: theta.x = 0
+bc ysym: theta.z = 0
+bc pin: w.z = 0
+
+// ---- Edge loads (sec. 6.2) ----
+// End closure: p_U R / 2 = 140.5 kN/m along +x.
+let f_end: Force/Length = p_U*R/2
+// Door load: p_U x_e per unit s, radial. Per unit edge length this is
+// p_U x (x - x_c)/r_c, which is 52.01 kN/m on the straight aft edge.
+let q_door: Force/Length = p_U*x*(x - x_c)/r_c
 
 step pressurize: static {
-    // end closure load, p_U R / 2 per unit arc length
-    bc xend: N*n = (pU*R/2, 0, 0)
-    output w, theta, u_r, s_hoop, s_axial
-    // 1. radial displacement at P
-    report u_r_P = u_r at (4876.8, 1853.158, -2208.506) mm
-    // 2. membrane stresses at P (C1 ratio = hoop / 61.32 MPa,
-    //    C2 ratio = axial / 30.66 MPa)
-    report hoop_P = s_hoop at (4876.8, 1853.158, -2208.506) mm
-    report axial_P = s_axial at (4876.8, 1853.158, -2208.506) mm
-    report hoop_strain_P = eps_t at (4876.8, 1853.158, -2208.506) mm
-    // 4. reactions, summed by hand for C3 to C5
-    report reaction(x0)
-    report reaction(y0)
-    report reaction(pbot)
+    bc x_end: N*n = (f_end, 0 N/m, 0 N/m)
+    bc door_aft: N*n = (0 N/m, q_door*y/R, q_door*z/R)
+    output w, w_r, s_hoop, s_axial, eps1
+
+    // Output 1: radial displacement
+    report w_r_max = max(w_r, wall)
+    report w_r_min = min(w_r, wall)
+    // Output 2: membrane stresses
+    report s_hoop_max = max(s_hoop, wall)
+    report s_axial_max = max(s_axial, wall)
+    report s_hoop_P = s_hoop at P
+    report s_axial_P = s_axial at P
+    report C1_ratio = (s_hoop at P)/(p_U*R/(24*0.191 mm))
+    report C2_ratio = (s_axial at P)/(p_U*R/(2*24*0.191 mm))
+    // Output 4: reactions
+    report R_x0 = reaction(x0)
+    report R_ysym = reaction(ysym)
+    report R_pin = reaction(pin)
+    report R_sum = reaction(x0) + reaction(ysym) + reaction(pin)
+    // Outputs 5 to 7: door corner (refined region in place of the submodel)
+    report eps1_edge_max = max(eps1, door_edge)
+    report eps_hoop_P = eps_hoop at P
+    report K = max(eps1, door_edge)/(eps_hoop at P)
+    report MS = 0.004/max(eps1, door_edge) - 1
 }
 
-// C1: hoop stress at P inside [48.83, 61.32] MPa (midpoint 55.08 MPa)
-expect c1_hoop: s_hoop at (4876.8, 1853.158, -2208.506) mm == 55.08 MPa within 11.3%
-// C2: axial stress at P, 28.7 MPa (expected to fail without stringers)
-expect c2_axial: s_axial at (4876.8, 1853.158, -2208.506) mm == 28.7 MPa within 5%
+// ---- Checks (sec. 7.2) ----
+// C1: 48.8 MPa to 61.3 MPa
+expect c1: s_hoop at P == 55.05 MPa within 6.25 MPa
+// C2: 28.7 MPa (expected to fail without stringers: about 30.7 MPa)
+expect c2: s_axial at P == 28.7 MPa within 5%
+// C3: sum of x reactions
+expect c3: (reaction(x0) + reaction(ysym) + reaction(pin)).x == -1273.0 kN within 0.1%
+// C4: sum of z reactions, within 0.1 % of 1273.0 kN
+expect c4: (reaction(x0) + reaction(ysym) + reaction(pin)).z == 0 kN within 1.273 kN
+// C5: sum of y reactions
+expect c5: (reaction(x0) + reaction(ysym) + reaction(pin)).y == -3427.1 kN within 0.1%
+// C6: no separate submodel, so there is no boundary to compare.

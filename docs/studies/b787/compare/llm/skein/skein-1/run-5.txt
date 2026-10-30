@@ -1,18 +1,3 @@
-report[8]{step,expr,value}:
-  pressurize,"wy_P = w.y at (4876.8, 1853.158, -2208.506) mm","0.0017029763557489628 m"
-  pressurize,"wz_P = w.z at (4876.8, 1853.158, -2208.506) mm","0.0006191808332054396 m"
-  pressurize,"hoop_P = s_hoop at (4876.8, 1853.158, -2208.506) mm","61318033.614894085 Pa"
-  pressurize,"axial_P = s_axial at (4876.8, 1853.158, -2208.506) mm","30660183.534716498 Pa"
-  pressurize,"hoop_strain_P = eps_t at (4876.8, 1853.158, -2208.506) mm","0.0009189860086887927 "
-  pressurize,reaction(x0),"(-1272941.3250211326, -14045.413519755219, 3.486273811859064e-07) N"
-  pressurize,reaction(y0),"(-6994.191580599258, -3427079.76000023, 3.486273811859064e-07) N"
-  pressurize,reaction(pbot),"(-3496.985865173177, -7022.610735063433, 3.486273811859064e-07) N"
-verify[3]{stage,id,result,value,limit}:
-  post,equilibrium,pass,"8.305567684978028e-07 N","12.826866653795996 N"
-  post,expect,fail,"c1_hoop: 61318033.614894085 Pa","55.08 MPa within 11.3%"
-  post,expect,fail,"c2_axial: 30660183.534716498 Pa","28.7 MPa within 5%"
-solve[1]{step,cells,dofs,cg_iterations,seconds,converged}:
-  pressurize,22204,135054,0,25.312806097997964,yes
-results[1]:
-  .skein/results/b787_fwd_fuselage/pressurize.vtu
-built .skein/build/b787_fwd_fuselage/b787_fwd_fuselage
+diagnostics[1]{class,id,file,line,col,msg,fix}:
+  error,unsupported,round-5.skn,46,5,"a second shell surface: this slice meshes sk_aft only","put all the shell on one surface"
+summary: errors=1 lints=0

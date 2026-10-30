@@ -1,0 +1,3 @@
+diagnostics[1]{class,id,file,line,col,msg,fix}:
+  error,unsupported,round-1.skn,69,30,"the shell 'wall' is not on a cylinder that a let names","write the shell as boundary(c, y^2 + z^2 == R^2 && z >= 0 m), with c = cylinder((0, 0, 0) m, (1, 0, 0), R, L)"
+summary: errors=1 lints=0

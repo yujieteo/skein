@@ -1,125 +1,68 @@
 // Boeing 787 forward fuselage barrel under ultimate cabin pressure.
-// Quarter model: 0 <= x <= 6.096 m, 0 deg <= theta <= 180 deg (y >= 0).
-// It has one Type A door cutout (left side).
+// Quarter model: 0 <= x <= 6.096 m, 0 deg <= theta <= 180 deg (left side, +y).
 //
-// Element order: MITC4 shells, order 1 (the only shell element in Skein).
+// Limits of this model. Read these before you use the results.
+// The Skein language card cannot express the features below, so this file
+// does not model them:
+//   1. Door cutout, door edge load and door-corner submodel (sections 2.3,
+//      2.4, 6.2 item 3, 6.4). A shell must be the side of a named cylinder,
+//      selected by comparisons joined by &&. A hole needs || or !, so the skin
+//      cannot have one. Outputs 5, 6 and 7 (corner strain, K, MS) and check C6
+//      are NOT produced. The door load puts back the pressure that the cutout
+//      removes, so the barrel without a door has the same reaction sums (C3 to C5).
+//   2. Stringer and frame beams (section 4, output 3). The skin is unstiffened.
+//      The hoop stress at P is then p_U*R/t = 61.3 MPa, at the top of the C1
+//      range. The axial stress is p_U*R/(2t) = 30.7 MPa, 7 % above the C2
+//      value of 28.7 MPa, so expectation c2 is expected to FAIL.
+//   3. Pad-up band (section 2.4). It has no effect, because there is no door.
+//   4. The point of the maximum radial displacement. No argmax function
+//      exists. Find it in the VTU output.
 //
-// Differences from the problem sheet (Skein limits):
-//  * Skein has no beam elements, so the stringers and frames (sheet section 4)
-//    are not in the model. The skin carries all of the load.
-//    - Output 3 (beam forces) is not available.
-//    - C1: the hoop stress at P sits at the upper bound pU*R/t (ratio near 1).
-//    - C2: the axial stress at P is about pU*R/(2t) = 30.7 MPa. This is
-//      about 7 % above the sheet value of 28.7 MPa, so expect c2 is
-//      expected to FAIL. The check is kept as the sheet states it.
-//  * Pad-up (sheet 2.4) is NOT modelled. One field cannot be solved by two
-//    shell physics blocks, and a material has one thickness. So the whole
-//    wall uses the 24-ply skin laminate [45/0/-45/90]3s. The corner strain
-//    (items 5 to 7) is therefore higher than with the 48-ply pad-up
-//    (conservative).
-//  * Skein has no global-to-local submodel transfer. The door-corner
-//    submodel (sheet 6.4) is built as local refinement inside the global
-//    mesh: 0.005 m on the corner cutout edge and 0.020 m in the 0.6 m square.
-//    The boundary of that region then matches the global solution by
-//    construction. For C6, run study "refinement" and compare the reported
-//    mid-edge hoop strains of the coarse run (0.05/0.05) and the refined
-//    run (0.005/0.02).
-//  * The door plug load is applied as an edge force per edge length:
-//    pU * x_e * |n.x| * e_r. Here |n.x| = ds/dl turns the per-unit-s load
-//    into a per-unit-length load. The value is 0 on the horizontal edges and
-//    pU*0.5334 on the aft edge. The load is radial. It is written with the
-//    edge-force form `N*n = ...`, which assumes Skein applies the full
-//    vector as the edge force.
-//  * Cutout corners are the intersection of the skin with spheres centred on
-//    the corner centres. On R = 2.883 m the chord radius differs from the
-//    geodesic radius by less than 0.1 mm.
-//  * Output 1 (point of max radial displacement) and output 5 (point of max
-//    strain): Skein reports values only. Read the points from the VTU
-//    fields u_r and e_p1.
+// Element choice: MITC4 quadrilateral shells, order 1, size 50 mm.
 
-model fuselage787_door: 3d, SI
+model fuselage787: 3d, SI
 
-// ---------- parameters ----------
-param p_L: Pressure = 65.0 kPa in 10 kPa..100 kPa
-param h_edge: Length = 0.005 m in 0.002 m..0.05 m
-param h_sub: Length = 0.020 m in 0.005 m..0.05 m
+// ---------- Values (sheet sections 1 to 6) ----------
+let R: Length = 2.883 m                 // skin mid-surface radius
+let L: Length = 6.096 m                 // half barrel length (10 frame pitches)
+let p_L: Pressure = 65.0 kPa            // limit cabin differential
+param p_U: Pressure = 1.5*p_L in 65 kPa..130 kPa   // ultimate, 25.303
 
-let R: Length = 2.883 m
+let t_skin: Length = 4.584 mm
+let A_str: Area = 2.016e-4 m^2          // stringer area (for the checks only)
+let A_frm: Area = 7.148e-4 m^2          // frame area (for the checks only)
+let pitch_str: Length = 0.2013 m
+let pitch_frm: Length = 0.6096 m
 
-scales R, p_L
+scales R, p_U
 
-let p_U: Pressure = 1.5*p_L
-
-// ---------- barrel ----------
-let L: Length = 6.096 m
-let t_s: Length = 4.584 mm
-
-// ---------- door cutout (sheet 2.3), x >= 0 half ----------
-// theta_upper = 56.825 deg, theta_lower = 93.174 deg
-// z = R cos(theta), on the y > 0 side
-let x_e: Length = 0.5334 m
-let r_c: Length = 0.178 m
-let x_c: Length = 0.3554 m
-let z_up: Length = 1.57757 m
-let z_lo: Length = -0.15963 m
-
-// corner centres: theta = 60.362 deg (upper), 89.636 deg (lower)
-let cu: Vector<Length> = (0.3554, 2.50580, 1.42570) m
-let cl: Vector<Length> = (0.3554, 2.88294, 0.01832) m
-
-// ---------- check values (sheet 7) ----------
-let A_fr: Area = 7.148e-4 m^2
-let A_st: Area = 2.016e-4 m^2
-let p_fr: Length = 0.6096 m
-let p_st: Length = 2*pi*R/90
-let nu_qi: Real = 0.326
-let s_h_ref: Pressure = p_U*R/t_s
-let s_a_ref: Pressure = p_U*R/(2*t_s)
-let C1_lo: Pressure = p_U*R/(t_s + A_fr/p_fr)
-let C2_val: Pressure = (p_U*R/2 + nu_qi*s_h_ref*A_st/p_st)/(t_s + A_st/p_st)
-let eps_allow: Real = 0.004
-
-// ---------- geometry ----------
+// ---------- Geometry ----------
 let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
-let side: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m)
+let wall: Surface = boundary(tube, y^2 + z^2 == R^2 && y >= 0 m)
 
-let door_zone: Solid = box((-0.1 m, 0 m, z_lo), (x_c, 3.5 m, z_up)) | box((-0.1 m, 0 m, cl.z), (x_e, 3.5 m, cu.z)) | sphere(cu, r_c) | sphere(cl, r_c)
+let x0: Curve = boundary(wall, x == 0 m)              // symmetry plane x = 0
+let ysym: Curve = boundary(wall, y == 0 m)            // theta = 0 and theta = 180 deg
+let end: Curve = boundary(wall, x == L)               // closure end
+let bot: Point = point((0, 0, -R))                    // x = 0, theta = 180 deg
 
-let wall: Surface = side - door_zone
+// Check point P: x = 4.8768 m, theta = 140 deg
+let P: Point = point((4.8768, 1.853158, -2.208505) m)
 
-// door-corner "submodel" square: 0.6 x 0.6 m centred on (x_c, s_c = 3.0373 m)
-// theta from 54.400 deg to 66.324 deg
-let sub_box: Solid = box((0.0554, 0, 1.15771) m, (0.6554, 3.5, 1.67826) m)
-let not_sub: Solid = box((-1, -4, -4) m, (8, 4, 4) m) - sub_box
-let corner_sq: Surface = wall - not_sub
-
-// edges
-let x0: Curve = boundary(wall, x == 0 m)
-let x_end: Curve = boundary(wall, x == L)
-let ysym: Curve = boundary(wall, y == 0 m)
-let door_edge: Curve = boundary(wall, door_zone)
-let corner_edge: Curve = door_edge - not_sub
-
-// points
-let pin: Point = point((0 m, 0 m, -R))
-let pP: Point = point((4.8768, 1.85316, -2.20850) m)
-let pAft: Point = point((0.6554, 2.50580, 1.42570) m)
-let pTop: Point = point((0.3554, 2.34417, 1.67826) m)
-
-// local unit vectors
+// Local unit vectors: axial, hoop (increasing theta) and radial
 let e_x: Vector<Real> = (1, 0, 0)
 let e_t: Vector<Real> = (0, z/R, -y/R)
 let e_r: Vector<Real> = (0, y/R, z/R)
 
-// ---------- laminate (sheet 3) ----------
-// [45/0/-45/90]3s from the outer face. With mirror: true, the plies fill h/2.
+// ---------- Laminate: skin [45/0/-45/90]3s, T800S/3900 RTA ----------
+// The plies start at the outer face (top: n). The skin is quasi-isotropic,
+// so the sign convention for ply angles does not change the membrane result.
 table plies{angle: Angle in deg}:
     45
     0
     -45
     90
 
-material ply_skin {
+material ply {
     E1: Pressure = 148 GPa
     E2: Pressure = 10.1 GPa
     G12: Pressure = 3.94 GPa
@@ -128,98 +71,73 @@ material ply_skin {
     h: Length = 24*0.191 mm
 }
 
-// ---------- mesh ----------
+// ---------- Mesh ----------
 mesh m on wall {
-    size: 0.05 m
+    size: 50 mm
     cell: quad
-    refine corner_sq: h_sub
-    refine corner_edge: h_edge
 }
 
-// ---------- physics ----------
-// top: n puts ply 1 on the outer face. q = p_U*n is the outward pressure
-// on the mid-surface.
+// ---------- Physics: internal pressure p_U, outward on the mid-surface ----------
 physics skin on wall: reissner_mindlin(layup: plies.angle, mirror: true, top: n, q: p_U*n) solves w: Vector<Length>,
     theta: Vector<Angle> {
-    material ply_skin
-    let u_r: Length = dot(w, e_r)
+    material ply
+    let w_r: Length = dot(e_r, w)
     let s_hoop: Pressure = dot(e_t, N*e_t)/h
     let s_ax: Pressure = dot(e_x, N*e_x)/h
-    let e_hoop: Real = dot(e_t, eps_m*e_t)
-    let e_ax: Real = dot(e_x, eps_m*e_x)
-    let e_xt: Real = dot(e_x, eps_m*e_t)
-    let e_p1: Real = (e_ax + e_hoop)/2 + (((e_ax - e_hoop)/2)^2 + e_xt^2)^0.5
+    let eps_h: Real = dot(e_t, eps_m*e_t)
+    let eps_a: Real = dot(e_x, eps_m*e_x)
 }
 
 method skin: cg { mesh: m, order: 1 }
 
-// ---------- symmetry and support (sheet 5) ----------
-// x = 0: u_x = 0, rot_y = rot_z = 0
+// ---------- Symmetry and rigid-body supports ----------
 bc x0: w.x = 0
 bc x0: theta.y = 0
 bc x0: theta.z = 0
-
-// y = 0 (theta = 0 and 180 deg): u_y = 0, rot_x = rot_z = 0
 bc ysym: w.y = 0
 bc ysym: theta.x = 0
 bc ysym: theta.z = 0
+bc bot: w.z = 0
 
-// rigid-body z, bottom point at x = 0
-bc pin: w.z = 0
-
-// ---------- analysis ----------
+// ---------- Analysis ----------
 step pressurize: static {
-    // end closure: p_U*R/2 = 140.5 kN/m along +x
-    bc x_end: N*n = (p_U*R/2, 0, 0)
+    // End closure: p_U*R/2 = 140.5 kN/m along +x. The total is 1273.0 kN.
+    bc end: N*n = (p_U*R/2, 0, 0)
 
-    // door plug load: p_U * x_e(s) per unit s, radial outward
-    bc door_edge: N*n = (0, -p_U*x*n.x*y/R, -p_U*x*n.x*z/R)
+    output w, theta, w_r, s_hoop, s_ax, eps_h, eps_a
 
-    output w, theta, u_r, s_hoop, s_ax, e_hoop, e_p1
+    // 1. Radial displacement
+    report w_r_max = max(w_r, wall)
+    report w_r_min = min(w_r, wall)
+    // 2. Membrane stresses
+    report s_hoop_max = max(s_hoop, wall)
+    report s_ax_max = max(s_ax, wall)
+    // 4. Reaction sums
+    report reaction(x0)
+    report reaction(ysym)
+    report reaction(bot)
+    report rx_total = reaction(x0).x + reaction(ysym).x + reaction(bot).x
+    report ry_total = reaction(x0).y + reaction(ysym).y + reaction(bot).y
+    report rz_total = reaction(x0).z + reaction(ysym).z + reaction(bot).z
 
-    // output 1
-    report u_r_max = max(u_r, wall)
-
-    // output 2 at the check point P
-    report s_hoop_P = s_hoop at pP
-    report s_ax_P = s_ax at pP
-    report C1_low = C1_lo
-    report C1_high = s_h_ref
-    report C1_ratio = (s_hoop at pP)/s_h_ref
-    report C2_expected = C2_val
-    report C2_ratio = (s_ax at pP)/s_a_ref
-
-    // output 4
-    report R_x0 = reaction(x0)
-    report R_ysym = reaction(ysym)
-    report R_pin = reaction(pin)
-    report R_sum_x = (reaction(x0) + reaction(ysym) + reaction(pin)).x
-    report R_sum_y = (reaction(x0) + reaction(ysym) + reaction(pin)).y
-    report R_sum_z = (reaction(x0) + reaction(ysym) + reaction(pin)).z
-
-    // outputs 5 to 7 (door corner)
-    report e_p1_corner_max = max(e_p1, corner_edge)
-    report e_hoop_P = e_hoop at pP
-    report K = max(e_p1, corner_edge)/(e_hoop at pP)
-    report MS = eps_allow/max(e_p1, corner_edge) - 1
-
-    // C6: hoop strain at the mid-points of the aft and top edges of the square
-    report e_hoop_aft_mid = e_hoop at pAft
-    report e_hoop_top_mid = e_hoop at pTop
+    // Checks C1 and C2 at P
+    report C1_s_hoop_P = s_hoop at P
+    report C1_ratio = (s_hoop at P)/(p_U*R/t_skin)
+    report C1_lower = p_U*R/(t_skin + A_frm/pitch_frm)
+    report C2_s_ax_P = s_ax at P
+    report C2_ratio = (s_ax at P)/(p_U*R/(2*t_skin))
+    report C2_expected = (p_U*R/2 + 0.326*(p_U*R/t_skin)*A_str/pitch_str)/(t_skin + A_str/pitch_str)
+    // Hoop strain at P: the denominator of K, if a door model is added later
+    report eps_hoop_P = eps_h at P
 }
 
-// ---------- checks (sheet 7.2) ----------
-// C1: range 48.8 to 61.3 MPa, written as 55.07 MPa +/- 11.4 %
-expect c1: s_hoop at pP == 55.07 MPa within 11.4%
-expect c2: s_ax at pP == 28.7 MPa within 5%
-expect c3: (reaction(x0) + reaction(ysym) + reaction(pin)).x == -1273.0 kN within 0.1%
-// C4: |sum Rz| < 0.1 % of 1273.0 kN, written with an offset
-expect c4: (reaction(x0) + reaction(ysym) + reaction(pin)).z + 1273.0 kN == 1273.0 kN within 0.1%
-expect c5: (reaction(x0) + reaction(ysym) + reaction(pin)).y == -3427.1 kN within 0.1%
-
-// C6: compare e_hoop_aft_mid and e_hoop_top_mid between the coarse run
-// (0.05/0.05) and the refined run (0.005/0.02). They must agree within 5 %.
-study refinement: grid {
-    h_edge: [0.05, 0.005] m
-    h_sub: [0.05, 0.02] m
-}
+// ---------- Built-in checks (sheet section 7.2) ----------
+// C1: between 48.8 and 61.3 MPa. The centre is 55.05 MPa, and the half-width is 11.35 %.
+expect c1_hoop: s_hoop at P == 55.05 MPa within 11.35%
+// C2: 28.7 MPa within 5 %. This is expected to FAIL (about 30.7 MPa), because the model has no stringers.
+expect c2_axial: s_ax at P == 28.7 MPa within 5%
+expect c3_rx: reaction(x0).x + reaction(ysym).x + reaction(bot).x == -1273.0 kN within 0.1%
+// C4: |sum of Rz| < 0.1 % of 1273.0 kN, written as a relative test on 1273 kN + Rz
+expect c4_rz: 1273.0 kN + reaction(x0).z + reaction(ysym).z + reaction(bot).z == 1273.0 kN within 0.1%
+expect c5_ry: reaction(x0).y + reaction(ysym).y + reaction(bot).y == -3427.1 kN within 0.1%
+// C6 (submodel boundary) cannot be checked: there is no door model in Skein.
