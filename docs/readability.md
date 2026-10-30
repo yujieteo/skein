@@ -6,9 +6,8 @@ a steel cantilever 100 × 10 × 10 mm, fixed at x = 0, with a shear force of
 100 N on its free end. The page also gives the results of the end-to-end
 LLM workflow (§4).
 
-**Status:** §1 to §3 are complete. The LLM workflow ran once for each path
-with `skein check` and no `skein run`, because `skein run` is not ready.
-The 3 runs for each path with `skein run` come in a later commit.
+**Status:** complete. §4.1 gives 3 runs for each path of the LLM workflow,
+with `skein check` and `skein run` for Skein.
 
 ---
 
@@ -380,11 +379,29 @@ The output folder gets the answer and the checker output of each round, and
 ### 4.1 Results
 
 Euler-Bernoulli for the request: PL³/(3EI) = 0.381 mm, with I = 50 × 100³ / 12 mm⁴.
+Model: claude-opus-5-5, 2026-10-30. The round limit is 5.
 
-| Date | Model | Path | Runs | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection | Reaction |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-10-30 | claude-opus-5-5 | skein | 1, check only | 1 of 1 | 0 | 3333 | 949 | 10.1 s | no `skein run` yet | no `skein run` yet |
-| 2026-10-30 | claude-opus-5-5 | inp | 1 | 1 of 1 | 0 | 652 | 6691 | 54.0 s | −0.379456 mm (40 C3D8I) | 1000 N |
+| Path | Run | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection | Reaction | Mesh and element |
+|---|---|---|---|---|---|---|---|---|---|
+| skein | 1 | yes | 0 | 3337 | 1055 | 11.5 s | none: `skein run` refused the model | none | 10 mm hex, order 2 |
+| skein | 2 | yes | 0 | 3337 | 1125 | 13.1 s | none: `skein run` refused the model | none | 10 mm hex, order 2 |
+| skein | 3 | yes | 0 | 3337 | 1070 | 45.9 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2: 139293 unknowns, 1223 CG iterations |
+| inp | 1 | yes | 0 | 656 | 2706 | 26.1 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
+| inp | 2 | yes | 0 | 656 | 3364 | 32.6 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
+| inp | 3 | yes | 0 | 656 | 6538 | 52.7 s | −0.379456 mm | 1000 N | 40 C3D8I, 126 nodes |
 
-The skein row used the checker of the open checker PR. The inp answer had
-229 lines. 166 of them were the data lines of the 126 nodes and the 40 elements.
+- The Skein input tokens include the card of `skein help --llm` (about
+  2700 tokens).
+- The Skein result is 0.3 % above Euler-Bernoulli, and the equilibrium
+  check of `skein run` passed. Shear adds about 0.8 % to Euler-Bernoulli.
+- `skein run` refused runs 1 and 2 with the error `unsupported`, because
+  each model had a report that this slice does not compute:
+  `min(u.z, tip)` in run 1 and `mean(u.z, tip)` in run 2. The card lists
+  `min` and `mean` as report functions. Each model also had
+  `u.z at (L, W/2, H/2)`, which the slice computes. The driver gives only the
+  check output back to the model, not the run output.
+- Inp runs 1 and 2 used beam elements, not solid elements. Inp run 3 wrote
+  its 126 nodes and 40 elements by hand in 234 lines.
+
+The build for these runs merged main, the `skein run` PR, the checker PR
+and this branch.
