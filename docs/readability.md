@@ -375,9 +375,10 @@ records each round:
 If the check or the run fails, the driver gives the model its output and
 "Fix the model." (or "Fix the deck."). For Skein, the run is `skein run`
 after a passed `skein check`. For a deck, `fh run` is the check and the run.
-The driver stops after the run passes or after round 5. Each run is one new `claude -p` session with no tools, no settings
-and no memory. The repair rounds resume that session. The input tokens
-count the whole context of each round, which includes the card.
+The driver stops after the run passes or after round 5. Each run is one new
+`claude -p` session with no tools, no settings and no memory. The repair
+rounds resume that session. The input tokens count the whole context of each
+round, which includes the card.
 
 ```sh
 ./build.sh
@@ -385,7 +386,8 @@ scripts/llm/workflow.py skein --out /tmp/llm-runs
 scripts/llm/workflow.py inp --out /tmp/llm-runs
 ```
 
-The output folder gets the answer and the checker output of each round, and
+The output folder gets the answer, the checker output and the `skein run`
+output of each round, and
 `results-skein.toon` or `results-inp.toon`.
 
 ### 4.1 Results
