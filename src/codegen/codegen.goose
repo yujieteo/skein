@@ -890,7 +890,7 @@ fn point_field(e: i64) -> i64 {
     return comp;
 }
 
-let SIGMA_COMPONENTS = ["xx", "yy", "zz", "yz", "xz", "xy", "zy", "zx", "yx"];
+let SIGMA_COMPONENTS = ["xx", "yy", "zz", "yz", "xz", "xy"];
 let EXPECT_FIX = "write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%, or sigma.xx at a point, or reaction(root).z";
 
 fn expect(n: i64) {
@@ -910,7 +910,7 @@ fn expect(n: i64) {
             unsupported(tok(f), str("sigma has no component '", name(f), "'"), "use xx, yy, zz, yz, xz or xy");
             return;
         }
-        x.comp = if c < 6 { c } else { c - 3 };
+        x.comp = c;
         x.at = eval(syntax::child(left, 1)).v;
     } else if kind(left) == syntax::N_AT && object >= 0 && name(object) != unknown_name {
         // An expect on a field this slice cannot sample stays, and the

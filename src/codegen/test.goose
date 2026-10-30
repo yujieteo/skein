@@ -153,6 +153,8 @@ fn test_closed_cylinder() {
                  "error unsupported 51:5 the fixed faces sym_x and bottom share an edge");
     expect_error("a reaction with no support", replace(text, "reaction(bottom).z", "reaction(bottom).x"),
                  "error unsupported 76:8 expect axial_force: the face bottom does not fix u.x");
+    expect_error("a transposed sigma component", replace(text, "sigma.zz at (r_m, 0 mm, L/2) == p*a/(2", "sigma.zy at (r_m, 0 mm, L/2) == p*a/(2"),
+                 "error unsupported 63:26 sigma has no component 'zy'");
 }
 
 fn test_units() {
