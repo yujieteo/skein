@@ -6,9 +6,8 @@ a steel cantilever 100 × 10 × 10 mm, fixed at x = 0, with a shear force of
 100 N on its free end. The page also gives the results of the end-to-end
 LLM workflow (§4).
 
-**Status:** §1 to §3 are complete. The LLM workflow ran once for each path
-with `skein check` only, before `skein run` existed. The 3 runs for each
-path with `skein run` come in a later commit.
+**Status:** complete. §4.1 gives 3 runs for each path of the LLM workflow,
+with `skein check` and `skein run` for Skein.
 
 ---
 
@@ -184,17 +183,24 @@ does not write it, but a deck that an LLM writes in one file must hold it
 | the element | default: order 2 on hex cells | `Mesh.ElementOrder = 2` in `beam.geo`, C3D20 | the grid solver chooses |
 | the dimensions of the model | type-checked by `skein check` | not checked | not checked |
 
-### 1.3 The results of the femahoy inputs
+### 1.3 The results
 
-The two femahoy inputs ran with `fh run` (femahoy and CalculiX on this
-computer, 2026-10-30). The `skein run` result is not in this table yet.
+The Skein file ran with `skein run` on main. The two femahoy inputs ran
+with `fh run` (femahoy and CalculiX on this computer). All runs are from
+2026-10-30.
 
 | Input | Mesh and element | Tip deflection u_z | Root reaction F_z |
 |---|---|---|---|
+| Skein | 40 × 4 × 4 hex27 (order 2), 19683 unknowns, 542 CG iterations | −0.190502 mm | 100.000 N |
 | femahoy grid | grid solver, `max_cell` 2.5 mm | −0.190113 mm | 100.000 N |
 | femahoy CalculiX | 40 × 4 × 4 C3D20, rigid tip | −0.190408 mm | 100.000 N |
 | Euler-Bernoulli, PL³/(3EI) | | −0.190476 mm | 100 N |
 | Timoshenko, the reference of the femahoy case | | −0.191933 mm | 100 N |
+
+The Skein tip deflection is 0.75 % below the Timoshenko reference, 0.20 %
+above the femahoy grid solver and 0.01 % above Euler-Bernoulli. The
+equilibrium check of `skein run` passed: the reaction equals the applied
+load to 2.4e-8 N.
 
 ---
 
@@ -328,15 +334,19 @@ E3, femahoy grid: `h15/grid.toml` against the base file.
 
 ### 2.3 The results of the edits
 
-The femahoy answers ran with `fh run`. The results show that each edit
-gives the model that the task asks for.
+The femahoy answers ran with `fh run`, and the Skein answers ran with
+`skein run` on main. The results show that each edit gives the model that
+the task asks for.
 
-| Task | femahoy CalculiX u_z, F_z | femahoy grid u_z, F_z |
-|---|---|---|
-| E1 | −0.285612 mm, 150.000 N | −0.285169 mm, 150.000 N |
-| E2, step 2 | −0.380815 mm, 200.000 N | −0.380225 mm, 200.000 N |
-| E3, H = 15 mm | −0.056905 mm, 100.000 N | −0.056823 mm, 100.000 N |
-| E3, H = 20 mm | −0.024300 mm, 100.000 N | −0.024266 mm, 100.000 N |
+| Task | Skein u_z, F_z | femahoy CalculiX u_z, F_z | femahoy grid u_z, F_z |
+|---|---|---|---|
+| E1 | −0.285753 mm, 150.000 N | −0.285612 mm, 150.000 N | −0.285169 mm, 150.000 N |
+| E2, step 2 | −0.381004 mm, 200.000 N | −0.380815 mm, 200.000 N | −0.380225 mm, 200.000 N |
+| E3, H = 15 mm | not in this slice | −0.056905 mm, 100.000 N | −0.056823 mm, 100.000 N |
+| E3, H = 20 mm | not in this slice | −0.024300 mm, 100.000 N | −0.024266 mm, 100.000 N |
+
+`skein run` refuses the `study` of E3 with the error `unsupported`, because
+this slice runs one linear static model. The E3 file passes `skein check`.
 
 ---
 
@@ -362,11 +372,13 @@ records each round:
 | `skein` | the card of `skein help --llm`, the request, "Write the complete Skein model." | `skein check` | `skein run` | the first `report` value in a length unit |
 | `inp` | the request, and "Write the complete CalculiX input deck", with the mesh in the deck | `fh run` (ccx reads the deck) | the same `fh run` | the largest displacement component in the `.dat` file |
 
-If the check fails, the driver gives the model the checker output and "Fix
-the model." (or "Fix the deck."). It stops after the check passes or after
-round 5. Each run is one new `claude -p` session with no tools, no settings
-and no memory. The repair rounds resume that session. The input tokens
-count the whole context of each round, which includes the card.
+If the check or the run fails, the driver gives the model its output and
+"Fix the model." (or "Fix the deck."). For Skein, the run is `skein run`
+after a passed `skein check`. For a deck, `fh run` is the check and the run.
+The driver stops after the run passes or after round 5. Each run is one new
+`claude -p` session with no tools, no settings and no memory. The repair
+rounds resume that session. The input tokens count the whole context of each
+round, which includes the card.
 
 ```sh
 ./build.sh
@@ -374,17 +386,52 @@ scripts/llm/workflow.py skein --out /tmp/llm-runs
 scripts/llm/workflow.py inp --out /tmp/llm-runs
 ```
 
-The output folder gets the answer and the checker output of each round, and
+The output folder gets the answer, the checker output and the `skein run`
+output of each round, and
 `results-skein.toon` or `results-inp.toon`.
 
 ### 4.1 Results
 
 Euler-Bernoulli for the request: PL³/(3EI) = 0.381 mm, with I = 50 × 100³ / 12 mm⁴.
+Model: claude-opus-5-5, 2026-10-30. The round limit is 5.
+For the femahoy case of §1, `skein run` gives −0.190502 mm and 100.000 N
+on 40 × 4 × 4 hex27 cells (§1.3).
 
-| Date | Model | Path | Runs | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection | Reaction |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-10-30 | claude-opus-5-5 | skein | 1, check only | 1 of 1 | 0 | 3333 | 949 | 10.1 s | no `skein run` yet | no `skein run` yet |
-| 2026-10-30 | claude-opus-5-5 | inp | 1 | 1 of 1 | 0 | 652 | 6691 | 54.0 s | −0.379456 mm (40 C3D8I) | 1000 N |
+"First-try pass" means that the check passed in round 1.
 
-The skein row used the checker of the open checker PR. The inp answer had
-229 lines. 166 of them were the data lines of the 126 nodes and the 40 elements.
+| Path | Run | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection | Reaction | Mesh and element |
+|---|---|---|---|---|---|---|---|---|---|
+| skein | 1 | yes | 1 | 7823 | 1736 | 53.1 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 2 | yes | 0 | 3339 | 1127 | 55.1 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| skein | 3 | yes | 0 | 3339 | 998 | 44.3 s | −0.382161 mm | 1000.000 N | 10 mm hex, order 2 |
+| inp | 1 | yes | 0 | 656 | 2706 | 26.1 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
+| inp | 2 | yes | 0 | 656 | 3364 | 32.6 s | −0.379948 mm | 1000 N | 10 B32R beam elements |
+| inp | 3 | yes | 0 | 656 | 6538 | 52.7 s | −0.379456 mm | 1000 N | 40 C3D8I, 126 nodes |
+
+Each Skein solve had 139293 unknowns and took 1223 CG iterations.
+
+An earlier version of the driver gave only the check output back to the
+model, not the run output. With it, `skein run` gave a number in 1 of 3
+Skein runs (same model, same day):
+
+| Path | Run | First-try pass | Repair rounds | Input tokens | Output tokens | Wall time | Tip deflection |
+|---|---|---|---|---|---|---|---|
+| skein | 1 | yes | 0 | 3337 | 1055 | 11.5 s | none: `skein run` refused the model |
+| skein | 2 | yes | 0 | 3337 | 1125 | 13.1 s | none: `skein run` refused the model |
+| skein | 3 | yes | 0 | 3337 | 1070 | 45.9 s | −0.382161 mm |
+
+- The Skein input tokens include the card of `skein help --llm` (about
+  2700 tokens).
+- The Skein result is 0.3 % above Euler-Bernoulli, and the equilibrium
+  check of `skein run` passed. Shear adds about 0.8 % to Euler-Bernoulli.
+- `skein run` refuses a report that this slice does not compute, with the
+  error `unsupported`. The card lists `min`, `mean` and `max` as report
+  functions, and the models used them: `min(u.z, tip)` and `mean(u.z, tip)`
+  with the earlier driver, and `max(von_mises(sigma), beam)` in run 1 above.
+  In run 1, one repair round removed it.
+- Inp runs 1 and 2 used beam elements, not solid elements. Inp run 3 wrote
+  its 126 nodes and 40 elements by hand in 234 lines.
+
+The Skein runs above used main with `skein run`, merged with the checker
+PR, because `skein check` is not on main yet. The earlier runs and the inp
+runs used the same code before the merge to main.

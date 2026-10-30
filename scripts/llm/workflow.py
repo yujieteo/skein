@@ -2,8 +2,9 @@
 """The end-to-end LLM workflow (docs/llm_test.md, docs/readability.md).
 
 A fresh model session gets one request and writes one input file. The driver
-checks the file, gives the checker output back to the model until the check
-passes or the round limit, then runs the file and records the result.
+checks and runs the file, and gives the output of a failed check or a failed
+run back to the model, until the run passes or the round limit. It records
+the rounds, the tokens, the wall time and the result.
 
     scripts/llm/workflow.py skein --out DIR   # the model gets `skein help --llm`
     scripts/llm/workflow.py inp --out DIR     # a CalculiX deck for femahoy, no card
@@ -36,10 +37,6 @@ ASK = {
     "inp": ("Write the complete CalculiX input deck. femahoy solves it with "
             "`fh run deck.inp`, which gives the deck to ccx. Put the mesh in "
             "the deck."),
-}
-FIX = {
-    "skein": "skein check printed this. Fix the model.",
-    "inp": "fh run printed this. Fix the deck.",
 }
 SUFFIX = {"skein": ".skn", "inp": ".inp"}
 ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +130,7 @@ def one_run(path, n, args, card):
     start = time.monotonic()
     output = ""
     for k in range(1, args.rounds + 1):
+        record["repair_rounds"] = k - 1
         text, reply = ask_model(args.model, work, session, k == 1, prompt)
         record["model"] = ",".join(reply.get("modelUsage", {})) or args.model
         i, o = tokens(reply)
@@ -142,25 +140,25 @@ def one_run(path, n, args, card):
         file.write_text(last_code_block(text))
         if path == "skein":
             status, output = run([str(args.skein), "check", file.name], work)
+            fix = "skein check printed this. Fix the model."
         else:
             status, output = run(["fh", "run", file.name, "--timeout",
                                   str(args.timeout)], work)
+            fix = "fh run printed this. Fix the deck."
         (work / f"check-{k}.txt").write_text(output)
+        if status == 0 and k == 1:
+            record["first_try_pass"] = "yes"
+        if status == 0 and path == "skein":
+            status, output = run([str(args.skein), "run", file.name], work)
+            fix = "skein run printed this. Fix the model."
+            (work / f"run-{k}.txt").write_text(output)
+        record["run_status"] = status
         if status == 0:
             record["passed"] = "yes"
-            record["first_try_pass"] = "yes" if k == 1 else "no"
+            value = skein_value if path == "skein" else inp_value
+            record["value"], record["reaction"] = value(output)
             break
-        record["repair_rounds"] = k
-        prompt = f"{FIX[path]}\n\n{output}"
-    if record["passed"] == "yes":
-        if path == "skein":
-            status, output = run([str(args.skein), "run", file.name], work)
-            (work / "run.txt").write_text(output)
-            record["value"], record["reaction"] = skein_value(output)
-            record["run_status"] = status
-        else:
-            record["value"], record["reaction"] = inp_value(output)
-            record["run_status"] = 0
+        prompt = f"{fix}\n\n{output}"
     record["wall_s"] = round(time.monotonic() - start, 1)
     return record
 
