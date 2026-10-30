@@ -149,6 +149,25 @@ fn expect_mesh_lints(what: u8[:], src: u8[:], want: u8[:]) {
     if got != want { fail(str("lint --mesh ", what, ": got [", got, "]")); }
 }
 
+// `mesher::lint(words)` exits 0 and gives exactly the ids `want`, one per line.
+fn expect_lint_command(what: u8[:], words: const u8[:][:], want: u8[:]) {
+    var copies: u8[..64][>..] = [];
+    for w in words {
+        var c: u8[..64] = [];
+        c.append(w);
+        copies.push(c);
+    }
+    var args: u8[:][>..] = [];
+    for &w in copies { args.push(w[..]); }
+    let status = mesher::lint(args[..]);
+    var got: u8[>..] = [];
+    for d in check::diags {
+        got.append(d.id);
+        got.push('\n');
+    }
+    if status != 0 || got != want { fail(str("skein lint ", what, ": the exit status is ", status, ", the ids [", got, "]")); }
+}
+
 // The lint rules that need the mesh (docs/checks.md §3) on a strip of
 // 1 m by 50 mm, in plane stress, with a load on its tip.
 fn test_lint() {
@@ -164,20 +183,14 @@ fn test_lint() {
     expect_mesh_lints("bending_lock", strip("", "1"), "bending_lock\n");
     expect_mesh_lints("order 2 does not lock", strip("", "2"), "");
     expect_mesh_lints("mesh_feature_small", strip(" - circle((0.5, 0.025) m, 5 mm)", "2"), "mesh_feature_small\n");
-    // The rules need --mesh.
-    check::lint_text("t.skn", strip("", "1"));
-    if check::diags.len != 0 { fail("lint with no --mesh gives a mesh rule"); }
-    // `skein lint --mesh` reads its option.
-    var words: u8[..64][>..] = [];
-    for w in ["skein", "lint", "--mesh", "examples/elements/conduction_slab_tet.skn"] {
-        var c: u8[..64] = [];
-        c.append(w);
-        words.push(c);
+    // `skein lint` applies the rules that need the mesh only with --mesh.
+    let path = "build/mesh_lint_strip.skn";
+    guard write_file(path, strip("", "1")) else {
+        fail(str("cannot write ", path));
+        return;
     }
-    var args: u8[:][>..] = [];
-    for &w in words { args.push(w[..]); }
-    let status = mesher::lint(args[..]);
-    if status != 0 { fail(str("skein lint --mesh: the exit status is ", status, ", not 0")); }
+    expect_lint_command("with no --mesh", ["skein", "lint", path], "");
+    expect_lint_command("with --mesh", ["skein", "lint", "--mesh", path], "bending_lock\n");
 }
 
 fn main() {

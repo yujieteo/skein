@@ -68,7 +68,7 @@ fn mesh_rules(n: i64, r: MeshRecord, dim: i64) {
         check::warn(syntax::nodes[n].tok, "mesh_feature_small",
                     str("a feature of the region of mesh '", node_text(n), "' is ", check::approx(f), " ", unit,
                         ", under the mesh size ", check::approx(r.size), " ", unit),
-                    str("a refine with size ", check::approx(f), " ", unit, " on the feature"));
+                    str("size: ", check::approx(f), " ", unit, " or less"));
     }
     let b = bounds(r.g);
     var thickness = 1.0e300;
