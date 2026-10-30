@@ -1,0 +1,101 @@
+// Boeing 787 forward fuselage, pressurization: REDUCED model for this skein run slice.
+//
+// This slice meshes one box. Its boundary conditions are only "u = 0" and
+// tractions. Its reports and checks are only reaction(region) and u.x, u.y or
+// u.z at a point. So the barrel, the door cutout, the pad-up, the stringers,
+// the frames and the door-corner submodel cannot be modelled here. The full
+// model is the round-2 file, which passes skein check.
+//
+// This file is the skin (t = 4.584 mm), unrolled flat:
+//   x = fuselage axis (0..L), y = arc length s = R*theta (0..pi*R), z = thickness.
+// The ultimate-pressure membrane state of the plain barrel skin is made by
+// equal and opposite tractions on opposite faces, so the loads balance:
+//   hoop  sigma_h = pU*R/t     = 61.32 MPa on the faces y = 0 and y = pi*R
+//   axial sigma_a = pU*R/(2t)  = 30.66 MPa on the faces x = 0 and x = L
+// A small clamped patch (100 mm square, inner face, centre x = 1 m, s = 1 m)
+// only removes the rigid motion. Its reaction must be about 0. It does not
+// disturb the uniform field near P, which is more than 3.8 m away.
+//
+// Material: quasi-isotropic laminate as isotropic, E = 55.85 GPa, nu = 0.326.
+// Element order: quadratic (cg order 2) hexahedra.
+//
+// Displacements u relative to the patch centre (x0, y0) = (1, 1) m:
+//   eps_a = (sigma_a - nu*sigma_h)/E = 1.91044e-4
+//   eps_h = (sigma_h - nu*sigma_a)/E = 9.18980e-4
+//   u.x = eps_a*(x - 1 m), u.y = eps_h*(y - 1 m)
+// Membrane stress from the reported displacements (1 m gauges about P):
+//   eps_a = u.x(PB) - u.x(PA),  eps_h = u.y(PD) - u.y(PC)   (per metre)
+//   sigma_h = E/(1-nu^2)*(eps_h + nu*eps_a)  -> C1: expect 61.3 MPa (bare skin; ratio 1.00)
+//   sigma_a = E/(1-nu^2)*(eps_a + nu*eps_h)  -> C2: expect 30.7 MPa (bare skin, not 25.2)
+// P = (x 4.8768 m, theta 140 deg) -> (4.8768 m, s = 7.0445 m, z = 0)
+
+model b787_skin_unrolled: 3d, SI
+
+let R: Length = 2.883 m
+let L: Length = 6.096 m
+let t_sk: Length = 4.584 mm
+let s_max: Length = 9.057079 m
+param pU: Pressure = 97.5 kPa in 10 kPa..200 kPa
+
+scales R, pU
+
+let E_q: Pressure = 55.85 GPa
+let nu_q: Real = 0.326
+
+let skin: Solid = box((0 m, 0 m, -t_sk/2), (L, s_max, t_sk/2))
+
+let fwd_end: Surface = boundary(skin, x == 0 m)
+let aft_end: Surface = boundary(skin, x == L)
+let top_edge: Surface = boundary(skin, y == 0 m)
+let bottom_edge: Surface = boundary(skin, y == s_max)
+let patch: Surface = boundary(skin, z == -t_sk/2 && x >= 0.95 m && x <= 1.05 m && y >= 0.95 m && y <= 1.05 m)
+
+material cfrp_qi {
+    E: Pressure = E_q
+    nu: Real = nu_q
+}
+
+mesh m on skin {
+    size: 50 mm
+    cell: hex
+}
+
+physics solid on skin: linear_elastic solves u: Vector<Length> {
+    material cfrp_qi
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+// removes the rigid motion only; the loads below balance each other
+bc patch: u = 0
+
+step ultimate: static {
+    // hoop membrane force pU*R per unit length
+    bc top_edge: sigma*n = (0 Pa, -pU*R/t_sk, 0 Pa)
+    bc bottom_edge: sigma*n = (0 Pa, pU*R/t_sk, 0 Pa)
+    // end closure load pU*R/2 per unit arc (total over the quarter: 1273.0 kN)
+    bc fwd_end: sigma*n = (-pU*R/(2*t_sk), 0 Pa, 0 Pa)
+    bc aft_end: sigma*n = (pU*R/(2*t_sk), 0 Pa, 0 Pa)
+
+    output u, sigma, von_mises(sigma)
+
+    // must be about 0 (the loads balance)
+    report reaction(patch)
+
+    // displacement at P
+    report uxP = u.x at (4.8768 m, 7.0445 m, 0 m)
+    report uyP = u.y at (4.8768 m, 7.0445 m, 0 m)
+    // axial gauge, 1 m about P
+    report uxA = u.x at (4.3768 m, 7.0445 m, 0 m)
+    report uxB = u.x at (5.3768 m, 7.0445 m, 0 m)
+    // hoop gauge, 1 m about P
+    report uyC = u.y at (4.8768 m, 6.5445 m, 0 m)
+    report uyD = u.y at (4.8768 m, 7.5445 m, 0 m)
+}
+
+// uniform membrane field: u.x = eps_a*(x - 1 m), u.y = eps_h*(y - 1 m)
+expect axial_A: u.x at (4.3768 m, 7.0445 m, 0 m) == 0.64512 mm within 2%
+expect axial_B: u.x at (5.3768 m, 7.0445 m, 0 m) == 0.83616 mm within 2%
+expect hoop_C: u.y at (4.8768 m, 6.5445 m, 0 m) == 5.0953 mm within 2%
+expect hoop_D: u.y at (4.8768 m, 7.5445 m, 0 m) == 6.0142 mm within 2%
+expect hoop_P: u.y at (4.8768 m, 7.0445 m, 0 m) == 5.5548 mm within 2%

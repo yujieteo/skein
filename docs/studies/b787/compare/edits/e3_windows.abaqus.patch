@@ -1,0 +1,149 @@
+diff --git a/base/abaqus/mesh.py b/e3_windows/abaqus/mesh.py
+index 8caa587..6a0569c 100644
+--- a/base/abaqus/mesh.py
++++ b/e3_windows/abaqus/mesh.py
+@@ -29,25 +29,38 @@ DOOR_S0 = R * math.radians(75.0)   # centre
+ S_UPPER = DOOR_S0 - DOOR_B
+ S_LOWER = DOOR_S0 + DOOR_B
+ PAD = 0.150
++WIN_X = [PITCH_FRAME * k for k in range(2, 10)]  # window centres, mid-bay
++WIN_A = 0.272 / 2.0                # half width along x
++WIN_B = 0.467 / 2.0                # half height along s, centre DOOR_S0
++WIN_R = 0.100                      # corner radius
++CUTOUTS = [(0.0, DOOR_S0, DOOR_A, DOOR_B, DOOR_R)] + [(x, DOOR_S0, WIN_A, WIN_B, WIN_R) for x in WIN_X]
+ 
+ ORIENT_NODE_BASE = 900000  # beam orientation nodes, not part of the mesh
+ BEAM_BASE = 100000
+ 
+ 
+-def door_distance(x, s):
+-    """Signed distance to the cutout edge: > 0 in the skin, < 0 in the cutout."""
+-    qx = abs(x) - (DOOR_A - DOOR_R)
+-    qs = abs(s - DOOR_S0) - (DOOR_B - DOOR_R)
++def box_distance(x, s, c):
++    """Signed distance to the edge of cutout c: > 0 in the skin, < 0 in the cutout."""
++    x0, s0, a, b, r = c
++    qx = abs(x - x0) - (a - r)
++    qs = abs(s - s0) - (b - r)
+     out = math.hypot(max(qx, 0.0), max(qs, 0.0))
+-    return out + min(max(qx, qs), 0.0) - DOOR_R
++    return out + min(max(qx, qs), 0.0) - r
++
++
++def door_distance(x, s):
++    return box_distance(x, s, CUTOUTS[0])
++
++
++def cutout_distance(x, s):
++    return min(box_distance(x, s, c) for c in CUTOUTS)
+ 
+ 
+ def corner_centre(x, s):
+-    """Centre of the corner arc nearest to (x, s), or None off the corner zones."""
+-    cx = math.copysign(DOOR_A - DOOR_R, x)
+-    cs = DOOR_S0 + math.copysign(DOOR_B - DOOR_R, s - DOOR_S0)
+-    if abs(x) > abs(cx) and abs(s - DOOR_S0) > DOOR_B - DOOR_R:
+-        return cx, cs
++    """Centre and radius of the corner arc nearest to (x, s), or None off the corner zones."""
++    x0, s0, a, b, r = min(CUTOUTS, key=lambda c: box_distance(x, s, c))
++    if abs(x - x0) > a - r and abs(s - s0) > b - r:
++        return x0 + math.copysign(a - r, x - x0), s0 + math.copysign(b - r, s - s0), r
+     return None
+ 
+ 
+@@ -112,7 +125,7 @@ class Mesh:
+                 grid[i, j] = nid
+                 self.xy[nid] = (x, s)
+         self._snap(xs, ss, grid)
+-        d = {n: door_distance(*p) for n, p in self.xy.items()}
++        d = {n: cutout_distance(*p) for n, p in self.xy.items()}
+         for n in d:
+             if abs(d[n]) < 1e-12:
+                 d[n] = 0.0
+@@ -124,7 +137,7 @@ class Mesh:
+                 ring = [grid[i, j], grid[i + 1, j], grid[i + 1, j + 1], grid[i, j + 1]]
+                 if all(d[n] >= 0 for n in ring):
+                     mid = [sum(self.xy[n][k] for n in ring) / 4 for k in (0, 1)]
+-                    assert door_distance(*mid) > 0, f"cell {i},{j} hides the cutout"
++                    assert cutout_distance(*mid) > 0, f"cell {i},{j} hides the cutout"
+                     poly = ring
+                 elif all(d[n] <= 0 for n in ring):
+                     continue
+@@ -160,27 +173,27 @@ class Mesh:
+             c = corner_centre(x, s)
+             if c is None:
+                 continue
+-            dist = math.hypot(x - c[0], s - c[1]) - DOOR_R
++            dist = math.hypot(x - c[0], s - c[1]) - c[2]
+             if abs(dist) >= 0.3 * min(hx[i], hs[j]):
+                 continue
+             on_s = any(abs(s - b) < 1e-9 for b in self.beam_s)
+             on_x = any(abs(x - b) < 1e-9 for b in self.beam_x)
+             if on_s:   # keep the node on its stringer: move along x
+-                x = c[0] + math.copysign(math.sqrt(DOOR_R ** 2 - (s - c[1]) ** 2), x - c[0])
++                x = c[0] + math.copysign(math.sqrt(c[2] ** 2 - (s - c[1]) ** 2), x - c[0])
+             elif on_x:  # keep the node on its frame: move along s
+-                s = c[1] + math.copysign(math.sqrt(DOOR_R ** 2 - (x - c[0]) ** 2), s - c[1])
++                s = c[1] + math.copysign(math.sqrt(c[2] ** 2 - (x - c[0]) ** 2), s - c[1])
+             else:
+-                k = DOOR_R / (dist + DOOR_R)
++                k = c[2] / (dist + c[2])
+                 x, s = c[0] + (x - c[0]) * k, c[1] + (s - c[1]) * k
+             self.xy[nid] = (x, s)
+ 
+     def _arc_point(self, a, b):
+         (xa, sa), (xb, sb) = self.xy[a], self.xy[b]
+         lo, hi = 0.0, 1.0
+-        da = door_distance(xa, sa)
++        da = cutout_distance(xa, sa)
+         for _ in range(60):
+             t = 0.5 * (lo + hi)
+-            if (door_distance(xa + t * (xb - xa), sa + t * (sb - sa)) >= 0) == (da >= 0):
++            if (cutout_distance(xa + t * (xb - xa), sa + t * (sb - sa)) >= 0) == (da >= 0):
+                 lo = t
+             else:
+                 hi = t
+@@ -305,6 +318,20 @@ def door_edge(mesh):
+     return sorted(nodes, key=lambda n: (mesh.xy[n][1], mesh.xy[n][0] if mesh.xy[n][1] < DOOR_S0 else -mesh.xy[n][0]))
+ 
+ 
++def window_edges(mesh):
++    """The aft and fore half of each window edge, each in the order of s as
++    in door_edge, with the window centre x."""
++    out = []
++    for c in CUTOUTS[1:]:
++        x0, s0 = c[0], c[1]
++        nodes = mesh.nodes_where(lambda x, s: abs(box_distance(x, s, c)) < 1e-6)
++        for side in (1.0, -1.0):
++            half = [n for n in nodes if (mesh.xy[n][0] - x0) * side >= -1e-9]
++            out.append((x0, sorted(half, key=lambda n: (
++                mesh.xy[n][1], abs(mesh.xy[n][0] - x0) * (1 if mesh.xy[n][1] < s0 else -1)))))
++    return out
++
++
+ def radial(x, s):
+     return [(2, math.sin(s / R)), (3, math.cos(s / R))]
+ 
+@@ -333,8 +360,10 @@ def resultant(mesh, cloads):
+ 
+ def global_model(here):
+     stringer_s = [R * math.radians(t) for t in STRINGERS_DEG]
+-    xs_break = merge([DOOR_A + PAD], [0.0, DOOR_A, L_HALF] + FRAMES)
+-    ss_break = merge([S_UPPER - PAD, S_LOWER + PAD], [0.0, S_UPPER, S_LOWER, R * math.pi] + stringer_s)
++    win_x = [x + d for x in WIN_X for d in (-WIN_A, WIN_A)]
++    xs_break = merge([DOOR_A + PAD], [0.0, DOOR_A, L_HALF, 4.8768] + FRAMES + win_x)  # 4.8768: check point P
++    ss_break = merge([S_UPPER - PAD, S_LOWER + PAD],
++                     [0.0, S_UPPER, S_LOWER, R * math.pi, DOOR_S0 - WIN_B, DOOR_S0 + WIN_B] + stringer_s)
+     xs = subdivide(xs_break, uniform(0.05))
+     ss = subdivide(ss_break, uniform(0.05))
+     m = Mesh(xs, ss, FRAMES, stringer_s)
+@@ -347,6 +376,9 @@ def global_model(here):
+         ("CLOAD", "End closure load, p_U R / 2 = %.1f N/m along +x" % (P_U * R / 2),
+          m.edge_loads(sorted(end, key=lambda n: m.xy[n][1]), 1, lambda x, s: P_U * R / 2, axial)),
+         ("CLOAD", DOOR_LOAD, m.edge_loads(door, 1, lambda x, s: P_U * x, radial)),
++        ("CLOAD", "Window load on each window edge, p_U * |x - x_w| per unit s, along the radius",
++         [line for x0, chain in window_edges(m)
++          for line in m.edge_loads(chain, 1, lambda x, s, x0=x0: P_U * abs(x - x0), radial)]),
+     ]
+     sub_x0, sub_s0 = DOOR_A - DOOR_R - 0.3, S_UPPER + DOOR_R - 0.3
+     sets = [

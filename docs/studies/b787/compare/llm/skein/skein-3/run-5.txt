@@ -1,0 +1,17 @@
+report[6]{step,expr,value}:
+  pressurize,reaction(root),"(-28291.960125675552, 4.249898211128311e-10, -1.0982148523908108e-09) N"
+  pressurize,"uy_side_hi = u.y at (L/2, Wb, t_skin/2)","9.249552225818506e-05 m"
+  pressurize,"uy_side_lo = u.y at (L/2, 0 m, t_skin/2)","-9.249552225924737e-05 m"
+  pressurize,"ux_aft = u.x at (L, Wb/2, t_skin/2)","0.0011726297336236773 m"
+  pressurize,"ux_mid = u.x at (L/2, Wb/2, t_skin/2)","0.0005903312185324927 m"
+  pressurize,"uz_P_outer = u.z at (L/2, Wb/2, t_skin)","-1.2305660927910313e-06 m"
+verify[4]{stage,id,result,value,limit}:
+  post,equilibrium,pass,"6.755336733202706e-07 N","1.71353988 N"
+  post,expect,pass,"c1_hoop_strain: 9.249552225818506e-05 m","0.09250 mm within 2%"
+  post,expect,pass,"c1_hoop_strain_lo: -9.249552225924737e-05 m","-0.09250 mm within 2%"
+  post,expect,pass,"c2_axial_strain: 0.0011726297336236773 m","1.1646 mm within 2%"
+solve[1]{step,dofs,cg_iterations,seconds,converged}:
+  pressurize,472527,3612,296.35096113899635,yes
+results[1]:
+  .skein/results/b787_skin_bay/pressurize.vtu
+built .skein/build/b787_skin_bay/b787_skin_bay

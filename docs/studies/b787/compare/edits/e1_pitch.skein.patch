@@ -1,0 +1,52 @@
+diff --git a/base/skein/door_corner.skn b/e1_pitch/skein/door_corner.skn
+index 3262150..3065d0a 100644
+--- a/base/skein/door_corner.skn
++++ b/e1_pitch/skein/door_corner.skn
+@@ -12,7 +12,7 @@ let global: Results = results("fuselage.skn", step: "pressurize")
+ 
+ let R: Length = 2.883 m
+ let x_end: Length = 6.096 m
+-let f_pitch: Length = 0.6096 m
++let f_pitch: Length = 0.4064 m
+ let p_U: Pressure = 1.5*65.0 kPa
+ 
+ // Door 2, a Type A exit (sheet 2.3), and the pad-up band around it (2.4).
+@@ -79,7 +79,7 @@ let ring_0: Curve = boundary(wall, x == 0 m)
+ let frames: Curve = pattern(
+     move(ring_0, (f_pitch/2, 0 m, 0 m)),
+     (f_pitch, 0 m, 0 m),
+-    10,
++    15,
+ ) & sub - door_box(0 m)
+ let beams: Curve = stringers | frames
+ 
+diff --git a/base/skein/fuselage.skn b/e1_pitch/skein/fuselage.skn
+index d291778..8c3f233 100644
+--- a/base/skein/fuselage.skn
++++ b/e1_pitch/skein/fuselage.skn
+@@ -1,6 +1,6 @@
+ // blocked-by: G3 G31 G32 G33
+ // Boeing 787 forward fuselage under cabin pressure: the global model of
+-// the problem sheet (../problem.md). One quarter of a 20-bay barrel,
++// the problem sheet (../problem.md). One quarter of a 30-bay barrel,
+ // 0 <= x <= 6.096 m and 0 deg <= theta <= 180 deg, with the left door 2
+ // cutout. Composite skin shells, offset beams for the stringers and the
+ // frames, ultimate pressure and the end closure load.
+@@ -10,7 +10,7 @@ model b787_fuselage: 3d, SI
+ 
+ let R: Length = 2.883 m
+ let x_end: Length = 6.096 m
+-let f_pitch: Length = 0.6096 m
++let f_pitch: Length = 0.4064 m
+ let s_pitch: Length = 2*pi*R/90
+ let p_U: Pressure = 1.5*65.0 kPa
+ 
+@@ -73,7 +73,7 @@ let ring_0: Curve = boundary(wall, x == 0 m)
+ let frames: Curve = pattern(
+     move(ring_0, (f_pitch/2, 0 m, 0 m)),
+     (f_pitch, 0 m, 0 m),
+-    10,
++    15,
+ ) - door_box(0 m)
+ let beams: Curve = stringers | frames
+ 

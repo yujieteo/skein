@@ -1,0 +1,66 @@
+diff --git a/base/skein/fuselage.skn b/e3_windows/skein/fuselage.skn
+index d291778..f0f075e 100644
+--- a/base/skein/fuselage.skn
++++ b/e3_windows/skein/fuselage.skn
+@@ -2,8 +2,8 @@
+ // Boeing 787 forward fuselage under cabin pressure: the global model of
+ // the problem sheet (../problem.md). One quarter of a 20-bay barrel,
+ // 0 <= x <= 6.096 m and 0 deg <= theta <= 180 deg, with the left door 2
+-// cutout. Composite skin shells, offset beams for the stringers and the
+-// frames, ultimate pressure and the end closure load.
++// cutout and a row of 8 windows. Composite skin shells, offset beams for
++// the stringers and the frames, ultimate pressure and the end closure load.
+ // theta turns from +z to +y. A skin point is (x, R*sin(theta), R*cos(theta)).
+ 
+ model b787_fuselage: 3d, SI
+@@ -55,9 +55,20 @@ fn panel(x0: Length, a: Length, th: Angle, b: Length) -> Solid = rotate(
+ // this is the nearest form of a corner radius in the x-s plane.
+ fn door_box(g: Length) -> Solid = fillet(panel(0 m, w_d/2 + g, theta_d, h_d/2 + g), r_c + g)
+ 
++// A row of 8 windows, mid-bay at x = 2*f_pitch to 9*f_pitch, level with
++// the door centre. Each cuts the skin and the stringers, as the door does.
++let w_w: Length = 0.272 m
++let h_w: Length = 0.467 m
++let r_w: Length = 0.100 m
++let windows: Solid = pattern(
++    fillet(panel(2*f_pitch, w_w/2, theta_d, h_w/2), r_w),
++    (f_pitch, 0 m, 0 m),
++    8,
++)
++
+ let barrel: Solid = cylinder((0, 0, 0) m, e_x, R, x_end)
+ let wall: Surface = boundary(barrel, y^2 + z^2 == R^2 && y >= 0 m)
+-let skin: Surface = wall - door_box(0 m)
++let skin: Surface = wall - door_box(0 m) - windows
+ // gap G32: a Surface or a Curve & a Solid is a Solid in the checker, not
+ // the part of the Surface or the Curve in the Solid.
+ let pad: Surface = skin & door_box(pad_w)
+@@ -68,7 +79,7 @@ let plain: Surface = skin - door_box(pad_w)
+ let stringer_0: Curve = line((0 m, R*sin(2 deg), R*cos(2 deg)), (x_end, R*sin(2 deg), R*cos(2 deg)))
+ let left: Solid = box((0 m, 0 m, -2*R), (x_end, 2*R, 2*R))
+ // gap G32: the & left gives a Solid.
+-let stringers: Curve = (pattern_polar(stringer_0, e_x, 90) & left) - door_box(0 m)
++let stringers: Curve = (pattern_polar(stringer_0, e_x, 90) & left) - door_box(0 m) - windows
+ let ring_0: Curve = boundary(wall, x == 0 m)
+ let frames: Curve = pattern(
+     move(ring_0, (f_pitch/2, 0 m, 0 m)),
+@@ -85,6 +96,11 @@ let skin_end: Curve = boundary(skin, x == x_end)
+ let aft_of_x_c: Solid = box((w_d/2 - r_c, 0 m, -2*R), (x_end, 2*R, 2*R))
+ // gap G32: the & aft_of_x_c gives a Solid.
+ let door_aft: Curve = boundary(skin, door_box(0 m)) & aft_of_x_c
++// The window edges. The pane load goes to them by the rule of the door,
++// with x - x_w in place of x. x_w is the centre of the nearest window.
++// gap N5: a pattern gives no value for each copy, so x - x_w comes from atan2.
++let window_edge: Curve = boundary(skin, windows)
++let dx_w: Length = f_pitch*atan2(sin(2*pi*x/f_pitch), cos(2*pi*x/f_pitch))/(2*pi)
+ let bottom: Point = point((0 m, 0 m, -R))
+ 
+ // The check point P (sheet 7.2): plain skin, mid-bay and mid-pitch.
+@@ -201,6 +217,7 @@ step pressurize: static {
+     // gap G33: N is not declared, and N*n is not a flux of an eq.
+     bc skin_end: N*n = (p_U*R/2, 0, 0)
+     bc door_aft: N*n = p_U*x*abs(dot(n, e_x))*e_r
++    bc window_edge: N*n = p_U*abs(dx_w)*abs(dot(n, e_x))*e_r
+     // gap G31: the template does not declare Nx.
+     output w, dot(w, e_r), s_hoop, s_axial, Nx
+     // gap N2: max gives the value, not its point, and one value for all
