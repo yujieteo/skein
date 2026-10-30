@@ -61,7 +61,8 @@ Goose source tree at the same commit as the compiler.
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
 | `src/runtime/` | the solver that generated code calls (`api.goose`): a 27-node hexahedron box mesher (`mesh.goose`), CG with Jacobi (`solve.goose`) and VTU output (`vtu.goose`) |
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
-| `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
+| `src/codegen/` | `skein run` for one linear static box: the Goose code generator (`codegen.goose`) and the build and run (`run.goose`). It needs the runtime in `src/runtime/`, and it sends a simplex model to `src/elements/`. |
+| `src/elements/` | `skein run` for a simplex model (`gen.goose`): P1 and P2 triangles and tetrahedra (`shape.goose`, `mesh.goose`) for the `linear_elastic` and `heat` templates, with assembly (`assemble.goose`), CG with Jacobi (`solve.goose`) and output (`post.goose`) |
 | `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
 
 ## Why Skein
