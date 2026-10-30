@@ -131,6 +131,19 @@ fn main() {
         fail(str("2D plate: the mesh area ", q2.measure, " is not the polygon area ", polygon_area));
     }
 
+    // A hole of radius 3 mm at size 5 mm: 4 chords, each with a sliver
+    // between it and the arc that is deeper than the centroid of a small
+    // triangle on the chord. The mesh must fill the chord polygon.
+    let coarse = mesher::subtract(mesher::rect(0.0, 0.0, 20.0, 20.0), mesher::circle(10.0, 10.0, 3.0));
+    if !mesher::mesh_2d(coarse, 5.0) { fail("2D coarse hole: the mesher did not finish"); }
+    expect_conforming("2D coarse hole", coarse);
+    let coarse_area = chord_area(20.0, 20.0, 10.0, 10.0, 3.0);
+    let qc = mesher::mesh_quality();
+    print("2D coarse hole, size 5\n", qc, "\n  area of the chord polygon: ", coarse_area);
+    if abs(qc.measure - coarse_area) > 1.0e-10 * coarse_area {
+        fail(str("2D coarse hole: the mesh area ", qc.measure, " is not the polygon area ", coarse_area));
+    }
+
     // The femahoy plate with a hole and a pad, in mm. The sharp edges: the
     // 2 rims of the hole, and the edges of the pad, plate and pad faces on
     // the lattice planes, at most their perimeters.

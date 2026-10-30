@@ -13,7 +13,6 @@ struct Quality {
     min_angle: f64,     // degrees
     max_angle: f64,     // degrees
     max_aspect: f64,
-    longest_edge: f64,
     measure: f64,       // the area in 2D, the volume in 3D
     inverted: i64,      // cells of zero or negative measure
 }
@@ -35,7 +34,7 @@ fn norm3(a: f64[3]) -> f64 { return sqrt(dot3(a, a)); }
 
 fn mesh_quality() -> Quality {
     var q = Quality { cells: cell_count(), nodes: point_count(), min_angle: 180.0, max_angle: 0.0,
-                      max_aspect: 0.0, longest_edge: 0.0, measure: 0.0, inverted: 0 };
+                      max_aspect: 0.0, measure: 0.0, inverted: 0 };
     let k = mesh_dim + 1;
     for c in cell_count() {
         var v: f64[3][4] = default<f64[3][4]>();
@@ -44,7 +43,6 @@ fn mesh_quality() -> Quality {
         for i in k {
             for j in i + 1..k { longest = max(longest, norm3(sub3(v[i], v[j]))); }
         }
-        q.longest_edge = max(q.longest_edge, longest);
         if mesh_dim == 2 {
             let area = 0.5 * cross3(sub3(v[1], v[0]), sub3(v[2], v[0]))[2];
             q.measure += area;

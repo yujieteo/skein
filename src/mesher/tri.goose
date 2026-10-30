@@ -11,7 +11,7 @@
 // 3. A segment is encroached if a point lies inside its diametral circle.
 //    Each encroached segment is split at the midpoint of its parameter on
 //    the true curve, until all segments are edges of the triangulation.
-// 4. Each triangle inside the shape with an angle below MIN_ANGLE, or a
+// 4. Each triangle inside the polygon of the segments with an angle below MIN_ANGLE, or a
 //    circumradius above size / sqrt(3), gets a point at its circumcentre.
 //    If that point encroaches a segment, the segment is split instead.
 import std;
@@ -48,6 +48,7 @@ var tn: i64[>..] = [];
 var talive: bool[>..] = [];
 var tfree: i64[>..<] = [];
 var tmark: i64[>..] = [];       // the cavity stamp
+var tin: bool[>..] = [];        // inside the polygon of the segments, by classify
 var stamp = 0;
 var last_tri = 0;
 
@@ -243,12 +244,14 @@ fn new_triangle(a: i64, b: i64, c: i64) -> i64 {
         }
         talive.push(false);
         tmark.push(0);
+        tin.push(false);
     }
     tv[3 * t] = a;
     tv[3 * t + 1] = b;
     tv[3 * t + 2] = c;
     for k in 3 { tn[3 * t + k] = -1; }
     talive[t] = true;
+    tin[t] = false;
     vtri[a] = t;
     vtri[b] = t;
     vtri[c] = t;
@@ -459,12 +462,50 @@ fn recover_segments(budget: i64) -> bool {
 
 // --- refinement ------------------------------------------------------------------
 
-fn inside_triangle(g: i64, t: i64) -> bool {
-    let a = tv[3 * t];
-    let b = tv[3 * t + 1];
-    let c = tv[3 * t + 2];
-    if a < 3 || b < 3 || c < 3 { return false; }
-    return phi(g, (px[a] + px[b] + px[c]) / 3.0, (py[a] + py[b] + py[c]) / 3.0, 0.0) < 0.0;
+// Sets tin of each live triangle from the polygon of the segments, not
+// from φ: between a chord and its arc, φ has the wrong sign. A flood fill
+// starts at the triangles on the corners of the large triangle, which are
+// outside, and flips the side across each segment. The segments must be
+// edges of the triangulation.
+fn classify() {
+    var seg: bool[>..] = [];
+    var seen: bool[>..] = [];
+    for e in tv.len { seg.push(false); }
+    for t in talive.len {
+        tin[t] = false;
+        seen.push(false);
+    }
+    for s in segments.len {
+        guard segments[s].alive else { continue; }
+        let t, k = find_edge(segments[s].a, segments[s].b);
+        if t < 0 { continue; }
+        seg[3 * t + k] = true;
+        let n = tn[3 * t + k];
+        if n >= 0 {
+            for j in 3 {
+                if tn[3 * n + j] == t { seg[3 * n + j] = true; }
+            }
+        }
+    }
+    var queue: i64[>..] = [];
+    for t in talive.len {
+        if talive[t] && (tv[3 * t] < 3 || tv[3 * t + 1] < 3 || tv[3 * t + 2] < 3) {
+            seen[t] = true;
+            queue.push(t);
+        }
+    }
+    var i = 0;
+    while i < queue.len {
+        let t = queue[i];
+        for k in 3 {
+            let n = tn[3 * t + k];
+            if n < 0 || seen[n] { continue; }
+            seen[n] = true;
+            tin[n] = tin[t] != seg[3 * t + k];
+            queue.push(n);
+        }
+        i++;
+    }
 }
 
 // The circumcentre of t, and the ratio of its circumradius to its
@@ -503,6 +544,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     talive.clear();
     tfree.clear();
     tmark.clear();
+    tin.clear();
     segments.clear();
     fan.clear();
     guard collect_curves(g) else { return false; }
@@ -529,9 +571,10 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     let ratio = 1.0 / (2.0 * sin(radians(MIN_ANGLE)));
     let largest = size / sqrt(3.0) * (1.0 + 1.0e-9);
     while done {
+        classify();
         var inserted = false;
         for t in talive.len {
-            if !talive[t] || !inside_triangle(g, t) { continue; }
+            if !talive[t] || !tin[t] { continue; }
             let x, y, r, q = circumcentre(t);
             if q <= ratio && r <= largest { continue; }
             if px.len >= budget { done = false; break; }
@@ -549,10 +592,11 @@ fn mesh_2d(g: i64, size: f64) -> bool {
         if !inserted { break; }
     }
     // The mesh: the triangles inside g, with their points renumbered.
+    classify();
     var index: i64[>..] = [];
     for v in px.len { index.push(-1); }
     for t in talive.len {
-        if !talive[t] || !inside_triangle(g, t) { continue; }
+        if !talive[t] || !tin[t] { continue; }
         for k in 3 {
             let v = tv[3 * t + k];
             if index[v] < 0 { index[v] = add_point(px[v], py[v], 0.0); }
