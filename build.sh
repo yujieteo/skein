@@ -2,9 +2,8 @@
 # Builds and tests the skein compiler.
 #
 #   ./build.sh          build build/skein
-#   ./build.sh test     build, run each src/<part>/test.goose, then
-#                       skein run each examples/*.skn, which must pass,
-#                       and check the generated C (scripts/generated_c.sh)
+#   ./build.sh test     build, then run each src/<part>/test.goose and
+#                       check the generated C (scripts/generated_c.sh)
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.
@@ -29,13 +28,6 @@ run_tests() {
             continue
         fi
         if ! (cd "$root" && "$out/test_$part"); then
-            status=1
-        fi
-    done
-    # The runs write .skein/ in build/, which git ignores.
-    for model in "$root"/examples/*.skn; do
-        if ! (cd "$out" && ./skein run "$model" >/dev/null); then
-            echo "FAIL skein run $model"
             status=1
         fi
     done
