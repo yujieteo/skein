@@ -40,14 +40,14 @@ fn euler_bernoulli_tip() -> f64 {
 fn test_cantilever() {
     runtime::mesh_box(0.0, 0.0, 0.0, L, B, H, 40, 4, 4);
     runtime::material(E, NU);
-    assert(runtime::fix_face(runtime::X, 0.0));
-    assert(runtime::traction_face(runtime::X, L, 0.0, 0.0, -P / (B * H)));
+    assert(runtime::fix("x0"));
+    assert(runtime::traction("x1", 0.0, 0.0, -P / (B * H)));
     if !runtime::solve_static() {
         failures++;
         print("FAIL cantilever: CG does not converge in ", runtime::cg_iterations(), " iterations");
     }
     let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
-    let rx, ry, rz = runtime::reaction_face(runtime::X, 0.0);
+    let rx, ry, rz = runtime::reaction("x0");
     let fx, fy, fz = runtime::applied_load();
     print("cantilever: 40 x 4 x 4 hex27, ", runtime::dof_count(), " dofs, ",
         runtime::cg_iterations(), " CG iterations, ", runtime::solve_seconds(), " s");
@@ -57,6 +57,7 @@ fn test_cantilever() {
     expect_near("tip uz against femahoy", uz, FEMAHOY_TIP, 0.02);
     expect_near("tip uz against Euler-Bernoulli", uz, euler_bernoulli_tip(), 0.02);
     expect_near("applied load", fz, -P, 1.0e-12);
+    expect_near("tip face area", runtime::face_area("x1"), B * H, 1.0e-12);
     // The equilibrium check of docs/checks.md: 1e-6 of the largest load.
     if abs(rz + fz) > 1.0e-6 * P || abs(rx + fx) > 1.0e-6 * P || abs(ry + fy) > 1.0e-6 * P {
         failures++;
@@ -70,20 +71,20 @@ fn test_cantilever() {
 }
 
 // A second load step on the same mesh: a point force at the tip, after
-// `clear_loads`. A plane that is not a face of the box selects nothing.
+// `clear_loads`. A name that is not a set of the mesh selects nothing.
 fn test_second_step() {
     runtime::clear_loads();
     runtime::force_point(L, 0.5 * B, 0.5 * H, 0.0, 0.0, -2.0 * P);
-    if runtime::traction_face(runtime::X, 0.5 * L, 0.0, 0.0, 1.0) {
+    if runtime::traction("mid", 0.0, 0.0, 1.0) || runtime::fix("mid") {
         failures++;
-        print("FAIL traction_face: x = L/2 is not a face of the box");
+        print("FAIL traction and fix: mid is not a set of the mesh");
     }
     if !runtime::solve_static() {
         failures++;
         print("FAIL second step: CG does not converge");
     }
     let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, H);
-    let rx, ry, rz = runtime::reaction_face(runtime::X, 0.0);
+    let rx, ry, rz = runtime::reaction("x0");
     let fx, fy, fz = runtime::applied_load();
     print("second step: point force ", fz, " N, tip uz at the top ", uz, " mm, reaction z ", rz, " N");
     expect_near("second step applied load", fz, -2.0 * P, 1.0e-12);
@@ -103,7 +104,7 @@ fn linear_jacobian(u: f64[:]) { assert(runtime::assemble()); }
 
 fn test_newton() {
     runtime::clear_loads();
-    assert(runtime::traction_face(runtime::X, L, 0.0, 0.0, -P / (B * H)));
+    assert(runtime::traction("x1", 0.0, 0.0, -P / (B * H)));
     assert(runtime::assemble());
     let converged, it = runtime::newton(runtime::disp, 1.0e-8, 5, linear_residual, linear_jacobian);
     let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
@@ -113,6 +114,40 @@ fn test_newton() {
         print("FAIL newton: converged ", converged, " in ", it, " iterations, want 1");
     }
     expect_near("newton tip uz against the linear solve", uz, -0.1905018167560175, 1.0e-6);
+}
+
+// A field with 1 dof for each node, as the heat template has: the VTU
+// file holds 1 component for each node, with the value of its dof.
+fn test_scalar_field() {
+    runtime::mesh_box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 2, 1, 1);
+    runtime::dofs_per_node = 1;
+    runtime::point_fields.clear();
+    runtime::add_point_field("T", 0, 1);
+    runtime::clear_dofs();
+    for d in runtime::disp.len { runtime::disp[d] = d; }
+    let path = "build/test_runtime_scalar.vtu";
+    var text: u8[>..] = [];
+    if !runtime::write_vtu(path) || !read_file(path, text) {
+        failures++;
+        print("FAIL scalar field: cannot write or read ", path);
+        return;
+    }
+    let head = "<DataArray type=\"Float64\" Name=\"T\" NumberOfComponents=\"1\" format=\"ascii\">\n";
+    let at = find(text, head);
+    var values: u8[>..] = [];
+    if at >= 0 {
+        let rest = text[at + head.len..];
+        values.append(rest[..find(rest, "</DataArray>")]);
+    }
+    let lines = split(values, "\n");
+    var good = at >= 0 && lines.len == runtime::node_count() + 1;
+    for i in runtime::node_count() {
+        if good && lines[i] != str(i as f64) { good = false; }
+    }
+    if !good {
+        failures++;
+        print("FAIL scalar field: want one value of T for each of ", runtime::node_count(), " nodes in ", path);
+    }
 }
 
 // The face sets of the box, and a cell type with no registry entry.
@@ -131,7 +166,7 @@ fn test_registry() {
     var nodes: i64[4] = [0, 1, 5, 25];
     runtime::add_cell(runtime::TET4, nodes);
     runtime::material(E, NU);
-    assert(runtime::fix_face(runtime::X, 0.0));
+    assert(runtime::fix("x0"));
     if runtime::solve_static() {
         failures++;
         print("FAIL registry: a tet4 cell with no element routine solves");
@@ -142,6 +177,7 @@ fn main() {
     test_cantilever();
     test_second_step();
     test_newton();
+    test_scalar_field();
     test_registry();
     if failures > 0 { exit(1); }
     print("runtime: all tests pass");

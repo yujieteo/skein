@@ -114,9 +114,12 @@ fn test_grid_cantilever() {
         "runtime::mesh_box(0.0, 0.0, 0.0, 100.0, 10.0, 10.0,",
         "runtime::cells_for(100.0, 2.5),",
         "runtime::material(210000.0, 0.3);",
-        "face(runtime::fix_face(runtime::X, 0.0), \"root\");",
-        "face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0), \"tip\");",
-        "equilibrium(rx, ry, rz, 100.0, \"N\");",
+        "face(runtime::fix(\"x0\"), \"root\");",
+        "face(runtime::traction(\"x1\", 0.0, 0.0, -1.0), \"tip\");",
+        "largest = max(largest, 1.0 * runtime::face_area(\"x1\"));",
+        "equilibrium(rx, ry, rz, largest, \"N\");",
+        "solve(\"load\", \"cg\", \"jacobi\");",
+        "let x, y, z = runtime::reaction(\"x0\");",
         "report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\"));",
         "output(\"RESULTS/load.vtu\");",
         "let ux, uy, uz = runtime::displacement_at(100.0, 5.0, 5.0);",
@@ -135,14 +138,14 @@ fn test_units() {
         }
         """;
     expect_lines("units in mm_N_MPa_s", model(MM, str(MESH, load)), [
-        "traction_face(runtime::X, 100.0, 0.0, 0.0, -0.2)",
+        "traction(\"x1\", 0.0, 0.0, -0.2)",
         "displacement_at(1000.0, 25.0, 50.0)",
         "quantity(uz, \"mm\")",
     ]);
     expect_lines("units in SI", model("model t: 3d, SI", str(MESH, load)), [
         "runtime::mesh_box(0.0, 0.0, 0.0, 0.1, 0.01, 0.01,",
         "runtime::material(210000000000.0, 0.3);",
-        "traction_face(runtime::X, 0.1, 0.0, 0.0, -199999.9999",
+        "traction(\"x1\", 0.0, 0.0, -199999.9999",
         "displacement_at(1.0, 0.025, 0.05)",
     ]);
 }
@@ -161,7 +164,7 @@ fn test_two_steps() {
         """;
     expect_lines("two steps", model(MM, str(MESH, steps)), [
         "fn step_one() {",
-        "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -2.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -2.0), \"tip\");",
+        "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -2.0) MPa\n    face(runtime::traction(\"x1\", 0.0, 0.0, -2.0), \"tip\");",
         "    step_one();\n    step_two();\n",
     ]);
 }
@@ -177,7 +180,7 @@ fn test_bc_scope() {
         bc tip: sigma*n = (0, 0, -1) MPa
         """;
     expect_lines("a top-level bc after the step", model(MM, str(MESH, after)), [
-        "fn step_load() {\n    // bc tip: sigma*n = (0.0, 0.0, -1.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0), \"tip\");",
+        "fn step_load() {\n    // bc tip: sigma*n = (0.0, 0.0, -1.0) MPa\n    face(runtime::traction(\"x1\", 0.0, 0.0, -1.0), \"tip\");",
     ]);
     let carry = """
         let bottom: Surface = boundary(beam, z == 0 mm)
@@ -196,8 +199,8 @@ fn test_bc_scope() {
         }
         """;
     expect_lines("step bcs carry on", model(MM, str(MESH, carry)), [
-        "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -1.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -1.0), \"tip\");\n    // bc bottom: sigma*n = (0.0, 0.0, 1.0) MPa\n    face(runtime::traction_face(runtime::Z, 0.0, 0.0, 0.0, 1.0), \"bottom\");\n    solve(",
-        "fn step_three() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -3.0) MPa\n    face(runtime::traction_face(runtime::X, 100.0, 0.0, 0.0, -3.0), \"tip\");\n    // bc bottom:",
+        "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -1.0) MPa\n    face(runtime::traction(\"x1\", 0.0, 0.0, -1.0), \"tip\");\n    // bc bottom: sigma*n = (0.0, 0.0, 1.0) MPa\n    face(runtime::traction(\"z0\", 0.0, 0.0, 1.0), \"bottom\");\n    solve(",
+        "fn step_three() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -3.0) MPa\n    face(runtime::traction(\"x1\", 0.0, 0.0, -3.0), \"tip\");\n    // bc bottom:",
     ]);
 }
 
@@ -212,7 +215,7 @@ fn test_reaction() {
         }
         """;
     let got = generate(model(MM, str(MESH, twice)));
-    if occurrences(got, "runtime::reaction_face(") != 1 || occurrences(got, "fix_face(") != 1 {
+    if occurrences(got, "runtime::reaction(") != 1 || occurrences(got, "runtime::fix(") != 1 {
         failures++;
         print("FAIL a face fixed twice: not one fix and one reaction in:\n", got);
     }
@@ -227,7 +230,9 @@ fn test_reaction() {
             bc bottom: sigma*n = (0, 0, 1) MPa
             bc top: sigma*n = (0, 0, -1) MPa
         }
-        """)), ["equilibrium(rx, ry, rz, 1000.0, \"N\");"]);
+        """)), [
+        "largest = max(largest, 1.0 * runtime::face_area(\"z0\"));\n    largest = max(largest, 1.0 * runtime::face_area(\"z1\"));\n    equilibrium(rx, ry, rz, largest, \"N\");",
+    ]);
     expect_error("fixed faces with an edge", model(MM, str(MESH, """
         let bottom: Surface = boundary(beam, z == 0 mm)
 
@@ -274,6 +279,14 @@ fn test_dispatch() {
                  "error unsupported 16:9 the template heat has no generator in this build");
     expect_error("a transient step", replace(model(MM, str(MESH, STEP)), "load: static", "load: transient"),
                  "error unsupported 19:12 the procedure transient has no generator in this build");
+    // The linear solver of a step: cg with jacobi, or a pair of the solvers lane.
+    let solve = "    solve { linear: cg, precond: jacobi }\n";
+    expect_lines("cg with jacobi", model(MM, str(MESH, replace(STEP, "    output u\n", solve))),
+                 ["solve(\"load\", \"cg\", \"jacobi\");"]);
+    expect_error("gmres", model(MM, str(MESH, replace(STEP, "    output u\n", replace(solve, "cg", "gmres")))),
+                 "error unsupported 22:5 the linear solver gmres with the preconditioner jacobi is not in this build");
+    expect_error("a solve setting", model(MM, str(MESH, replace(STEP, "    output u\n", replace(solve, "precond", "rtol")))),
+                 "error unsupported 22:25 the solve setting is not in this slice");
 }
 
 fn main() {

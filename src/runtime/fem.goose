@@ -41,6 +41,18 @@ var cell_start: i64[>..] = [0];     // the nodes of cell c are cell_nodes[cell_s
 var cell_nodes: i64[>..] = [];
 var dofs_per_node = 3;              // dof p of node a is dofs_per_node a + p
 
+// A field of the VTU output: the dofs first .. first + count - 1 of each
+// node. mesh_clear sets the one field u, the dofs 0 to 2. A lane that
+// changes dofs_per_node sets its own fields, for example the temperature
+// (count 1) or the rotations of a shell (first 3, count 3).
+struct Field {
+    name: u8[..64],
+    first: i64,
+    count: i64,
+}
+
+var point_fields: Field[>..] = [];
+
 // A named set is a range of `set_items`: a node index for a node set, or
 // 6 c + f (local face f of cell c) for a face set. The local faces of a
 // cell type are in the order of its registry entry.
@@ -56,6 +68,8 @@ fn cell_count() -> i64 { return cell_type.len; }
 
 fn mesh_clear() {
     dofs_per_node = 3;
+    point_fields.clear();
+    add_point_field("u", 0, 3);
     coords.clear();
     cell_type.clear();
     cell_start.clear();
@@ -66,6 +80,12 @@ fn mesh_clear() {
     set_start.clear();
     set_start.push(0);
     set_items.clear();
+}
+
+fn add_point_field(name: const u8[:], first: i64, count: i64) {
+    var f = Field { name: [], first: first, count: count };
+    f.name.append(name[..min(name.len, 64)]);
+    point_fields.push(f);
 }
 
 fn add_node(x: f64, y: f64, z: f64) -> i64 {
@@ -85,7 +105,7 @@ fn add_cell(t: i64, nodes: i64[:]) -> i64 {
 
 fn cell_node(c: i64, l: i64) -> i64 { return cell_nodes[cell_start[c] + l]; }
 
-fn add_set(name: u8[:], face: bool, items: i64[:]) {
+fn add_set(name: const u8[:], face: bool, items: i64[:]) {
     var w: u8[..64] = [];
     w.append(name[..min(name.len, 64)]);
     set_names.push(w);
@@ -94,14 +114,14 @@ fn add_set(name: u8[:], face: bool, items: i64[:]) {
     set_start.push(set_items.len);
 }
 
-fn add_node_set(name: u8[:], nodes: i64[:]) { add_set(name, false, nodes); }
+fn add_node_set(name: const u8[:], nodes: i64[:]) { add_set(name, false, nodes); }
 
 // `faces` holds 6 c + f for local face f of cell c.
-fn add_face_set(name: u8[:], faces: i64[:]) { add_set(name, true, faces); }
+fn add_face_set(name: const u8[:], faces: i64[:]) { add_set(name, true, faces); }
 
 // The index of the node set (face false) or the face set (face true)
 // `name`, or -1. A node set and a face set can have the same name.
-fn find_set(name: u8[:], face: bool) -> i64 {
+fn find_set(name: const u8[:], face: bool) -> i64 {
     for s, i in set_names {
         if s == name && set_is_face[i] == face { return i; }
     }
@@ -141,6 +161,23 @@ fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
     if t == HEX27 { return solid_stiffness(c, ke); }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_matrix(c, ke); }
     return elements_matrix(c, ke);
+}
+
+// The weights of a uniform load on local face f of cell c: w[a] is the
+// integral of N_a over the face, for each local node a. False if the cell
+// type has no face routine.
+fn cell_face_weights(c: i64, f: i64, w: f64[>..]&) -> bool {
+    w.clear();
+    let t = cell_type[c] as i64;
+    if t == HEX27 { hex27_face_weights(c, f, w); return true; }
+    if t == QUAD4_SHELL || t == BEAM2 { return shells_face_weights(c, f, w); }
+    return elements_face_weights(c, f, w);
+}
+
+// Whether the reference point xi is in a cell of the 3D cell type t.
+fn cell_inside(t: i64, xi: f64[3]) -> bool {
+    if t == HEX27 { return max(abs(xi[0]), max(abs(xi[1]), abs(xi[2]))) <= 1.0 + 1.0e-9; }
+    return elements_inside(t, xi);
 }
 
 // The tensor product of 3-point Gauss rules on [-1, 1]^3, x fastest.

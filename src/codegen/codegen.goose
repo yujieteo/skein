@@ -278,12 +278,13 @@ recursive fn eval(n: i64) -> Val {
 
 // --- the model -------------------------------------------------------------------
 
-// A face of the box: the part of its boundary where coordinate `axis` is
-// `value`.
+// A surface: the node set and the face set `set` of the mesh. A face of
+// the box is the face set x0, x1, y0, y1, z0 or z1 (src/runtime/api.goose),
+// normal to `axis`. A surface of the mesher lane has axis -1.
 struct Face {
     name: u8[..64],
+    set: u8[..64],
     axis: i64,
-    value: f64,
 }
 
 // A boundary condition: `u = 0` (`fix`), or `sigma*n = t` on a face.
@@ -301,7 +302,9 @@ struct Report {
 
 struct Step {
     name: u8[..64],
-    procedure: i64, // index in PROCEDURES
+    procedure: i64, // the lane of the procedure (dispatch.goose)
+    solver: u8[..64],         // the linear solver and the preconditioner of `solve`
+    preconditioner: u8[..64],
     first_own: i64, // the bcs of the step itself: a range of `bcs`
     own_count: i64,
     first_bc: i64,  // all bcs that hold in the step: a range of `active`
@@ -344,8 +347,11 @@ var material_name: u8[..64];
 var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var physics_tok = -1;
-var template = LINEAR_ELASTIC;  // index in TEMPLATES
+var template = CORE;            // the lane of the template (dispatch.goose)
 var lane_mesh = false;          // the mesher lane meshes the solid (lane_mesher.goose)
+var cell_name: u8[..64];        // the mesh setting `cell`
+var cell_tok = -1;
+var order_tok = -1;
 // The `bc` items outside the steps, which hold in each step.
 var global_bcs: i64[>..];
 
@@ -367,8 +373,11 @@ fn reset() {
     physics_name = [];
     unknown_name = [];
     physics_tok = -1;
-    template = LINEAR_ELASTIC;
+    template = CORE;
     lane_mesh = false;
+    set64(cell_name, "hex");
+    cell_tok = -1;
+    order_tok = -1;
     mesh_size = 0.0;
     mesh_tok = -1;
     order = 2;
@@ -434,8 +443,19 @@ fn solid(n: i64, value: i64) {
 
 let FACE_FIX = "write the surface as boundary(beam, x == 0 mm), with x, y or z equal to a face of the box";
 
-// `let root: Surface = boundary(beam, x == value)`.
+// `let root: Surface = boundary(beam, x == value)`. A surface of a solid of
+// the mesher lane goes to mesher_surface (lane_mesher.goose).
 fn surface(n: i64, value: i64) {
+    var f = Face { name: [], set: [], axis: -1 };
+    set64(f.name, name(n));
+    if lane_mesh {
+        if !mesher_surface(n, value, f.set) {
+            unsupported(tok(value), str("the surface '", name(n), "' is not a surface of the mesh"), FACE_FIX);
+            return;
+        }
+        faces.push(f);
+        return;
+    }
     let good = kind(value) == syntax::N_CALL && name(syntax::child(value, 0)) == "boundary" &&
                syntax::child_count(value) == 3;
     if !good {
@@ -457,12 +477,13 @@ fn surface(n: i64, value: i64) {
     }
     let v = eval(syntax::child(cond, 1));
     let tol = 1.0e-9 * (hi[axis] - lo[axis]);
-    if abs(v.v[0] - lo[axis]) > tol && abs(v.v[0] - hi[axis]) > tol {
+    let side = if abs(v.v[0] - lo[axis]) <= tol { 0 } else if abs(v.v[0] - hi[axis]) <= tol { 1 } else { -1 };
+    if side < 0 {
         unsupported(tok(cond), "the surface is not on a face of the box", FACE_FIX);
         return;
     }
-    var f = Face { name: [], axis: axis, value: v.v[0] };
-    set64(f.name, name(n));
+    f.axis = axis;
+    set64(f.set, str(AXIS_NAMES[axis], side));
     faces.push(f);
 }
 
@@ -525,9 +546,11 @@ fn mesh(n: i64) {
         } else if name(s) == "size" {
             mesh_size = eval(value).v[0];
         } else if name(s) == "cell" {
-            if kind(value) != syntax::N_NAME || name(value) != "hex" {
+            if kind(value) != syntax::N_NAME {
                 unsupported(tok(value), "this slice meshes a box with hex cells only", "write cell: hex");
             }
+            set64(cell_name, name(value));
+            cell_tok = tok(value);
         } else {
             unsupported(tok(s), str("the mesh setting '", name(s), "' is not in this slice"), "use only size and cell");
         }
@@ -545,20 +568,19 @@ fn physics(n: i64) {
     }
     physics_tok = tok(n);
     set64(physics_name, name(n));
-    // A template other than linear_elastic goes to its generator (dispatch.goose).
+    // A template of a lane goes to its generator (dispatch.goose).
     var c0 = syntax::nodes[n].first;
     while c0 >= 0 {
-        if kind(c0) == syntax::N_USES { template = table_index(TEMPLATES, name(c0)); }
+        if kind(c0) == syntax::N_USES && template_lane(name(c0)) > CORE {
+            template = template_lane(name(c0));
+            if !read_template(template, name(c0), n) {
+                unsupported(tok(n), str("the template ", name(c0), " has no generator in this build"),
+                            PHYSICS_FIX);
+            }
+            return;
+        }
         c0 = syntax::nodes[c0].next;
     }
-    if template > LINEAR_ELASTIC {
-        if !read_template(template, n) {
-            unsupported(tok(n), str("the template ", TEMPLATES[template], " has no generator in this build"),
-                        PHYSICS_FIX);
-        }
-        return;
-    }
-    template = LINEAR_ELASTIC;
     var uses = false;
     var c = syntax::nodes[n].first;
     while c >= 0 {
@@ -596,10 +618,7 @@ fn method(n: i64) {
     while s >= 0 {
         if kind(s) == syntax::N_SETTING && name(s) == "order" {
             order = eval(syntax::nodes[s].first).v[0] as! i64;
-            if order != 2 {
-                unsupported(tok(s), "this slice has only order 2, because linear cells lock in bending",
-                            "write order: 2");
-            }
+            order_tok = tok(s);
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order");
         }
@@ -642,15 +661,18 @@ fn bc(n: i64) -> i64 {
 
 fn step(n: i64) {
     let proc = syntax::child(n, 0);
-    // A procedure other than static goes to its generator (dispatch.goose).
-    let p = table_index(PROCEDURES, name(proc));
-    if p > STATIC {
-        var other = Step { name: [], procedure: p, first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                           first_report: reports.len, report_count: 0, output: false };
-        set64(other.name, name(n));
-        steps.push(other);
-        if !read_procedure(p, n) {
-            unsupported(tok(proc), str("the procedure ", PROCEDURES[p], " has no generator in this build"),
+    var s = Step { name: [], procedure: CORE, solver: [], preconditioner: [], first_own: bcs.len, own_count: 0,
+                   first_bc: 0, bc_count: 0, first_report: reports.len, report_count: 0, output: false };
+    set64(s.name, name(n));
+    set64(s.solver, "cg");
+    set64(s.preconditioner, "jacobi");
+    // A procedure of a lane goes to its generator (dispatch.goose).
+    let p = procedure_lane(name(proc));
+    if p > CORE {
+        s.procedure = p;
+        steps.push(s);
+        if !read_procedure(p, name(proc), n) {
+            unsupported(tok(proc), str("the procedure ", name(proc), " has no generator in this build"),
                         "write step load: static { ... }");
         }
         return;
@@ -658,9 +680,6 @@ fn step(n: i64) {
     if name(proc) != "static" || syntax::nodes[proc].first >= 0 {
         unsupported(tok(proc), "this slice has only static steps with no arguments", "write step load: static { ... }");
     }
-    var s = Step { name: [], procedure: STATIC, first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                   first_report: reports.len, report_count: 0, output: false };
-    set64(s.name, name(n));
     var c = syntax::nodes[proc].next;
     while c >= 0 {
         let k = kind(c);
@@ -679,14 +698,40 @@ fn step(n: i64) {
                 report(r);
                 r = syntax::nodes[r].next;
             }
+        } else if k == syntax::N_SOLVE {
+            solve(c, s);
         } else {
-            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output and report");
+            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output, report and solve");
         }
         c = syntax::nodes[c].next;
     }
     s.own_count = bcs.len - s.first_own;
     s.report_count = reports.len - s.first_report;
     steps.push(s);
+}
+
+let SOLVE_FIX = "write solve { linear: cg, precond: jacobi }";
+
+// `solve { linear: <solver>, precond: <preconditioner> }`. A pair other
+// than cg with jacobi goes to the solvers lane (lane_solvers.goose).
+fn solve(n: i64, s: Step&) {
+    var c = syntax::nodes[syntax::nodes[n].first].first;
+    while c >= 0 {
+        let value = syntax::nodes[c].first;
+        let known = kind(c) == syntax::N_SETTING && (name(c) == "linear" || name(c) == "precond");
+        if !known || kind(value) != syntax::N_NAME {
+            unsupported(tok(c), "the solve setting is not in this slice", SOLVE_FIX);
+        } else if name(c) == "linear" {
+            set64(s.solver, name(value));
+        } else {
+            set64(s.preconditioner, name(value));
+        }
+        c = syntax::nodes[c].next;
+    }
+    if !(s.solver == "cg" && s.preconditioner == "jacobi") && !solvers_known(s.solver, s.preconditioner) {
+        unsupported(tok(n), str("the linear solver ", s.solver, " with the preconditioner ", s.preconditioner,
+                                " is not in this build"), SOLVE_FIX);
+    }
 }
 
 let REPORT_FIX = "write report reaction(root), or report u.z at (100, 5, 5) mm";
@@ -815,11 +860,20 @@ fn read(prog: i64) -> bool {
     }
     let first = syntax::nodes[prog].first;
     let at = if first >= 0 { tok(first) } else { tok(prog) };
-    if solid_tok < 0 { unsupported(at, "the model has no box solid", BOX_FIX); }
+    if solid_tok < 0 { unsupported(at, "the model has no solid", BOX_FIX); }
     if mesh_tok < 0 { unsupported(at, "the model has no mesh", "add mesh m on beam { size: 5 mm, cell: hex }"); }
     if physics_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if material_name.len == 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
+    // A cell other than hex of order 2 goes to the elements lane (lane_elements.goose).
+    if (cell_name != "hex" || order != 2) && !elements_cell(cell_name, order) {
+        if cell_name != "hex" {
+            unsupported(cell_tok, "this slice meshes a box with hex cells only", "write cell: hex");
+        } else {
+            unsupported(order_tok, "this slice has only order 2, because linear cells lock in bending",
+                        "write order: 2");
+        }
+    }
     if ok() {
         step_bcs();
         supports();
@@ -853,9 +907,7 @@ fn step_bcs() {
     }
 }
 
-fn same_plane(a: i64, b: i64) -> bool {
-    faces[a].axis == faces[b].axis && faces[a].value == faces[b].value
-}
+fn same_plane(a: i64, b: i64) -> bool { faces[a].set == faces[b].set }
 
 // The fixed faces of step `si`, one for each plane.
 fn fixed_faces(si: i64) -> i64[>..] {
@@ -880,7 +932,7 @@ fn supports() {
         return;
     }
     for f in a[1..] {
-        if faces[f].axis != faces[a[0]].axis {
+        if faces[f].axis < 0 || faces[f].axis != faces[a[0]].axis {
             unsupported(bc_tok(0, f), str("the fixed faces ", faces[a[0]].name, " and ", faces[f].name,
                                           " share an edge, and this slice cannot sum their reaction"),
                         "fix one face, or two opposite faces");
@@ -922,7 +974,6 @@ fn bc_tok(si: i64, f: i64) -> i64 {
 
 // --- the Goose program -------------------------------------------------------------
 
-let AXES = ["runtime::X", "runtime::Y", "runtime::Z"];
 let AXIS_NAMES = ["x", "y", "z"];
 
 // The text of a Goose float literal.
@@ -1012,7 +1063,8 @@ let PRELUDE = """
         }
     }
 
-    fn solve(step: u8[:]) {
+    fn solve(step: u8[:], solver: u8[:], preconditioner: u8[:]) {
+        runtime::linear_solver(solver, preconditioner);
         let converged = runtime::solve_static();
         format(solves, "  ", step, ",", runtime::dof_count(), ",", runtime::cg_iterations(), ",",
                runtime::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
@@ -1066,10 +1118,8 @@ let PRELUDE = """
 fn emit_face_call(out: u8[>..]&, b: Bc) {
     let f = faces[b.face];
     out.append("    face(runtime::");
-    out.append(if b.fix { "fix_face(" } else { "traction_face(" });
-    out.append(AXES[f.axis]);
-    out.append(", ");
-    lit(out, f.value);
+    out.append(if b.fix { "fix(" } else { "traction(" });
+    quoted(out, f.set);
     if !b.fix {
         out.append(", ");
         lits(out, b.t);
@@ -1077,22 +1127,6 @@ fn emit_face_call(out: u8[>..]&, b: Bc) {
     out.append("), ");
     quoted(out, f.name);
     out.append(");\n");
-}
-
-// The largest load of step `si`: the size of a traction times the area of
-// its face.
-fn largest_load(si: i64) -> f64 {
-    let s = steps[si];
-    var largest = 0.0;
-    for b in active[s.first_bc..s.first_bc + s.bc_count] {
-        if b.fix { continue; }
-        let axis = faces[b.face].axis;
-        var area = 1.0;
-        for j in 0..3 { if j != axis { area *= hi[j] - lo[j]; } }
-        let t = sqrt(b.t[0] * b.t[0] + b.t[1] * b.t[1] + b.t[2] * b.t[2]);
-        largest = max(largest, t * area);
-    }
-    return largest;
 }
 
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
@@ -1116,18 +1150,30 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     }
     out.append("    solve(");
     quoted(out, s.name);
+    out.append(", ");
+    quoted(out, s.solver);
+    out.append(", ");
+    quoted(out, s.preconditioner);
     out.append(");\n");
     // The reaction on all fixed faces, for the check `equilibrium`.
     out.append("    var rx, ry, rz = 0.0, 0.0, 0.0;\n");
     for fi in fixed_faces(si) {
         let f = faces[fi];
-        format(out, "    {\n        let x, y, z = runtime::reaction_face(", AXES[f.axis], ", ");
-        lit(out, f.value);
+        out.append("    {\n        let x, y, z = runtime::reaction(");
+        quoted(out, f.set);
         out.append(");\n        rx += x;\n        ry += y;\n        rz += z;\n    }\n");
     }
-    out.append("    equilibrium(rx, ry, rz, ");
-    lit(out, largest_load(si));
-    format(out, ", \"", system.force, "\");\n");
+    // The largest load: the size of a traction times the area of its face.
+    out.append("    var largest = 0.0;\n");
+    for b in active[s.first_bc..s.first_bc + s.bc_count] {
+        if b.fix { continue; }
+        out.append("    largest = max(largest, ");
+        lit(out, sqrt(b.t[0] * b.t[0] + b.t[1] * b.t[1] + b.t[2] * b.t[2]));
+        out.append(" * runtime::face_area(");
+        quoted(out, faces[b.face].set);
+        out.append("));\n");
+    }
+    format(out, "    equilibrium(rx, ry, rz, largest, \"", system.force, "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] {
         emit_report(out, s.name, r);
     }
@@ -1154,8 +1200,8 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
     var value: u8[>..] = [];
     if kind(e) == syntax::N_CALL {
         let f = faces[find_face(name(syntax::nodes[syntax::child(e, 1)].first))];
-        format(out, "    let x, y, z = runtime::reaction_face(", AXES[f.axis], ", ");
-        lit(out, f.value);
+        out.append("    let x, y, z = runtime::reaction(");
+        quoted(out, f.set);
         out.append(");\n");
         format(value, "vector(x, y, z, \"", system.force, "\")");
     } else {
@@ -1201,7 +1247,7 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append(";\n");
     out.append(PRELUDE);
     for si in 0..steps.len {
-        if steps[si].procedure == STATIC {
+        if steps[si].procedure == CORE {
             emit_step(out, si, results_dir);
         } else {
             emit_procedure(out, steps[si].procedure, si, results_dir);
@@ -1210,7 +1256,7 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append("fn main() {\n");
     if lane_mesh {
         mesher_emit(out);
-    } else {
+    } else if !elements_emit_mesh(out) {
         format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ",
                system.length, "\n");
         out.append("    runtime::mesh_box(");
@@ -1226,7 +1272,7 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         }
         out.append(");\n");
     }
-    if template == LINEAR_ELASTIC {
+    if template == CORE {
         format(out, "    // material ", material_name, "\n    runtime::material(");
         lit(out, young);
         out.append(", ");

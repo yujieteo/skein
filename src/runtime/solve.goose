@@ -1,6 +1,7 @@
-// The dofs, the sparse matrix (CSR in three arrays), the assembly over the
-// cells of the mesh, the linear solver interface with its first entry (CG
-// with a Jacobi preconditioner), the Newton interface and the reactions.
+// The dofs, the loads on face sets, the sparse matrix (CSR in three
+// arrays), the assembly over the cells of the mesh, the linear solver
+// interface with its first entry (CG with a Jacobi preconditioner), the
+// Newton interface, the reactions and the values at a point.
 //
 // The matrix holds all dofs, with the fixed dofs too, so that the
 // reactions are K u - f on the fixed dofs. The linear operator of a solve
@@ -62,9 +63,12 @@ fn clear_load_vector() {
     clear_solution();
 }
 
+// The sum of the loads on the dofs 0 to 2 of each node.
 fn load_sum() -> f64, f64, f64 {
     var s: f64[3] = [0.0, 0.0, 0.0];
-    for v, d in load { s[d % 3] += v; }
+    for n in node_count() {
+        for k in min(dofs_per_node, 3) { s[k] += load[dofs_per_node * n + k]; }
+    }
     return s[0], s[1], s[2];
 }
 
@@ -73,6 +77,57 @@ fn fix_set(s: i64) {
     for n in set_members(s) {
         for p in dofs_per_node { fixed[dofs_per_node * n + p] = 1; }
     }
+    clear_solution();
+}
+
+// --- loads -------------------------------------------------------------------------
+
+var face_w: f64[>..] = [];
+
+// Adds a uniform traction (force per area) (tx, ty, tz) on the faces of
+// face set s: the consistent nodal forces of cell_face_weights. False, with
+// a message, if a cell type has no face routine.
+fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64) -> bool {
+    let t: f64[3] = [tx, ty, tz];
+    for item in set_members(s) {
+        let c = item / FACE_STRIDE;
+        if !cell_face_weights(c, item % FACE_STRIDE, face_w) {
+            write_stderr(str("runtime: the cell type ", CELL_NAMES[cell_type[c]], " has no face routine\n"));
+            return false;
+        }
+        for w, a in face_w {
+            let d = dofs_per_node * cell_node(c, a);
+            for k in min(dofs_per_node, 3) { load[d + k] += w * t[k]; }
+        }
+    }
+    clear_solution();
+    return true;
+}
+
+// The area of the faces of face set s that have a face routine.
+fn set_area(s: i64) -> f64 {
+    var area = 0.0;
+    for item in set_members(s) {
+        if cell_face_weights(item / FACE_STRIDE, item % FACE_STRIDE, face_w) {
+            for w in face_w { area += w; }
+        }
+    }
+    return area;
+}
+
+// Adds the force (fx, fy, fz) at the node nearest to (x, y, z).
+fn add_point_force(x: f64, y: f64, z: f64, fx: f64, fy: f64, fz: f64) {
+    var best = 0;
+    var best_d = -1.0;
+    for n in node_count() {
+        let dx = coords[3 * n] - x;
+        let dy = coords[3 * n + 1] - y;
+        let dz = coords[3 * n + 2] - z;
+        let d = dx * dx + dy * dy + dz * dz;
+        if best_d < 0.0 || d < best_d { best = n; best_d = d; }
+    }
+    let f: f64[3] = [fx, fy, fz];
+    for k in min(dofs_per_node, 3) { load[dofs_per_node * best + k] += f[k]; }
     clear_solution();
 }
 
@@ -339,4 +394,77 @@ fn set_reaction(s: i64) -> f64, f64, f64 {
         }
     }
     return sum[0], sum[1], sum[2];
+}
+
+// --- points ----------------------------------------------------------------------
+
+var point_n: f64[>..] = [];
+var point_dn: f64[>..] = [];
+
+// Whether p is in the box that holds the nodes of cell c.
+fn in_cell_bounds(c: i64, p: f64[3]) -> bool {
+    let first = cell_node(c, 0);
+    var lo: f64[3] = [coords[3 * first], coords[3 * first + 1], coords[3 * first + 2]];
+    var hi: f64[3] = lo;
+    for e in cell_start[c]..cell_start[c + 1] {
+        let n = cell_nodes[e];
+        for s in 3 {
+            lo[s] = min(lo[s], coords[3 * n + s]);
+            hi[s] = max(hi[s], coords[3 * n + s]);
+        }
+    }
+    let tol = 1.0e-9 * max(hi[0] - lo[0], max(hi[1] - lo[1], hi[2] - lo[2]));
+    for s in 3 {
+        if p[s] < lo[s] - tol || p[s] > hi[s] + tol { return false; }
+    }
+    return true;
+}
+
+// The reference point xi of p in the 3D cell c, by Newton's method from
+// xi = 0. False if it does not converge.
+fn reference_point(c: i64, p: f64[3], xi: f64[3]&) -> bool {
+    let t = cell_type[c] as i64;
+    xi = [0.0, 0.0, 0.0];
+    for it in 20 {
+        guard cell_shape(t, xi, point_n, point_dn) else { return false; }
+        var x: f64[3] = [0.0, 0.0, 0.0];
+        for w, a in point_n {
+            let n = cell_node(c, a);
+            for s in 3 { x[s] += w * coords[3 * n + s]; }
+        }
+        var jac: f64[9] = [0.0; 9];
+        cell_jacobian(c, point_dn, jac);
+        var inv: f64[9] = [0.0; 9];
+        guard inverse3(jac, inv) != 0.0 else { return false; }
+        var step = 0.0;
+        for r in 3 {
+            let d = inv[r] * (p[0] - x[0]) + inv[3 + r] * (p[1] - x[1]) + inv[6 + r] * (p[2] - x[2]);
+            xi[r] += d;
+            step = max(step, abs(d));
+        }
+        if step <= 1.0e-12 { return true; }
+    }
+    return false;
+}
+
+// The dofs 0 to 2 at (x, y, z), interpolated in the first 3D cell that
+// holds the point. A point outside the 3D cells gives 0, 0, 0.
+fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
+    guard disp.len > 0 else { return 0.0, 0.0, 0.0; }
+    let p: f64[3] = [x, y, z];
+    var xi: f64[3] = [0.0, 0.0, 0.0];
+    for c in cell_count() {
+        let t = cell_type[c] as i64;
+        if CELL_DIMS[t] != 3 || !in_cell_bounds(c, p) || !reference_point(c, p, xi) || !cell_inside(t, xi) {
+            continue;
+        }
+        cell_shape(t, xi, point_n, point_dn);
+        var u: f64[3] = [0.0, 0.0, 0.0];
+        for w, a in point_n {
+            let d = dofs_per_node * cell_node(c, a);
+            for k in min(dofs_per_node, 3) { u[k] += w * disp[d + k]; }
+        }
+        return u[0], u[1], u[2];
+    }
+    return 0.0, 0.0, 0.0;
 }
