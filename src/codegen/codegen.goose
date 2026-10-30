@@ -280,7 +280,7 @@ recursive fn eval(n: i64) -> Val {
 
 // A surface: the node set and the face set `set` of the mesh. A face of
 // the box is the face set x0, x1, y0, y1, z0 or z1 (src/runtime/api.goose),
-// normal to `axis`. A surface of the mesher lane has axis -1.
+// normal to `axis`. A surface of the mesher or the shells lane has axis -1.
 struct Face {
     name: u8[..64],
     set: u8[..64],
@@ -348,7 +348,7 @@ var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var physics_tok = -1;
 var template = CORE;            // the lane of the template (dispatch.goose)
-var lane_mesh = false;          // the mesher lane meshes the solid (lane_mesher.goose)
+var mesh_lane = CORE;           // the lane that meshes the geometry: CORE (the box), MESHER or SHELLS
 var cell_name: u8[..64];        // the mesh setting `cell`
 var cell_tok = -1;
 var order_tok = -1;
@@ -374,7 +374,7 @@ fn reset() {
     unknown_name = [];
     physics_tok = -1;
     template = CORE;
-    lane_mesh = false;
+    mesh_lane = CORE;
     set64(cell_name, "hex");
     cell_tok = -1;
     order_tok = -1;
@@ -417,7 +417,7 @@ let BOX_FIX = "write the solid as box((x0, y0, z0) mm, (x1, y1, z1) mm)";
 fn solid(n: i64, value: i64) {
     if kind(value) != syntax::N_CALL || name(syntax::child(value, 0)) != "box" || syntax::child_count(value) != 3 {
         if solid_tok < 0 && mesher_read(n, value) {
-            lane_mesh = true;
+            mesh_lane = MESHER;
             set64(solid_name, name(n));
             solid_tok = tok(n);
             return;
@@ -443,13 +443,15 @@ fn solid(n: i64, value: i64) {
 
 let FACE_FIX = "write the surface as boundary(beam, x == 0 mm), with x, y or z equal to a face of the box";
 
-// `let root: Surface = boundary(beam, x == value)`. A surface of a solid of
-// the mesher lane goes to mesher_surface (lane_mesher.goose).
+// `let root: Surface = boundary(beam, x == value)`. A surface of a geometry
+// of the mesher lane goes to mesher_surface (lane_mesher.goose), and of the
+// shells lane to shells_surface (lane_shells.goose).
 fn surface(n: i64, value: i64) {
     var f = Face { name: [], set: [], axis: -1 };
     set64(f.name, name(n));
-    if lane_mesh {
-        if !mesher_surface(n, value, f.set) {
+    if mesh_lane != CORE {
+        let found = if mesh_lane == MESHER { mesher_surface(n, value, f.set) } else { shells_surface(n, value, f.set) };
+        if !found {
             unsupported(tok(value), str("the surface '", name(n), "' is not a surface of the mesh"), FACE_FIX);
             return;
         }
@@ -492,8 +494,16 @@ fn value_item(n: i64) {
     let ty = syntax::child(n, 0);
     let value = syntax::child(n, 1);
     let t = if kind(ty) == syntax::N_TYPE_NAME { name(ty) } else { "" };
+    let shell_type = t == "Surface" || t == "Curve";
+    // A model with no solid can have a shell or beam geometry of the shells lane.
+    if shell_type && solid_tok < 0 && shells_read_geometry(n, value) {
+        mesh_lane = SHELLS;
+        set64(solid_name, name(n));
+        solid_tok = tok(n);
+        return;
+    }
     if t == "Solid" { solid(n, value); return; }
-    if t == "Surface" { surface(n, value); return; }
+    if t == "Surface" || (shell_type && mesh_lane == SHELLS) { surface(n, value); return; }
     if t == "Volume" || t == "Curve" || t == "Region" {
         unsupported(tok(n), str("a ", t, " is not in this slice"), "use a Solid box and Surface faces of it");
         return;
@@ -1254,8 +1264,10 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         }
     }
     out.append("fn main() {\n");
-    if lane_mesh {
+    if mesh_lane == MESHER {
         mesher_emit(out);
+    } else if mesh_lane == SHELLS {
+        shells_emit_mesh(out);
     } else if !elements_emit_mesh(out) {
         format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ",
                system.length, "\n");

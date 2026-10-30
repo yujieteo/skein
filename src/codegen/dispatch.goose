@@ -17,6 +17,7 @@ let CORE = 0;
 let ELEMENTS = 1;
 let SHELLS = 2;
 let TRANSIENT = 3;
+let MESHER = 4;
 
 // The owner of the template `word`, or -1 if no lane owns it.
 fn template_lane(word: u8[:]) -> i64 {
