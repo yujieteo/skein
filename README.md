@@ -58,6 +58,7 @@ Goose source tree at the same commit as the compiler.
 | `src/skein.goose` | the command line |
 | `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
 | `src/fmt/` | `skein fmt` (`fmt.goose`) |
+| `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 
 ## Why Skein
 
