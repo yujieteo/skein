@@ -298,7 +298,7 @@ A boundary condition is an equation on a region:
 
 ```skein
 bc root: u = 0
-bc sym: u.x = 0
+bc plane: u.x = 0
 bc tip: sigma*n = (0, 0, -1) MPa
 ```
 
@@ -311,9 +311,9 @@ flux. `check` lists each free part, so you see what you did not write:
 
 ```toon
 free_boundary[3]{physics,field,region,condition}:
-  solid,u,"boundary(beam) - root - sym - tip","sigma*n = 0"
-  solid,u.y,"sym","(sigma*n).y = 0"
-  solid,u.z,"sym","(sigma*n).z = 0"
+  solid,u,"boundary(beam) - root - plane - tip","sigma*n = 0"
+  solid,u.y,"plane","(sigma*n).y = 0"
+  solid,u.z,"plane","(sigma*n).z = 0"
 ```
 
 ---
