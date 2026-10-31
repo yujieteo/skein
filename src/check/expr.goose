@@ -23,8 +23,8 @@ let BUILTIN_FNS = [
     "box", "cylinder", "sphere", "cone", "torus", "rect", "circle", "polygon", "extrude",
     "revolve", "sweep", "line", "arc", "spline", "point", "shell", "loft", "pattern",
     "pattern_polar", "fillet", "chamfer", "move", "rotate", "scale",
-    // Shells and beams (spec §4.3), argmax and when (§14.5).
-    "tangent", "ply_stiffness", "laminate", "along", "argmax", "when",
+    // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
+    "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
 ];
 let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "dual_eps"];
 

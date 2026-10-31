@@ -327,6 +327,8 @@ bc wall: dot(q, n) = h*(T - T_inf)    // natural: convection (Robin)
 bc inlet: v = ((2 m/s)*(1 - (y/R)^2), 0)
 bc corner: p = 0                      // a point
 bc load_pt: sigma*n = (0, 0, -1) kN   // a point force
+bc plate: u = rigid(c)                // a rigid face: straight, it turns about c
+bc c: moment(sigma*n) = (0, 5, 0) N*m // the moment on the rigid face
 ```
 
 A `bc` outside the steps applies in all steps. A `bc` inside a step applies

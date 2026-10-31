@@ -267,6 +267,20 @@ fn test_conditions() {
     expect_id("bc_off_boundary", str(elastic, "bc b: u = 0\n"));
     expect_clean("G16 a point force", str(elastic, "let tip: Point = point((1, 1, 1) m)\nbc tip: sigma*n = (0, 0, -1) kN\n"));
     expect_clean("a bc on a face", str(elastic, "bc f: u = 0\nbc f: u.x = 0 m\n"));
+    // Gap G17: a rigid face, with the force and the moment on its point.
+    let tip = "let c: Point = point((1, 1, 1) m)\nbc f: u = rigid(c)\n";
+    expect_clean("G17 a rigid face with a force and a moment", str(elastic, tip, "bc c: sigma*n = (0, 0, -1) kN\nbc c: moment(sigma*n) = (0, 1, 0) kN*m\n"));
+    expect_clean("G17 a fixed component and a force with 0 in it", str(elastic, tip, "bc c: u.x = 0\nbc c: sigma*n = (0, 0, -1) kN\n"));
+    expect_clean("G17 a fixed point with a moment", str(elastic, tip, "bc c: u = 0\nbc c: moment(sigma*n) = (0, 1, 0) kN*m\n"));
+    expect_id("bc_conflict", str(elastic, tip, "bc c: u.x = 0\nbc c: sigma*n = (1, 0, -1) kN\n"));
+    expect_id("bc_conflict", str(elastic, "let c: Point = point((1, 1, 1) m)\nbc c: u.x = 0\nbc c: sigma*n = (0, 0, -1) kN\n"));
+    expect_id("unit_mismatch", str(elastic, tip, "bc c: moment(sigma*n) = (0, 1, 0) kN\n"));
+    expect_id("rigid_form", str(elastic, "let c: Point = point((1, 1, 1) m)\nbc f: u.x = rigid(c)\n"));
+    expect_id("rigid_form", str(elastic, "bc f: u = rigid(f)\n"));
+    expect_id("rigid_form", str(elastic, "let c: Point = point((1, 1, 1) m)\nbc f: u = 2*rigid(c)\n"));
+    expect_id("rigid_form", str(elastic, "let c: Point = point((1, 1, 1) m)\nbc c: moment(sigma*n) = (0, 1, 0) kN*m\n"));
+    expect_id("rigid_form", str(elastic, tip, "bc f: moment(sigma*n) = (0, 1, 0) kN*m\n"));
+    expect_ids("G17 a 2D moment is a scalar", "model m: 2d, mm_N_MPa_s\nlet b: Surface = rect((0, 0) mm, (10, 10) mm)\nlet f: Curve = boundary(b, y == 10 mm)\nlet g: Curve = boundary(b, y == 0 mm)\nlet c: Point = point((5, 10) mm)\nscales 10 mm, 210 GPa\nmaterial steel {\n    E: Pressure = 210 GPa\n    nu: Real = 0.3\n}\nmesh m1 on b { size: 1 mm }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 mm)\n}\nbc g: u = 0\nbc f: u = rigid(c)\nbc c: sigma*n = (1, -2) N\nbc c: moment(sigma*n) = 5 N*mm\n", "");
     expect_clean("a vector and a component bc that agree", str(elastic, "bc f: u = (0, 1, 0) mm\nbc f: u.x = 0 m\n"));
     expect_clean("a named vector and a component bc", str(elastic, "let d: Vector<Length> = (1, 0, 0) mm\nbc f: u = d\nbc f: u.y = 0 m\n"));
     expect_id("bc_conflict", str(elastic, "bc f: u.x = 0 m\nbc f: sigma*n = (0, 0, 1) MPa\n"));
