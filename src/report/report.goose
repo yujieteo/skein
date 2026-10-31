@@ -436,10 +436,28 @@ fn case_count(toon: u8[:]) -> i64 {
     return if good { n } else { 0 };
 }
 
+// Copies to `toon` the table of the last run of study `study` in
+// .skein/studies, and gives the exit status of that run. It gives 2 if
+// there is no table, or if the run was of another source than the source
+// that syntax parsed last.
+fn last_run(model: u8[:], study: u8[:], toon: u8[:]) -> i64 {
+    let file = str(".skein/studies/", model, "/", study);
+    let last = text_of(str(file, ".toon"));
+    guard study.len > 0 && last.len > 0 && write_file(toon, last) else {
+        write_stderr(str("skein report: --no-run needs the table of a study run in .skein/studies/", model, "\n"));
+        return 2;
+    };
+    guard text_of(str(file, ".hash")) == syntax::source_hash() else {
+        write_stderr("skein report: the results are of an older source; run skein report without --no-run\n");
+        return 2;
+    };
+    return if find(last, ",fail,") >= 0 { 1 } else { 0 };
+}
+
 // Fills `page` with the run of the model at `path`, and of its study
 // `study` if that is not "". It gives the exit status of the run, or 3.
 // With `no_run`, it reads the table of the last run of the study from
-// .skein/studies, and solves nothing. Reason: the interposer sweep of 108
+// .skein/studies, and solves nothing. Reason: the interposer sweep of 72
 // cases runs for more than an hour.
 fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool) -> i64 {
     var me: u8[>..] = [];
@@ -451,12 +469,7 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
     let study_arg = if study.len > 0 { str(" --study ", quoted(study)) } else { str("") };
     var status = 0;
     if no_run {
-        let last = text_of(str(".skein/studies/", model, "/", study, ".toon"));
-        guard study.len > 0 && last.len > 0 && write_file(toon, last) else {
-            write_stderr(str("skein report: --no-run needs the table of a study run in .skein/studies/", model, "\n"));
-            return 2;
-        };
-        status = if find(last, ",fail,") >= 0 { 1 } else { 0 };
+        status = last_run(model, study, toon);
     } else {
         status = shell(str(skein, " run ", quoted(path), study_arg, " > ", quoted(toon), " 2> ", quoted(str(work, "/run.err"))));
         write_stderr(text_of(str(work, "/run.err")));

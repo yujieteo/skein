@@ -331,6 +331,12 @@ fn add_file(path: u8[:], text: u8[:]) -> i64 {
     return files.len - 1;
 }
 
+// The hash of the source of all files that syntax parsed last: a model and
+// its `use` files.
+fn source_hash() -> u8[>..] {
+    return str(hash(source));
+}
+
 // Records an error at token `tok`.
 fn error_at(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
     var e = Error { id: [], tok: tok, msg: [], fix: [] };

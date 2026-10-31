@@ -58,10 +58,28 @@ fn test_case_count() {
     expect_text("no study", str(report::case_count("solve[1]{step}:\n")), "0");
 }
 
+// With `--no-run`, the report uses the table of a study run only if the run
+// wrote the hash of the current source.
+fn test_last_run() {
+    let dir = ".skein/studies/report_test";
+    report::make_dirs(dir);
+    write_file(str(dir, "/s.toon"), "study:\ncases[1]{case,status}:\n  1,ok\n");
+    write_file(str(dir, "/s.hash"), "");
+    let toon = ".skein/studies/report_test/run.toon";
+    syntax::parse_model("m.skn", "model m\n");
+    expect_text("no hash", str(report::last_run("report_test", "s", toon)), "2");
+    write_file(str(dir, "/s.hash"), syntax::source_hash());
+    expect_text("same source", str(report::last_run("report_test", "s", toon)), "0");
+    expect_text("table copy", report::text_of(toon), "study:\ncases[1]{case,status}:\n  1,ok\n");
+    syntax::parse_model("m.skn", "model m\nparam L = 2 m\n");
+    expect_text("edited source", str(report::last_run("report_test", "s", toon)), "2");
+}
+
 fn main() {
     test_json();
     test_small_vtu();
     test_case_count();
+    test_last_run();
     if failures > 0 {
         print(failures, " report tests fail");
         exit(1);
