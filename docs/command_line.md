@@ -483,3 +483,26 @@ cases: 16
 ```
 
 The exit status is that of `run` (§10).
+
+### 12.1 The look of the page
+
+The page has the look of the site teoyujie.org (its rule 6, `REQUIREMENTS.md`
+in the repository yujieteo/site), light only: a near-white background,
+16 px Inter for the text, IBM Plex Mono for the source, the tables and the
+legend, quiet underlined links, and the buttons and the press, ease and
+focus rules of `public/shared/kowalski.css`. Hover styles apply only under
+`(hover: hover) and (pointer: fine)`. There are no themes and no dark mode.
+Reason: the captain asked on 2026-10-31 that the HTML reports obey the same
+principles as his website.
+
+The two panes keep their layout, and the column of 692 px does not apply.
+Reason: the source and the viewer are side by side, and one column of 692 px
+has no room for both. The flash that marks the target of a jump lasts 1.6 s,
+not under 300 ms. Reason: the eye must find the line after the scroll.
+The colours of the contour bar and of pass and fail are data, so they
+stay.
+
+The two fonts are in `src/report/fonts/` with their SIL OFL 1.1 licence
+files. `report` writes them into the file as woff2 in base64, so the file
+needs no network. Reason: the report opens offline. Together they cost
+87 628 bytes of woff2 and 116 840 bytes in the file.

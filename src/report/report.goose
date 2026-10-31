@@ -551,7 +551,14 @@ fn run(args: const u8[:][:]) -> i64 {
         return 3;
     };
     put(html, "<!--title-->", model);
-    put(html, "/*css*/", text_of(str(dir, "viewer.css")));
+    var css = text_of(str(dir, "viewer.css"));
+    var inter: u8[>..] = [];
+    base64::encode(inter, text_of(str(dir, "fonts/inter.woff2")));
+    put(css, "/*inter*/", inter);
+    var plex: u8[>..] = [];
+    base64::encode(plex, text_of(str(dir, "fonts/ibm-plex-mono.woff2")));
+    put(css, "/*plex*/", plex);
+    put(html, "/*css*/", css);
     put(html, "/*js*/", text_of(str(dir, "viewer.js")));
     put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs));
     guard write_file(out_path, html) else {
