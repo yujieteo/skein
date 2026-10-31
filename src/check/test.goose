@@ -268,6 +268,9 @@ fn test_physics() {
     expect_id("global_eq", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) + sigma.zz = 100 MPa\n}\n"));
     expect_id("global_eq", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) = x*1 MPa/m\n}\n"));
     expect_id("global_eq", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nphysics pull solves F: Force {\n    eq F = integral(u.x*1 GPa/m, f) + u.x*1 N/m\n}\n"));
+    let periodic = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet Q: Power/Volume = 1 W/m^3\nmaterial m {\n    k: Conductivity = 400 W/(m*K)\n}\nmesh m1 on b { size: 0.1 m }\n");
+    expect_id("global_eq", str(periodic, "physics h on b solves T: Temperature {\n    material m\n    eq -div(k*grad(T)) = Q - mean(Q, b)\n}\n"));
+    expect_id("global_eq", str(periodic, "physics h on b solves T: Temperature {\n    material m\n    let L: Power/Volume = -div(k*grad(T))\n    eq L = Q - mean(Q, b)\n}\n"));
 }
 
 fn test_conditions() {

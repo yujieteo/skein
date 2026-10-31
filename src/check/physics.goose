@@ -165,10 +165,27 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
 var globals: i64[>..];
 
 fn is_reduction(n: i64) -> bool {
-    let k = syntax::nodes[n];
-    guard k.kind == syntax::N_CALL && syntax::nodes[k.first].kind == syntax::N_NAME else { return false; }
-    let name = tok_text(syntax::nodes[k.first].tok);
+    guard syntax::nodes[n].kind == syntax::N_CALL else { return false; }
+    let name = call_name(syntax::nodes[n].first);
     return name == "mean" || name == "integral";
+}
+
+fn is_diff(n: i64) -> bool {
+    guard syntax::nodes[n].kind == syntax::N_CALL else { return false; }
+    let name = call_name(syntax::nodes[n].first);
+    return name == "grad" || name == "div" || name == "curl" || name == "strain";
+}
+
+// True if `n` has grad, div, curl or strain outside mean and integral.
+recursive fn has_diff(n: i64) -> bool {
+    if is_reduction(n) { return false; }
+    if is_diff(n) { return true; }
+    var c = syntax::nodes[n].first;
+    while c >= 0 {
+        if has_diff(c) { return true; }
+        c = syntax::nodes[c].next;
+    }
+    return false;
 }
 
 recursive fn has_reduction(n: i64) -> bool {
@@ -182,11 +199,12 @@ recursive fn has_reduction(n: i64) -> bool {
 }
 
 // The token of the first field that `n` uses outside mean and integral, or
-// -1. A field is x, y, z, n, tau or an unknown that is not global. The walk
-// goes into the value of each `let`.
+// -1. A field is x, y, z, n, tau, an unknown that is not global, or grad, div,
+// curl or strain. The walk goes into the value of each `let`.
 recursive fn field_use(n: i64) -> i64 {
     if is_reduction(n) { return -1; }
     let k = syntax::nodes[n];
+    if is_diff(n) { return syntax::nodes[k.first].tok; }
     if k.kind == syntax::N_NAME {
         let name = tok_text(k.tok);
         let s = visible.get(key(name));
@@ -278,12 +296,13 @@ fn check_physics(n: i64) {
         }
         c = syntax::nodes[c].next;
     }
-    // An eq with mean or integral makes its unknown global (spec §10.5).
+    // An eq with mean or integral, and with no grad, div, curl or strain
+    // outside them, makes its unknown global (spec §10.5).
     var k_eq = 0;
     c = k.first;
     while c >= 0 {
         if syntax::nodes[c].kind == syntax::N_EQN {
-            if k_eq < physics[cur_phys].count && has_reduction(c) { globals.push(physics[cur_phys].first + k_eq); }
+            if k_eq < physics[cur_phys].count && has_reduction(c) && !has_diff(c) { globals.push(physics[cur_phys].first + k_eq); }
             k_eq++;
         }
         c = syntax::nodes[c].next;
