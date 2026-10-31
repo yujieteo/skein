@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-cantilever/beam/grid.toml
-// blocked-by: G18
 // A steel cantilever 100 x 10 x 10 mm with a shear force of 100 N on its free end.
 // The tip deflection is checked against the Timoshenko beam, -0.191933 mm. The bending
 // stress at x = 51.25 mm is checked against the Saint-Venant solution, +-29.25 MPa.
@@ -31,8 +30,8 @@ physics solid on beam: linear_elastic solves u: Vector<Length> {
     material steel
 }
 
-// gap G18: no 8-node hex with incompatible modes. Order 2 replaces it.
-method solid: cg { mesh: m, order: 2 }
+// The 8-node hex with incompatible modes of the grid solver.
+method solid: cg { mesh: m, order: 1, family: incompatible }
 
 step load: static {
     bc root: u = 0

@@ -124,7 +124,8 @@ in the file stays in the review.
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
 | `method_missing` | §13 | a physics has no `method`, and the default cannot choose one mesh | two meshes on the region | a `method` item that names the mesh |
-| `method_setting` | §13 | a setting does not belong to the method kind | `points:` in `cg` | the valid settings |
+| `method_setting` | §13 | a setting does not belong to the method kind, or a `family` or `quadrature` word is not a value of the setting | `points:` in `cg` | the valid settings or values |
+| `family_cell` | §13 | `serendipity` without order 2, `incompatible` without order 1 or with `quadrature: reduced`, or either family on cells that are not `quad` or `hex` | `family: incompatible` with `order: 2` | `order: 1`, or `cell: hex` in the mesh |
 | `method_physics` | §13 | the method cannot discretize the physics | `gfd` with a `plastic` block | a method that can |
 | `inf_sup` | §13 | an unstable velocity-pressure pair with no stabilization | `order: { v: 1, p: 1 }`, `stabilize: none` | `stabilize: supg_pspg` or `order: { v: 2, p: 1 }` |
 | `order_too_low` | §13 | the cell order is too low for the derivatives | `order: 1` with `lap(lap(w))` | the minimum order |

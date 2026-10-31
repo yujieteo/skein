@@ -12,6 +12,7 @@ import os;
 namespace runtime;
 import .fem;
 import .solid;
+import .hex8i;
 import .lane_solvers;
 
 var fixed: u8[>..] = [];            // 1 for each dof that is held at 0
@@ -412,6 +413,7 @@ fn add_node_reaction(node: i64, sum: f64[3]&) {
 
 var point_n: f64[>..] = [];
 var point_dn: f64[>..] = [];
+var point_xi: f64[3] = [0.0, 0.0, 0.0];
 
 // Whether p is in the box that holds the nodes of cell c.
 fn in_cell_bounds(c: i64, p: f64[3]) -> bool {
@@ -459,8 +461,8 @@ fn reference_point(c: i64, p: f64[3], xi: f64[3]&) -> bool {
     return false;
 }
 
-// The last 3D cell that holds (x, y, z), with the shape functions there in
-// point_n and point_dn, or -1. On a face between two cells of a lattice
+// The last 3D cell that holds (x, y, z), with the reference point in
+// point_xi and the shape functions there in point_n and point_dn, or -1. On a face between two cells of a lattice
 // mesh, the last cell is the cell on the high side of each axis.
 fn find_cell(x: f64, y: f64, z: f64) -> i64 {
     let p: f64[3] = [x, y, z];
@@ -470,6 +472,7 @@ fn find_cell(x: f64, y: f64, z: f64) -> i64 {
         let t = cell_type[c] as i64;
         if CELL_DIMS[t] == 3 && in_cell_bounds(c, p) && reference_point(c, p, xi) && cell_inside(t, xi) {
             cell_shape(t, xi, point_n, point_dn);
+            point_xi = xi;
             return c;
         }
         c--;
@@ -501,7 +504,8 @@ fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
     var jac: f64[9] = [0.0; 9];
     cell_jacobian(c, point_dn, jac);
     var inv: f64[9] = [0.0; 9];
-    guard inverse3(jac, inv) != 0.0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
+    let det = inverse3(jac, inv);
+    guard det != 0.0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
     // g[3 k + s] = ∂u_k / ∂x_s
     var g: f64[9] = [0.0; 9];
     for a in point_n.len {
@@ -512,6 +516,7 @@ fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
             for k in 3 { g[3 * k + s] += disp[d + k] * ds; }
         }
     }
+    if cell_type[c] as i64 == HEX8I { hex8i_add_modes(c, point_xi, det, g); }
     let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
     let mu = young / (2.0 * (1.0 + poisson));
     let tr = lambda * (g[0] + g[4] + g[8]);

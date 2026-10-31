@@ -1,5 +1,4 @@
 // femahoy: validation/cases/frequency-cantilever/job.inp
-// blocked-by: G18
 // The natural frequencies of a clamped steel beam of 100 x 10 x 5 mm. Modal
 // step, 3D, quadratic hexahedra on a 40 x 4 x 2 grid. The reference is mode 1
 // of Blevins (1979), Table 8-1: 417.758 Hz, within 1 %.
@@ -21,7 +20,6 @@ material steel {
     rho: Density = 7.85e-9 t/mm^3
 }
 
-// gap G18: femahoy uses C3D20R (serendipity, reduced integration).
 mesh m on beam {
     size: 2.5 mm
     cell: hex
@@ -33,6 +31,9 @@ physics solid on beam solves u: Vector<Length> {
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
     eq rho*ddt2(u) - div(sigma) = 0
 }
+
+// The C3D20R of femahoy: serendipity cells with reduced integration.
+method solid: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }
 
 bc fixed: u = 0
 

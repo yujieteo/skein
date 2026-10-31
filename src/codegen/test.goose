@@ -111,7 +111,7 @@ fn test_grid_cantilever() {
     read_file("examples/femahoy/grid_cantilever.skn", text);
     expect_lines("grid_cantilever", text, [
         "import runtime from \"RUNTIME\";",
-        "runtime::mesh_box(0.0, 0.0, 0.0, 100.0, 10.0, 10.0,",
+        "runtime::mesh_box_incompatible(0.0, 0.0, 0.0, 100.0, 10.0, 10.0,",
         "runtime::cells_for(100.0, 2.5),",
         "runtime::material(210000.0, 0.3);",
         "face(runtime::fix(\"x0\"), \"root\");",
@@ -329,6 +329,10 @@ fn test_unsupported() {
                  "error unsupported 13:11 this slice meshes with hex cells only");
     expect_error("order 1", model(MM, str(MESH, "method solid: cg { order: 1 }\n", STEP)),
                  "error unsupported 19:20 this slice has only order 2");
+    expect_error("incompatible of order 2", model(MM, str(MESH, "method solid: cg { order: 2, family: incompatible }\n", STEP)),
+                 "error unsupported 19:38 this slice has the incompatible modes only for linear_elastic on hex cells of order 1");
+    expect_error("serendipity", model(MM, str(MESH, "method solid: cg { family: serendipity }\n", STEP)),
+                 "error unsupported 19:28 this slice has only the families lagrange and incompatible");
     expect_error("a face off the box", replace(model(MM, str(MESH, STEP)), "x == L", "x == 50 mm"),
                  "error unsupported 5:37 the surface is not on a face of beam");
     expect_error("no support", replace(model(MM, str(MESH, STEP)), "bc root: u = 0\n", ""),

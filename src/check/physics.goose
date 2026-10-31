@@ -691,6 +691,8 @@ let RKPM_SETTINGS = ["points", "basis", "support", "integrate", "bc", "couple"];
 let GFD_SETTINGS = ["points", "stencil", "weight", "couple"];
 let ODE_SETTINGS = ["couple"];
 let STABLE = ["supg_pspg", "vms", "supg_pspg_lsic", "pspg"];
+let FAMILIES = ["lagrange", "serendipity", "incompatible", "nedelec", "raviart_thomas"];
+let QUADRATURES = ["full", "reduced"];
 
 fn check_method(n: i64) {
     let k = syntax::nodes[n];
@@ -732,6 +734,66 @@ fn check_method(n: i64) {
     }
     if p >= 0 && kind == "cg" && physics[p].incompressible { inf_sup(p, b, k.aux); }
     if p >= 0 && kind == "cg" { order_too_low(p, b); }
+    if kind == "cg" { family_cell(b); }
+}
+
+// The word of setting `name` in block `b`, or `default` when the block does
+// not have it. A value that is not in `words` is `method_setting`, and it
+// gives "".
+fn setting_word(b: i64, name: u8[:], words: const u8[:][:], default: u8[:]) -> u8[>..] {
+    let v = setting(b, name);
+    guard v >= 0 else { return str(default); };
+    let w = node_text(v);
+    guard syntax::nodes[v].kind == syntax::N_NAME && contains_name(words, w) else {
+        error(first_tok(v), "method_setting", str("'", w, "' is not a value of ", name), str("use one of: ", join(words)));
+        return [];
+    };
+    return w;
+}
+
+// `family_cell`: a serendipity cell needs order 2, an incompatible cell
+// needs order 1 and full quadrature, and both need quad or hex cells
+// (spec §13).
+fn family_cell(b: i64) {
+    let family = setting_word(b, "family", FAMILIES, "lagrange");
+    let quadrature = setting_word(b, "quadrature", QUADRATURES, "full");
+    guard family == "serendipity" || family == "incompatible" else { return; };
+    let at = first_tok(setting(b, "family"));
+    let want = if family == "serendipity" { 2.0 } else { 1.0 };
+    let order = setting(b, "order");
+    var orders: i64[>..] = [];
+    if order >= 0 && syntax::nodes[order].kind == syntax::N_RECORD {
+        var c = syntax::nodes[order].first;
+        while c >= 0 {
+            orders.push(syntax::nodes[c].first);
+            c = syntax::nodes[c].next;
+        }
+    } else if order >= 0 {
+        orders.push(order);
+    }
+    var bad = order < 0 && want != 2.0;
+    for o in orders {
+        let v, ok = const_value(o);
+        if ok && v != want { bad = true; }
+    }
+    if bad {
+        error(at, "family_cell", str("the family ", family, " needs order ", want as i64),
+              str("write order: ", want as i64, ", or remove the family"));
+    }
+    if family == "incompatible" && quadrature == "reduced" {
+        error(at, "family_cell", "the incompatible modes need full quadrature", "remove quadrature: reduced");
+    }
+    let ms = setting(b, "mesh");
+    guard ms >= 0 && syntax::nodes[ms].kind == syntax::N_NAME else { return; };
+    let s = visible.get(key(tok_text(syntax::nodes[ms].tok)));
+    guard s && syms[s].kind == S_MESH else { return; };
+    let cell = setting(syntax::child_of_kind(syms[s].node, syntax::N_BLOCK), "cell");
+    let name = if cell >= 0 { node_text(cell) } else { "" };
+    if name != "quad" && name != "hex" {
+        error(at, "family_cell", str("the family ", family, " needs quad or hex cells, but the mesh '",
+                                     node_text(ms), "' has ", if cell >= 0 { name } else { "the default cells" }),
+              str("add cell: ", if space == 3 { "hex" } else { "quad" }, " to the mesh"));
+    }
 }
 
 fn want_kind(n: i64, kind: i64, what: u8[:]) {

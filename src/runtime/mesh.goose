@@ -1,10 +1,12 @@
 // The lattice mesher: a structured mesh of 27-node hexahedra of a box or
-// of a sector of an annulus in the unstructured mesh of fem.goose. It is
-// one producer of that mesh. The supports, the loads and the values at a
-// point use only the mesh and its named sets (solve.goose).
+// of a sector of an annulus, or of 8-node hexahedra with incompatible
+// modes of a box, in the unstructured mesh of fem.goose. It is one producer
+// of that mesh. The supports, the loads and the values at a point use only
+// the mesh and its named sets (solve.goose).
 //
-// The nodes are the points of a lattice with 2n + 1 points along an edge of
-// n cells, so node (i, j, k) of the lattice has the index i + lx (j + ly k).
+// The nodes are the points of a lattice with 2n + 1 points (hex27) or
+// n + 1 points (hex8i) along an edge of n cells, so node (i, j, k) of the
+// lattice has the index i + lx (j + ly k).
 // Cell (cx, cy, cz) has the index cx + nx (cy + ny cz).
 //
 // The lattice is uniform in its own coordinates (q0, q1, q2). For a box
@@ -24,7 +26,7 @@ import .solid;
 import .solve;
 
 var cells: i64[3] = [0, 0, 0];      // cells along x, y and z
-var lattice: i64[3] = [0, 0, 0];    // nodes along x, y and z: 2 cells + 1
+var lattice: i64[3] = [0, 0, 0];    // nodes along x, y and z: 2 cells + 1 (hex27) or cells + 1
 
 let FACE_NAMES = ["x0", "x1", "y0", "y1", "z0", "z1"];
 let ANNULUS_FACE_NAMES = ["r0", "r1", "t0", "t1", "z0", "z1"];
@@ -37,32 +39,34 @@ fn box_cell(cx: i64, cy: i64, cz: i64) -> i64 {
     return cx + cells[0] * (cy + cells[1] * cz);
 }
 
-fn build_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
+// t is HEX27 or HEX8I.
+fn build_box(t: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
              nx: i64, ny: i64, nz: i64) {
-    build_lattice(false, 0.0, 0.0, [x0, y0, z0], [x1, y1, z1], nx, ny, nz);
+    build_lattice(t, false, 0.0, 0.0, [x0, y0, z0], [x1, y1, z1], nx, ny, nz);
 }
 
 fn build_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, z1: f64,
                  nr: i64, nt: i64, nz: i64) {
     assert(r0 > 0.0);
-    build_lattice(true, cx, cy, [r0, t0, z0], [r1, t1, z1], nr, nt, nz);
+    build_lattice(HEX27, true, cx, cy, [r0, t0, z0], [r1, t1, z1], nr, nt, nz);
 }
 
-fn build_lattice(annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
+fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
     assert(nx > 0 && ny > 0 && nz > 0);
+    let per = if t == HEX27 { 2 } else { 1 };   // lattice steps along a cell edge
     mesh_clear();
     var spacing: f64[3] = [0.0, 0.0, 0.0];   // the size of a cell in q
     cells = [nx, ny, nz];
     for a in 3 {
-        lattice[a] = 2 * cells[a] + 1;
+        lattice[a] = per * cells[a] + 1;
         spacing[a] = (hi[a] - lo[a]) / cells[a];
     }
     for k in lattice[2] {
         for j in lattice[1] {
             for i in lattice[0] {
-                let a = lo[0] + 0.5 * i * spacing[0];
-                let b = lo[1] + 0.5 * j * spacing[1];
-                let c = lo[2] + 0.5 * k * spacing[2];
+                let a = lo[0] + i * spacing[0] / per;
+                let b = lo[1] + j * spacing[1] / per;
+                let c = lo[2] + k * spacing[2] / per;
                 if annulus {
                     add_node(cx + a * cos(b), cy + a * sin(b), c);
                 } else {
@@ -76,8 +80,15 @@ fn build_lattice(annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3], nx: i6
     for cz in nz {
         for cy in ny {
             for cx in nx {
-                for l in 27 { nodes[l] = node_at(2 * cx + l % 3, 2 * cy + l / 3 % 3, 2 * cz + l / 9); }
-                add_cell(HEX27, nodes);
+                if t == HEX27 {
+                    for l in 27 { nodes[l] = node_at(2 * cx + l % 3, 2 * cy + l / 3 % 3, 2 * cz + l / 9); }
+                    add_cell(HEX27, nodes);
+                } else {
+                    // The corners in the order of HEX8_CORNERS (hex8i.goose).
+                    var corners: i64[8] = [0; 8];
+                    for l in 8 { corners[l] = node_at(cx + (l + 1) / 2 % 2, cy + l / 2 % 2, cz + l / 4); }
+                    add_cell(HEX8I, corners);
+                }
             }
         }
     }

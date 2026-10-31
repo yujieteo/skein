@@ -14,6 +14,7 @@
 import std;
 namespace runtime;
 import .solid;
+import .hex8i;
 import .lane_elements;
 import .lane_shells;
 
@@ -28,10 +29,11 @@ let HEX8 = 4;
 let HEX27 = 5;
 let QUAD4_SHELL = 6;
 let BEAM2 = 7;
+let HEX8I = 8;     // hex8 with incompatible modes (hex8i.goose)
 
-let CELL_NAMES = ["tri3", "tri6", "tet4", "tet10", "hex8", "hex27", "quad4_shell", "beam2"];
-let CELL_NODES: i64[8] = [3, 6, 4, 10, 8, 27, 4, 2];
-let CELL_DIMS: i64[8] = [2, 2, 3, 3, 3, 3, 2, 1];
+let CELL_NAMES = ["tri3", "tri6", "tet4", "tet10", "hex8", "hex27", "quad4_shell", "beam2", "hex8i"];
+let CELL_NODES: i64[9] = [3, 6, 4, 10, 8, 27, 4, 2, 8];
+let CELL_DIMS: i64[9] = [2, 2, 3, 3, 3, 3, 2, 1, 3];
 
 // --- the mesh ----------------------------------------------------------------------
 
@@ -150,6 +152,7 @@ fn cell_shape(t: i64, xi: f64[3], n: f64[>..]&, dn: f64[>..]&) -> bool {
     n.clear();
     dn.clear();
     if t == HEX27 { hex27_shape(xi, n, dn); return true; }
+    if t == HEX8I { hex8_shape(xi, n, dn); return true; }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_shape(t, xi, n, dn); }
     return elements_shape(t, xi, n, dn);
 }
@@ -160,6 +163,7 @@ fn cell_quadrature(t: i64, xi: f64[>..]&, w: f64[>..]&) -> bool {
     xi.clear();
     w.clear();
     if t == HEX27 { gauss_hex3(xi, w); return true; }
+    if t == HEX8I { gauss_hex2(xi, w); return true; }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_quadrature(t, xi, w); }
     return elements_quadrature(t, xi, w);
 }
@@ -170,6 +174,7 @@ fn cell_quadrature(t: i64, xi: f64[>..]&, w: f64[>..]&) -> bool {
 fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
     let t = cell_type[c] as i64;
     if t == HEX27 { return solid_stiffness(c, ke); }
+    if t == HEX8I { return hex8i_matrix(c, ke); }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_matrix(c, ke); }
     return elements_matrix(c, ke);
 }
@@ -181,14 +186,14 @@ fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
 fn cell_face_weights(c: i64, f: i64, w: f64[>..]&) -> bool {
     w.clear();
     let t = cell_type[c] as i64;
-    if t == HEX27 { hex27_face_weights(c, f, w); return true; }
+    if t == HEX27 || t == HEX8I { hex_face_weights(c, f, w); return true; }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_face_weights(c, f, w); }
     return elements_face_weights(c, f, w);
 }
 
 // Whether the reference point xi is in a cell of the 3D cell type t.
 fn cell_inside(t: i64, xi: f64[3]) -> bool {
-    if t == HEX27 { return max(abs(xi[0]), max(abs(xi[1]), abs(xi[2]))) <= 1.0 + 1.0e-9; }
+    if t == HEX27 || t == HEX8I { return max(abs(xi[0]), max(abs(xi[1]), abs(xi[2]))) <= 1.0 + 1.0e-9; }
     return elements_inside(t, xi);
 }
 

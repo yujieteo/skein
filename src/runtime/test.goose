@@ -71,6 +71,58 @@ fn test_cantilever() {
     }
 }
 
+// The cantilever on 2.5 mm cells with 8-node hexahedra with incompatible
+// modes (C3D8I), as the femahoy grid solver. The bending stress at
+// x = 51.25 mm on the top face is the Saint-Venant value M c / I.
+fn test_cantilever_incompatible() {
+    runtime::mesh_box_incompatible(0.0, 0.0, 0.0, L, B, H, 40, 4, 4);
+    runtime::material(E, NU);
+    assert(runtime::fix("x0"));
+    assert(runtime::traction("x1", 0.0, 0.0, -P / (B * H)));
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL hex8i cantilever: CG does not converge in ", runtime::cg_iterations(), " iterations");
+    }
+    let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
+    let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(51.25, 0.5 * B, H);
+    let bending = P * (L - 51.25) * 0.5 * H / (B * H * H * H / 12.0);
+    print("cantilever: 40 x 4 x 4 hex8i, ", runtime::dof_count(), " dofs, ",
+        runtime::cg_iterations(), " CG iterations, ", runtime::solve_seconds(), " s");
+    print("  tip uz ", uz, " mm (femahoy ", FEMAHOY_TIP, "), top sxx ", sxx, " MPa (Saint-Venant ", bending, ")");
+    expect_near("hex8i tip uz against femahoy", uz, FEMAHOY_TIP, 0.01);
+    expect_near("hex8i top sxx against Saint-Venant", sxx, bending, 0.015);
+}
+
+// The patch test of the incompatible modes: a uniform tension of 1 MPa in
+// x on a box of 2 × 2 × 2 cells with a moved centre node. The modes of
+// Taylor et al. (1976) keep the stress uniform and exact.
+fn test_patch_incompatible() {
+    runtime::mesh_box_incompatible(0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2, 2, 2);
+    let centre = 1 + 3 * (1 + 3 * 1);
+    runtime::coords[3 * centre] += 0.2;
+    runtime::coords[3 * centre + 1] -= 0.15;
+    runtime::coords[3 * centre + 2] += 0.1;
+    runtime::material(E, NU);
+    assert(runtime::fix_component("x0", runtime::X));
+    assert(runtime::fix_component("y0", runtime::Y));
+    assert(runtime::fix_component("z0", runtime::Z));
+    assert(runtime::traction("x1", 1.0, 0.0, 0.0));
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL hex8i patch: CG does not converge");
+    }
+    let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(0.7, 1.3, 0.6);
+    let ux, uy, uz = runtime::displacement_at(2.0, 2.0, 2.0);
+    let other = abs(syy) + abs(szz) + abs(syz) + abs(sxz) + abs(sxy);
+    print("patch: hex8i, sxx ", sxx, " MPa, the other components ", other, " MPa");
+    expect_near("hex8i patch sxx", sxx, 1.0, 1.0e-8);
+    expect_near("hex8i patch ux", ux, 2.0 / E, 1.0e-8);
+    if other > 1.0e-8 {
+        failures++;
+        print("FAIL hex8i patch: the other stress components are ", other, " MPa, want 0");
+    }
+}
+
 // A second load step on the same mesh: a point force at the tip, after
 // `clear_loads`. A name that is not a set of the mesh selects nothing.
 fn test_second_step() {
@@ -248,6 +300,8 @@ fn main() {
     test_newton();
     test_shared_edge();
     test_annulus();
+    test_cantilever_incompatible();
+    test_patch_incompatible();
     test_scalar_field();
     test_registry();
     if failures > 0 { exit(1); }

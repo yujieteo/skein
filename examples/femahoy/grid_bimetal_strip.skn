@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-bimetal-strip/strip/grid.toml
-// blocked-by: G18
 // A free strip of 2 bonded layers, heated from 20 degC to 120 degC. The layers expand
 // by different amounts, so the strip bends. The curvature of the top face is checked
 // against Timoshenko (1925): 1.163636e-3 1/mm in x and in y.
@@ -51,8 +50,8 @@ physics solid on strip solves u: Vector<Length> {
     eq div(sigma) = 0
 }
 
-// gap G18: no 8-node hex with incompatible modes. Order 2 replaces it.
-method solid: cg { mesh: m, order: 2 }
+// The 8-node hex with incompatible modes of the grid solver.
+method solid: cg { mesh: m, order: 1, family: incompatible }
 
 step heat_up: static {
     bc sym_x: u.x = 0

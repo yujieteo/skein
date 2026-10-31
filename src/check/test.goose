@@ -305,6 +305,20 @@ fn test_conditions() {
     expect_id("inf_sup", str(H2, FLOW, "\nmethod flow: cg {\n    mesh: m1\n    order: { v: 1, p: 1 }\n    stabilize: none\n}\n"));
     expect_clean("a stable pair", str(H2, FLOW, "\nmethod flow: cg {\n    mesh: m1\n    order: { v: 1, p: 1 }\n    stabilize: supg_pspg\n}\n"));
     expect_id("order_too_low", str(H2, "let c: Surface = rect((0, 0) m, (1, 1) m)\nmesh m1 on c { size: 0.1 m }\nphysics plate on c solves w: Length {\n    eq lap(lap(w)) = 0 m^-3\n}\nmethod plate: cg {\n    mesh: m1\n    order: 1\n}\n"));
+    // G18: the element families and the quadrature (spec §13).
+    let hex = str(H, SOLID, "\nmesh m2 on b {\n    size: 0.1 m\n    cell: hex\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n");
+    expect_clean("C3D8I", str(hex, "method s: cg { mesh: m2, order: 1, family: incompatible }\n"));
+    expect_clean("C3D20R", str(hex, "method s: cg { mesh: m2, order: 2, family: serendipity, quadrature: reduced }\n"));
+    expect_clean("C3D20", str(hex, "method s: cg { mesh: m2, family: serendipity }\n"));
+    expect_clean("C3D8R", str(hex, "method s: cg { mesh: m2, order: 1, quadrature: reduced }\n"));
+    expect_clean("lagrange with full quadrature", str(hex, "method s: cg { mesh: m2, family: lagrange, quadrature: full }\n"));
+    expect_ids("a family that is not a word of the list", str(hex, "method s: cg { mesh: m2, family: hermite }\n"), "method_setting\n");
+    expect_ids("a quadrature that is not a word of the list", str(hex, "method s: cg { mesh: m2, quadrature: 2 }\n"), "method_setting\n");
+    expect_ids("incompatible of order 2", str(hex, "method s: cg { mesh: m2, order: 2, family: incompatible }\n"), "family_cell\n");
+    expect_ids("incompatible with the default order", str(hex, "method s: cg { mesh: m2, family: incompatible }\n"), "family_cell\n");
+    expect_ids("serendipity of order 1", str(hex, "method s: cg { mesh: m2, order: { u: 1 }, family: serendipity }\n"), "family_cell\n");
+    expect_ids("incompatible with reduced quadrature", str(hex, "method s: cg { mesh: m2, order: 1, family: incompatible, quadrature: reduced }\n"), "family_cell\n");
+    expect_ids("serendipity on tetrahedra", str(hex, "method s: cg { mesh: m1, order: 2, family: serendipity }\n"), "family_cell\n");
 }
 
 fn test_steps() {

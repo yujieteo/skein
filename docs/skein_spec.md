@@ -1345,7 +1345,7 @@ The kinds:
 
 | Kind | Settings | Notes |
 |---|---|---|
-| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature`, `couple` | continuous Galerkin FEM. `nedelec` (H(curl)) and `raviart_thomas` (H(div)) are phase 5. |
+| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple` | continuous Galerkin FEM. `nedelec` (H(curl)) and `raviart_thomas` (H(div)) are phase 5. |
 | `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty`, `shock_capturing` (`none`, `entropy_viscosity`) | interior penalty for second-order terms |
 | `fv` | `mesh`, `gradient` (`green_gauss`, `least_squares`), `flux` (`upwind`, `linear_upwind`, `central`), `limiter` (`none`, `minmod`, `van_leer`, `venkatakrishnan`), `pv_coupling` (`rhie_chow`) | cell-centred finite volume |
 | `rkpm` | `points`, `basis` (`linear`, `quadratic`), `support` (Real, times the spacing), `integrate` (`scni`, `gauss`), `bc` (`nitsche`) | Galerkin meshless |
@@ -1354,6 +1354,30 @@ The kinds:
 
 The setting `stabilize` takes `none`, `supg`, `supg_pspg`, `vms` or
 `supg_pspg_lsic`. §17.2 gives the meaning.
+
+The setting `family` of `cg` gives the cells of each order:
+
+- `lagrange` (the default): the full tensor-product or simplex nodes of
+  the order.
+- `serendipity`: a quad or hex of order 2 with nodes only on the corners
+  and the edges: 8 nodes on a quad (CPE8), 20 nodes on a hex (C3D20).
+- `incompatible`: a quad or hex of order 1 with the incompatible modes of
+  Wilson et al. (1973), with the correction of Taylor et al. (1976), so
+  that the cell passes the patch test (CPE4I, C3D8I). The modes
+  1 - ξ² along each cell axis are internal to each cell, and the solver
+  condenses them out. They remove the shear locking of order 1 in bending.
+
+The setting `quadrature` takes `full` (the default), the Gauss rule that
+integrates the stiffness of an undistorted cell exactly, or `reduced`,
+one point fewer along each axis of a quad or hex and one order lower on a
+simplex (C3D8R, C3D20R, CPE8R, S8R). With order 1 on a quad or hex,
+`reduced` adds hourglass control (Flanagan and Belytschko 1981).
+
+`serendipity` needs `order: 2` and `incompatible` needs `order: 1`, both
+on a mesh with `cell: quad` or `cell: hex`. `incompatible` needs `full`
+quadrature, because the gradients of its modes are 0 at the one centre
+point. Another combination is an error [`family_cell`]. A word that is not a
+value of `family` or `quadrature` is an error [`method_setting`].
 
 A setting that does not belong to the kind is an error
 [`method_setting`]. The checker tests the method against the physics:

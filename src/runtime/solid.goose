@@ -1,6 +1,7 @@
 // The linear elastic solid: the material, the element routine of a 3D cell
-// of any type in the registry, the Jacobian of a 3D cell, and the registry
-// entry of the 27-node hexahedron (the triquadratic Lagrange cell).
+// of any type in the registry, the Jacobian of a 3D cell, the face weights
+// of a hexahedron, and the registry entry of the 27-node hexahedron (the
+// triquadratic Lagrange cell).
 //
 // The local node a of a hex27 cell is at (a % 3, a / 3 % 3, a / 9) on the
 // lattice of the reference points -1, 0 and 1 along each axis. Its local
@@ -38,9 +39,11 @@ fn hex27_shape(xi: f64[3], n: f64[>..]&, dn: f64[>..]&) {
     }
 }
 
-// The weights of local face f = 2 r + side of the hex27 cell c
-// (cell_face_weights in fem.goose), by 3 × 3 Gauss points on the face.
-fn hex27_face_weights(c: i64, f: i64, w: f64[>..]&) {
+// The weights of local face f = 2 r + side of the hexahedron c, hex27 or
+// hex8i (cell_face_weights in fem.goose), by 3 × 3 Gauss points on the face.
+fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
+    let t = cell_type[c] as i64;
+    let nn = CELL_NODES[t];
     let r = f / 2;
     let a = if r == 0 { 1 } else { 0 };
     let b = if r == 2 { 1 } else { 2 };
@@ -48,20 +51,18 @@ fn hex27_face_weights(c: i64, f: i64, w: f64[>..]&) {
     // face at side 0 looks to -ξ_r.
     var sign = if r == 1 { -1.0 } else { 1.0 };
     if f % 2 == 0 { sign = -sign; }
-    for l in 4 * 27 { w.push(0.0); }
+    for l in 4 * nn { w.push(0.0); }
     var xi: f64[3] = [0.0, 0.0, 0.0];
     xi[r] = if f % 2 == 0 { -1.0 } else { 1.0 };
     for gb in 3 {
         for ga in 3 {
             xi[a] = GAUSS3_X[ga];
             xi[b] = GAUSS3_X[gb];
-            shape_n.clear();
-            shape_dn.clear();
-            hex27_shape(xi, shape_n, shape_dn);
+            cell_shape(t, xi, shape_n, shape_dn);
             // The tangents ∂x/∂ξ_a and ∂x/∂ξ_b of the face.
             var ta: f64[3] = [0.0, 0.0, 0.0];
             var tb: f64[3] = [0.0, 0.0, 0.0];
-            for l in 27 {
+            for l in nn {
                 let n = cell_node(c, l);
                 for s in 3 {
                     ta[s] += shape_dn[3 * l + a] * coords[3 * n + s];
@@ -75,7 +76,7 @@ fn hex27_face_weights(c: i64, f: i64, w: f64[>..]&) {
             let nz = sign * (ta[0] * tb[1] - ta[1] * tb[0]);
             let gw = GAUSS3_W[ga] * GAUSS3_W[gb];
             let da = gw * sqrt(nx * nx + ny * ny + nz * nz);
-            for l in 27 {
+            for l in nn {
                 w[4 * l] += shape_n[l] * da;
                 w[4 * l + 1] += shape_n[l] * gw * nx;
                 w[4 * l + 2] += shape_n[l] * gw * ny;
@@ -129,8 +130,6 @@ fn solid_stiffness(c: i64, ke: f64[>..]&) -> bool {
     guard CELL_DIMS[t] == 3 && cell_quadrature(t, quad_xi, quad_w) else { return false; }
     let nn = CELL_NODES[t];
     let size = 3 * nn;
-    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    let mu = young / (2.0 * (1.0 + poisson));
     ke.clear();
     for i in size * size { ke.push(0.0); }
     grad.clear();
@@ -149,22 +148,30 @@ fn solid_stiffness(c: i64, ke: f64[>..]&) -> bool {
                     + inv[3 * s + 2] * shape_dn[3 * l + 2];
             }
         }
-        let dv = w * det;
-        for i in nn {
-            for j in nn {
-                let dot = grad[3 * i] * grad[3 * j] + grad[3 * i + 1] * grad[3 * j + 1]
-                    + grad[3 * i + 2] * grad[3 * j + 2];
-                for p in 3 {
-                    let row = size * (3 * i + p) + 3 * j;
-                    for q in 3 {
-                        var v = lambda * grad[3 * i + p] * grad[3 * j + q]
-                            + mu * grad[3 * i + q] * grad[3 * j + p];
-                        if p == q { v += mu * dot; }
-                        ke[row + q] += v * dv;
-                    }
+        add_elastic(grad, nn, w * det, ke);
+    }
+    return true;
+}
+
+// Adds dv times the integrand of solid_stiffness to ke, for `count` shape
+// functions with the gradients grad[3 i + s]. ke has 3 count rows.
+fn add_elastic(grad: f64[:], count: i64, dv: f64, ke: f64[>..]&) {
+    let size = 3 * count;
+    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    let mu = young / (2.0 * (1.0 + poisson));
+    for i in count {
+        for j in count {
+            let dot = grad[3 * i] * grad[3 * j] + grad[3 * i + 1] * grad[3 * j + 1]
+                + grad[3 * i + 2] * grad[3 * j + 2];
+            for p in 3 {
+                let row = size * (3 * i + p) + 3 * j;
+                for q in 3 {
+                    var v = lambda * grad[3 * i + p] * grad[3 * j + q]
+                        + mu * grad[3 * i + q] * grad[3 * j + p];
+                    if p == q { v += mu * dot; }
+                    ke[row + q] += v * dv;
                 }
             }
         }
     }
-    return true;
 }

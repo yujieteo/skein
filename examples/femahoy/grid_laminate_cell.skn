@@ -1,5 +1,5 @@
 // femahoy: validation/cases/grid-laminate-cell/cell/grid.toml
-// blocked-by: G18 G19
+// blocked-by: G19
 // The periodic unit cell of a laminate of aluminium and a polymer, 2
 // layers along z. Each physics solves the periodic fluctuation of 1 load
 // case: a unit mean gradient, a unit mean strain or a unit temperature
@@ -114,14 +114,14 @@ physics el_th on unit_cell solves w_th: Vector<Length> {
     eq div(s_th) = 0
 }
 
-// gap G18: no 8-node hex with incompatible modes. Order 1 is exact here.
-method cond_x: cg { mesh: m, order: 1 }
-method cond_z: cg { mesh: m, order: 1 }
-method el_xx: cg { mesh: m, order: 1 }
-method el_zz: cg { mesh: m, order: 1 }
-method el_yz: cg { mesh: m, order: 1 }
-method el_xy: cg { mesh: m, order: 1 }
-method el_th: cg { mesh: m, order: 1 }
+// The 8-node hex with incompatible modes of the grid solver.
+method cond_x: cg { mesh: m, order: 1, family: incompatible }
+method cond_z: cg { mesh: m, order: 1, family: incompatible }
+method el_xx: cg { mesh: m, order: 1, family: incompatible }
+method el_zz: cg { mesh: m, order: 1, family: incompatible }
+method el_yz: cg { mesh: m, order: 1, family: incompatible }
+method el_xy: cg { mesh: m, order: 1, family: incompatible }
+method el_th: cg { mesh: m, order: 1, family: incompatible }
 
 // The expansion of a cell that is transversely isotropic about z, with no
 // mean stress: alpha = -inv(C)*(mean stress of el_th)/dT.

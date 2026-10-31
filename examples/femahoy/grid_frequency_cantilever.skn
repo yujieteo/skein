@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-frequency-cantilever/beam/grid.toml
-// blocked-by: G18
 // A steel beam 100 x 10 x 5 mm, clamped at x = 0: its first natural frequency. The
 // reference is the clamped-free beam of Blevins (1979), Table 8-1: 417.758 Hz, within 1 %.
 
@@ -28,8 +27,8 @@ physics solid on beam solves u: Vector<Length> {
     eq rho*ddt2(u) - div(sigma) = 0
 }
 
-// gap G18: no 8-node hex with incompatible modes. Order 2 replaces it.
-method solid: cg { mesh: m, order: 2 }
+// The 8-node hex with incompatible modes of the grid solver.
+method solid: cg { mesh: m, order: 1, family: incompatible }
 
 step mode_1: modal(count: 1) {
     bc root: u = 0

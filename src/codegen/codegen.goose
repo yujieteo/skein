@@ -413,6 +413,8 @@ var mesh_lane = CORE;           // the lane that meshes the geometry: CORE (a bo
 var cell_name: u8[..64];        // the mesh setting `cell`
 var cell_tok = -1;
 var order_tok = -1;
+var incompatible = false;       // the method setting `family: incompatible`
+var family_tok = -1;
 // The `bc` items outside the steps, which hold in each step.
 var global_bcs: i64[>..];
 
@@ -441,6 +443,8 @@ fn reset() {
     set64(cell_name, "hex");
     cell_tok = -1;
     order_tok = -1;
+    incompatible = false;
+    family_tok = -1;
     mesh_size = 0.0;
     mesh_tok = -1;
     order = 2;
@@ -840,8 +844,16 @@ fn method(n: i64) {
         if kind(s) == syntax::N_SETTING && name(s) == "order" {
             order = eval(syntax::nodes[s].first).v[0] as! i64;
             order_tok = tok(s);
+        } else if kind(s) == syntax::N_SETTING && name(s) == "family" {
+            let f = syntax::nodes[s].first;
+            family_tok = tok(f);
+            incompatible = name(f) == "incompatible";
+            if !incompatible && name(f) != "lagrange" {
+                unsupported(family_tok, "this slice has only the families lagrange and incompatible",
+                            "write family: incompatible, or remove the family");
+            }
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
-            unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order");
+            unsupported(tok(s), "the method setting is not in this slice", "use only mesh, order and family");
         }
         s = syntax::nodes[s].next;
     }
@@ -1146,7 +1158,13 @@ fn read(prog: i64) -> bool {
     let lane_cell = if mesh_lane == MESHER { mesher_cell(cell_name, order) }
                     else if mesh_lane == SHELLS { shells_cell(cell_name, order) }
                     else { elements_cell(cell_name, order) };
-    if (cell_name != "hex" || order != 2) && !lane_cell {
+    if incompatible {
+        // The runtime has the incompatible modes on the box mesh only (hex8i).
+        if template != CORE || domain.kind != BOX || cell_name != "hex" || order != 1 {
+            unsupported(family_tok, "this slice has the incompatible modes only for linear_elastic on hex cells of order 1 on a box",
+                        "write cell: hex and order: 1, and mesh a box");
+        }
+    } else if (cell_name != "hex" || order != 2) && !lane_cell {
         if cell_name != "hex" {
             unsupported(cell_tok, "this slice meshes with hex cells only", "write cell: hex");
         } else {
@@ -1704,6 +1722,13 @@ fn emit_core_mesh(out: u8[>..]&) {
             out.append(", ");
             lit(out, d.hi[j]);
         }
+    } else if incompatible {
+        format(out, "    // mesh on ", solid_name, ": 8-node hexahedra with incompatible modes of at most ", mesh_size,
+               " ", system.length, "\n");
+        out.append("    runtime::mesh_box_incompatible(");
+        lits(out, d.lo);
+        out.append(", ");
+        lits(out, d.hi);
     } else {
         format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ",
                system.length, "\n");
