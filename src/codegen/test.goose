@@ -563,8 +563,6 @@ fn test_ledger() {
     expect_text("peak_mb", str(codegen::toon_number(toon, "peak_mb:"), " ", codegen::toon_number(toon, "none:")), "34.5 -1.0");
 }
 
-// `skein run --study` of an example, and the command line errors. `./build.sh
-// test` builds build/skein first. The runs write .skein under build/.
 // skein verify convergence: the manufactured solutions of dg and of fv
 // with a limiter and ssprk3 converge with the order of their method, and
 // the faults of the command line stop it.
@@ -592,6 +590,8 @@ fn test_convergence() {
     }
 }
 
+// `skein run --study` of an example, and the command line errors. `./build.sh
+// test` builds build/skein first. The runs write .skein under build/.
 fn test_study_run() {
     let runs = [
         ["--study lengths --jobs 2", "0"],

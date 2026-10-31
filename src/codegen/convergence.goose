@@ -97,6 +97,12 @@ fn run_level(path: u8[:], text: u8[:], level: i64, errors: Errors[>..]&) -> bool
         write_stderr(str("skein verify convergence: the program of level ", level, " stopped with status ", status, "\n"));
         return false;
     };
+    for line in split(text_out, '\n') {
+        guard !(starts_with(line, "  solve,") && find(line, ",fail,") >= 0) else {
+            write_stderr(str("skein verify convergence: the solve of level ", level, " did not converge: ", trim(line), "\n"));
+            return false;
+        };
+    }
     read_errors(text_out, errors);
     return true;
 }
