@@ -185,7 +185,7 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
 One work-stealing task pool runs the cases of a study (spec §20.5). Each
 worker has a queue of cases. An idle worker takes a case from the queue of
 another worker. A case is a separate program, so each case has its own
-pool for its assembly and its solves.
+pool for its assembly and its CG products.
 
 ---
 
