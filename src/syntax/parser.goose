@@ -432,11 +432,12 @@ fn parse_block(lists: bool) -> i64 {
     let b = node(N_BLOCK, expect(TK_LBRACE, "'{'"));
     accept(TK_NL);
     while in_body() {
-        if at(KW_REFINE) || at(KW_LAYERS) {
+        if at(KW_REFINE) || at(KW_LAYERS) || at(KW_CRACK_TIP) {
             let t = advance();
             let region = expr();
             expect(TK_COLON, "':'");
-            add(b, node2(if tokens[t].kind == KW_REFINE { N_REFINE } else { N_LAYERS }, t, region, expr()));
+            let k = tokens[t].kind;
+            add(b, node2(if k == KW_REFINE { N_REFINE } else if k == KW_LAYERS { N_LAYERS } else { N_CRACK_TIP }, t, region, expr()));
         } else {
             let name = label("a setting name");
             add(b, node1(N_SETTING, name, setting_value(lists)));

@@ -48,6 +48,7 @@ fn check_text(path: u8[:], text: u8[:]) {
     scales_end();
     objectives_end();
     method_missing();
+    crack_tip_order();
     free_boundary();
     sort_diags();
 }

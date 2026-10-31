@@ -321,6 +321,26 @@ fn cell_size(p: i64) -> f64, bool {
     return h, ok && h > 0.0;
 }
 
+// `crack_tip_form` (spec §9.1): a crack tip moves the mid-side nodes, so
+// the displacement of each physics on the mesh needs order 2.
+fn crack_tip_order() {
+    for p, i in physics {
+        let u = displacement_of(i);
+        let mesh = mesh_of(i);
+        guard u >= 0 && mesh >= 0 else { continue; };
+        let order = order_of(method_of(i), u);
+        var c = syntax::nodes[syntax::child_of_kind(mesh, syntax::N_BLOCK)].first;
+        while c >= 0 {
+            if syntax::nodes[c].kind == syntax::N_CRACK_TIP && order != 2.0 {
+                error(syntax::nodes[c].tok, "crack_tip_form",
+                      str("crack_tip moves the mid-side nodes, but ", tok_text(syms[u].tok), " has order ", order as i64),
+                      str("write order: 2 in method ", tok_text(syms[p.sym].tok)));
+            }
+            c = syntax::nodes[c].next;
+        }
+    }
+}
+
 // A value rounded to 3 significant digits, for a message.
 fn approx(v: f64) -> f64 {
     if v <= 0.0 { return v; }

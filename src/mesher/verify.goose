@@ -277,7 +277,7 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     while s >= 0 {
         let value = syntax::nodes[s].first;
         if syntax::nodes[s].kind != syntax::N_SETTING {
-            reader_fault(syntax::nodes[s].tok, "refine and layers are not in the mesher yet: it makes a uniform mesh",
+            reader_fault(syntax::nodes[s].tok, "refine, layers and crack_tip are not in the mesher yet: it makes a uniform mesh",
                          "remove the line, and give a size that resolves the smallest feature");
         } else if node_text(s) == "size" {
             size = eval_value(value).v[0];
