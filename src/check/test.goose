@@ -318,6 +318,7 @@ fn test_crack_tip() {
     expect_id("crack_tip_form", str(model, plate, "points p1 on b {\n    spacing: 1 mm\n    crack_tip c: 0.2 mm\n}\nmesh m1 on b { size: 1 mm }\n", solid));
     expect_id("crack_tip_form", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm\n}\n", solid, "method s: cg { mesh: m1, order: 1 }\n"));
     expect_id("crack_tip_form", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm\n}\n", solid, "method s: cg { order: 1 }\n"));
+    expect_clean("G20 a meshless method beside a crack tip mesh", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm\n}\npoints cloud on b { spacing: 1 mm }\n", solid, "method s: rkpm { points: cloud }\n"));
     expect_id("crack_tip_form", str(H, SOLID, "\nlet c: Point = point((1, 1, 1) m)\nmesh m2 on b {\n    size: 0.1 m\n    crack_tip c: 0.01 m\n}\n"));
     expect_id("not_constant", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm*(1 + x/(1 mm))\n}\n", solid));
 }

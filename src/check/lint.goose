@@ -280,7 +280,7 @@ fn prop_value(mat: i64, name: u8[:]) -> f64, bool {
 }
 
 // The mesh item of physics `p`: the mesh that its method names, or else the
-// one mesh that a method with no `mesh` takes (spec §13), or -1.
+// one mesh that a cg, dg or fv method with no `mesh` takes (spec §13), or -1.
 fn mesh_of(p: i64) -> i64 {
     var mesh = -1;
     let m = method_of(p);
@@ -288,7 +288,7 @@ fn mesh_of(p: i64) -> i64 {
     if ms >= 0 && syntax::nodes[ms].kind == syntax::N_NAME {
         let s = visible.get(key(tok_text(syntax::nodes[ms].tok)));
         if s && syms[s].kind == S_MESH { mesh = syms[s].node; }
-    } else if ms < 0 {
+    } else if ms < 0 && (m < 0 || syntax::nodes[m].aux >= 0 && contains_name(["cg", "dg", "fv"], tok_text(syntax::nodes[m].aux))) {
         var all = 0;
         for s in syms {
             if s.kind != S_MESH { continue; }
