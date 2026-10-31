@@ -183,7 +183,9 @@ let CARD = """
     ## Expectations
 
     `expect name: u.z at (L, 0 mm, 0 mm) == -0.5 mm within 2%` tests a result
-    after the last step.
+    after the last step. In a step, it tests at the end of that step. In a
+    study, it tests each case, and `== [1, 2] mm` gives one value for each
+    case of a `grid` or a `zip`.
 
     ## Example
 

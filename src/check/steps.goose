@@ -140,6 +140,7 @@ fn check_step(n: i64) {
                 }
             },
             syntax::N_SOLVE, syntax::N_ADAPT => { check_values(s.first); },
+            syntax::N_EXPECT => { check_expect(c, 0); },
             syntax::N_OUTPUT => {
                 var o = s.first;
                 while o >= 0 {
@@ -178,28 +179,64 @@ fn check_step(n: i64) {
 
 // --- expect (spec §15.3) -------------------------------------------------------------------
 
-fn check_expect(n: i64) {
+// An `expect` item, an `expect` of a step, or an `expect` of a study whose
+// lists hold one value for each of its `cases` cases. `cases` is 0 where a
+// list cannot stand, and -1 when the checker cannot count the cases.
+fn check_expect(n: i64, cases: i64) {
     let k = syntax::nodes[n];
     in_expect = true;
     let lhs = k.first;
     let rhs = syntax::nodes[lhs].next;
     let within = syntax::nodes[rhs].next;
     let l = expr_ty(lhs);
-    let r = expr_ty(rhs);
-    let w = expr_ty(within);
+    let rs = expect_values(rhs, cases);
+    let ws = expect_values(within, cases);
     in_expect = false;
-    if !is_any(l) && !is_any(r) && (l.kind != K_NUM || r.kind != K_NUM) {
-        error(first_tok(lhs), "expect_form", str("an expect compares ", ty_str(l), " with ", ty_str(r)),
-              "compare two quantities, or a field with a value at a point with 'at'");
-    } else {
+    for r in rs {
+        guard is_any(l) || is_any(r) || (l.kind == K_NUM && r.kind == K_NUM) else {
+            error(first_tok(lhs), "expect_form", str("an expect compares ", ty_str(l), " with ", ty_str(r)),
+                  "compare two quantities, or a field with a value at a point with 'at'");
+            break;
+        };
         let joined_ty = sum_ty(first_tok(rhs), l, r, "==");
-        if !w.percent && !is_any(joined_ty) && is_num(w) && !w.zero && w.dim != joined_ty.dim {
-            error(first_tok(within), "unit_mismatch",
-                  str("within is ", dim_str(w.dim), ", but the sides are ", dim_str(joined_ty.dim)),
-                  str("give within in a unit of ", dim_str(joined_ty.dim), ", or as a percent"));
+        for w in ws {
+            if !w.percent && !is_any(joined_ty) && is_num(w) && !w.zero && w.dim != joined_ty.dim {
+                error(first_tok(within), "unit_mismatch",
+                      str("within is ", dim_str(w.dim), ", but the sides are ", dim_str(joined_ty.dim)),
+                      str("give within in a unit of ", dim_str(joined_ty.dim), ", or as a percent"));
+                break;
+            }
         }
     }
     declare(S_EXPECT, k.tok, n, kind_ty(K_DECL));
+}
+
+// The types of the expected value or the `within` `v` of an expect: one for
+// each value of a list, else one.
+fn expect_values(v: i64, cases: i64) -> Ty[>..] {
+    var tys: Ty[>..] = [];
+    guard syntax::nodes[v].kind == syntax::N_LIST else {
+        tys.push(expr_ty(v));
+        return tys;
+    };
+    let unit = syntax::child_of_kind(v, syntax::N_UNIT);
+    var c = syntax::nodes[v].first;
+    while c >= 0 {
+        if syntax::nodes[c].kind != syntax::N_UNIT {
+            var t = expr_ty(c);
+            if unit >= 0 && is_bare(c) { t = bare_in_unit(t, unit); }
+            tys.push(t);
+        }
+        c = syntax::nodes[c].next;
+    }
+    if cases == 0 {
+        error(syntax::nodes[v].tok, "expect_cases", "a list of values needs a grid or a zip study",
+              "give one value, or put the expect in a grid or a zip study");
+    } else if cases > 0 && tys.len != cases {
+        error(syntax::nodes[v].tok, "expect_cases", str("the list has ", tys.len, " values, but the study has ", cases, " cases"),
+              "give one value for each case, in the order of the cases");
+    }
+    return tys;
 }
 
 // --- allow (spec §19) ----------------------------------------------------------------------
@@ -348,8 +385,37 @@ fn check_study(n: i64) {
     while c >= 0 {
         let s = syntax::nodes[c];
         if s.kind == syntax::N_SETTING { study_entry(s.tok, s.first); }
+        if s.kind == syntax::N_EXPECT { check_expect(c, study_case_count(pname, b)); }
         c = s.next;
     }
+}
+
+// The number of cases of a `grid` or a `zip` study with the block `b`, -1
+// when a range makes it unknown, and 0 for the other procedures.
+fn study_case_count(pname: u8[:], b: i64) -> i64 {
+    if pname != "grid" && pname != "zip" { return 0; }
+    var cases = 1;
+    var c = syntax::nodes[b].first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_SETTING {
+            let v = syntax::nodes[c].first;
+            if syntax::nodes[v].kind == syntax::N_RANGE { return -1; }
+            var count = 1;
+            if syntax::nodes[v].kind == syntax::N_LIST {
+                count = 0;
+                var i = syntax::nodes[v].first;
+                while i >= 0 {
+                    if syntax::nodes[i].kind != syntax::N_UNIT { count++; }
+                    i = syntax::nodes[i].next;
+                }
+            }
+            // A zip takes value i of each list, so its lists have one length.
+            if pname == "zip" { return count; }
+            cases *= count;
+        }
+        c = syntax::nodes[c].next;
+    }
+    return cases;
 }
 
 fn study_entry(tok: i64, v: i64) {

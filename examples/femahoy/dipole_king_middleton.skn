@@ -1,5 +1,5 @@
 // femahoy: validation/cases/dipole-king-middleton/omega12.5/openems.py
-// blocked-by: G10 G13 G26
+// blocked-by: G13 G26
 // A centre-fed strip dipole in free space, half length 77.7 mm, width 1.2 mm (equivalent
 // radius 0.3 mm, Omega = 12.5), with a delta-gap feed. Time-harmonic Maxwell equations for E.
 // Reference: King and Middleton, X = -185.7 ohm at beta*h = 1.2, R = 71.02 ohm at 1.5.
@@ -82,8 +82,19 @@ study band: grid {
     bh: [1.2, 1.5, pi/2]
 }
 
-// gap G7: no real and imaginary parts. The checks need Im(z_in) = -185.7 ohm at bh = 1.2 and
-// Re(z_in) = 71.02 ohm at bh = 1.5, each within 6%.
-// gap G10: no expect for each study case.
+// The reference gives Im(z_in) at bh = 1.2 and Re(z_in) at bh = 1.5 only, so each has a study
+// of one case. z_in is in V/A (ohm).
+study reactance: grid {
+    bh: [1.2]
+    expect x_in: imag(v0/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) -
+        integral(hc.x, lp_n) - integral(hc.y, lp_w)))) == -185.7 V/A within 6%
+}
+
+study resistance: grid {
+    bh: [1.5]
+    expect r_in: re(v0/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) -
+        integral(hc.x, lp_n) - integral(hc.y, lp_w)))) == 71.02 V/A within 6%
+}
+
 // gap G13: no far field. The checks need the directivity 1.641 at bh = pi/2 within 6%, and the
 // radiated power over the power into the feed, 1 within 6%.

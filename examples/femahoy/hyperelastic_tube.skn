@@ -1,5 +1,5 @@
 // femahoy: validation/cases/hyperelastic-tube/job.inp
-// blocked-by: G10 G36
+// blocked-by: G36
 // A quarter of a long rubber tube in plane strain (A = 10 mm, B = 20 mm), 3-term Ogden rubber
 // (Ogden 1972), nearly incompressible. The inner face moves out to 2.5 and then 4 times its
 // radius, past the pressure maximum. References (Haughton and Ogden 1979): F = 5.74269 N at
@@ -61,8 +61,7 @@ bc sy: u.y = 0
 // A pressure load cannot pass the maximum. Thus the inner face moves radially.
 step inflate_25: static(ramp: 20) {
     bc inner: u = (15 mm)/A_in*(x, y)
-    // gap G10: an expect checks only the last step. F at 2.5 (5.74269 N) is a report only.
-    report f_25 = reaction(inner).x
+    expect f_25: reaction(inner).x == 5.74269 N within 0.2%
 }
 
 step inflate_40: static(ramp: 20) {

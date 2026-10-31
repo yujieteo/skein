@@ -495,6 +495,16 @@ expect mms: T == T_exact within 1e-3 K
 ```
 
 An expectation is a test on the results. A failed one gives exit status 1.
+An `expect` item runs after the last step. An `expect` in a step runs at
+the end of that step. An `expect` in a study runs in each case, and a list
+gives one value for each case of a `grid` or a `zip`:
+
+```skein
+study ra_sweep: grid {
+    Ra: [10000, 100000]
+    expect nu: mean(-grad(T).x, hot)*a/dT == [2.243, 4.519] within 0.6%
+}
+```
 
 Spec: [§15.3](skein_spec.md#153-expect).
 
@@ -633,7 +643,8 @@ study re_sweep: grid {
 
 The procedures are `grid`, `zip`, `sample` and `minimize`. Each case runs
 all the steps. Cases run at the same time on worker threads. A named
-`report cd = …` gives a column of the results table.
+`report cd = …` and each `expect` give a column of the results table. An
+`expect` in the study checks each case (§19).
 
 ```
 skein run model.skn --study re_sweep --jobs 3

@@ -386,6 +386,12 @@ fn test_steps() {
     expect_id("results_missing", str(H, "let g: Results = results(\"samples/01_cantilever.skn\", step: \"unload\")\n"));
     expect_id("expect_form", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nexpect e: b == 1 m within 1%\n"));
     expect_id("unit_mismatch", str(H, "let a: Length = 1 m\nexpect e: a == 1 m within 1 s\n"));
+    // G10: an expect of a step, checked at the end of the step.
+    expect_clean("G10 an expect of a step", str(elastic, "step go: static {\n    bc f: u = 0\n    expect e: u.x at (1, 0, 0) m == 0 m within 1 mm\n}\n"));
+    expect_clean("G10 an eigenvalue in an expect of a modal step", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n    expect f1: eigenvalue(1) == 10 Hz within 1%\n}\nstep two: static {\n    bc f: u = 0\n}\n"));
+    expect_clean("G10 when in an expect of a transient step", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    expect t1: when(max(norm(u), b), 1 mm) == 0.1 s within 5%\n}\nstep two: static {\n    bc f: u = 0\n}\n"));
+    expect_id("when_step", str(elastic, shake, "step two: static {\n    bc f: u = 0\n    expect t1: when(max(norm(u), b), 1 mm) == 0.1 s within 5%\n}\n"));
+    expect_id("unit_mismatch", str(elastic, "step go: static {\n    bc f: u = 0\n    expect e: u.x at (1, 0, 0) m == 0 m within 1 s\n}\n"));
 }
 
 fn test_studies() {
@@ -394,6 +400,15 @@ fn test_studies() {
     expect_id("study_param", str(H, "let D: Length = 1 m\nstudy s: grid {\n    D: [0.1, 0.2] m\n}\n"));
     expect_clean("a study", str(H, "param D: Length = 1 m in 0.1 m..2 m\nstudy s: grid {\n    D: [0.1, 0.2] m\n}\n"));
     expect_id("study_objective", str(H, "param D: Length = 1 m\nstudy s: minimize(drag) {\n    D: 0.1 m..0.2 m\n}\n"));
+    // G10: an expect of a study, checked in each case, with a list of one
+    // value for each case of a grid or a zip.
+    let d = str(H, "param D: Length = 1 m in 0.1 m..2 m\nparam k: Real = 1\n");
+    expect_clean("G10 an expect of a grid", str(d, "study s: grid {\n    D: [0.1, 0.2] m\n    k: [1, 2, 3]\n    expect e: 2*D == [0.2, 0.2, 0.2, 0.4, 0.4, 0.4] m within [1%, 1%, 1%, 2 mm, 2 mm, 2 mm]\n}\n"));
+    expect_clean("G10 an expect of a zip", str(d, "study s: zip {\n    D: [0.1, 0.2] m\n    k: [1, 2]\n    expect e: k == [1, 2] within 1%\n}\n"));
+    expect_clean("G10 an expect of a minimize", str(d, "step go: static {\n    report r = D\n}\nstudy s: minimize(r) {\n    D: 0.1 m..2 m\n    expect e: D == 0.1 m within 1%\n}\n"));
+    expect_ids("G10 a list of a grid of 6 cases", str(d, "study s: grid {\n    D: [0.1, 0.2] m\n    k: [1, 2, 3]\n    expect e: k == [1, 2] within 1%\n}\n"), "expect_cases\n");
+    expect_ids("G10 a list of a sample", str(d, "study s: sample(n: 2, method: lhs, seed: 1) {\n    D: 0.1 m..0.2 m\n    expect e: D == 0.1 m within [1%, 2%]\n}\n"), "expect_cases\n");
+    expect_ids("G10 a list in a unit of another dimension", str(d, "study s: zip {\n    D: [0.1, 0.2] m\n    expect e: D == [0.1, 0.2] s within 1%\n}\n"), "unit_mismatch\n");
     expect_id("scales_missing", "model m: 3d, SI\nlet a: Length = 1 m\n");
     expect_id("scales_dependent", "model m: 3d, SI\nlet a: Length = 1 m\nscales a, 2*a\n");
     expect_id("scales_incomplete", "model m: 3d, SI\nlet a: Length = 1 m\nlet r: Density = 1 kg/m^3\nscales a\n");

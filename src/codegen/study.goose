@@ -23,6 +23,10 @@ var varied: Varied[>..];
 // The value text of parameter `p` in case `c` is `case_values[c * varied.len + p]`.
 var case_values: u8[..256][>..];
 var case_count = 0;
+// The `expect` lines of the study (spec §15.3). Case c appends
+// `case_expects[expect_at[c]..expect_at[c + 1]]` to its model text.
+var case_expects: u8[>..];
+var expect_at: i64[>..];
 
 fn case_value(c: i64, p: i64) -> const u8[:] { return case_values[c * varied.len + p]; }
 
@@ -117,11 +121,45 @@ fn study_cases(prog: i64, s: i64) -> bool {
         set64(w.name, name(e));
         varied.push(w);
     }
-    if procedure == "grid" || procedure == "zip" { return list_cases(procedure == "grid", entries); }
-    if procedure == "sample" { return sample_cases(pr, entries); }
-    unsupported(tok(pr), str("the study procedure ", procedure, " is not in this build"),
-                "use grid, zip or sample");
-    return false;
+    var good = false;
+    if procedure == "grid" || procedure == "zip" {
+        good = list_cases(procedure == "grid", entries);
+    } else if procedure == "sample" {
+        good = sample_cases(pr, entries);
+    } else {
+        unsupported(tok(pr), str("the study procedure ", procedure, " is not in this build"),
+                    "use grid, zip or sample");
+    }
+    if good { study_expects(body); }
+    return good;
+}
+
+// The text in case `c` of the expected value or the `within` `v` of an
+// expect of a study: value c of a list, else `v`.
+fn case_text(v: i64, c: i64) -> u8[>..] {
+    guard kind(v) == syntax::N_LIST else { return str(source_of(v)); };
+    var texts: u8[..256][>..] = [];
+    list_texts(v, texts);
+    return str(texts[c]);
+}
+
+// The `expect` lines of each case of the study with the block `body`. The
+// checker gives each list of an expect one value for each case.
+fn study_expects(body: i64) {
+    case_expects.clear();
+    expect_at.clear();
+    for c in 0..case_count {
+        expect_at.push(case_expects.len);
+        var e = syntax::nodes[body].first;
+        while e >= 0 {
+            if kind(e) == syntax::N_EXPECT {
+                format(case_expects, "\nexpect ", name(e), ": ", source_of(syntax::child(e, 0)), " == ",
+                       case_text(syntax::child(e, 1), c), " within ", case_text(syntax::child(e, 2), c), "\n");
+            }
+            e = syntax::nodes[e].next;
+        }
+    }
+    expect_at.push(case_expects.len);
 }
 
 // The cases of `grid` (the Cartesian product of the lists, with the last
@@ -297,7 +335,8 @@ fn sample_cases(pr: i64, entries: i64[:]) -> bool {
     return true;
 }
 
-// The model `text` of case `c`: the case values in place of the defaults.
+// The model `text` of case `c`: the case values in place of the defaults,
+// and the `expect` lines of the study at the end.
 fn case_source(text: u8[:], c: i64) -> u8[>..] {
     var order: i64[>..] = [];
     for p in 0..varied.len { order.push(p); }
@@ -310,6 +349,7 @@ fn case_source(text: u8[:], c: i64) -> u8[>..] {
         at = varied[p].hi;
     }
     out.append(text[at..]);
+    out.append(case_expects[expect_at[c]..expect_at[c + 1]]);
     return out;
 }
 
@@ -375,33 +415,36 @@ fn toon_fields(line: u8[:]) -> u8[..512][>..] {
 }
 
 // The columns of the table after `verify`: the named reports, then the
-// expects. `cells[c * columns.len + j]` is the value of column j in case c.
+// expects of the items and the steps, then the expects of the study.
+// `cells[c * columns.len + j]` is the value of column j in case c.
 var columns: u8[..64][>..];
 var report_columns = 0;
 var cells: u8[..256][>..];
 
-// The named reports and the expects of program `prog`.
-fn result_columns(prog: i64) {
+fn add_column(t: i64) {
+    var w: u8[..64] = [];
+    set64(w, syntax::text(t));
+    columns.push(w);
+}
+
+// The named reports and the expects of program `prog` and of its study `s`.
+fn result_columns(prog: i64, s: i64) {
     columns.clear();
     cells.clear();
     var c = syntax::nodes[prog].first;
     while c >= 0 {
         if kind(c) == syntax::N_STEP {
-            var s = syntax::nodes[syntax::nodes[c].first].next;
-            while s >= 0 {
-                if kind(s) == syntax::N_REPORT {
-                    var r = syntax::nodes[s].first;
+            var st = syntax::nodes[syntax::nodes[c].first].next;
+            while st >= 0 {
+                if kind(st) == syntax::N_REPORT {
+                    var r = syntax::nodes[st].first;
                     while r >= 0 {
                         let aux = syntax::nodes[r].aux;
-                        if aux >= 0 && position(columns, syntax::text(aux)) < 0 {
-                            var w: u8[..64] = [];
-                            set64(w, syntax::text(aux));
-                            columns.push(w);
-                        }
+                        if aux >= 0 && position(columns, syntax::text(aux)) < 0 { add_column(aux); }
                         r = syntax::nodes[r].next;
                     }
                 }
-                s = syntax::nodes[s].next;
+                st = syntax::nodes[st].next;
             }
         }
         c = syntax::nodes[c].next;
@@ -409,11 +452,19 @@ fn result_columns(prog: i64) {
     report_columns = columns.len;
     c = syntax::nodes[prog].first;
     while c >= 0 {
-        if kind(c) == syntax::N_EXPECT {
-            var w: u8[..64] = [];
-            set64(w, name(c));
-            columns.push(w);
+        if kind(c) == syntax::N_EXPECT { add_column(tok(c)); }
+        if kind(c) == syntax::N_STEP {
+            var st = syntax::nodes[c].first;
+            while st >= 0 {
+                if kind(st) == syntax::N_EXPECT { add_column(tok(st)); }
+                st = syntax::nodes[st].next;
+            }
         }
+        c = syntax::nodes[c].next;
+    }
+    c = syntax::nodes[syntax::nodes[syntax::nodes[s].first].next].first;
+    while c >= 0 {
+        if kind(c) == syntax::N_EXPECT { add_column(tok(c)); }
         c = syntax::nodes[c].next;
     }
 }
@@ -467,7 +518,7 @@ fn read_case(e: CaseEnd) -> u8[>..], bool {
 // the TOON in `toon`, and what to print in `out`. The result is the exit
 // status (command_line.md §10).
 fn study_table(study: u8[:], at: i64, jobs: i64, prog: i64, ends: CaseEnd[:], json: bool, out: u8[>..]&, toon: u8[>..]&) -> i64 {
-    result_columns(prog);
+    result_columns(prog, find_study(prog, study));
     var verify: bool[>..] = [];
     var msgs: u8[..1024][>..] = [];
     var failed: i64[>..] = [];

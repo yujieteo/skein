@@ -104,6 +104,12 @@ fn test_long_lines() {
         str(HEAD, "step s: static {\n    solve {\n        nonlinear: newton\n        linear: gmres\n",
             "        precond: ilu0\n        rtol: 1e-8\n        atol: 1e-10\n",
             "        max_iterations: 50\n    }\n}\n"));
+    // A line breaks at an operator inside a list that ends with an added comma.
+    let calls = "g(alpha_one, alpha_one) + g(alpha_one, alpha_one) - g(alpha_one, alpha_one) - g(alpha_one, alpha_one)";
+    expect_fmt("an operator after an added comma",
+        str(HEAD, "expect e: f(", calls, ") == 1 within 1\n"),
+        str(HEAD, "expect e: f(\n    g(alpha_one, alpha_one) +\n        g(alpha_one, alpha_one) -\n",
+            "        g(alpha_one, alpha_one) -\n        g(alpha_one, alpha_one),\n) == 1 within 1\n"));
 }
 
 fn test_errors() {

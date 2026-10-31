@@ -3,7 +3,8 @@
 // adiabatic, so the centre temperature does not change with the length:
 // the expect holds in each case. The heat out of the sides grows with the
 // length. The study sources varies only the source, so its cases share
-// one mesh (spec §20.4). The expect holds only for the default source. The
+// one mesh (spec §20.4). The expect item holds only for the default source,
+// and the expect of the study gives the centre temperature of each case. The
 // study bands varies only the tolerance of the expect, so its cases share
 // the mesh and the solution, and the model solves once.
 
@@ -48,6 +49,7 @@ study lengths: grid {
 
 study sources: grid {
     qv: [1e7, 2e7] W/m^3
+    expect centre_q: T at (0.0025, 0.01, 0.01) m == [14.734270656, 29.468541312] degC within band
 }
 
 study bands: grid {

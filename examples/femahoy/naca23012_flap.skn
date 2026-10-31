@@ -1,5 +1,5 @@
 // femahoy: validation/cases/naca23012-flap/d0/system/controlDict
-// blocked-by: G10 G24
+// blocked-by: G24
 // NACA 23012 with a plain flap of 0.20c, at 0 deg, effective Re = 8.4 million, fully turbulent
 // (Spalart-Allmaras). Flap 10 deg up, 0 and 10 deg down. Reference: Abbott and Greenberg (1939),
 // NACA Report 661, Table I: cl -0.3762, 0.1200, 0.5640; cm about the a.c. 0.08, -0.008, -0.09.
@@ -203,11 +203,11 @@ step steady: static {
     report cm = integral((x - xr)*(sigma*n).y - (y - yr)*(sigma*n).x, wall)/(0.5*rho_f*U^2*chord^2)
 }
 
+// The tolerance is 30% + 0.005.
 study flaps: grid {
     delta: [-10, 0, 10] deg
+    expect cl_f: -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord) ==
+        [-0.3762, 0.1200, 0.5640] within [0.3*0.3762 + 0.005, 0.3*0.1200 + 0.005, 0.3*0.5640 + 0.005]
+    expect cm_f: integral((x - xr)*(sigma*n).y - (y - yr)*(sigma*n).x, wall)/(0.5*rho_f*U^2*chord^2) ==
+        [0.08, -0.008, -0.09] within [0.3*0.08 + 0.005, 0.3*0.008 + 0.005, 0.3*0.09 + 0.005]
 }
-
-// The expectations hold for the default delta = 0. The tolerance is 30% + 0.005.
-// gap G10: no expect for each study case. Flap -10 deg: cl -0.3762, cm 0.08. Flap 10 deg: cl 0.5640, cm -0.09.
-expect cl_0: -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord) == 0.1200 within 0.3*0.1200 + 0.005
-expect cm_0: integral((x - xr)*(sigma*n).y - (y - yr)*(sigma*n).x, wall)/(0.5*rho_f*U^2*chord^2) == -0.008 within 0.3*0.008 + 0.005

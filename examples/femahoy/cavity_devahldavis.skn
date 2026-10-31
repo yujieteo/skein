@@ -1,5 +1,4 @@
 // femahoy: validation/cases/cavity-devahldavis/ra1e4/system/controlDict
-// blocked-by: G10
 // Natural convection of air (Pr = 0.71) in a square cavity, laminar and steady. The left wall
 // is hot, the right wall is cold, the top and the bottom are adiabatic. L, Th - Tc and alpha
 // are 1, thus a velocity in m/s is in units of alpha/L. Reference: de Vahl Davis (1983), Table V.
@@ -72,10 +71,7 @@ step steady: static {
 
 study ra_sweep: grid {
     Ra: [10000, 100000]
+    expect nu: mean(-grad(T).x, hot)*a/dT == [2.243, 4.519] within 0.6%
+    expect u_max: max(v.x, vline) == [16.178, 34.73] m/s within 0.6%
+    expect v_max: max(v.y, hline) == [19.617, 68.59] m/s within 0.6%
 }
-
-// The expectations hold for the default Ra = 1e4.
-// gap G10: no expect for each study case. At Ra = 1e5: Nu 4.519, umax 34.73 m/s, vmax 68.59 m/s.
-expect nu_ra1e4: mean(-grad(T).x, hot)*a/dT == 2.243 within 0.6%
-expect umax_ra1e4: max(v.x, vline) == 16.178 m/s within 0.6%
-expect vmax_ra1e4: max(v.y, hline) == 19.617 m/s within 0.6%

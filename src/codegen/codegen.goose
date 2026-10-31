@@ -394,6 +394,7 @@ struct Expect {
     within: f64,
     relative: bool,
     label: u8[..256],
+    step: i64,      // the step that checks it at its end, or -1 for an item
 }
 
 var model_name: u8[..64];
@@ -974,8 +975,10 @@ fn step(n: i64) {
             }
         } else if k == syntax::N_SOLVE {
             solve(c, s);
+        } else if k == syntax::N_EXPECT {
+            expect(c, steps.len);
         } else {
-            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output, report and solve");
+            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output, report, expect and solve");
         }
         c = syntax::nodes[c].next;
     }
@@ -1051,14 +1054,15 @@ fn point_field(e: i64) -> i64 {
 let SIGMA_COMPONENTS = ["xx", "yy", "zz", "yz", "xz", "xy"];
 let EXPECT_FIX = "write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%, or sigma.xx at a point, or reaction(root).z";
 
-fn expect(n: i64) {
+// An `expect` item (step -1), or an `expect` of step `step`.
+fn expect(n: i64, step: i64) {
     let left = syntax::child(n, 0);
     let right = syntax::child(n, 1);
     let within = syntax::child(n, 2);
     var label: u8[>..] = [];
     format(label, source_of(right), " within ", source_of(within));
     var x = Expect { name: [], kind: EXPECT_U, comp: -1, at: [0.0, 0.0, 0.0], face: -1, tok: tok(n), want: 0.0,
-                     within: 0.0, relative: kind(within) == syntax::N_PERCENT, label: [] };
+                     within: 0.0, relative: kind(within) == syntax::N_PERCENT, label: [], step: step };
     let f = if kind(left) == syntax::N_AT { syntax::child(left, 0) } else { left };
     let object = if kind(f) == syntax::N_MEMBER { syntax::nodes[f].first } else { -1 };
     if kind(left) == syntax::N_AT && object >= 0 && kind(object) == syntax::N_NAME && name(object) == "sigma" {
@@ -1151,7 +1155,7 @@ fn read(prog: i64) -> bool {
         } else if k == syntax::N_STEP {
             step(c);
         } else if k == syntax::N_EXPECT {
-            expect(c);
+            expect(c, -1);
         } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this slice"),
                         "remove it: this slice runs one linear static box");
@@ -1572,6 +1576,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: Share) {
     for r in reports[s.first_report..s.first_report + s.report_count] {
         emit_report(out, si, r);
     }
+    for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
         var path: u8[>..] = [];
         format(path, results_dir, "/", s.name, ".vtu");
@@ -1751,7 +1756,7 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&
         emit_template(out, template);
     }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
-    for x in expects { emit_expect(out, x); }
+    for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for s in skipped {
         out.append("    not_run(");
         quoted(out, s);

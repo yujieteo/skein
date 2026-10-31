@@ -213,6 +213,16 @@ fn test_two_steps() {
         "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -2.0) MPa\n    face(runtime::traction(\"x1\", 0.0, 0.0, -2.0), \"tip\");",
         "    step_one();\n    step_two();\n",
     ]);
+    // G10: an expect of a step is checked at the end of the step, and an
+    // expect item after the last step.
+    let expects = replace(steps, "-1) MPa\n", "-1) MPa\n    expect one_uz: u.z at (100, 5, 5) mm == -0.1 mm within 50%\n");
+    let got = generate(model(MM, str(MESH, expects, "\nexpect last_uz: u.z at (100, 5, 5) mm == -0.2 mm within 50%\n")));
+    let one = find(got, "expect(\"one_uz\", uz, -0.1,");
+    let last = find(got, "expect(\"last_uz\", uz, -0.2,");
+    if one < 0 || last < 0 || one > find(got, "fn step_two()") || last < find(got, "    step_two();\n") {
+        failures++;
+        print("FAIL an expect of a step: ", got);
+    }
 }
 
 // Spec §12.2: a top-level bc holds in each step wherever it is in the
@@ -420,6 +430,13 @@ fn test_study_cases() {
     // A bare number in a list takes the unit of the list, also after a `-`.
     expect_text("a negative value", cases("study s: grid {\n    a: [-1, 2] m\n}\n"), "-1 m\n2 m\n");
     expect_text("a unit with a power", cases("study s: grid {\n    a: [1, 2] m^-1*m^2\n}\n"), "1 m^-1*m^2\n2 m^-1*m^2\n");
+    // G10: each case appends the expects of the study, with its values.
+    let text = str(STUDY_MODEL, "\nstudy s: grid {\n    a: [1, 2] m\n    expect e2: 2*a == [2, 4] m within [1%, 1 mm]\n    expect e3: a/1 m == 1 within 1e9\n}\n");
+    let prog = syntax::parse_model("t.skn", text);
+    codegen::study_cases(prog, codegen::find_study(prog, "s"));
+    let source = codegen::case_source(text, 1);
+    let want = "}\n\nexpect e2: 2*a == 4 m within 1 mm\n\nexpect e3: a/1 m == 1 within 1e9\n";
+    expect_text("the expects of case 2", source[source.len - want.len..], want);
     // A case of a sample is the value lo + t*(hi - lo), with t in [0, 1), in
     // the unit of the range.
     for i in 0..SAMPLE_RANGES.len {
@@ -503,6 +520,14 @@ fn test_study_table() {
         failures++;
         print("FAIL the study table: exit status ", status, ", not 1");
     }
+    // G10: the columns of the expects of the steps and of the study.
+    let two = str(replace(STUDY_MODEL, "reaction(c)\n", "reaction(c)\n    expect es: a == 1 m within 1%\n"),
+                  "\nstudy s: grid {\n    a: [1, 2] m\n    expect ec: a == [1, 2] m within 1%\n}\n");
+    let p2 = syntax::parse_model("t.skn", two);
+    codegen::result_columns(p2, codegen::find_study(p2, "s"));
+    var names: u8[>..] = [];
+    for col in codegen::columns { format(names, col, " "); }
+    expect_text("the columns of the expects", names, "r es e ec ");
 }
 
 // The workers of a study (spec §20.5): k cases that fit in the memory, and
@@ -560,7 +585,8 @@ fn test_study_run() {
     }
     table.clear();
     read_file(str(studies, "/sources.toon"), table);
-    for want in ["  1,1e7 W/m^3,ok,pass,-20.0", "  2,2e7 W/m^3,ok,fail,-40.0"] {
+    // G10: the expect of the study holds in each case.
+    for want in ["{case,qv,status,verify,heat_out,centre,centre_q,time_s}", "  1,1e7 W/m^3,ok,pass,-20.0", "  2,2e7 W/m^3,ok,fail,-40.0", " W,fail,pass,"] {
         if find(table, want) < 0 {
             failures++;
             print("FAIL skein run --study sources: no '", want, "' in:\n", table);
