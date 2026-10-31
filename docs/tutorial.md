@@ -25,6 +25,10 @@
 
 </details>
 
+This document describes the language design. The
+[command reference](command_line.md) states the current executable limits.
+A valid language construct can still exceed the native solver support.
+
 This tutorial teaches Skein with examples. It assumes that you know a little
 about the finite element method and that you can read Rust or a similar
 language. After it, read [the language reference](reference.md) for each
@@ -117,8 +121,8 @@ verify[5]{stage,id,result,value,limit}:
   post,energy_balance,pass,1.1e-11,1e-6
 ```
 
-`skein view bar.skn` shows the deformed shape and the contours in the
-browser.
+The planned `skein view bar.skn` command will show the deformed shape
+and contours in a browser. For current VTU results, use ParaView.
 
 ---
 

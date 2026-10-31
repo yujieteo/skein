@@ -37,6 +37,10 @@
 
 </details>
 
+This document describes the language design. The
+[command reference](command_line.md) states the current executable limits.
+A valid language construct can still exceed the native solver support.
+
 This is the reference for the Skein language: each construct, topic by
 topic, with an example. Each section ends with a pointer to the rules in
 [the specification](skein_spec.md). The examples are fragments. A complete

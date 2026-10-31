@@ -75,10 +75,8 @@ These gaps are closed:
 
 ## Parser and formatter findings
 
-- The library file `barrel.skn` (§4.1) holds the dimensions, the
-  geometry and the materials that both models use. A library file holds
-  only `material`, `param`, `let` and `fn` items, so each model keeps its
-  own copy of the ply table, the mesh, the physics and the conditions.
+- A library file holds only `material`, `param`, `let` and `fn` items.
+  Each model therefore repeats the ply table, mesh, physics and conditions.
 - The parser accepts a list `[...]` only in a procedure argument, not in a
   template argument. The layup is a table for this reason.
 - `skein fmt` breaks a physics header at a `|` in its region, and it
@@ -88,10 +86,5 @@ These gaps are closed:
 
 ## Size
 
-Counted with tiktoken `o200k_base`:
-
-| File | Lines | Tokens |
-|---|---|---|
-| `fuselage.skn` | 227 | 2859 |
-| `door_corner.skn` | 211 | 2632 |
-| Total | 438 | 5491 |
+See the [study comparison](../readability.md#2-size) for the size of the
+models and the count method.

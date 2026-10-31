@@ -34,16 +34,8 @@ abaqus job=door_corner globalmodel=global
 
 ## Size
 
-Lines count non-blank lines. Tokens use tiktoken `o200k_base`.
-
-| Part | Lines | Lines without `**` comments | Tokens |
-|---|---|---|---|
-| Hand-written: `global.inp`, `door_corner.inp`, `properties.inp` | 240 | 164 | 3,639 |
-| Mesh script: `mesh.py` | 352 | 352 | 5,690 |
-| Generated: the four mesh and load files | 55,847 | 55,836 | 1,067,377 |
-
-The 72 ply lines of the skin and pad-up sections are 72 of the 164
-keyword lines.
+See the [study comparison](../readability.md#2-size) for the size of the
+decks, the mesh script and the generated files.
 
 ## Decisions that the sheet leaves open
 

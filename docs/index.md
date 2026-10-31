@@ -24,21 +24,23 @@ gives the phases.
   rules of `skein fmt`, and the TOON output.
 * [Checks](checks.md): the catalogue of errors, lint rules and verification
   checks, each with its id and its fix.
-* [Samples](../samples/README.md): six complete models.
+* [Samples](../samples/README.md): complete language examples.
 
 ## The project
 
 * [Implementation notes](implementation.md): how the compiler, the runtime
-  and the mesher will work.
+  and the mesher work, plus the planned architecture.
 * [Roadmap](roadmap.md): the phases, their gates and the risks.
 * [Femahoy coverage](femahoy_coverage.md): the femahoy cases as Skein
   models, the construct for each femahoy feature, and the spec gaps.
-* [Design decisions](decisions.md): the 17 decisions and where the
+* [Design decisions](decisions.md): the decisions and where the
   documentation implements each one.
 * [Tradeoffs](tradeoffs.md): the goals in priority order, the design
   against diverse workloads, and the gaps.
 * [Grilling](grilling.md): the design tree, the questions and the answers
   of the captain.
+* [B787 study](studies/b787/readability.md): a fuselage model in Skein and
+  Abaqus, with edit comparisons and LLM results.
 * [The LLM test](llm_test.md): how to measure whether an LLM writes Skein
   better than an Abaqus or APDL deck.
 * [Readability](readability.md): one cantilever in Skein and in femahoy,

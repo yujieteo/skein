@@ -17,37 +17,40 @@
 
 </details>
 
-`skein` is one tool for all the work on a model. Each command does the
-checks of the commands before it: `lint` does `check` first, and `run` does
-`check`, the pre-solve verification, the solve and the post-solve
-verification.
+This page describes the current commands and the planned interface.
+The command table states which commands exist. Notes in each section
+separate current support from the design. The
+[roadmap](roadmap.md) gives the planned phases.
+
+`lint` checks the model first. `run` supports a limited set of native
+models. It reports the verification checks that its solver implements.
 
 ---
 
 ## 1. Commands
 
-| Command | What it does |
-|---|---|
-| `skein check model.skn` | parses and type-checks. It writes nothing and runs nothing. |
-| `skein fmt model.skn…` | rewrites the files in the standard layout (§3) |
-| `skein lint model.skn` | `check`, then the lint rules |
-| `skein verify model.skn` | `check`, the mesh, and the pre-solve verification. No solve. |
-| `skein verify convergence model.skn` | the convergence study (checks.md §4.3) |
-| `skein build model.skn` | writes the Goose source and builds a native executable or a WebAssembly module |
-| `skein run model.skn` | builds and runs the model, with all verification |
-| `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) |
-| `skein view model.skn` | opens the results in the WebGL viewer |
-| `skein md model.skn` | `check`, then writes the model as a Markdown document (§11) |
-| `skein lsp` | serves an editor over the Language Server Protocol |
-| `skein help [command]` | prints help |
-| `skein help --llm` | prints the language card for an LLM: the grammar, the keywords, the standard library and one example, in about 2000 tokens |
-| `skein help std` | prints the Skein source of the standard library (spec §4.2) |
+| Command | What it does | Status |
+|---|---|---|
+| `skein check model.skn` | parses and type-checks. It creates no files and performs no solve. | Current |
+| `skein fmt model.skn…` | rewrites the files in the standard layout (§3) | Current |
+| `skein lint model.skn` | `check`, then the lint rules | Current |
+| `skein verify model.skn` | `check`, the mesh, and the pre-solve verification. No solve. | Current: mesh quality only |
+| `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Planned |
+| `skein build model.skn` | writes the Goose source and builds a native executable or a WebAssembly module | Planned |
+| `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
+| `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current: STL only |
+| `skein view model.skn` | opens the results in the WebGL viewer | Planned |
+| `skein md model.skn` | `check`, then writes the model as a Markdown document (§11) | Current |
+| `skein lsp` | serves an editor over the Language Server Protocol | Planned |
+| `skein help [command]` | prints help | Current: general help only |
+| `skein help --llm` | prints the language card for an LLM: the grammar, the keywords, the standard library and one example | Current |
+| `skein help std` | prints the Skein source of the standard library (spec §4.2) | Current |
 
-Global options:
+Output format:
 
 | Option | Meaning |
 |---|---|
-| `--format toon\|json` | the output format (§6). Default `toon`. |
+| `--format toon\|json` | output format for `check`, `lint` and `run --study` (§6). Default `toon`. |
 
 ---
 
@@ -63,14 +66,15 @@ as many errors as possible. It also prints the parts of the boundary that
 get the default natural condition (spec §12.3), because a missing `bc` is
 the most common modelling fault.
 
+The current `check` command accepts one model file and `--format toon|json`.
+It checks `param` declarations at their default values.
+The options below are planned:
+
 | Option | Meaning |
 |---|---|
 | `--groups` | print the dimensionless groups of the model (spec §21.3) |
 | `--study <name>` | check each case of the study, and print the stages that each parameter reaches (spec §20.4). No solve. |
 | `--set name=value` | give a `param` a value for this command (spec §20.1). The value has a unit and must be in the range of the `param`. |
-
-`check` needs no mesh, so it is fast. Its target is under 50 ms for each of
-the samples. Reason: an LLM runs `check` after each edit.
 
 ---
 
@@ -130,6 +134,13 @@ Rules that need the mesh, for example `bending_lock` and
 
 ## 5. Running and verifying
 
+Current `run` accepts one model file. With `--study`, it also accepts
+`--jobs` and `--format`. The other options below are planned.
+Current `verify` accepts only one model file and reports `mesh_quality`.
+It does not support `convergence`, `--mesh` or `--dfm`.
+
+The examples and option table below describe the planned interface:
+
 ```
 skein run samples/02_cavity.skn
 skein run samples/03_birth_death.skn --from lift_3
@@ -151,15 +162,17 @@ skein verify samples/01_cantilever.skn --dfm
 | `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in the memory, and the table gives the `k` that it used (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
-`run` writes the results to `.skein/results/<model>/<step>.vtu` (one file
-per output time) and the state to `.skein/state/<model>/<step>.sks`.
+Current `run` writes VTU results under `.skein/results/<model>/`.
+The solver determines each file name. State files for restarts remain
+planned work.
 `run --study` writes the results of each case under
 `.skein/studies/<model>/<study>/<case>/`, and the table of all cases to
 `.skein/studies/<model>/<study>.toon` (§6.5).
 Case 1 writes the stages that no varied parameter reaches (spec §20.4) to
 `.skein/studies/<model>/<study>/shared/`, and the other cases read them:
 the mesh, and also the solution of each step when the varied parameters
-reach only `expect` and `report` expressions.
+reach only `expect` and `report` expressions. The shell generator shares
+no stages.
 Each case gets its threads in the environment variable `SKEIN_THREADS`.
 
 ---
@@ -241,6 +254,11 @@ A case that fails gets the status `failed` and the diagnostic
 
 ## 7. Building
 
+The `skein build` command and its options below are planned.
+Current `skein run` writes `.skein/build/<model>/main.goose` and calls
+Goose to build a native executable. Set `GOOSE` to select the compiler.
+`./build.sh` builds the Skein compiler itself.
+
 ```
 skein build samples/01_cantilever.skn --target wasm
 ```
@@ -264,7 +282,7 @@ The WebAssembly target compiles the C from Goose with emcc (spec §18.1).
 skein export samples/01_cantilever.skn --geometry beam --format stl
 ```
 
-`export` writes one `geometry` value as a part file (spec §22.5). It needs
+`export` writes one `let` shape as an STL file (spec §22.5). It needs
 no solve. It checks the model, meshes the `let` shape that `--geometry`
 names, and writes the STL to standard output:
 
@@ -281,7 +299,7 @@ error.
 | Option | Meaning |
 |---|---|
 | `--geometry <name>` | the geometry to write. Required. |
-| `--format stl\|step` | STL is a triangle mesh (phase 2). STEP is tessellated in phase 4 and exact in phase 5. |
+| `--format stl` | current format, and the default. STEP remains planned work. |
 | `--size length` | the size of the triangles, for example `--size 2mm`. Default: the `size` of the first `mesh` block on the geometry, else of the first `mesh` block. |
 
 `export` writes geometry only. Skein does not import a mesh or a CAD file
@@ -290,6 +308,8 @@ error.
 ---
 
 ## 8. The language server
+
+The language server is planned. The current executable rejects `lsp`.
 
 `skein lsp --stdio` serves an editor. It gives:
 
@@ -307,9 +327,9 @@ error.
 | Path | Contents |
 |---|---|
 | `*.skn` | Skein source |
-| `.skein/build/` | generated Goose and C |
-| `.skein/results/<model>/` | VTU result files and the TOON run log |
-| `.skein/state/<model>/<step>.sks` | the state at the end of each step, for restarts and submodels |
+| `.skein/build/` | generated Goose, C and native executables |
+| `.skein/results/<model>/` | VTU result files. A single run prints its TOON log to standard output. |
+| `.skein/state/<model>/<step>.sks` | planned state files for restarts and submodels |
 | `.skein/studies/<model>/<study>/` | one directory of results for each case |
 | `.skein/studies/<model>/<study>.toon` | the table of the study |
 
