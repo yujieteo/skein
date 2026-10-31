@@ -511,6 +511,55 @@ fn read_stl(what: u8[:], stl: u8[:]) -> i64, f64, f64[3] {
     return count, volume, area;
 }
 
+// The integers of `text` in order, or only the ones that follow a '#'.
+fn integers(text: u8[:], marked: bool, list: i64[>..]&) {
+    var i = 0;
+    while i < text.len {
+        guard syntax::is_digit(text[i]) && (!marked || (i > 0 && text[i - 1] == '#')) else { i++; continue; };
+        var e = i;
+        while e < text.len && syntax::is_digit(text[e]) { e++; }
+        let v, good = parse_int(text[i..e]);
+        list.push(v);
+        i = e;
+    }
+}
+
+// Checks the STEP file `step` as a schema check, with no CAD reader on the
+// machine: the Part 21 frame, every #n that is used is defined, and the
+// triangles of the TRIANGULATED_FACE are in range of its COORDINATES_LIST.
+// The result is the triangle count.
+fn check_step(what: u8[:], step: u8[:]) -> i64 {
+    if !starts_with(step, "ISO-10303-21;\n") || !ends_with(step, "END-ISO-10303-21;\n") { fail(str("export ", what, ": no Part 21 frame")); }
+    if find(step, "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF") < 0 { fail(str("export ", what, ": no AP242 schema")); }
+    var defined: i64[>..] = [];
+    var used: i64[>..] = [];
+    var points = 0;
+    var corners: i64[>..] = [];
+    for line in split(step, '\n') {
+        guard line.len > 0 && line[0] == '#' else { continue; };
+        let eq = position(line, '=');
+        integers(line[..eq], false, defined);
+        let body = line[eq + 1..];
+        if starts_with(body, "COORDINATES_LIST") {
+            var n: i64[>..] = [];
+            integers(body[..find(body, ",(")], false, n);
+            points = n[0];
+        } else if starts_with(body, "TRIANGULATED_FACE") {
+            integers(body[find(body, ",$,(),(") + 7..], false, corners);
+            integers(body[..find(body, ",$,(),(")], true, used);
+        } else {
+            integers(body, true, used);
+        }
+    }
+    for u in used { if !contains(defined[..], u) { fail(str("export ", what, ": #", u, " is used and not defined")); } }
+    var top = 0;
+    for c in corners { top = max(top, c); }
+    if points != corners.len || top != points || corners.len % 3 != 0 {
+        fail(str("export ", what, ": ", corners.len, " corners, ", points, " points, the highest index ", top));
+    }
+    return corners.len / 3;
+}
+
 // `skein export` (spec §22): the surface of the tetrahedra of a Solid,
 // closed and with its normals out, and the triangles of a 2D Surface.
 fn test_export() {
@@ -527,6 +576,10 @@ fn test_export() {
     if !starts_with(fine, "solid s\n") || !ends_with(fine, "endsolid s\n") { fail("export a block with a hole: no solid and endsolid lines"); }
     if n_fine == 0 || abs(volume - tets) > 1.0e-9 * tets { fail(str("export a block with a hole: the volume ", volume, " is not ", tets)); }
     if mesher::norm3(area) > 1.0e-9 { fail(str("export a block with a hole: the surface is open, area sum ", mesher::norm3(area))); }
+    // --format step: the same triangles in a STEP AP242 file.
+    let step = export_case("a block with a hole as STEP", holed, ["--geometry", "s", "--format", "step"], 0);
+    let n_step = check_step("a block with a hole", step);
+    if n_step != n_fine { fail(str("export STEP: ", n_step, " triangles, the STL has ", n_fine)); }
     // --size sets the triangles in place of the size of the mesh block.
     let coarse = export_case("--size 50 cm", holed, ["--geometry", "s", "--size", "50 cm"], 0);
     let n_coarse, coarse_volume, coarse_area = read_stl("--size 50 cm", coarse);
@@ -539,9 +592,11 @@ fn test_export() {
     let plate = "model t: 2d, SI\nscales 1 m\nlet p: Surface = rect((0, 0) m, (2, 1) m)\n";
     let n_plate, plate_volume, plate_area = read_stl("a 2D rect", export_case("a 2D rect", plate, ["--geometry", "p", "--size", "0.25 m"], 0));
     if n_plate == 0 || abs(plate_area[2] - 2.0) > 1.0e-12 { fail(str("export a 2D rect: the area is ", plate_area[2], ", not 2")); }
+    let plate_step = export_case("a 2D rect as STEP", plate, ["--geometry", "p", "--size", "0.25 m", "--format", "step"], 0);
+    if check_step("a 2D rect", plate_step) != n_plate { fail("export STEP: a 2D rect has other triangles than its STL"); }
     // Faults of the command line: exit status 2 and no STL.
     export_case("an unknown let", holed, ["--geometry", "nope", "--size", "1 m"], 2);
-    export_case("--format step", holed, ["--geometry", "s", "--format", "step"], 2);
+    export_case("--format iges", holed, ["--geometry", "s", "--format", "iges"], 2);
     export_case("a size with no unit", holed, ["--geometry", "s", "--size", "3"], 2);
     export_case("no --geometry", holed, ["--size", "1 m"], 2);
     export_case("an unknown option", holed, ["--geometry", "s", "--sizes", "1 m"], 2);

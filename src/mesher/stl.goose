@@ -1,6 +1,6 @@
 // `skein export model.skn --geometry name --format stl` (docs/command_line.md
 // §7.1, spec §22): `check`, then the mesh of one `let` shape, and its
-// surface as ASCII STL on standard output. A Solid gives the boundary
+// surface as ASCII STL on standard output, or as STEP AP242 with `--format step`. A Solid gives the boundary
 // faces of its tetrahedra, with the normals out of the solid. A 2D
 // Surface gives its triangles, in the plane z = 0. The coordinates are in
 // the length unit of the header, as for `skein verify`.
@@ -18,7 +18,7 @@ import .tri;
 import .tet;
 import .verify;
 
-let EXPORT_USAGE = "usage: skein export <file.skn> --geometry <name> [--format stl] [--size <length>]\n";
+let EXPORT_USAGE = "usage: skein export <file.skn> --geometry <name> [--format stl|step] [--size <length>]\n";
 
 // A length option such as "2 mm" or "0.002m", in the length unit of the
 // header. 0 when it is not a number > 0 with a length unit.
@@ -62,8 +62,19 @@ fn model_size(prog: i64, name: u8[:]) -> f64 {
     return if first >= 0 { block_size(first) } else { 0.0 };
 }
 
-// Writes one facet a, b, c, with the unit normal of the right-hand rule.
-fn facet(out: u8[>..]&, a: f64[3], b: f64[3], c: f64[3]) {
+// Adds one triangle a, b, c to `tris`, three points for each triangle.
+fn facet(tris: f64[3][>..]&, a: f64[3], b: f64[3], c: f64[3]) {
+    tris.push(a);
+    tris.push(b);
+    tris.push(c);
+}
+
+// Writes the triangle that starts at tris[3 * t] as one STL facet, with
+// the unit normal of the right-hand rule.
+fn write_facet(out: u8[>..]&, tris: f64[3][:], t: i64) {
+    let a = tris[3 * t];
+    let b = tris[3 * t + 1];
+    let c = tris[3 * t + 2];
     let n = cross3(sub3(b, a), sub3(c, a));
     let l = norm3(n);
     let s = if l > 0.0 { 1.0 / l } else { 0.0 };
@@ -74,7 +85,7 @@ fn facet(out: u8[>..]&, a: f64[3], b: f64[3], c: f64[3]) {
 
 // The faces of the tetrahedra that are in one cell only, each with its
 // nodes in the order that turns its normal out of the cell.
-fn boundary_facets(out: u8[>..]&) {
+fn boundary_facets(out: f64[3][>..]&) {
     let n = point_count();
     fn key(c: i64, skip: i64) -> i64 {
         var f: i64[..3] = [];
@@ -106,6 +117,56 @@ fn boundary_facets(out: u8[>..]&) {
     }
 }
 
+// A real number of a STEP file: it has a point, and an exponent is E.
+fn step_real(out: u8[>..]&, x: f64) {
+    for ch in str(x) { out.push(if ch == 'e' { 'E' } else { ch }); }
+}
+
+// The STEP AP242 file of the triangles: one tessellated shell with one
+// triangulated face, in the length unit of the header. A 2D Surface and a
+// Solid use the same entities. Entity numbers: #1 to #25 are the product
+// and its units, #30 to #33 the geometry.
+fn write_step(out: u8[>..]&, name: u8[:], tris: f64[3][:]) {
+    let unit = if metre == 1000.0 { ".MILLI." } else { "$" };
+    format(out, "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('skein tessellated export'),'2;1');\n",
+           "FILE_NAME('", name, ".stp','',(''),(''),'skein','skein','');\n",
+           "FILE_SCHEMA(('AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 1 1 4 }'));\nENDSEC;\nDATA;\n",
+           "#1=APPLICATION_CONTEXT('managed model based 3d engineering');\n",
+           "#2=APPLICATION_PROTOCOL_DEFINITION('international standard','ap242_managed_model_based_3d_engineering',2011,#1);\n",
+           "#3=MECHANICAL_CONTEXT('',#1,'mechanical');\n",
+           "#4=PRODUCT('", name, "','", name, "','',(#3));\n",
+           "#5=PRODUCT_DEFINITION_FORMATION('','',#4);\n",
+           "#6=PRODUCT_DEFINITION_CONTEXT('part definition',#1,'design');\n",
+           "#7=PRODUCT_DEFINITION('design','',#5,#6);\n",
+           "#8=PRODUCT_DEFINITION_SHAPE('','',#7);\n",
+           "#10=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(", unit, ",.METRE.));\n",
+           "#11=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));\n",
+           "#12=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());\n",
+           "#13=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-9),#10,'distance_accuracy_value','');\n",
+           "#14=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#13))",
+           "GLOBAL_UNIT_ASSIGNED_CONTEXT((#10,#11,#12))REPRESENTATION_CONTEXT('',''));\n",
+           "#15=CARTESIAN_POINT('',(0.,0.,0.));\n#16=DIRECTION('',(0.,0.,1.));\n#17=DIRECTION('',(1.,0.,0.));\n",
+           "#18=AXIS2_PLACEMENT_3D('',#15,#16,#17);\n");
+    format(out, "#30=COORDINATES_LIST('',", tris.len, ",(");
+    for i in tris.len {
+        if i > 0 { out.append(","); }
+        out.append("(");
+        for j in 3 {
+            if j > 0 { out.append(","); }
+            step_real(out, tris[i][j]);
+        }
+        out.append(")");
+    }
+    format(out, "));\n#31=TRIANGULATED_FACE('',#30,0,(),$,(),(");
+    for t in tris.len / 3 {
+        if t > 0 { out.append(","); }
+        format(out, "(", 3 * t + 1, ",", 3 * t + 2, ",", 3 * t + 3, ")");
+    }
+    out.append("));\n#32=TESSELLATED_SHELL('',(#31),$);\n");
+    format(out, "#33=TESSELLATED_SHAPE_REPRESENTATION('", name, "',(#32,#18),#14);\n",
+           "#34=SHAPE_DEFINITION_REPRESENTATION(#8,#33);\nENDSEC;\nEND-ISO-10303-21;\n");
+}
+
 // `skein export`, with the STL in `out`. The result is the exit status
 // (command_line.md §10). A fault of the model goes to standard error.
 fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
@@ -113,6 +174,7 @@ fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
     var at = -1;
     var geo = -1;
     var sized = -1;
+    var step = false;
     var i = 2;
     while i < args.len {
         let a = args[i];
@@ -120,10 +182,11 @@ fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
             let v = args[i + 1];
             if a == "--geometry" { geo = i + 1; }
             if a == "--size" { sized = i + 1; }
-            guard a != "--format" || v == "stl" else {
-                write_stderr(str("skein export: the format '", v, "' is not in this version: write --format stl\n"));
+            guard a != "--format" || v == "stl" || v == "step" else {
+                write_stderr(str("skein export: the format '", v, "' is not known: write --format stl or --format step\n"));
                 return 2;
             }
+            if a == "--format" { step = v == "step"; }
             i += 2;
             continue;
         }
@@ -176,12 +239,18 @@ fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
         reader_fault(syntax::nodes[g].tok, "the mesher did not finish in its budget of points", "give a larger --size");
         return model_fault(true);
     }
-    format(out, "solid ", name, "\n");
+    var tris: f64[3][>..] = [];
     if dim == 3 {
-        boundary_facets(out);
+        boundary_facets(tris);
     } else {
-        for c in cell_count() { facet(out, vertex(cell_node(c, 0)), vertex(cell_node(c, 1)), vertex(cell_node(c, 2))); }
+        for c in cell_count() { facet(tris, vertex(cell_node(c, 0)), vertex(cell_node(c, 1)), vertex(cell_node(c, 2))); }
     }
+    if step {
+        write_step(out, name, tris[..]);
+        return 0;
+    }
+    format(out, "solid ", name, "\n");
+    for t in tris.len / 3 { write_facet(out, tris[..], t); }
     format(out, "endsolid ", name, "\n");
     return 0;
 }
