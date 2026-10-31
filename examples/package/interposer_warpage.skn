@@ -1,0 +1,149 @@
+// Hisada, Yamada, Asai and Aoki (2012), "Study of warpage and mechanical
+// stress of 2.5D package interposers during chip and interposer mount
+// process", IMAPS 2012, pp. 967-974, doi 10.4071/isom-2012-WP61.
+// Sequence alpha, step 1: a logic chip and a memory chip are joined to an
+// interposer with 2 RDL layers on its top face, with no underfill. The
+// assembly cools from the stress-free 180 degC to 25 degC. Linear
+// thermoelastic, 3D, quadratic hexahedra. Half model: the plane y = 0 is a
+// plane of symmetry. The paper does not give the RDL thickness, the bumps
+// or the place of the chips. These are params, and the study sweep runs
+// models b to j of Table 4 for each set of them.
+
+model interposer_warpage: 3d, mm_N_MPa_s
+
+/// The interposer material: 1 is Si, 2 is Glass-A, 3 is Glass-B (Table 5).
+param mat: Real = 1 in 1..3
+/// The interposer thickness (Table 4).
+param t_int: Length = 100 um in 100 um..200 um
+/// Assumption: the RDL thickness. Table 3 gives 2 RDL layers with a line
+/// and space of 4/4 um. A layer of Cu lines and dielectric of 2 to 10 um
+/// gives 4 to 20 um for the 2 layers.
+param t_rdl: Length = 10 um in 4 um..20 um
+/// Assumption: the height of the bump layer. Table 1 gives a pitch of
+/// 150 um for the logic bumps, and a C4 bump is 1/3 to 1/2 of its pitch high.
+param h_bump: Length = 50 um in 50 um..75 um
+/// Assumption: the part of the area under a chip that the bumps fill. The
+/// bump layer is smeared, so its E is f_bump times the E of solder. Bumps
+/// of 0.35 to 0.7 of their pitch across fill pi/4*(d/p)^2 = 0.1 to 0.4 of
+/// the area. Step 1 has no underfill.
+param f_bump: Real = 0.2 in 0.1..0.4
+/// Assumption: the shift of the pair of chips along x from the centre.
+/// Table 3 gives a 27 mm interposer for 25.375 mm of chips and gap, so the
+/// pair can move 0.8125 mm to each side.
+param x_off: Length = 0 mm in -0.8125 mm..0.8125 mm
+
+let T_free: Temperature = 180 degC
+let T_use: Temperature = 25 degC
+// The chip thickness of Table 1.
+let t_chip: Length = 786 um
+// The half width of the interposer (27 x 27 mm, Table 3).
+let a: Length = 13.5 mm
+// The logic chip (15 x 15 mm) and the memory chip (10 x 7 mm), 0.375 mm
+// apart (Table 2).
+let x_logic: Length = -12.6875 mm + x_off
+let x_gap: Length = x_logic + 15 mm
+let x_memory: Length = x_gap + 0.375 mm
+let z_rdl: Length = t_int + t_rdl
+let z_chip: Length = z_rdl + h_bump
+
+scales t_chip, 100000 MPa, 155 K
+
+let interposer: Solid = box((-a, 0 mm, 0 mm), (a, a, t_int))
+let rdl: Solid = box((-a, 0 mm, t_int), (a, a, z_rdl))
+/// The bump layer is smeared: a layer under each chip, with the full area
+/// of the chip, and the E of solder (Table 5) times f_bump.
+let bumps: Solid = box((x_logic, 0 mm, z_rdl), (x_gap, 7.5 mm, z_chip)) |
+    box((x_memory, 0 mm, z_rdl), (x_memory + 10 mm, 3.5 mm, z_chip))
+let chips: Solid = box((x_logic, 0 mm, z_chip), (x_gap, 7.5 mm, z_chip + t_chip)) |
+    box((x_memory, 0 mm, z_chip), (x_memory + 10 mm, 3.5 mm, z_chip + t_chip))
+let package: Solid = interposer | rdl | bumps | chips
+
+let sym_y: Surface = boundary(package, y == 0 mm)
+// ZDOF: the centre of the package is held along the z axis.
+let centre: Point = point((0, 0, 0) mm)
+let centre_top: Point = point((0 mm, 0 mm, t_int))
+// Point A: the top right corner of the interposer.
+let corner_a: Point = point((a, a, 0 mm))
+
+// The interposer materials of Table 5: E, nu and the CTE.
+table interposer_props{id: Real, E: Pressure in GPa, alpha: Expansion in K^-1}:
+    1, 165, 3.2e-6
+    2, 77, 3.8e-6
+    3, 74, 6.0e-6
+
+material interposer_mat {
+    E: Pressure = interp(interposer_props.id, interposer_props.E, mat)
+    nu: Real = 0.22
+    alpha: Expansion = interp(interposer_props.id, interposer_props.alpha, mat)
+}
+
+material silicon {
+    E: Pressure = 165 GPa
+    nu: Real = 0.22
+    alpha: Expansion = 3.2e-6 K^-1
+}
+
+// A composite of Cu and dielectric.
+material rdl_mat {
+    E: Pressure = 28 GPa
+    nu: Real = 0.24
+    alpha: Expansion = 17e-6 K^-1
+}
+
+material solder {
+    E: Pressure = f_bump*27 GPa
+    nu: Real = 0.35
+    alpha: Expansion = 25e-6 K^-1
+}
+
+// A grid plane on each face of each layer: 1 cell through each thin layer.
+mesh m on package {
+    size: 0.5 mm
+    cell: hex
+}
+
+physics solid on package solves u: Vector<Length> {
+    material interposer_mat on interposer,
+        rdl_mat on rdl,
+        solder on bumps,
+        silicon on chips
+    assume small_strain, isotropic
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T_use - T_free)*I)
+    eq div(sigma) = 0
+}
+
+step cool: static {
+    bc sym_y: u.y = 0
+    bc centre: u.x = 0
+    bc centre: u.z = 0
+    bc centre_top: u.x = 0
+    output u, sigma
+    report warpage = u.z at corner_a - u.z at centre
+}
+
+// The z displacement at point A of Figure 7 for models b to j, read from
+// the bar chart. Row k is mat 1 + (k - 1)/3 and t_int 100 um + 50 um*((k - 1)%3).
+table fig7_data{k: Real, w: Length in mm}:
+    1, 0.39
+    2, 0.22
+    3, 0.13
+    4, 0.58
+    5, 0.37
+    6, 0.23
+    7, 0.58
+    8, 0.33
+    9, 0.19
+
+// The row of fig7_data of the case.
+let fig7_row: Real = 3*(mat - 1) + (t_int - 100 um)/(50 um) + 1
+
+// Models b to j for each set of the assumptions, at the two ends of the
+// range of t_rdl, f_bump and x_off: 72 cases.
+study sweep: grid {
+    t_rdl: [4, 20] um
+    f_bump: [0.1, 0.4]
+    x_off: [-0.8125, 0.8125] mm
+    mat: [1, 2, 3]
+    t_int: [100, 150, 200] um
+    expect fig7: u.z at corner_a - u.z at centre == interp(fig7_data.k, fig7_data.w, fig7_row) within 25%
+}

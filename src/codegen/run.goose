@@ -411,12 +411,13 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     // The tokens of the cases replaced those of the model: read it again
     // for the columns and the place of the study.
     let p = syntax::parse_model(path, text);
+    let hash = syntax::source_hash();
     var printed: u8[>..] = [];
     var table: u8[>..] = [];
     let status = study_table(study, tok(find_study(p, study)), k, p, ends, json, printed, table);
-    let file = str(".skein/studies/", model, "/", study, ".toon");
-    if !write_file(file, table) {
-        write_stderr(str("skein run: cannot write '", file, "'\n"));
+    let file = str(".skein/studies/", model, "/", study);
+    if !write_file(str(file, ".toon"), table) || !write_file(str(file, ".hash"), hash) {
+        write_stderr(str("skein run: cannot write '", file, ".toon'\n"));
         return 1;
     }
     write_stdout(printed);

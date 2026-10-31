@@ -441,8 +441,11 @@ viewer, the source, the tables and the results. Without `-o`, the file is
 `<model>.html`. Without `--study`, the report uses the first study of the
 model, or a single run if the model has no study. With `--no-run`,
 `report` uses the last run of the study in `.skein/studies/` and solves
-nothing. Reason: a study of 108 cases can run for more than an hour. The
-results must be of the current source.
+nothing. Reason: the interposer sweep of 72 cases runs for more than an
+hour. `skein run --study` writes a hash of the source of the model and of
+its `use` files in `.skein/studies/<model>/<study>.hash`. If the hash is
+missing or is not the hash of the current source, `report --no-run` stops
+with exit status 2 and tells you to run `report` without `--no-run`.
 
 The page has two panes:
 

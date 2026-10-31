@@ -436,10 +436,28 @@ fn case_count(toon: u8[:]) -> i64 {
     return if good { n } else { 0 };
 }
 
+// Copies to `toon` the table of the last run of study `study` in
+// .skein/studies, and gives the exit status of that run. It gives 2 if
+// there is no table, or if the run was of another source than the source
+// that syntax parsed last.
+fn last_run(model: u8[:], study: u8[:], toon: u8[:]) -> i64 {
+    let file = str(".skein/studies/", model, "/", study);
+    let last = text_of(str(file, ".toon"));
+    guard study.len > 0 && last.len > 0 && write_file(toon, last) else {
+        write_stderr(str("skein report: --no-run needs the table of a study run in .skein/studies/", model, "\n"));
+        return 2;
+    };
+    guard text_of(str(file, ".hash")) == syntax::source_hash() else {
+        write_stderr("skein report: the results are of an older source; run skein report without --no-run\n");
+        return 2;
+    };
+    return if find(last, ",fail,") >= 0 { 1 } else { 0 };
+}
+
 // Fills `page` with the run of the model at `path`, and of its study
 // `study` if that is not "". It gives the exit status of the run, or 3.
 // With `no_run`, it reads the table of the last run of the study from
-// .skein/studies, and solves nothing. Reason: the interposer sweep of 108
+// .skein/studies, and solves nothing. Reason: the interposer sweep of 72
 // cases runs for more than an hour.
 fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool) -> i64 {
     var me: u8[>..] = [];
@@ -451,12 +469,7 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
     let study_arg = if study.len > 0 { str(" --study ", quoted(study)) } else { str("") };
     var status = 0;
     if no_run {
-        let last = text_of(str(".skein/studies/", model, "/", study, ".toon"));
-        guard study.len > 0 && last.len > 0 && write_file(toon, last) else {
-            write_stderr(str("skein report: --no-run needs the table of a study run in .skein/studies/", model, "\n"));
-            return 2;
-        };
-        status = if find(last, ",fail,") >= 0 { 1 } else { 0 };
+        status = last_run(model, study, toon);
     } else {
         status = shell(str(skein, " run ", quoted(path), study_arg, " > ", quoted(toon), " 2> ", quoted(str(work, "/run.err"))));
         write_stderr(text_of(str(work, "/run.err")));
@@ -490,40 +503,6 @@ fn put(doc: u8[>..]&, mark: u8[:], with: u8[:]) {
     out.append(doc[at + mark.len..]);
     doc.clear();
     doc.append(out);
-}
-
-// The token classes of the source, as [line, column, length, class] for the
-// coloured source pane: k keyword, n number, s string, u unit, t type. A
-// unit is a unit name after a number. A type is a name that starts with a
-// capital letter after `:` or `<`.
-fn token_classes(out: u8[>..]&) {
-    out.append("[");
-    var first = true;
-    var prev = -1;
-    for i in 0..syntax::tokens.len {
-        let t = syntax::tokens[i];
-        let kind = t.kind;
-        var class = "";
-        if t.file == 0 {
-            if kind >= syntax::KW_ALLOW { class = "k"; }
-            else if kind == syntax::TK_NUMBER || kind == syntax::TK_PERCENT { class = "n"; }
-            else if kind == syntax::TK_STRING { class = "s"; }
-            else if kind == syntax::TK_IDENT {
-                let word = syntax::text(i);
-                if (prev == syntax::TK_NUMBER || prev == syntax::TK_PERCENT) && syntax::is_unit_name(word) { class = "u"; }
-                else if (prev == syntax::TK_COLON || prev == syntax::TK_LANGLE) && word[0] >= 'A' && word[0] <= 'Z' { class = "t"; }
-            }
-        }
-        if kind != syntax::TK_COMMENT && kind != syntax::TK_DOC_COMMENT { prev = kind; }
-        if class.len == 0 { continue; }
-        var chars = 0;
-        for k in 0..t.len {
-            if (syntax::source[t.start + k] & 0xC0) != 0x80 { chars++; }
-        }
-        format(out, if first { "" } else { "," }, "[", t.line, ",", t.col - 1, ",", chars, ",\"", class, "\"]");
-        first = false;
-    }
-    out.append("]");
 }
 
 // `skein report`. `args` are the words after `report`. It gives the exit
@@ -565,8 +544,6 @@ fn run(args: const u8[:][:]) -> i64 {
     check::check_text(path, text);
     if check::error_count() > 0 { return check::finish(false); }
     let model, first_study = names(syntax::parse_model(path, text));
-    var classes: u8[>..] = [];
-    token_classes(classes);
     if study.len == 0 { study.append(first_study); }
     if out_path.len == 0 { out_path.append(str(model, ".html")); }
     let work = str(".skein/report/", model);
@@ -578,7 +555,6 @@ fn run(args: const u8[:][:]) -> i64 {
     json_field(json, "model", model);
     json_field(json, "file", path);
     json_field(json, "source", text);
-    format(json, "\"tokens\":", classes, ",");
     let status = run_model(path, model, study, work, no_run);
     if status > 1 { return status; }
     let dir = str(resource_dir(), "../src/report/");
@@ -588,16 +564,7 @@ fn run(args: const u8[:][:]) -> i64 {
         return 3;
     };
     put(html, "<!--title-->", model);
-    // kowalski.css is the file of the site as it is. Its two font urls become data URIs.
-    var css = text_of(str(dir, "kowalski.css"));
-    css.append(text_of(str(dir, "viewer.css")));
-    var inter: u8[>..] = [];
-    base64::encode(inter, text_of(str(dir, "fonts/inter.woff2")));
-    put(css, "/fonts/inter.woff2", str("data:font/woff2;base64,", inter));
-    var plex: u8[>..] = [];
-    base64::encode(plex, text_of(str(dir, "fonts/ibm-plex-mono.woff2")));
-    put(css, "/fonts/ibm-plex-mono.woff2", str("data:font/woff2;base64,", plex));
-    put(html, "/*css*/", css);
+    put(html, "/*css*/", text_of(str(dir, "viewer.css")));
     put(html, "/*js*/", text_of(str(dir, "viewer.js")));
     put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs));
     guard write_file(out_path, html) else {

@@ -1174,6 +1174,7 @@ function select(id, options, value, onchange) {
 function renderControls() {
   const c = document.getElementById('controls');
   c.textContent = '';
+  document.getElementById('note').textContent = '';
   const mesh = S.mesh;
   if (!mesh) return;
   const fields = mesh.fields.map((f) => f.name);
@@ -1191,8 +1192,7 @@ function renderControls() {
     el('label', {}, el('input', { type: 'checkbox', id: 'bands', checked: S.bands > 0, onchange: (ev) => { S.bands = ev.target.checked ? 12 : 0; draw(); } }), ' bands'),
     el('label', {}, el('input', { type: 'checkbox', id: 'edges', checked: S.lines, onchange: (ev) => { S.lines = ev.target.checked; draw(); } }), ' mesh'),
     el('button', { class: 'button', onclick: () => { view.fit(mesh.lo, mesh.hi); draw(); } }, 'fit'),
-    el('label', { class: 'button file' }, 'Open VTU', el('input', { type: 'file', accept: '.vtu', id: 'open-vtu', onchange: openFile })),
-    el('span', { id: 'note', class: 'note' })].filter(Boolean));
+    el('label', { class: 'button file' }, 'Open VTU', el('input', { type: 'file', accept: '.vtu', id: 'open-vtu', onchange: openFile }))].filter(Boolean));
 }
 
 // The deformation factor that moves the largest displacement by 1/10 of the
@@ -1249,7 +1249,7 @@ function focusSlider(p) {
 function selectCase(i) {
   if (i < 0 || i >= D.cases.length) return;
   S.caseIndex = i;
-  S.step = Math.min(S.step, D.cases[i].results.length - 1);
+  S.step = Math.max(0, Math.min(S.step, D.cases[i].results.length - 1));
   S.foreign = null;
   renderSliders();
   renderTables();
