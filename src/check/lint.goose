@@ -101,15 +101,19 @@ fn unused_material() {
     }
 }
 
-// `unused_field`: no part of the model outside a physics and its materials
-// uses a name of it (an unknown, a state or a `let`), other than as the left
-// side of a `bc`. Then the solve of its unknowns gives nothing.
+// `unused_field`: no part of the model outside a physics and the materials
+// that it assigns uses a name of it (an unknown, a state or a `let`), other
+// than as the left side of a `bc`. Then the solve of its unknowns gives nothing.
 fn unused_field() {
     for p, i in physics {
         used_names.clear();
         var c = syntax::nodes[model_prog].first;
         while c >= 0 {
-            if c != p.node && syntax::nodes[c].kind != syntax::N_MATERIAL { note_names(c, false); }
+            var own = c == p.node;
+            for pm in phys_mats {
+                if pm.phys == i && syms[pm.mat].node == c { own = true; }
+            }
+            if !own { note_names(c, false); }
             c = syntax::nodes[c].next;
         }
         var used = false;
