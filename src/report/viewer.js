@@ -1059,6 +1059,8 @@ function exprField(mesh, text) {
 function renderSource() {
   const pre = document.getElementById('source');
   pre.textContent = '';
+  const tokensOf = new Map();
+  for (const t of D.tokens || []) tokensOf.set(t[0], (tokensOf.get(t[0]) || []).concat([t]));
   const fieldLines = new Map();
   for (const o of M.outputs) fieldLines.set(o.line, (fieldLines.get(o.line) || []).concat([o.expr]));
   M.lines.forEach((text, i) => {
@@ -1067,22 +1069,36 @@ function renderSource() {
     const code = el('span', { class: 'code' });
     const ci = text.indexOf('//');
     const body = ci >= 0 ? text.slice(0, ci) : text;
-    const re = /[A-Za-z_]\w*/g;
-    let at = 0;
-    let m;
-    while ((m = re.exec(body))) {
-      code.append(body.slice(at, m.index));
-      const w = m[0];
-      if (M.regions.has(w)) {
-        code.append(el('a', { href: '#', class: 'region', 'data-region': w, onclick: (ev) => { ev.preventDefault(); markRegion(w, line); } }, w));
-      } else if (M.params.some((p) => p.name === w) && studyParams.includes(w)) {
-        code.append(el('a', { href: '#', class: 'param', 'data-param': w, onclick: (ev) => { ev.preventDefault(); focusSlider(w); } }, w));
-      } else {
-        code.append(w);
+    // The words and links of a piece of text.
+    const words = (piece, into) => {
+      const re = /[A-Za-z_]\w*/g;
+      let at = 0;
+      let m;
+      while ((m = re.exec(piece))) {
+        into.append(piece.slice(at, m.index));
+        const w = m[0];
+        if (M.regions.has(w)) {
+          into.append(el('a', { href: '#', class: 'region', 'data-region': w, onclick: (ev) => { ev.preventDefault(); markRegion(w, line); } }, w));
+        } else if (M.params.some((p) => p.name === w) && studyParams.includes(w)) {
+          into.append(el('a', { href: '#', class: 'param', 'data-param': w, onclick: (ev) => { ev.preventDefault(); focusSlider(w); } }, w));
+        } else {
+          into.append(w);
+        }
+        at = m.index + w.length;
       }
-      at = m.index + w.length;
+      into.append(piece.slice(at));
+    };
+    // The token classes of the line, from the lexer of the compiler (token_classes in report.goose).
+    let at = 0;
+    for (const [, col, len, cls] of tokensOf.get(line) || []) {
+      if (col < at || col + len > body.length) continue;
+      words(body.slice(at, col), code);
+      const tk = el('span', { class: 'tk-' + cls });
+      words(body.slice(col, col + len), tk);
+      code.append(tk);
+      at = col + len;
     }
-    code.append(body.slice(at));
+    words(body.slice(at), code);
     if (ci >= 0) code.append(el('span', { class: text.slice(ci).startsWith('///') ? 'doc' : 'comment' }, text.slice(ci)));
     row.append(code);
     const actions = sourceActions(line);
@@ -1096,19 +1112,19 @@ function renderSource() {
 function sourceActions(line) {
   const out = [];
   for (const o of M.outputs.filter((x) => x.line === line)) {
-    out.push(el('button', { class: 'chip', 'data-output': o.expr, onclick: () => showOutput(o.expr) }, 'show ' + o.expr));
+    out.push(el('button', { class: 'button chip', 'data-output': o.expr, onclick: () => showOutput(o.expr) }, 'show ' + o.expr));
   }
   for (const e of M.expects.filter((x) => x.line === line)) {
-    out.push(el('button', { class: 'chip', 'data-expect': e.name, onclick: () => showCheck('expect', e.name, e.text) }, 'check ' + e.name));
+    out.push(el('button', { class: 'button chip', 'data-expect': e.name, onclick: () => showCheck('expect', e.name, e.text) }, 'check ' + e.name));
   }
   for (const r of M.reports.filter((x) => x.line === line)) {
-    out.push(el('button', { class: 'chip', 'data-report': r.expr, onclick: () => showCheck('report', r.expr, r.expr) }, 'report'));
+    out.push(el('button', { class: 'button chip', 'data-report': r.expr, onclick: () => showCheck('report', r.expr, r.expr) }, 'report'));
   }
   for (const st of M.steps.filter((x) => x.line === line)) {
-    out.push(el('button', { class: 'chip', 'data-step': st.name, onclick: () => selectStep(st.name) }, 'show step'));
+    out.push(el('button', { class: 'button chip', 'data-step': st.name, onclick: () => selectStep(st.name) }, 'show step'));
   }
   for (const m of M.materials.filter((x) => x.line === line && !x.region)) {
-    out.push(el('button', { class: 'chip', onclick: () => markRegion(null, line) }, 'material ' + m.name));
+    out.push(el('button', { class: 'button chip', onclick: () => markRegion(null, line) }, 'material ' + m.name));
   }
   return out;
 }
@@ -1167,16 +1183,16 @@ function renderControls() {
     el('label', {}, 'Field ', select('field', fields, S.field, (v) => { S.field = v; refresh(); })),
     results.length > 1 ? el('label', {}, 'Step ', select('step', results.map((r) => stepName(r.path)), stepName(results[S.step].path),
       (v) => selectStep(v))) : null,
-    el('label', {}, 'Deform ', el('input', { id: 'scale', type: 'number', min: 0, step: 'any', value: fmt(S.scale), style: 'width:7em',
+    el('label', {}, 'Deform ', el('input', { id: 'scale', type: 'number', min: 0, step: 'any', value: fmt(S.scale), class: 'num',
       onchange: (ev) => { S.scale = Math.max(0, +ev.target.value || 0); draw(); } }),
-    mesh.disp ? el('button', { onclick: () => { S.scale = autoScale(mesh); renderControls(); draw(); } }, 'auto') : null),
+    mesh.disp ? el('button', { class: 'button', onclick: () => { S.scale = autoScale(mesh); renderControls(); draw(); } }, 'auto') : null),
     el('label', {}, 'Cut ', select('cut', ['off', 'x', 'y', 'z'], S.cut, (v) => { S.cut = v; refresh(); }),
       el('input', { id: 'cut-at', type: 'range', min: 0, max: 1000, value: Math.round(S.cutAt * 1000),
         oninput: (ev) => { S.cutAt = ev.target.value / 1000; refresh(); } })),
     el('label', {}, el('input', { type: 'checkbox', id: 'bands', checked: S.bands > 0, onchange: (ev) => { S.bands = ev.target.checked ? 12 : 0; draw(); } }), ' bands'),
     el('label', {}, el('input', { type: 'checkbox', id: 'edges', checked: S.lines, onchange: (ev) => { S.lines = ev.target.checked; draw(); } }), ' mesh'),
-    el('button', { onclick: () => { view.fit(mesh.lo, mesh.hi); draw(); } }, 'fit'),
-    el('label', { class: 'file' }, 'Open VTU ', el('input', { type: 'file', accept: '.vtu', id: 'open-vtu', onchange: openFile }))].filter(Boolean));
+    el('button', { class: 'button', onclick: () => { view.fit(mesh.lo, mesh.hi); draw(); } }, 'fit'),
+    el('label', { class: 'button file' }, 'Open VTU', el('input', { type: 'file', accept: '.vtu', id: 'open-vtu', onchange: openFile }))].filter(Boolean));
 }
 
 // The deformation factor that moves the largest displacement by 1/10 of the

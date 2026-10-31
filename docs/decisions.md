@@ -44,6 +44,7 @@ answers of the captain from 2026-10-30.
 | Too many goals: rank them, with simulation as the core | [tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order), [grilling round 0](grilling.md#round-0-the-ranking-of-the-goals) |
 | The grilling answers of 2026-10-30: three protected goals, required scales, a work-stealing pool, closed lists of number systems and symmetry groups, the token cuts | [grilling answers](grilling.md#answers), [tradeoffs §11](tradeoffs.md#11-summary-of-the-gaps) |
 | Small diffs that a person can read | spec [§3.2](skein_spec.md#32-layout-for-small-diffs), [command line §3](command_line.md#3-formatting), [LLM test §2.1](llm_test.md#21-edit-tasks) |
+| The HTML report has the look of the captain's website: light only, Inter and IBM Plex Mono, no dark mode (2026-10-31) | [command line §12.1](command_line.md#121-the-look-of-the-page) |
 
 ## Choices made in the spec
 

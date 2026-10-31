@@ -1,62 +1,70 @@
-:root {
-  --bg: #fbfbf9; --fg: #1d1d1b; --muted: #6b6b66; --line: #dcdcd6; --panel: #ffffff; --stage: #eeeeea;
-  --accent: #2756c5; --mark: #c41d8a; --pass: #187a3a; --fail: #b3261e; --flash: #fff2a8; --code: #f4f4f0;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #161615; --fg: #e8e8e2; --muted: #9a9a92; --line: #34342f; --panel: #1e1e1c; --stage: #262624;
-    --accent: #8fb0ff; --mark: #ff6fc8; --pass: #6fd28f; --fail: #ff8a80; --flash: #5a4d00; --code: #20201e;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #161615; --fg: #e8e8e2; --muted: #9a9a92; --line: #34342f; --panel: #1e1e1c; --stage: #262624;
-  --accent: #8fb0ff; --mark: #ff6fc8; --pass: #6fd28f; --fail: #ff8a80; --flash: #5a4d00; --code: #20201e;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
-h1 { margin: 0 0 4px; font-size: 20px; }
-h2 { font-size: 16px; margin: 14px 0 6px; }
-h3 { font-size: 14px; margin: 12px 0 4px; }
-#intro { margin: 0; max-width: 70em; }
+/* The layout of the report. The tokens, the fonts, the base, the .button and the interaction rules are in
+   kowalski.css, the file of the site as it is (docs/command_line.md §12.1). The controls that it has no rule for
+   take the rules of the site tool public/play/neurons/style.css. The layout of two panes is the layout of the
+   report and has no column of 692 px. */
+:root { --stage: #f9f9f8; --flash: #ececea;
+  /* The colours of the code blocks of emilkowal.ski (Shiki github-light), read from the computed styles of
+     https://emilkowal.ski/ui/building-a-toast-component. Pass and fail use the green and the red of the same theme. */
+  --tk-keyword: #d73a49; --tk-number: #005cc5; --tk-string: #032f62; --tk-unit: #e36209; --tk-type: #6f42c1; --tk-comment: #6a737d;
+  --pass: #22863a; --fail: #d73a49; }
+header { padding: 16px 24px; border-bottom: 1px solid var(--line); }
+h1 { margin: 0 0 4px; font-size: var(--text); font-weight: 500; }
+h2 { font-size: var(--text); font-weight: 500; margin: 16px 0 8px; }
+h3 { font-size: var(--text); font-weight: 500; margin: 12px 0 4px; }
+#intro { margin: 0; max-width: 70em; color: var(--muted); }
 .note { color: var(--muted); }
 main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0; }
 @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
-#source-pane { border-right: 1px solid var(--line); padding: 0 0 0 16px; max-height: calc(100vh - 20px); overflow: auto; position: sticky; top: 0; }
-#source { margin: 0; font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--code); padding: 6px 0; }
+#source-pane { border-right: 1px solid var(--line); padding: 0 0 0 24px; max-height: calc(100vh - 20px); overflow: auto; position: sticky; top: 0; }
+#source { margin: 0; font: var(--code)/var(--leading) var(--mono); background: var(--card); padding: 8px 0; }
 .src-line { white-space: pre-wrap; padding: 0 8px 0 0; display: flex; gap: 8px; }
 .src-line .ln { color: var(--muted); min-width: 3.2em; text-align: right; user-select: none; flex: none; }
 .src-line .code { flex: 1; }
-.src-line.active { background: color-mix(in srgb, var(--mark) 14%, transparent); }
+.src-line.active { background: var(--select); }
+/* The flash after a jump is the one animation over 300 ms: the eye must find the line after the scroll. */
 .src-line.flash, tr.flash { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: var(--flash); } to { background: transparent; } }
-.comment { color: var(--muted); }
-.doc { color: var(--accent); font-style: italic; }
-a { color: var(--accent); }
-a.region { color: var(--mark); text-decoration: underline dotted; }
-a.param { text-decoration: underline dotted; }
+.comment { color: var(--tk-comment); }
+.tk-k { color: var(--tk-keyword); } .tk-n { color: var(--tk-number); } .tk-s { color: var(--tk-string); }
+.tk-u { color: var(--tk-unit); } .tk-t { color: var(--tk-type); }
+.doc { color: var(--tk-comment); font-style: italic; }
 .actions { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-button, select, input { font: inherit; color: inherit; }
-button, select { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; cursor: pointer; }
-.chip { font-size: 11px; padding: 0 6px; border-radius: 9px; color: var(--accent); }
-#view-pane { padding: 8px 16px 24px; min-width: 0; }
-#controls { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 6px; }
-#stage { position: relative; height: min(62vh, 620px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--stage); }
+#view-pane { padding: 8px 24px 24px; min-width: 0; }
+#controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+#stage { position: relative; height: min(62vh, 620px); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--stage); }
 #canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-#legend { position: absolute; left: 10px; bottom: 10px; background: color-mix(in srgb, var(--panel) 85%, transparent); padding: 6px 8px; border-radius: 4px; min-width: 220px; }
+#legend { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.85); padding: 6px 8px; border-radius: 4px; min-width: 220px; }
 #legend .bar { height: 10px; border-radius: 2px; background: linear-gradient(90deg, #30123b, #4662d7, #36aaf9, #1ae4b6, #72fe5e, #c8ef34, #faba39, #f66b19, #ca2a04, #7a0403); }
-#legend .ticks { display: flex; justify-content: space-between; font-size: 11px; gap: 6px; }
-#legend .legend-name { font-weight: 600; font-size: 12px; }
-#probe { position: absolute; right: 10px; top: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent); padding: 6px 8px; border-radius: 4px; max-width: 46%; font-size: 12px; }
+#legend .ticks { display: flex; justify-content: space-between; font: var(--code)/var(--leading) var(--mono); gap: 6px; }
+#legend .legend-name { font-weight: 600; font-size: var(--small); }
+#probe { position: absolute; right: 10px; top: 10px; background: rgba(255,255,255,.9); padding: 6px 8px; border-radius: 4px; max-width: 46%; font-size: var(--small); }
 #probe:empty { display: none; }
-.slider { margin: 6px 0 10px; }
+.slider { margin: 8px 0 12px; }
 .slider input { width: 100%; }
-.slider .doc { font-size: 12px; }
-.table { margin: 4px 0 10px; overflow-x: auto; }
-table { border-collapse: collapse; font-size: 12.5px; }
+.slider .doc { font-size: var(--small); }
+.table { margin: 4px 0 12px; overflow-x: auto; }
+table { border-collapse: collapse; font-size: var(--small); }
+th { font-weight: 500; }
+td { font-family: var(--mono); font-size: var(--code); }
 th, td { border-bottom: 1px solid var(--line); padding: 2px 8px; text-align: left; white-space: nowrap; }
-tr.current td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+tr.current td { background: var(--select); }
 tr[data-case] { cursor: pointer; }
 .pass { color: var(--pass); font-weight: 600; }
 .fail { color: var(--fail); font-weight: 600; }
-.line-link { font-size: 11px; text-decoration: none; }
+.line-link { font-size: var(--small); text-decoration: none; }
+a.region, a.param { text-decoration-style: dotted; }
+.chip { margin-left: 4px; }
+/* inputs, as in public/play/neurons/style.css */
+a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+input, select { font: inherit; color: var(--ink); }
+/* as the box Set speed of public/play/goosestrike/style.css */
+select, input[type=number] { min-height: var(--tap); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; font-size: 1rem; font-variant-numeric: tabular-nums; }
+#controls button, #controls label.file { min-height: var(--tap); }
+input.num { width: 7rem; }
+input[type=range] { height: var(--tap); margin: 0; accent-color: var(--ink); }
+input[type=checkbox] { accent-color: var(--ink); }
+/* the file input is hidden and its label is a .button */
+label.file { display: inline-block; }
+label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label.file:focus-within { box-shadow: var(--focus-ring); }
+#controls label { display: inline-flex; align-items: center; gap: 8px; }
