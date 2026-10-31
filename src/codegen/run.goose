@@ -455,13 +455,26 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     outs.clear();
     var first = if share.stages > 0 { 1 } else { 0 };
     if l.budget > 0.0 && limit > 1 && first == 0 {
-        // The case with the most dofs, which reads no stage of case 1.
+        // The cases with the fewest and the most dofs, which read no stage
+        // of case 1, and the larger bytes for each dof of the two. Reason:
+        // the bytes for each dof change with the dofs, in the two
+        // directions: the RSS before the solve and the GMRES restart of a
+        // wave solve do not grow with the dofs, and the skyline profile of a
+        // shell grows faster. On a PML duct study, the per-dof bytes of the
+        // largest case gave the smaller cases 30% to 39% less than their peaks.
+        var small = 0;
         var big = 0;
-        for d, c in dofs { if d > dofs[big] { big = c; } }
-        let estimate = probe_case(case_jobs[big]);
-        if estimate > 0.0 {
-            l.per_dof = estimate / dofs[big];
-            l.source = big;
+        for d, c in dofs {
+            if d < dofs[small] { small = c; }
+            if d > dofs[big] { big = c; }
+        }
+        for c in [small, big] {
+            if c == big && big == small { break; }
+            let estimate = probe_case(case_jobs[c]);
+            if estimate > 0.0 && estimate / dofs[c] > l.per_dof {
+                l.per_dof = estimate / dofs[c];
+                l.source = c;
+            }
         }
     }
     if l.budget > 0.0 {

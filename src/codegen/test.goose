@@ -534,7 +534,7 @@ fn test_study_table() {
 
 // The memory ledger of a study (spec §20.5): a case starts only if its
 // estimate fits beside the running cases, or if no case runs. A measured
-// peak takes the place of the estimate.
+// peak takes the place of a smaller estimate.
 fn test_ledger() {
     var l = codegen::new_ledger(1.0e9);
     var got: u8[>..] = [];
@@ -546,8 +546,8 @@ fn test_ledger() {
     l.used = 8.0e8;
     format(got, codegen::admits(l, codegen::case_need(l, 2000), 3), " ", codegen::admits(l, codegen::case_need(l, 3000), 3), " ");
     format(got, codegen::admits(l, codegen::case_need(l, 20000), 0), " ");
-    codegen::learn(l, 4, 1000, 5.0e7);   // the first peak replaces the estimate
-    codegen::learn(l, 5, 1000, 4.0e7);   // a smaller peak does not
+    codegen::learn(l, 4, 1000, 5.0e7);   // a smaller peak does not replace the estimate
+    codegen::learn(l, 5, 1000, 2.0e8);   // a larger peak does
     format(got, l.per_dof, " ", l.source, " ");
     l.budget = 0.0;   // no budget: --jobs only
     format(got, codegen::admits(l, 1.0e12, 7), " ");
@@ -558,7 +558,7 @@ fn test_ledger() {
     format(got, codegen::admits(m, codegen::case_need(m, 1000), 1), " ", codegen::admits(m, codegen::case_need(m, 1000), 0), " ");
     codegen::learn(m, 0, 1000, 2.0e6);
     format(got, codegen::admits(m, codegen::case_need(m, 1000), 1));
-    expect_text("the ledger", got, "true false true false true 50000.0 4 true false true true");
+    expect_text("the ledger", got, "true false true false true 200000.0 5 true false true true");
     let toon = "solve[0]:\nestimate_mb: 12\npeak_mb: 34.5\n";
     expect_text("peak_mb", str(codegen::toon_number(toon, "peak_mb:"), " ", codegen::toon_number(toon, "none:")), "34.5 -1.0");
 }

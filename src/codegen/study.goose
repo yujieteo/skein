@@ -447,15 +447,16 @@ fn admits(l: Ledger, need: f64, running: i64) -> bool {
 }
 
 // Learns from case c of `dofs` dofs, which ended with the measured peak
-// `peak`. The first measured peak takes the place of the estimate, and a
-// larger peak for each dof takes the place of a smaller one.
+// `peak`. A larger peak for each dof takes the place of the estimate or of
+// a smaller peak. Reason: the bytes for each dof change with the dofs, so a
+// smaller peak of one case is not a bound for the other cases.
 fn learn(l: Ledger&, c: i64, dofs: i64, peak: f64) {
     guard peak > 0.0 && dofs > 0 else { return; };
+    l.measured = true;
     let per = peak / dofs;
-    if l.measured && per <= l.per_dof { return; }
+    if per <= l.per_dof { return; }
     l.per_dof = per;
     l.source = c;
-    l.measured = true;
 }
 
 // The value of the line "key: value" of the TOON `text`, or -1.
