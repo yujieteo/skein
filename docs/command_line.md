@@ -263,7 +263,9 @@ A case that fails gets the status `failed` and the diagnostic
 
 `run` ends its records with the memory of the run (spec §20.5): the
 number of memory checks (one before the assembly of each solve), the
-largest estimate, and the measured peak, in MB:
+largest estimate, and the measured peak, in MB. When a check finds that
+the solve fits only on 1 thread, the run goes on with 1 thread and
+writes one line on stderr.
 
 ```toon
 memory_checks: 1

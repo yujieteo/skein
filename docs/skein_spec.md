@@ -2097,6 +2097,8 @@ estimate is the resident memory at the check, plus a measured number of
 bytes for each entry of the pattern for its solution path, plus the
 vectors of its solver. The pattern is what the program really builds, so
 the estimate needs no table of cell types or physics. If the estimate
+on the threads of the case does not fit but the estimate on 1 thread
+fits, the solve goes on with 1 thread. If the estimate on 1 thread
 does not fit in the budget, the program stops before the assembly with
 the estimate and the free memory. Each case also sets its
 `oom_score_adj` to 1000, so that the kernel kills a case first and not

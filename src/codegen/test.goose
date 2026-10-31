@@ -653,7 +653,8 @@ fn test_two_step_study() {
 }
 
 // A run that does not fit in the memory budget (spec §20.5) stops before
-// its assembly, with exit status 1 and the estimate and the budget.
+// its assembly, with exit status 1 and the estimate and the budget. A run
+// that fits only on 1 thread goes on with 1 thread.
 fn test_memory_stop() {
     var c: u8[>..] = [];
     format(c, "cd build && SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err; ",
@@ -662,6 +663,16 @@ fn test_memory_stop() {
     if system(c[0]) != 0 {
         failures++;
         print("FAIL skein run with SKEIN_MEMORY_BUDGET=1000000 does not stop with the memory message");
+    }
+    // 40 MB holds the solve on 1 thread (about 25 MB) and not on 16 threads
+    // (about 53 MB): the run goes on with 1 thread.
+    c.clear();
+    format(c, "cd build && SKEIN_THREADS=16 SKEIN_MEMORY_BUDGET=40000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err && ",
+           "grep -q 'the solve runs on 1 thread, since 16 threads need about' memory.err");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL skein run on 16 threads with a budget for 1 thread does not go on with 1 thread");
     }
 }
 

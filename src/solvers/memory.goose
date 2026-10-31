@@ -183,13 +183,13 @@ var memory_checks = 0;   // the checks of the run
 
 // Checks, after the pattern of a solve on path `name` and before its
 // values, that the case fits in the budget (memory_estimate). If it does
-// not, it stops the program with the estimate, the budget and `fix`, the
-// lower-memory choice of the path or "". It also asks the kernel to kill
+// not on its threads but does on 1 thread, the case goes on with 1 thread.
+// If it does not on 1 thread, it stops the program with the estimate, the
+// budget and `fix`, the lower-memory choice of the path or "". It also asks the kernel to kill
 // this case first if the memory runs out (oom_score_adj 1000, which a
 // process may set on itself).
 fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) {
-    let need = memory_estimate(name, entries, dofs, vectors);
-    largest_estimate = max(largest_estimate, need);
+    var need = memory_estimate(name, entries, dofs, vectors);
     memory_checks++;
     var probe: u8[>..] = [];
     if env("SKEIN_MEMORY_PROBE", probe) {
@@ -198,6 +198,13 @@ fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) 
     }
     write_file("/proc/self/oom_score_adj", "1000");
     let have = memory_budget();
+    let one = resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, 1);
+    if have > 0.0 && need > have && one <= have {
+        write_stderr(str("skein run: the solve runs on 1 thread, since ", case_threads(), " threads need about ", mb(need), " MB and ", mb(have), " MB is free\n"));
+        threads = 1;
+        need = one;
+    }
+    largest_estimate = max(largest_estimate, need);
     if have <= 0.0 || need <= have { return; }
     write_stderr(str("skein run: the solve needs about ", mb(need), " MB of memory, and ", mb(have),
                      " MB is free for it (", BUDGET_SHARE, " of MemAvailable and of the cgroup limit). ",
