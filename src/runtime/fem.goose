@@ -30,10 +30,11 @@ let HEX27 = 5;
 let QUAD4_SHELL = 6;
 let BEAM2 = 7;
 let HEX8I = 8;     // hex8 with incompatible modes (hex8i.goose)
+let QUAD4 = 9;
 
-let CELL_NAMES = ["tri3", "tri6", "tet4", "tet10", "hex8", "hex27", "quad4_shell", "beam2", "hex8i"];
-let CELL_NODES: i64[9] = [3, 6, 4, 10, 8, 27, 4, 2, 8];
-let CELL_DIMS: i64[9] = [2, 2, 3, 3, 3, 3, 2, 1, 3];
+let CELL_NAMES = ["tri3", "tri6", "tet4", "tet10", "hex8", "hex27", "quad4_shell", "beam2", "hex8i", "quad4"];
+let CELL_NODES: i64[10] = [3, 6, 4, 10, 8, 27, 4, 2, 8, 4];
+let CELL_DIMS: i64[10] = [2, 2, 3, 3, 3, 3, 2, 1, 3, 2];
 
 // --- the mesh ----------------------------------------------------------------------
 

@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-laminate-cell/cell/grid.toml
-// blocked-by: G19
 // The periodic unit cell of a laminate of aluminium and a polymer, 2
 // layers along z. Each physics solves the periodic fluctuation of 1 load
 // case: a unit mean gradient, a unit mean strain or a unit temperature
@@ -51,7 +50,7 @@ material polymer {
     c: SpecificHeat = 1500 J/(kg*K)
 }
 
-// gap G19: the spec does not put a grid plane on the face at z = 0.3 mm.
+// The face z = 0.3 mm of the layers is a grid plane.
 mesh m on unit_cell {
     size: 0.25 mm
     cell: hex

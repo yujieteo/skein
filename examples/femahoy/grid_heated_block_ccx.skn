@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-heated-block-ccx/block/grid.toml
-// blocked-by: G19
 // A steel plate with a copper block on its top. A heat source in the block, a convection
 // on the bottom of the plate, the other faces adiabatic. The temperatures are checked
 // against CalculiX 2.23 with C3D20 elements: 48.45740, 34.98249 and 36.92743 degC.
@@ -26,10 +25,10 @@ material copper {
     qv: Power/Volume = 2e6 W/m^3
 }
 
-// gap G19: hex cells need 1 box, and the part is a union of 2 boxes. Thus the cells are tetrahedra.
+// A grid on the union of 2 boxes, with a grid plane on each face of the block.
 mesh m on part {
     size: 0.000625 m
-    cell: tet
+    cell: hex
 }
 
 physics thermal on part solves T: Temperature {

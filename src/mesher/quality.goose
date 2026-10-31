@@ -2,10 +2,14 @@
 // minimum and the maximum angle of a triangle. In 3D, the minimum and the
 // maximum dihedral angle of a tetrahedron. The aspect ratio is the
 // longest edge over the inradius, scaled so that an equilateral cell has 1.
+// A quad or a hex cell of a grid (grid.goose) is an axis-aligned box: each
+// angle is 90 degrees, and the aspect ratio is its longest side over its
+// shortest side.
 import std;
 import math;
 namespace mesher;
 import .mesh;
+import runtime from "../runtime";
 
 struct Quality {
     cells: i64,
@@ -37,6 +41,27 @@ fn mesh_quality() -> Quality {
                       max_aspect: 0.0, measure: 0.0, inverted: 0 };
     let k = mesh_dim + 1;
     for c in cell_count() {
+        let t = runtime::cell_type[c] as i64;
+        if t == runtime::QUAD4 || t == runtime::HEX8 {
+            // Node 2 or node 6 is the corner opposite node 0.
+            let lo = vertex(cell_node(c, 0));
+            let hi = vertex(cell_node(c, if t == runtime::QUAD4 { 2 } else { 6 }));
+            var measure = 1.0;
+            var longest = 0.0;
+            var shortest = 1.0e300;
+            for a in mesh_dim {
+                let side = hi[a] - lo[a];
+                measure *= side;
+                longest = max(longest, side);
+                shortest = min(shortest, side);
+            }
+            q.measure += measure;
+            if shortest <= 0.0 { q.inverted++; continue; }
+            q.min_angle = min(q.min_angle, 90.0);
+            q.max_angle = max(q.max_angle, 90.0);
+            q.max_aspect = max(q.max_aspect, longest / shortest);
+            continue;
+        }
         var v: f64[3][4] = default<f64[3][4]>();
         for i in k { v[i] = vertex(cell_node(c, i)); }
         var longest = 0.0;

@@ -1,5 +1,5 @@
 // femahoy: validation/cases/submodel-kirsch-hole/job.inp
-// blocked-by: G19
+// blocked-by: G36
 // The submodel of submodel_kirsch_hole_global.skn: the ring 10 <= r <= 20 mm
 // about the hole, with a fine mesh. The cut r = 20 mm takes the displacement
 // of the global model. The reference is the Kirsch sxx at the integration
@@ -28,7 +28,7 @@ material steel {
     nu: Real = 0.3
 }
 
-// gap G19: femahoy uses CPE8R quads on the ring. Skein makes quads only on a rect.
+// gap G36: femahoy uses CPE8R quads on the ring. The mesher makes quads only on a union of rects.
 mesh m on ring {
     size: 1 mm
     cell: tri

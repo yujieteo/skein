@@ -19,6 +19,7 @@ import .mesh;
 import .quality;
 import .tri;
 import .tet;
+import .grid;
 
 let VERIFY_USAGE = "usage: skein verify <file.skn>\n";
 
@@ -246,6 +247,23 @@ recursive fn shape_call(n: i64) -> Value {
     return number_value(0.0);
 }
 
+// Appends the shape of each box and rect call in expression n to `out`, in
+// the operands of |, & and -: the faces of each one are planes of a grid.
+recursive fn written_boxes(n: i64, out: i64[>..]&) {
+    let k = syntax::nodes[n].kind;
+    if k == syntax::N_BINARY {
+        let op = syntax::text(syntax::nodes[n].tok);
+        guard op == "|" || op == "&" || op == "-" else { return; };
+        written_boxes(syntax::child(n, 0), out);
+        written_boxes(syntax::child(n, 1), out);
+    } else if k == syntax::N_CALL {
+        let name = node_text(syntax::child(n, 0));
+        guard name == "box" || name == "rect" else { return; };
+        let v = eval_value(n);
+        if v.n == 0 { out.push(v.g); }
+    }
+}
+
 // The record of one mesh, for the table of the report.
 struct MeshRecord {
     name: u8[..64],
@@ -271,8 +289,9 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     var size = 0.0;
     // A copy, not a slice of a string: mesh_3d and mesh_2d reallocate the
     // byte arrays of the runtime mesh.
-    var cell: u8[..3] = [];
+    var cell: u8[..4] = [];
     cell.append(if dim == 2 { "tri" } else { "tet" });
+    let grid = if dim == 2 { "quad" } else { "hex" };
     var s = syntax::nodes[syntax::child(n, 1)].first;
     while s >= 0 {
         let value = syntax::nodes[s].first;
@@ -283,9 +302,13 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
             size = eval_value(value).v[0];
         } else if node_text(s) == "cell" {
             let c = node_text(value);
-            if c != cell {
-                reader_fault(syntax::nodes[value].tok, str("the mesher makes ", cell, " cells in a ", dim, "d model"),
-                             str("write cell: ", cell));
+            if c == grid {
+                cell.clear();
+                cell.append(grid);
+            } else if c != cell {
+                let simplex = if dim == 2 { "tri" } else { "tet" };
+                reader_fault(syntax::nodes[value].tok, str("the mesher makes ", simplex, " or ", grid, " cells in a ", dim, "d model"),
+                             str("write cell: ", simplex));
             }
         } else {
             reader_fault(syntax::nodes[s].tok, str("the mesh setting '", node_text(s), "' is not in the mesher yet"),
@@ -302,8 +325,20 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
                      if dim == 3 { "mesh a Solid" } else { "mesh a 2D Surface" });
         return false;
     }
-    let done = if dim == 3 { mesh_3d(g.g, size) } else { mesh_2d(g.g, size) };
-    if !done { reader_fault(syntax::nodes[n].tok, "the mesher did not finish in its budget of points", "give a larger size"); }
+    var done = false;
+    if cell == grid {
+        var planes: i64[>..] = [];
+        for v in let_values { written_boxes(v, planes); }
+        done = mesh_grid(g.g, dim, size, planes[..]);
+        if !done {
+            reader_fault(syntax::nodes[region].tok,
+                         str("the mesher makes ", grid, " cells only on a union of ", if dim == 3 { "boxes" } else { "rects" }),
+                         str("write cell: ", if dim == 3 { "tet" } else { "tri" }));
+        }
+    } else {
+        done = if dim == 3 { mesh_3d(g.g, size) } else { mesh_2d(g.g, size) };
+        if !done { reader_fault(syntax::nodes[n].tok, "the mesher did not finish in its budget of points", "give a larger size"); }
+    }
     var r = MeshRecord { name: [], cell: [], size: size, g: g.g, q: mesh_quality() };
     r.name.append(node_text(n));
     r.cell.append(cell);

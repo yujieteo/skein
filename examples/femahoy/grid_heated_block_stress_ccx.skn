@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-heated-block-stress-ccx/block/grid.toml
-// blocked-by: G19
 // The plate and the heated block of grid-heated-block-ccx, with the thermal stress of the
 // steady temperature. A point at the centre of the bottom holds u.z, so the plate is free
 // to bend. The displacements are checked against CalculiX 2.23 with C3D20 elements.
@@ -37,10 +36,10 @@ material copper {
     alpha: Expansion = 17e-6 K^-1
 }
 
-// gap G19: hex cells need 1 box, and the part is a union of 2 boxes. Thus the cells are tetrahedra.
+// A grid on the union of 2 boxes, with a grid plane on each face of the block.
 mesh m on part {
     size: 0.00125 m
-    cell: tet
+    cell: hex
 }
 
 physics thermal on part solves T: Temperature {

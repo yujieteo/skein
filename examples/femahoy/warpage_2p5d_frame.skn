@@ -1,5 +1,5 @@
 // femahoy: validation/cases/warpage-2p5d-frame/job.inp
-// blocked-by: G19
+// blocked-by: G36
 // 1/4 of a 2.5D package with a metal frame (Tsai, Wang and Liu 2021). It
 // cools from the stress-free 140 degC to 60 degC. Linear thermoelastic, 3D,
 // quadratic tetrahedra. The reference is the moire warpage of the substrate
@@ -23,11 +23,19 @@ let module: Solid = box((0, 0, 1.81) mm, (20.5, 13.75, 2.73) mm)
 // face is the face x == 0 or y == 0 of a box, turned by atan(0.9/0.92) = 44.37 deg to lean
 // in over the module.
 let slope: Angle = 44.37 deg
-let cut_x: Solid = move(rotate(box((-30, -1, -30) mm, (0, 30, 30) mm), (0, -1, 0), slope), (21.4, 0, 1.81) mm)
-let cut_y: Solid = move(rotate(box((-1, -30, -30) mm, (30, 0, 30) mm), (1, 0, 0), slope), (0, 14.65, 1.81) mm)
+let cut_x: Solid = move(
+    rotate(box((-30, -1, -30) mm, (0, 30, 30) mm), (0, -1, 0), slope),
+    (21.4, 0, 1.81) mm,
+)
+let cut_y: Solid = move(
+    rotate(box((-1, -30, -30) mm, (30, 0, 30) mm), (1, 0, 0), slope),
+    (0, 14.65, 1.81) mm,
+)
 let fil: Solid = (box((0, 0, 1.81) mm, (21.4, 14.65, 2.73) mm) & cut_x & cut_y) - module
-let adh: Solid = box((24.3, 0, 1.81) mm, (27.5, 27.5, 1.87) mm) | box((0, 20.1, 1.81) mm, (27.5, 27.5, 1.87) mm)
-let frm: Solid = box((24.3, 0, 1.87) mm, (27.5, 27.5, 2.745) mm) | box((0, 20.1, 1.87) mm, (27.5, 27.5, 2.745) mm)
+let adh: Solid = box((24.3, 0, 1.81) mm, (27.5, 27.5, 1.87) mm) |
+    box((0, 20.1, 1.81) mm, (27.5, 27.5, 1.87) mm)
+let frm: Solid = box((24.3, 0, 1.87) mm, (27.5, 27.5, 2.745) mm) |
+    box((0, 20.1, 1.87) mm, (27.5, 27.5, 2.745) mm)
 let package: Solid = sub | module | fil | adh | frm
 
 let sym_x: Surface = boundary(package, x == 0 mm)
@@ -78,7 +86,8 @@ material glue {
     alpha: Expansion = 170e-6 K^-1
 }
 
-// gap G19: femahoy uses a C3D20R tensor grid through each layer.
+// gap G36: femahoy uses a C3D20R tensor grid through each layer. The sloped faces of
+// the UF2 fillet are not faces of a box, so the Skein grid cannot mesh the package.
 mesh m on package {
     size: 1 mm
     cell: tet
@@ -86,7 +95,13 @@ mesh m on package {
 }
 
 physics solid on package solves u: Vector<Length> {
-    material substrate on sub, underfill2 on uf2 | fil, silicon on interposer | die, underfill1 on uf1, mould on emc, glue on adh, frame_metal on frm
+    material substrate on sub,
+        underfill2 on uf2 | fil,
+        silicon on interposer | die,
+        underfill1 on uf1,
+        mould on emc,
+        glue on adh,
+        frame_metal on frm
     assume small_strain, isotropic
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T_use - T_free)*I)
     eq div(sigma) = 0
