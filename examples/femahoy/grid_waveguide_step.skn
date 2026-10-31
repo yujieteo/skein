@@ -64,13 +64,12 @@ bc step_face: E.y = 0
 bc port_in: Hs*n = im*beta1/mu0*(E - dot(E, n)*n) - 2*im*beta1/mu0*e1
 bc port_out: Hs*n = im*beta2/mu0*(E - dot(E, n)*n)
 
-// gap G9: a procedure argument cannot be a list, also a list of one frequency.
 step response: harmonic(freq: [f0]) {
     output E
 }
 
 // S21 takes the factor sqrt(a2*beta2/(a1*beta1)): the waves are normalized to 1 W.
-// gap G7: no real() and imag() of a Complex value. femahoy tests each part within 0.035.
-// Here the test is on the complex difference.
-expect s11: integral(dot(E, e1), port_in)/integral(dot(e1, e1), port_in) - 1 == 0.199629 - 0.304586*im within 0.035
-expect s21: integral(dot(E, e2), port_out)/integral(dot(e2, e2), port_out)*sqrt(a2*beta2/(a1*beta1)) == 0.737493 + 0.568202*im within 0.035
+expect s11_re: re(integral(dot(E, e1), port_in)/integral(dot(e1, e1), port_in) - 1) == 0.199629 within 0.035
+expect s11_im: imag(integral(dot(E, e1), port_in)/integral(dot(e1, e1), port_in) - 1) == -0.304586 within 0.035
+expect s21_re: re(integral(dot(E, e2), port_out)/integral(dot(e2, e2), port_out)*sqrt(a2*beta2/(a1*beta1))) == 0.737493 within 0.035
+expect s21_im: imag(integral(dot(E, e2), port_out)/integral(dot(e2, e2), port_out)*sqrt(a2*beta2/(a1*beta1))) == 0.568202 within 0.035

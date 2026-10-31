@@ -47,7 +47,6 @@ method em: cg {
     order: 2
 }
 
-// gap G9: a procedure argument cannot be a list, also a list of one frequency.
 step tone: harmonic(freq: [f0]) {
     // gap G26: no PML. The first-order absorbing condition of Bayliss and Turkel for the
     // outgoing scattered wave stands for the PML of femahoy.
@@ -55,10 +54,12 @@ step tone: harmonic(freq: [f0]) {
     output es
 }
 
+// Q is the scattered power per length over 2*a_c times the incident intensity. With
+// H = curl(es)/(-im*omega*mu0), the outward power per area is
+// imag(es*conj(dot(grad(es), n)))/(2*omega*mu0), and the incident intensity is
+// e0^2/(2*mu0*c0). Thus Q = integral(imag(es*conj(dot(grad(es), n))), outer_face)/(2*k0*a_c*e0^2).
 study spectrum: grid {
     ka: [1, 2, 2.5, 3]
+    expect q: integral(imag(es*conj(dot(grad(es), n))), outer_face)/(2*k0*a_c*e0^2) ==
+        [2.862930, 4.293232, 3.613747, 2.582972] within 1%
 }
-
-// gap G7: no real part and no complex conjugate. Q = (scattered power per length)/(2*a times
-// the incident intensity) needs Re(Ez*conj(H)). The checks: Q = 2.862930, 4.293232, 3.613747
-// and 2.582972 at ka = 1, 2, 2.5 and 3, each within 1%, in an expect of the study spectrum.

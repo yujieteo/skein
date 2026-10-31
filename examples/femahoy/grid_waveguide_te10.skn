@@ -53,13 +53,12 @@ bc ywalls: E.z = 0
 bc port_in: Hs*n = im*beta/mu0*(E - dot(E, n)*n) - 2*im*beta/mu0*e10
 bc port_out: Hs*n = im*beta/mu0*(E - dot(E, n)*n)
 
-// gap G9: a procedure argument cannot be a list, also a list of one frequency.
 step response: harmonic(freq: [f0]) {
     output E
 }
 
 // S11 and S21 are the projections of E on the TE10 mode of each port.
-expect s11: integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1 == 0 within 0.012
-// gap G7: no arg() of a Complex value. The complex test of S21 replaces the femahoy checks
-// of |S21| and of its phase, with the tolerance of |S21|.
-expect s21: integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out) == cos(88.008473 deg) + im*sin(88.008473 deg) within 0.013
+// femahoy passes a value v within 1e-3*|v| + 0.012, in the unit of v.
+expect s11_mag: abs(integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1) == 0 within 0.012
+expect s21_mag: abs(integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out)) == 1 within 0.013
+expect s21_deg: arg(integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out)) == 88.008473 deg within 0.1 deg

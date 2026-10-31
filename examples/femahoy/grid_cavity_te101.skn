@@ -52,5 +52,5 @@ step resonance: modal(count: 1, shift: 8 GHz) {
     output E
 }
 
-// gap G6: no name for the eigenfrequency of a modal step. The check is
-// frequency == 8.884604442 GHz within 3e-4 of the value.
+// 3e-4 of the value is 0.03%.
+expect f1: eigenvalue(1) == 8.884604442 GHz within 0.03%

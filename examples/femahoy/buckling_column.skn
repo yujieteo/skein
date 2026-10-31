@@ -46,5 +46,5 @@ step buckle: buckling(count: 4) {
     output u
 }
 
-// gap G6: no name for the load factor of mode 1. The check is
-// pi^2*E*(B^4/12)/(4*L^2)/(1 N) = 10794.88 within 1%.
+// The load factor is pi^2*E*(B^4/12)/(4*L^2)/(1 N).
+expect p1: eigenvalue(1) == 10794.88 within 1%

@@ -41,5 +41,5 @@ step modes: modal(count: 6) {
     output u
 }
 
-// gap G6: no name for the frequency of mode 1. The check is
-// f1 = 1.87510407^2/(2*pi*L^2)*sqrt(E*I/m) = 417.758 Hz within 1%.
+// f1 = 1.87510407^2/(2*pi*L^2)*sqrt(E*I/m), with m the mass for each length.
+expect f1: eigenvalue(1) == 417.758 Hz within 1%

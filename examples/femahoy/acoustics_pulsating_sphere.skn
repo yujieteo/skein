@@ -43,7 +43,6 @@ method acoustic: cg {
 }
 
 // The time factor is exp(im*omega*t), as in femahoy. n points out of the air.
-// gap G9: a procedure argument cannot be a list, also a list of one frequency.
 step tone: harmonic(freq: [f0]) {
     bc src: dot(grad(p), n) = im*omega*rho_air*u_s
     bc outer_face: dot(grad(p), n) = -(im*kw + 1/r_o)*p
@@ -53,7 +52,7 @@ step tone: harmonic(freq: [f0]) {
     report p_probe = p at (0.2, 0.2, 0.1) m
 }
 
-// gap G7: no real and imaginary parts. femahoy checks each part within 1%. Here the
-// complex value is checked within 1% of its modulus.
-expect z_ratio: mean(p, src)/(rho_air*c_air*u_s) == 0.456197 + 0.498078*im within 1%
-expect p_probe: p at (0.2, 0.2, 0.1) m == 4.98678e-2 Pa - 7.81063e-2 Pa*im within 1%
+expect z_re: re(mean(p, src)/(rho_air*c_air*u_s)) == 0.456197 within 1%
+expect z_im: imag(mean(p, src)/(rho_air*c_air*u_s)) == 0.498078 within 1%
+expect p_re: re(p at (0.2, 0.2, 0.1) m) == 4.98678e-2 Pa within 1%
+expect p_im: imag(p at (0.2, 0.2, 0.1) m) == -7.81063e-2 Pa within 1%

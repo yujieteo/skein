@@ -36,4 +36,10 @@ step modes: modal(count: 12) {
     output u
 }
 
-// gap G6: no name gives the frequency of mode k, so the frequencies of modes 7 to 12 are not expect lines.
+// Modes 1 to 6 are the rigid modes.
+expect f7: eigenvalue(7) == 11961.42 Hz within 0.5%
+expect f8: eigenvalue(8) == 13530.06 Hz within 0.5%
+expect f9: eigenvalue(9) == 25595.73 Hz within 0.5%
+expect f10: eigenvalue(10) == 28841.65 Hz within 0.5%
+expect f11: eigenvalue(11) == 31574.5 Hz within 0.5%
+expect f12: eigenvalue(12) == 31633.88 Hz within 0.5%

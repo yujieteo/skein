@@ -54,11 +54,11 @@ physics eddy on box_air solves Az: Complex<Power*Time/(Current*Length)> {
 
 method eddy: cg { mesh: m, order: 1 }
 
-// gap G9: a procedure argument cannot be a list. femahoy also solves 1 kHz and 10 kHz.
+// femahoy also solves 1 kHz and 10 kHz, but it checks only 100 kHz.
 step proximity: harmonic(freq: [f0]) {
     output Az, J
 }
 
-// gap G7: no real() and imag() of a Complex value. The loop impedance per length is
-// Z = 2*E0/integral(J, bar_a). The checks are real(Z) == 4.865727173e-2 V/(A*m) and
-// imag(Z)/(2*pi*f0) == 4.870218310e-7 V*s/(A*m), each within 0.5%.
+// The loop impedance per length is Z = 2*E0/integral(J, bar_a), with R = re(Z) and L = imag(Z)/omega.
+expect r: re(2*E0/integral(J, bar_a)) == 4.865727173e-2 V/(A*m) within 0.5%
+expect l: imag(2*E0/integral(J, bar_a))/(2*pi*f0) == 4.870218310e-7 V*s/(A*m) within 0.5%

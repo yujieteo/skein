@@ -13,7 +13,8 @@ scales W, P/(W*W)
 
 let beam: Solid = box((0, 0, 0) mm, (L, W, W))
 let fixed: Surface = boundary(beam, x == 0 mm)
-let tip: Surface = boundary(beam, x == L)
+// The 9 nodes of the tip face of femahoy: the corners, the mid-sides and the centre.
+let tip: Point = pattern(pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3), (0 mm, 0 mm, W/2), 3)
 
 material steel {
     E: Pressure = 210000 MPa
@@ -31,16 +32,15 @@ physics solid on beam: linear_elastic solves u: Vector<Length> {
 
 bc fixed: u = 0
 
-// gap G16: no point force. femahoy puts -0.25 N on each of the 9 tip nodes.
-// Skein puts the same resultant on the tip face as a uniform traction.
+// femahoy puts P/9 = 0.25 N in -z on each of the 9 tip nodes.
 step tip_load: static {
-    bc tip: sigma*n = (0, 0, -P/(W*W))
+    bc tip: sigma*n = (0 N, 0 N, -P/9)
     output u, sigma
     report reaction(fixed)
 }
 
 step double_load: static {
-    bc tip: sigma*n = (0, 0, -2*P/(W*W))
+    bc tip: sigma*n = (0 N, 0 N, -2*P/9)
     output u, sigma
     report reaction(fixed)
 }

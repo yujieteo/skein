@@ -165,6 +165,9 @@ var cur_phys = -1;        // the physics that the checker is in, or -1
 var cur_step = -1;        // the step that the checker is in, or -1
 var cur_proc: u8[..32];   // the procedure of that step
 var last_proc: u8[..32];  // the procedure of the last step of the file
+var cur_count = -1;       // the count of a modal or buckling step, or -1 when it is not a constant
+var eig_proc: u8[..32];   // the procedure of the last modal or buckling step of the file
+var eig_count = -1;       // the count of that step
 var step_count = 0;
 var setting_mode = false; // an undeclared name is a word (a setting value)
 var in_expect = false;
@@ -222,6 +225,9 @@ fn reset_state() {
     cur_step = -1;
     cur_proc.clear();
     last_proc.clear();
+    cur_count = -1;
+    eig_proc.clear();
+    eig_count = -1;
     step_count = 0;
     setting_mode = false;
     in_expect = false;

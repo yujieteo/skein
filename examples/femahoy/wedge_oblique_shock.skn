@@ -73,16 +73,14 @@ step march: transient(end: 2 s, dt: 0.6 ms, scheme: ssprk3) {
     bc outlet: f_m*n = f_m*n
     bc outlet: dot(f_e, n) = dot(f_e, n)
     output rho, mom, e_t, p
-    report beta_tan = tan(theta) + 2*integral((p - p1)/(2.4675 Pa - p1), aft)/len^2
+    report beta = atan(tan(theta) + 2*integral((p - p1)/(2.4675 Pa - p1), aft)/len^2)
     report mach2 = mean(norm(mom)/rho/sqrt(gam*p/rho), behind)
     report p2 = mean(p, behind)
     report t2 = mean(p/(rho*r_gas), behind)
     report rho2 = mean(rho, behind)
 }
 
-// gap G12: no inverse tangent. The check of beta = 36.94490 deg within 0.25% is on tan(beta),
-// with the tolerance 0.25%*beta/(sin(beta)*cos(beta)) = 0.336%.
-expect shock_angle: tan(theta) + 2*integral((p - p1)/(2.4675 Pa - p1), aft)/len^2 == tan(36.94490 deg) within 0.336%
+expect shock_angle: atan(tan(theta) + 2*integral((p - p1)/(2.4675 Pa - p1), aft)/len^2) == 36.94490 deg within 0.25%
 expect mach2: mean(norm(mom)/rho/sqrt(gam*p/rho), behind) == 1.873526 within 0.25%
 expect pressure_ratio: mean(p, behind) == 2.4675 Pa within 0.25%
 expect temperature_ratio: mean(p/(rho*r_gas), behind) == 1.321958 K within 0.25%
