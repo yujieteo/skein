@@ -1935,7 +1935,6 @@ gives the phase of each part.
 | multigrid | smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996) |
 | mesher | §9.2 |
 | output | VTU writer, TOON reports, state files |
-| tasks | the work-stealing task pool of §20.5 |
 
 ### 18.5 The compiler in Goose
 
