@@ -16,7 +16,7 @@ import .typeexpr;
 // them [`duplicate_name`].
 let BUILTIN_FNS = [
     "sym", "skew", "tr", "det", "inv", "transpose", "dev", "dot", "cross", "outer", "norm",
-    "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "von_mises", "tresca",
+    "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "sum", "von_mises", "tresca",
     "principal", "fourier", "abs", "sqrt", "exp", "ln", "sin", "cos", "tan", "tanh", "atan",
     "atan2", "min", "max", "diff", "reaction", "integral", "mean", "results", "boundary",
     "grad", "div", "curl", "lap", "ddt", "ddt2", "re", "imag", "arg", "conj", "eigenvalue",

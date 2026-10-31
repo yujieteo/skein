@@ -1,0 +1,84 @@
+// femahoy: validation/cases/fit-nist-pontius/pontius/fit.toml
+// The least squares fit of y = c0 + c1*x + c2*x^2 to the 40 observations of the data set
+// Pontius of NIST StRD (a load cell: the deflection y at the load x, no units). The model
+// states the normal equations. References: the certified values of NIST, within 1e-10.
+// The fit has no geometry, so the space 1d has no effect.
+
+model fit_nist_pontius: 1d, nondim
+
+table obs{x: Real, y: Real}:
+    150000, 0.11019
+    300000, 0.21956
+    450000, 0.32949
+    600000, 0.43899
+    750000, 0.54803
+    900000, 0.65694
+    1050000, 0.76562
+    1200000, 0.87487
+    1350000, 0.98292
+    1500000, 1.09146
+    1650000, 1.20001
+    1800000, 1.30822
+    1950000, 1.41599
+    2100000, 1.52399
+    2250000, 1.63194
+    2400000, 1.73947
+    2550000, 1.84646
+    2700000, 1.95392
+    2850000, 2.06128
+    3000000, 2.16844
+    150000, 0.11052
+    300000, 0.22018
+    450000, 0.32939
+    600000, 0.43886
+    750000, 0.54798
+    900000, 0.65739
+    1050000, 0.76596
+    1200000, 0.87474
+    1350000, 0.98300
+    1500000, 1.09150
+    1650000, 1.20004
+    1800000, 1.30818
+    1950000, 1.41613
+    2100000, 1.52408
+    2250000, 1.63159
+    2400000, 1.73965
+    2550000, 1.84696
+    2700000, 1.95445
+    2850000, 2.06177
+    3000000, 2.16829
+
+// The loads are near 1e6. The fit uses u = x/s, so that the columns 1, u and u^2 have a
+// similar size. In 64-bit numbers the normal equations then give c0 within 4e-12. n0 is
+// the number of rows.
+let s: Real = 1e6
+let n0: Real = sum(obs.x/obs.x)
+let n1: Real = sum(obs.x/s)
+let n2: Real = sum((obs.x/s)^2)
+let n3: Real = sum((obs.x/s)^3)
+let n4: Real = sum((obs.x/s)^4)
+let m0: Real = sum(obs.y)
+let m1: Real = sum(obs.y*obs.x/s)
+let m2: Real = sum(obs.y*(obs.x/s)^2)
+let ybar: Real = m0/n0
+let sst: Real = sum((obs.y - ybar)^2)
+
+// b0, b1 and b2 are the coefficients of 1, u and u^2. r2 is R-squared.
+physics normal solves b0: Real, b1: Real, b2: Real, r2: Real {
+    eq n0*b0 + n1*b1 + n2*b2 = m0
+    eq n1*b0 + n2*b1 + n3*b2 = m1
+    eq n2*b0 + n3*b1 + n4*b2 = m2
+    eq r2*sst = sst - sum((obs.y - b0 - b1*obs.x/s - b2*(obs.x/s)^2)^2)
+}
+
+step fit: static {
+    report b0, b1, b2, r2
+}
+
+expect c0: b0 == 0.673565789473684e-3 within 1e-8%
+
+expect c1: b1/s == 0.732059160401003e-6 within 1e-8%
+
+expect c2: b2/s^2 == -0.316081871345029e-14 within 1e-8%
+
+expect r_squared: r2 == 0.999999900178537 within 1e-8%

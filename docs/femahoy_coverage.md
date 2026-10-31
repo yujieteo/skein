@@ -38,6 +38,9 @@ gives the roadmap phase that closes the gap:
   [scordelis_lo_roof.skn](../examples/femahoy/scordelis_lo_roof.skn) and
   the thin plate of
   [laminate_pagano.skn](../examples/femahoy/laminate_pagano.skn) use it.
+- Phase 2 closes G5. Spec [§5.6](skein_spec.md#56-tables) states `sum`,
+  and the new model
+  [fit_nist_pontius.skn](../examples/femahoy/fit_nist_pontius.skn) uses it.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -52,7 +55,7 @@ Skein cannot state the core physics of these cases, so they have no model.
 | G2 | Random vibration: a modal damping ratio, a PSD input and the RMS response over a frequency band. | `validation/cases/random-vibration-cantilever/job.inp:14`, `:25`, `check.toml:9` | `harmonic` (§14.2) has no damping ratio for each mode, and no report function integrates over the frequencies of a step (§14.5). Also needs G8 and G9. | A `harmonic` argument `damping: Real`, and a report function `rms(f, psd)` over the frequencies of the step. | 4 |
 | G3 | Shells (`S8R`, `S6`), also a composite shell section with plies. | `validation/cases/scordelis-lo-roof/job.inp:26`, `validation/cases/laminate-pagano/job.inp:16` | §4.2 names `reissner_mindlin(t)`, but gives no source, no types of `w` and `theta`, and no load argument. Its parameter `t` is also the built-in time. The thin plate of `laminate-pagano` is missing from its model. | Give the template source in §4.2, with a parameter `h: Length`, a load argument, typed unknowns and an optional `layup` table of plies (thickness, angle, material). | 5, closed by [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
 | G4 | A perfect electric conductor on a curved wall: only the tangential part of the field is zero. | `validation/cases/grid-coax-tem/coax/grid.toml:1` | The left side of an essential `bc` is an unknown or a component of it (§12.1). A component is along x, y or z, not along the wall. | Accept `cross(n, u)` as the left side of an essential condition. | 5 |
-| G5 | A least-squares curve fit to 40 points. | `validation/cases/fit-nist-pontius/pontius/fit.toml:4` | A table feeds only `interp` and the rows of an `expect` (§5.6, §15.3). No construct sums an expression over the rows. `minimize` has no gradients, so it cannot get to a relative error of 1e-10. | A function `sum(expr)` over the rows of a table. A `nondim` model can then state the normal equations. Or: state that a curve fit is not a Skein model. | 2 |
+| G5 | A least-squares curve fit to 40 points. | `validation/cases/fit-nist-pontius/pontius/fit.toml:4` | A table feeds only `interp` and the rows of an `expect` (§5.6, §15.3). No construct sums an expression over the rows. `minimize` has no gradients, so it cannot get to a relative error of 1e-10. | A function `sum(expr)` over the rows of a table. A `nondim` model can then state the normal equations. Or: state that a curve fit is not a Skein model. | 2, closed by [§5.6](skein_spec.md#56-tables) |
 
 ### Gaps that make a model fail `check`
 
@@ -253,7 +256,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Case folders for each parameter value | cavity-devahldavis, naca0012-ladson, naca23012-flap, dipole-king-middleton, optics-mie-cylinder | `param` and `study s: grid` | [§20.1](skein_spec.md#201-param), [§20.2](skein_spec.md#202-study), gap [G10](#gaps-that-remove-a-check) |
 | Shape optimization (Nelder-Mead) | shape-hole-biaxial | `study s: minimize(objective, method: nelder_mead, max_cases)` | [§20.2](skein_spec.md#202-study), gap [G25](#gaps-that-change-the-discretization-or-the-physics) |
 | Topology optimization (SIMP) | topology-mbb-beam, topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
-| A least-squares curve fit | fit-nist-pontius | none | gap [G5](#gaps-that-block-a-case) |
+| A least-squares curve fit | fit-nist-pontius | the normal equations: `sum(expr)` over the rows of a table, and a physics of global unknowns | [§5.6](skein_spec.md#56-tables), [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
 
 ### Loads
 
@@ -358,7 +361,7 @@ tests read the fixture.
 | `validation/cases/dam-break-vof` | [dam_break_vof.skn](../examples/femahoy/dam_break_vof.skn) |
 | `validation/cases/dipole-king-middleton` | [dipole_king_middleton.skn](../examples/femahoy/dipole_king_middleton.skn) |
 | `validation/cases/dynamics-bar-step` | [dynamics_bar_step.skn](../examples/femahoy/dynamics_bar_step.skn) |
-| `validation/cases/fit-nist-pontius` | none: gap [G5](#gaps-that-block-a-case) |
+| `validation/cases/fit-nist-pontius` | [fit_nist_pontius.skn](../examples/femahoy/fit_nist_pontius.skn) |
 | `validation/cases/fracture-centre-crack` | [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn) |
 | `validation/cases/frequency-cantilever` | [frequency_cantilever.skn](../examples/femahoy/frequency_cantilever.skn) |
 | `validation/cases/grid-bimetal-strip` | [grid_bimetal_strip.skn](../examples/femahoy/grid_bimetal_strip.skn) |
