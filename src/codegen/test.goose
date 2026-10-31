@@ -565,6 +565,33 @@ fn test_ledger() {
 
 // `skein run --study` of an example, and the command line errors. `./build.sh
 // test` builds build/skein first. The runs write .skein under build/.
+// skein verify convergence: the manufactured solutions of dg and of fv
+// with a limiter and ssprk3 converge with the order of their method, and
+// the faults of the command line stop it.
+fn test_convergence() {
+    let runs = [
+        ["../examples/grid/mms_dg_static.skn", "0"],
+        ["../examples/grid/mms_fv_transient.skn", "0"],
+        ["../examples/grid/mms_dg_static.skn --levels 1", "2"],
+        ["../examples/lame_profile.skn --levels 2", "1"],
+    ];
+    for r in runs {
+        var c: u8[>..] = [];
+        format(c, "cd build && ./skein verify convergence ", r[0], " >convergence.toon 2>/dev/null; test $? = ", r[1]);
+        c.push(0);
+        if system(c[0]) != 0 {
+            failures++;
+            print("FAIL skein verify convergence ", r[0], ": no exit status ", r[1]);
+        }
+        var out: u8[>..] = [];
+        read_file("build/convergence.toon", out);
+        if r[1] == "0" && (find(out, "  post,convergence,pass,\"mms: order ") < 0 || find(out, "  mms,2,1024,") < 0) {
+            failures++;
+            print("FAIL skein verify convergence ", r[0], ": no pass of mms on 3 levels in:\n", out);
+        }
+    }
+}
+
 fn test_study_run() {
     let runs = [
         ["--study lengths --jobs 2", "0"],
@@ -944,6 +971,7 @@ fn main() {
     test_memory_stop();
     test_two_step_study();
     test_study_run();
+    test_convergence();
     test_case_threads();
     test_split();
     test_unchecked_status();

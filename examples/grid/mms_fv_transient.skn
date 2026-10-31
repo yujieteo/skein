@@ -1,0 +1,44 @@
+// A manufactured solution of transient advection-diffusion on the unit
+// square, with fv and the explicit scheme ssprk3: u = exp(-t/T)
+// sin(pi x/L) sin(pi y/L) u0, and the source that makes it exact. The
+// minmod limiter keeps the face values second order where u is smooth,
+// so `skein verify convergence` measures an L2 order near 2. `dt: stable`
+// halves the step with the size of the mesh.
+
+model mms_fv_transient: 2d, SI
+
+let L: Length = 1 m
+let T: Time = 1 s
+let u0: Temperature = 1 K
+let ax: Velocity = 1 m/s
+let ay: Velocity = 0.5 m/s
+let a: Vector<Velocity> = (1, 0.5) m/s
+let d: KinViscosity = 0.01 m^2/s
+let s: Real = sin(pi*x/L)*sin(pi*y/L)
+let g: Real = exp(-t/T)
+
+scales L, u0, T
+
+let sq: Surface = rect((0, 0) m, (L, L))
+let edge: Curve = boundary(sq)
+
+mesh grid on sq {
+    size: 0.125 m
+    cell: quad
+}
+
+physics heat on sq solves u: Temperature = s*u0 {
+    eq ddt(u) + div(a*u) - d*div(grad(u)) =
+        g*u0*(pi/L*(ax*cos(pi*x/L)*sin(pi*y/L) + ay*sin(pi*x/L)*cos(pi*y/L)) +
+            (2*d*(pi/L)^2 - 1/T)*s)
+}
+
+method heat: fv { mesh: grid, flux: linear_upwind, limiter: minmod }
+
+bc edge: u = 0 K
+
+step decay: transient(end: 0.5 s, dt: stable, scheme: ssprk3) {
+    report u at (L/2, L/2)
+    output u
+    expect mms: u == g*s*u0 within 10%
+}

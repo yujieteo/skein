@@ -98,6 +98,10 @@ flow_fluid|fluid: density > 0, viscosity > 0 and a stabilize value
 flow_fix|fix_velocity: comp 0 or 1, and clear_bcs on a mesh
 flow_solve|solve_steady: clear_bcs, and rtol > 0
 flow_value|value_at: a value, and a solve
+grid_mesh|mesh_rect: xb > xa, yb > ya, and cells_x, cells_y >= 1
+grid_equation|equation: a mesh, c_t >= 0 and d >= 0
+grid_dg|dg: a mesh, 1 <= p <= 3, the flux upwind or lax_friedrichs, and sigma > 0
+grid_fix|fix_selected: k >= 0, a method and select_faces
 solvers_multiply|multiply: row_start has y.len + 1 entries, col and val one size, x and y one size
 solvers_ilu0_apply|ilu0_apply: row_start has r.len + 1 entries, z and diag r.len, lu col.len
 CALLS

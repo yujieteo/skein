@@ -1873,12 +1873,27 @@ uses Rhie-Chow interpolation (Rhie and Chow 1983) of the face velocity. The
 system is solved fully coupled by Newton's method. The unknowns are cell
 averages. Essential conditions act through the face flux.
 
+The current lowering (`src/grid/`) takes one scalar unknown with
+`ct ddt(u) + div(a*u) - d*div(grad(u)) = f` on a `rect` of `quad` cells,
+with `ct`, `a` and `d` constant. The diffusive flux uses the two cell
+values. `linear_upwind` adds the cell gradient to the upwind value, with
+the face limiter `ψ(r)` of Darwish and Moukalled (2003) for `minmod` and
+`van_leer`, and the cell limiter of Venkatakrishnan (1995) with `K = 1`.
+An essential condition is a ghost cell. A `static` step is a defect
+correction: each iteration solves the first order system with GMRES and
+ILU(0). A `transient` step uses `ssprk3`.
+
 ### 17.4 Discontinuous Galerkin (`dg`)
 
 The lowering applies §17.1 on each cell. The boundary terms on interior
 faces use the numerical flux of the `flux` setting for `F_a` and the
 symmetric interior penalty form (Arnold 1982, Arnold et al. 2002) for
 `F_d`. Essential conditions are weak, by the same penalty.
+
+The current lowering (`src/grid/`) takes the equation of §17.3 on the same
+grid. The basis is the tensor Legendre basis `Q_p`, `order` 1 to 3, so the
+mass matrix is diagonal. The penalty is `σ = penalty · d · (p+1)²/h`, with
+the default `penalty: 2`. `roe` is `upwind` for one scalar.
 
 ### 17.5 Meshless
 

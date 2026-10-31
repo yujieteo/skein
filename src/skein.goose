@@ -8,6 +8,7 @@ import fmt.fmt;
 import cli.card;
 import codegen.run;
 import codegen.build;
+import codegen.convergence;   // skein-p4-grid: skein verify convergence
 import check from "./check";
 import md from "./md";
 import report from "./report";   // skein report
@@ -70,6 +71,11 @@ fn main() {
     }
     if command == "check" { exit(check::command(args)); }
     if command == "lint" { exit(mesher::lint(args)); }
+    if command == "verify" && args.len > 2 && args[2] == "convergence" {
+        var rest: const u8[:][>..] = [];
+        for a in args[3..] { rest.push(a); }
+        exit(codegen::convergence(rest));
+    }
     if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
     if command == "export" { exit(mesher::export_command(args)); }
     if command == "md" {

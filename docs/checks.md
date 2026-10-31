@@ -227,6 +227,21 @@ It compares the observed order with the expected order of the method (for
 example 3 in L2 for `cg` with `order: 2` and a smooth solution) and fails
 when the observed order is lower by more than 0.3. The id is `convergence`.
 
+The current tool runs the `fv` and `dg` models, and gives the order of
+each `expect` of two fields from the two finest levels. It does not give
+the order of a `report` yet. The expected order is `order + 1` for `dg`,
+1 for `fv` with `flux: upwind` and advection, and 2 for the other `fv`
+models. It writes `.skein/build/<model>/convergence/<level>/` and prints:
+
+```
+convergence[3]{expect,level,cells,error,order}:
+  mms,0,64,0.00026185813521134853,-
+  mms,1,256,2.9987022032873325e-05,3.1263752635398405
+  mms,2,1024,3.36292242325016e-06,3.1565508534892865
+verify[1]{stage,id,result,value,limit}:
+  post,convergence,pass,"mms: order 3.1565508534892865",">= 2.7 (dg, order 2)"
+```
+
 ---
 
 ## 5. Run errors

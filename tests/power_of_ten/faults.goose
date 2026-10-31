@@ -7,6 +7,7 @@ import runtime from "../../src/runtime";
 import elements from "../../src/elements";
 import shells from "../../src/shells";
 import flow from "../../src/flow";
+import grid from "../../src/grid";
 import solvers from "../../src/solvers";
 import mesher from "../../src/mesher";
 
@@ -56,6 +57,18 @@ fn main() {
         flow::fix_velocity(0, 1.0);
     } else if call == "flow_solve" {
         flow::solve_steady(1.0e-8);
+    } else if call == "grid_mesh" {
+        grid::mesh_rect(0.0, 0.0, 0.0, 1.0, 2, 2);
+    } else if call == "grid_equation" {
+        grid::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        grid::equation(1.0, 0.0, 0.0, -1.0);
+    } else if call == "grid_dg" {
+        grid::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        grid::dg(4, grid::UPWIND, 2.0);
+    } else if call == "grid_fix" {
+        grid::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        grid::fv(grid::UPWIND, grid::GREEN_GAUSS, grid::NONE);
+        grid::fix_selected(-1);
     } else if call == "flow_value" {
         flow::value_at(flow::VALUE_P, 0.0, 0.0);
     } else if call == "solvers_multiply" {
