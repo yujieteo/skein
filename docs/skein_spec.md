@@ -2093,7 +2093,8 @@ runs does not change the results.
 
 On the native target, a case is a separate program. Thus a task of the
 pool is one whole case. A part of the work in a case, for example a colour
-of the assembly or a block of a solver, is not a task of the pool.
+of the assembly or a block of a solver, is not a task of the pool. A
+later phase adds the threads in a case.
 
 ### 20.6 The results table
 
