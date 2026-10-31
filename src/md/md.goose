@@ -90,7 +90,8 @@ recursive fn type_str(n: i64, s: u8[>..]&) {
         },
         syntax::N_DIM_POW => {
             type_str(first(n), s);
-            format(s, "^", syntax::nodes[n].aux);
+            s.push('^');
+            syntax::format_halves(s, syntax::nodes[n].aux);
         },
         _ => { s.append(node_text(n)); },
     }
@@ -205,7 +206,9 @@ recursive fn math_unit(n: i64) {
             if wrap { out.push('('); }
             math_unit(b);
             if wrap { out.push(')'); }
-            format(out, "^{", syntax::nodes[n].aux, "}");
+            out.append("^{");
+            syntax::format_halves(out, syntax::nodes[n].aux);
+            out.push('}');
         },
         _ => {},
     }

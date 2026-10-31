@@ -75,7 +75,7 @@ in the file stays in the review.
 | `unit_mismatch` | §6.1 | a sum, comparison or equation joins two dimensions | `E + rho` | the two dimensions, and the unit that would make them equal |
 | `rank_mismatch` | §7.2 | a sum or an equation joins two ranks | `div(sigma) = 0 Pa` | the rank of each side |
 | `ambiguous_product` | §7.2 | `*` between two vectors | `v*n` | `dot(v, n)` |
-| `unit_fractional` | §6.1 | `sqrt` or `^` gives a fractional exponent | `sqrt(E)` | the exponents |
+| `unit_fractional` | §6.1 | `sqrt` or `^` gives an exponent that is not a multiple of 1/2 | `sqrt(sqrt(E))` | the exponents |
 | `unit_transcendental` | §6.1 | `exp`, `ln` or a trigonometric function other than `atan2` takes a quantity with a dimension | `exp(T)` | divide by a reference value |
 | `unit_affine` | §6.3 | `degC` in a compound unit | `1.2 W/(m*degC)` | `W/(m*K)` |
 | `sum_no_column` | §5.6 | the argument of `sum` uses no table column | `sum(2 m)` | `sum(t.col)` |

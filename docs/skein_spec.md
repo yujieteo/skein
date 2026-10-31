@@ -263,7 +263,7 @@ type        = qtype | "Vector" "<" stype ">" | "Tensor2" "<" stype ">"
 stype       = qtype | numsys ;
 numsys      = ( "Complex" | "Quaternion" | "Dual" ) "<" qtype ">" ;
 qtype       = dimterm { ("*" | "/") dimterm } ;
-dimterm     = ident [ "^" ["-"] digits ] | "(" qtype ")" ;
+dimterm     = ident [ "^" ["-"] number ] | "(" qtype ")" ;
 
 expr        = orexpr ;
 orexpr      = andexpr { ("||" | "|") andexpr } ;
@@ -282,7 +282,7 @@ arg         = [ name ":" ] ( expr | list ) ;
 namedargs   = name ":" expr { "," name ":" expr } ;
 
 unitexpr    = unitfactor { ("*" | "/") unitfactor } ;
-unitfactor  = unitname [ "^" ["-"] digits ] | "(" unitexpr ")" ;
+unitfactor  = unitname [ "^" ["-"] number ] | "(" unitexpr ")" ;
 ```
 
 Notes on the grammar:
@@ -640,18 +640,23 @@ Reason for exception 1: `u = 0` is the most common boundary condition, and
 
 ### 6.1 Dimensions
 
-A dimension is a vector of seven integer exponents over the SI base
-dimensions: mass M, length L, time T, temperature Θ, current I, amount N and
-luminous intensity J. The checker does arithmetic on these vectors:
+A dimension is a vector of seven exponents over the SI base dimensions:
+mass M, length L, time T, temperature Θ, current I, amount N and luminous
+intensity J. Each exponent is a multiple of 1/2. Reason: a stress intensity
+factor has the dimension `Pressure*Length^0.5` (femahoy gap G14). The
+checker does arithmetic on these vectors:
 
 - `a*b` adds the exponents, `a/b` subtracts them, `a^k` multiplies them by
-  `k`. `k` must be an integer constant, except when `a` is `Real`. Then `k`
-  may be any constant `Real`, not a varying value (§7.6) [`not_constant`].
+  `k`. `k` must be a constant, and each exponent of the result must be a
+  multiple of 1/2 [`unit_fractional`]. When `a` is `Real`, `k` may be any
+  constant `Real`. A varying `k` is an error (§7.6) [`not_constant`].
   A function parameter is constant when each call gives it a constant.
+- After `^` in a type or a unit, the exponent is a number that is a
+  multiple of 0.5: `Pressure*Length^0.5`, `MPa*mm^0.5`, `Length^-1.5`.
 - `a + b`, `a - b`, `a == b` and the other comparisons need equal
   dimensions [`unit_mismatch`].
-- `sqrt(a)` halves the exponents. Each exponent must be even
-  [`unit_fractional`].
+- `sqrt(a)` halves the exponents. Each exponent of `a` must be a whole
+  number [`unit_fractional`].
 - `exp`, `ln`, `sin`, `cos`, `tan`, `tanh` take `Real` or `Angle`
   [`unit_transcendental`]. `atan` takes `Real`. `atan2(y, x)` takes two
   values of one dimension [`unit_mismatch`]. Both give an `Angle`.

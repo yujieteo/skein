@@ -85,7 +85,8 @@ recursive fn span(n: i64, lo: i64&, hi: i64&) {
 
 // --- units (spec §6.3, §6.5) ---------------------------------------------------
 
-// A factor to SI and the exponents of length, mass and time.
+// A factor to SI and the exponents of length, mass and time, in halves
+// (spec §6.1).
 struct Unit {
     f: f64,
     l: i64,
@@ -99,15 +100,15 @@ struct BaseUnit {
 }
 
 let BASE_UNITS = [
-    BaseUnit { name: "m", u: Unit { f: 1.0, l: 1, m: 0, t: 0 } },
-    BaseUnit { name: "g", u: Unit { f: 1.0e-3, l: 0, m: 1, t: 0 } },
-    BaseUnit { name: "s", u: Unit { f: 1.0, l: 0, m: 0, t: 1 } },
-    BaseUnit { name: "N", u: Unit { f: 1.0, l: 1, m: 1, t: -2 } },
-    BaseUnit { name: "Pa", u: Unit { f: 1.0, l: -1, m: 1, t: -2 } },
-    BaseUnit { name: "t", u: Unit { f: 1000.0, l: 0, m: 1, t: 0 } },
-    BaseUnit { name: "bar", u: Unit { f: 1.0e5, l: -1, m: 1, t: -2 } },
+    BaseUnit { name: "m", u: Unit { f: 1.0, l: 2, m: 0, t: 0 } },
+    BaseUnit { name: "g", u: Unit { f: 1.0e-3, l: 0, m: 2, t: 0 } },
+    BaseUnit { name: "s", u: Unit { f: 1.0, l: 0, m: 0, t: 2 } },
+    BaseUnit { name: "N", u: Unit { f: 1.0, l: 2, m: 2, t: -4 } },
+    BaseUnit { name: "Pa", u: Unit { f: 1.0, l: -2, m: 2, t: -4 } },
+    BaseUnit { name: "t", u: Unit { f: 1000.0, l: 0, m: 2, t: 0 } },
+    BaseUnit { name: "bar", u: Unit { f: 1.0e5, l: -2, m: 2, t: -4 } },
     // skein-elements: the heat units of src/elements/gen.goose. Each system uses the kelvin.
-    BaseUnit { name: "W", u: Unit { f: 1.0, l: 2, m: 1, t: -3 } },
+    BaseUnit { name: "W", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
     BaseUnit { name: "K", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
 ];
 
@@ -166,7 +167,7 @@ recursive fn unit_value(n: i64) -> Unit {
     if k == syntax::N_UNIT_POW {
         let b = unit_value(syntax::nodes[n].first);
         let e = syntax::nodes[n].aux;
-        return Unit { f: pow(b.f, e), l: b.l * e, m: b.m * e, t: b.t * e };
+        return Unit { f: pow(b.f, e / 2.0), l: b.l * e / 2, m: b.m * e / 2, t: b.t * e / 2 };
     }
     let a = unit_value(syntax::child(n, 0));
     let b = unit_value(syntax::child(n, 1));
@@ -177,7 +178,7 @@ recursive fn unit_value(n: i64) -> Unit {
 // The factor from a unit to the unit system of the header.
 fn to_system(n: i64) -> f64 {
     let u = unit_value(n);
-    return u.f / (pow(system.l, u.l) * pow(system.m, u.m) * pow(system.t, u.t));
+    return u.f / (pow(system.l, u.l / 2.0) * pow(system.m, u.m / 2.0) * pow(system.t, u.t / 2.0));
 }
 
 // --- values --------------------------------------------------------------------

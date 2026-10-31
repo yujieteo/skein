@@ -118,6 +118,9 @@ fn test_parse() {
         "(let \"k\" (type \"Real\") (number \"1.2\" (unit \"W\" (unit_div \"/\" (unit_name \"W\") (unit_mul \"*\" (unit_name \"m\") (unit_name \"K\"))))))");
     expect_item("let k: Force/Length^2 = 1 N/mm^2",
         "(let \"k\" (dim_div \"/\" (type \"Force\") (dim_pow \"^\" 2 (type \"Length\"))) (number \"1\" (unit \"N\" (unit_div \"/\" (unit_name \"N\") (unit_pow \"^\" 2 (unit_name \"mm\"))))))");
+    // An exponent of a type or a unit is a multiple of 0.5 (femahoy gap G14).
+    expect_item("let k: Pressure*Length^-0.5 = 1 MPa*mm^1.5",
+        "(let \"k\" (dim_mul \"*\" (type \"Pressure\") (dim_pow \"^\" -0.5 (type \"Length\"))) (number \"1\" (unit \"MPa\" (unit_mul \"*\" (unit_name \"MPa\") (unit_pow \"^\" 1.5 (unit_name \"mm\"))))))");
     expect_item("let z: Vector<Complex<Velocity>> = 0",
         "(let \"z\" (type_apply \"Vector\" (type_apply \"Complex\" (type \"Velocity\"))) (number \"0\"))");
     expect_item("let ok: Bool = !a && b || c != d",
@@ -179,6 +182,7 @@ fn test_errors() {
     // The lexer reports these, and the parser adds no second error.
     expect_errors("model m: 3d, SI\nlet s: String = \"abc\n", "syntax 2:17\n");
     expect_errors("model m: 3d, SI\nlet a: Real = 1 # 2\n", "syntax 2:17\n");
+    expect_errors("model m: 3d, SI\nlet a: Length^0.25 = 1 m\n", "syntax 2:20\n");
     expect_errors("model m: 3d, SI\nlet a: Bool = a < b < c\n", "syntax 2:21\n");
     // A list is only a study entry or a procedure argument.
     expect_errors("model m: 3d, SI\nlet a: Real = [1, 2]\n", "syntax 2:15\n");

@@ -171,19 +171,19 @@ fn test_units() {
     let load = """
         step load: static {
             bc root: u = 0
-            bc tip: sigma*n = (0, 0, -1 kN/(50 mm*100 mm))
+            bc tip: sigma*n = (0, 0, -1 kN/(50 mm*100 mm^0.5*mm^0.5))
             report tip_uz = u.z at (1, 0.025, 0.05) m
         }
         """;
     expect_lines("units in mm_N_MPa_s", model(MM, str(MESH, load)), [
-        "traction(\"x1\", 0.0, 0.0, -0.2)",
+        "traction(\"x1\", 0.0, 0.0, -0.2000000000",
         "displacement_at(1000.0, 25.0, 50.0)",
         "quantity(uz, \"mm\")",
     ]);
     expect_lines("units in SI", model("model t: 3d, SI", str(MESH, load)), [
         "runtime::mesh_box(0.0, 0.0, 0.0, 0.1, 0.01, 0.01,",
         "runtime::material(210000000000.0, 0.3);",
-        "traction(\"x1\", 0.0, 0.0, -199999.9999",
+        "traction(\"x1\", 0.0, 0.0, -200000.0000",
         "displacement_at(1.0, 0.025, 0.05)",
     ]);
 }

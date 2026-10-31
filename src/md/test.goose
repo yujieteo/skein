@@ -86,6 +86,7 @@ fn test_escapes() {
         fn twice_of(y: Real) -> Real = 2*y
         let a: Real = twice_of(3)
         let r: Real = 5%
+        let k: Pressure/Length^0.5 = 2 MPa*mm^-0.5
 
         scales 1 m, 1 kg, 1 s, 1 K
         """;
@@ -101,6 +102,8 @@ fn test_escapes() {
         "$\\operatorname{twice}_{\\mathrm{of}}(3)$",
         "\\mathit{twice}_{\\mathrm{of}}(y) = 2 y",
         "| `r` | let | `Real` | $5$ % |",
+        "`Pressure/Length^0.5`",
+        "\\mathrm{mm}^{-0.5}",
     ];
     for w in wants {
         if find(result, w) < 0 {
