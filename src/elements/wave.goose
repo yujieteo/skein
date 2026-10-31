@@ -247,6 +247,7 @@ fn wave_cell(c: i64, me: f64[:], fe: f64[:]) {
 // The natural loads of the tied nodes move to their masters.
 fn wave_assemble() {
     wave_pattern();
+    solvers::memory_check("simplex wave gmres ilu0", col.len, dof_total(), wave_restart(dof_total()) + 8, "");
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     var me: f64[200] = [0.0; 200];
@@ -306,6 +307,9 @@ fn wave_rhs() -> f64[>..] {
     return b;
 }
 
+// The GMRES restart of a system of n dofs.
+fn wave_restart(n: i64) -> i64 { return min(WAVE_RESTART, max(50, WAVE_KRYLOV / max(n, 1))); }
+
 // Assembles and solves the system of one frequency. False if GMRES does
 // not converge.
 fn wave_solve() -> bool {
@@ -319,7 +323,7 @@ fn wave_solve() -> bool {
     var converged = solvers::ilu0(row_start, col, val, lu, diag);
     var its = 0;
     if converged {
-        let restart = min(WAVE_RESTART, max(50, WAVE_KRYLOV / max(b.len, 1)));
+        let restart = wave_restart(b.len);
         solvers::rows_start(row_start, col, val);
         its, converged = solvers::gmres(row_start, col, val, b, sol, WAVE_TOLERANCE, restart, WAVE_ITERATIONS) { r, z =>
             solvers::ilu0_apply(row_start, col, lu, diag, r, z);

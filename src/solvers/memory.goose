@@ -56,6 +56,10 @@ struct MemoryPath {
 //                         step before it leaves pages that the buckling step uses again.
 //     shell skyline ldlt  thin cylinder 38.1 mm, 23,760 dofs: 8.2 (one value for each
 //                         entry of the profile), and no threads
+//     simplex wave        PML duct at 6 mm and 4 mm, 35,070 and 76,602 dofs: 17.6 and 9.1
+//                         (lu and the ILU(0)), and -2.5 and 14.4 more on 16 threads. The
+//                         highest of each, measured on 2026-11-01. The Krylov vectors of
+//                         GMRES are most of the peak, and the caller counts them.
 //     flow                sample 02 at a/128, 102,675 dofs: 24.2 (val, lu and pre). Not
 //                         measured on 16 threads: the 16 of simplex cg amg, which also
 //                         has rows_start.
@@ -67,6 +71,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, thread_bytes: 1.0 },
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, thread_bytes: 0.0 },
+    MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, thread_bytes: 16.0 },
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, thread_bytes: 16.0 },
 ];
 
