@@ -79,6 +79,7 @@ in the file stays in the review.
 | `unit_transcendental` | §6.1 | `exp`, `ln` or a trigonometric function other than `atan2` takes a quantity with a dimension | `exp(T)` | divide by a reference value |
 | `unit_affine` | §6.3 | `degC` in a compound unit | `1.2 W/(m*degC)` | `W/(m*K)` |
 | `sum_no_column` | §5.6 | the argument of `sum` uses no table column | `sum(2 m)` | `sum(t.col)` |
+| `sum_mixed_tables` | §5.6 | the argument of `sum` uses the columns of more than one table | `sum(a.x*b.y)` | `sum(a.x)*sum(b.y)` |
 | `not_constant` | §7.6 | a varying value where a constant must be | `size: 1 mm*(1 + x/L)` | `refine` for local size |
 
 ### 2.3 Geometry and regions

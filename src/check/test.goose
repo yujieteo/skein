@@ -214,6 +214,10 @@ fn test_types() {
     expect_clean("sum of a table column", str(H, tb, "let s: Area = sum(tb.a^2*tb.b)\n"));
     expect_id("unit_mismatch", str(H, tb, "let s: Real = sum(tb.a)\n"));
     expect_id("sum_no_column", str(H, "let s: Length = sum(2 m)\n"));
+    let tc = "table tc{c: Real}:\n    1\n";
+    expect_id("sum_mixed_tables", str(H, tb, tc, "let s: Length = sum(tb.a*tc.c)\n"));
+    expect_id("sum_mixed_tables", str(H, tb, tc, "let l: Length = tb.a\nlet s: Length = sum(l*tc.c)\n"));
+    expect_clean("sum of one table through a let", str(H, tb, "let l: Length = tb.a\nlet s: Area = sum(l*tb.a)\n"));
     expect_id("geometry_dim", str(H2, "let s: Solid = rect((0, 0) m, (1, 1) m)\n"));
     expect_id("geometry_space", str(H, "let s: Surface = circle((0, 0) m, 1 m)\n"));
     expect_clean("a 2D profile of extrude and revolve in a 3d model", str(H, "let s: Solid = extrude(rect((0, 0) m, (1, 1) m), 2 m) | revolve(circle((2, 0) m, 1 m), 1 rad)\n"));

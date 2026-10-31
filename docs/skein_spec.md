@@ -607,7 +607,8 @@ point of an `at`. The statement then applies to each row (§15.3).
 
 `sum(expr)` is the sum of the scalar or tensor expression `expr` over the
 rows of a table. It has the type of `expr`, and it is one value, not a
-list. `expr` must use a column of a table [`sum_no_column`].
+list. `expr` must use a column of a table [`sum_no_column`], and
+all its columns must come from one table [`sum_mixed_tables`].
 
 ```skein
 let sxy: Real = sum(obs.x*obs.y)
