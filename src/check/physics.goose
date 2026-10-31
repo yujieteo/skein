@@ -133,7 +133,7 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
             let p = physics[cur_phys];
             if eqs < p.count { note_fluxes(s, p.first + eqs); }
             note_high_derivs(s, 0);
-            if convection(k.first) || convection(syntax::nodes[k.first].next) { physics[cur_phys].convective = true; }
+            if convection(k.first, 0) || convection(syntax::nodes[k.first].next, 0) { physics[cur_phys].convective = true; }
             eqs++;
         },
         syntax::N_PLASTIC => {
@@ -792,10 +792,16 @@ fn is_pressure(t: Ty) -> bool { is_num(t) && t.rank == 0 && t.dim == FORCE - dim
 // True when the expression `n` has a convection term: `grad(a)*w`,
 // `w*grad(a)`, `dot(w, grad(a))` or `dot(grad(a), w)`, with `w` a name of
 // a vector of velocities and each side perhaps a product with other
-// factors (spec §13, the default `stabilize`).
-recursive fn convection(n: i64) -> bool {
-    guard n >= 0 else { return false; };
+// factors (spec §13, the default `stabilize`). A name of a physics `let`
+// gives the convection terms of its value, to `depth` 16.
+recursive fn convection(n: i64, depth: i64) -> bool {
+    guard n >= 0 && depth <= 16 else { return false; };
     let k = syntax::nodes[n];
+    if k.kind == syntax::N_NAME {
+        let s = visible.get(key(tok_text(k.tok)));
+        return s && syms[s].kind == S_LET && syms[s].phys == cur_phys && syms[s].node >= 0
+               && convection(syntax::nodes[syms[s].node].last, depth + 1);
+    }
     var a = -1;
     var b = -1;
     if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
@@ -811,7 +817,7 @@ recursive fn convection(n: i64) -> bool {
     if a >= 0 && b >= 0 && ((factor(a, true) && factor(b, false)) || (factor(b, true) && factor(a, false))) { return true; }
     var c = k.first;
     while c >= 0 {
-        if convection(c) { return true; }
+        if convection(c, depth) { return true; }
         c = syntax::nodes[c].next;
     }
     return false;

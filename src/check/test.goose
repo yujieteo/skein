@@ -353,6 +353,8 @@ fn test_method_defaults() {
     expect_chosen("conduction", str(heat, "physics h on b: heat solves T: Temperature {\n    material cu\n}\n"), "h,m1,2,none\n");
     expect_chosen("convection of a heat", str(heat, "let w: Vector<Velocity> = (1, 0, 0) m/s\nphysics h on b solves T: Temperature {\n    material cu\n    eq rho*c_p*dot(w, grad(T)) - div(k*grad(T)) = 0 W/m^3\n}\n"),
                   "h,m1,2,supg\n");
+    expect_chosen("convection in a let", str(heat, "let w: Vector<Velocity> = (1, 0, 0) m/s\nphysics h on b solves T: Temperature {\n    material cu\n    let adv: Power/Volume = rho*c_p*dot(w, grad(T))\n    let net: Power/Volume = adv\n    eq net - div(k*grad(T)) = 0 W/m^3\n}\n"),
+                  "h,m1,2,supg\n");
     // The report: TOON and JSON.
     check::check_text("t.skn", str(H2, FLOW));
     var toon: u8[>..] = [];
