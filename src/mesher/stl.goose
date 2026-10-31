@@ -119,7 +119,11 @@ fn boundary_facets(out: f64[3][>..]&) {
 
 // A real number of a STEP file: it has a point, and an exponent is E.
 fn step_real(out: u8[>..]&, x: f64) {
-    for ch in str(x) { out.push(if ch == 'e' { 'E' } else { ch }); }
+    let text = str(x);
+    for ch in text {
+        if ch == 'e' && position(text, '.') < 0 { out.push('.'); }
+        out.push(if ch == 'e' { 'E' } else { ch });
+    }
 }
 
 // The STEP AP242 file of the triangles: one tessellated shell with one
@@ -157,7 +161,7 @@ fn write_step(out: u8[>..]&, name: u8[:], tris: f64[3][:]) {
         }
         out.append(")");
     }
-    format(out, "));\n#31=TRIANGULATED_FACE('',#30,0,(),$,(),(");
+    format(out, "));\n#31=TRIANGULATED_FACE('',#30,", tris.len, ",(),$,(),(");
     for t in tris.len / 3 {
         if t > 0 { out.append(","); }
         format(out, "(", 3 * t + 1, ",", 3 * t + 2, ",", 3 * t + 3, ")");

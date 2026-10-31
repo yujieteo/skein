@@ -525,8 +525,9 @@ fn integers(text: u8[:], marked: bool, list: i64[>..]&) {
 }
 
 // Checks the STEP file `step` as a schema check, with no CAD reader on the
-// machine: the Part 21 frame, every #n that is used is defined, and the
-// triangles of the TRIANGULATED_FACE are in range of its COORDINATES_LIST.
+// machine: the Part 21 frame, every #n that is used is defined, every
+// coordinate is a REAL with a point, the pnmax of the TRIANGULATED_FACE is
+// the point count, and its triangles are in range of its COORDINATES_LIST.
 // The result is the triangle count.
 fn check_step(what: u8[:], step: u8[:]) -> i64 {
     if !starts_with(step, "ISO-10303-21;\n") || !ends_with(step, "END-ISO-10303-21;\n") { fail(str("export ", what, ": no Part 21 frame")); }
@@ -534,6 +535,7 @@ fn check_step(what: u8[:], step: u8[:]) -> i64 {
     var defined: i64[>..] = [];
     var used: i64[>..] = [];
     var points = 0;
+    var pnmax = -1;
     var corners: i64[>..] = [];
     for line in split(step, '\n') {
         guard line.len > 0 && line[0] == '#' else { continue; };
@@ -544,9 +546,16 @@ fn check_step(what: u8[:], step: u8[:]) -> i64 {
             var n: i64[>..] = [];
             integers(body[..find(body, ",(")], false, n);
             points = n[0];
+            for real in split(body[find(body, ",(") + 1..], ',') {
+                if position(real, '.') < 0 { fail(str("export ", what, ": the coordinate ", real, " has no point")); }
+            }
         } else if starts_with(body, "TRIANGULATED_FACE") {
+            let head = body[..find(body, ",(),$,(),(")];
             integers(body[find(body, ",$,(),(") + 7..], false, corners);
-            integers(body[..find(body, ",$,(),(")], true, used);
+            integers(head, true, used);
+            var n: i64[>..] = [];
+            integers(head, false, n);
+            pnmax = n[n.len - 1];
         } else {
             integers(body, true, used);
         }
@@ -554,6 +563,7 @@ fn check_step(what: u8[:], step: u8[:]) -> i64 {
     for u in used { if !contains(defined[..], u) { fail(str("export ", what, ": #", u, " is used and not defined")); } }
     var top = 0;
     for c in corners { top = max(top, c); }
+    if pnmax != points { fail(str("export ", what, ": pnmax ", pnmax, ", not the point count ", points)); }
     if points != corners.len || top != points || corners.len % 3 != 0 {
         fail(str("export ", what, ": ", corners.len, " corners, ", points, " points, the highest index ", top));
     }
@@ -580,6 +590,9 @@ fn test_export() {
     let step = export_case("a block with a hole as STEP", holed, ["--geometry", "s", "--format", "step"], 0);
     let n_step = check_step("a block with a hole", step);
     if n_step != n_fine { fail(str("export STEP: ", n_step, " triangles, the STL has ", n_fine)); }
+    var small: u8[>..] = [];
+    mesher::step_real(small, 5.0e-5);
+    if small[..] != "5.E-05" { fail(str("export STEP: 5e-05 is the REAL ", small, ", not 5.E-05")); }
     // --size sets the triangles in place of the size of the mesh block.
     let coarse = export_case("--size 50 cm", holed, ["--geometry", "s", "--size", "50 cm"], 0);
     let n_coarse, coarse_volume, coarse_area = read_stl("--size 50 cm", coarse);
