@@ -658,11 +658,21 @@ fn test_two_step_study() {
 fn test_memory_stop() {
     var c: u8[>..] = [];
     format(c, "cd build && SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err; ",
-           "test $? = 1 && grep -q 'MB of memory, and 1 MB is free for it' memory.err");
+           "test $? = 1 && grep -q 'MB of memory, and 1 MB is free for it (from SKEIN_MEMORY_BUDGET)' memory.err");
     c.push(0);
     if system(c[0]) != 0 {
         failures++;
         print("FAIL skein run with SKEIN_MEMORY_BUDGET=1000000 does not stop with the memory message");
+    }
+    // The stop gives the 1-thread estimate, the least that the solve needs:
+    // the message on 16 threads is the same as on 1 thread.
+    c.clear();
+    format(c, "cd build && for t in 1 16; do SKEIN_THREADS=$t SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory$t.err; ",
+           "test $? = 1 || exit 1; done && cmp -s memory1.err memory16.err");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL skein run on 16 threads that does not fit does not stop with the 1-thread estimate");
     }
     // 40 MB holds the solve on 1 thread (about 25 MB) and not on 16 threads
     // (about 53 MB): the run goes on with 1 thread.

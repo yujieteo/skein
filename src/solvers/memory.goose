@@ -78,6 +78,7 @@ let THREAD_BYTES = 1.5e6;
 let BUDGET_SHARE = 0.9;
 
 var budget = -1.0;            // the budget in bytes, 0 if it is not known, or -1 before the first read
+var budget_from_env = false;  // SKEIN_MEMORY_BUDGET set the budget
 var largest_estimate = 0.0;   // the largest estimate of a check, in bytes
 
 // The value in kB of the line `key` of a /proc file such as
@@ -134,7 +135,7 @@ fn memory_budget() -> f64 {
         budget = if free > 0.0 { BUDGET_SHARE * free + resident_bytes() } else { 0.0 };
         if env("SKEIN_MEMORY_BUDGET", s) {
             let v, good = parse_int(s);
-            if good { budget = v * 1.0; }
+            if good { budget = v * 1.0; budget_from_env = true; }
         }
     }
     return budget;
@@ -184,8 +185,8 @@ var memory_checks = 0;   // the checks of the run
 // Checks, after the pattern of a solve on path `name` and before its
 // values, that the case fits in the budget (memory_estimate). If it does
 // not on its threads but does on 1 thread, the case goes on with 1 thread.
-// If it does not on 1 thread, it stops the program with the estimate, the
-// budget and `fix`, the lower-memory choice of the path or "". It also asks the kernel to kill
+// If it does not on 1 thread, it stops the program with the 1-thread
+// estimate, the budget and `fix`, the lower-memory choice of the path or "". It also asks the kernel to kill
 // this case first if the memory runs out (oom_score_adj 1000, which a
 // process may set on itself).
 fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) {
@@ -206,8 +207,9 @@ fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) 
     }
     largest_estimate = max(largest_estimate, need);
     if have <= 0.0 || need <= have { return; }
-    write_stderr(str("skein run: the solve needs about ", mb(need), " MB of memory, and ", mb(have),
-                     " MB is free for it (", BUDGET_SHARE, " of MemAvailable and of the cgroup limit). ",
+    let source = if budget_from_env { str("from SKEIN_MEMORY_BUDGET") } else { str(BUDGET_SHARE, " of MemAvailable and of the cgroup limit") };
+    write_stderr(str("skein run: the solve needs about ", mb(one), " MB of memory, and ", mb(have),
+                     " MB is free for it (", source, "). ",
                      "Close other programs or use a coarser mesh", fix, ".\n"));
     exit(1);
 }
