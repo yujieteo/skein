@@ -37,8 +37,8 @@ let PAGE_IMPORTS = """
     """;
 
 // The end of the program of the page. The arguments are the words of
-// `--set`. web_quality prints the mesh_quality record of the mesh after
-// the records.
+// `--set`. web_quality prints the mesh_quality record of a simplex mesh
+// after the records.
 let PAGE_MAIN = """
 
     fn web_quality() {
@@ -323,19 +323,25 @@ let PAGE_HTML = """
       return { xyz: nums(pts.body), conn: nums(conn.body), offs: nums(offs.body), types: nums(types.body), field: nums(field.body), comps };
     }
 
-    // The boundary triangles of the corner nodes of the cells.
+    // The boundary triangles of the corner nodes of the cells: the faces
+    // of a tetrahedron or a hexahedron (VTK type 12) that no other cell
+    // has, and each triangle and quad, a quad as 2 triangles.
+    const TET_FACES = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
+    const HEX_FACES = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
     function surface(v) {
       const tris = [], count = new Map();
+      const split = (f) => (f.length === 3 ? [f] : [[f[0], f[1], f[2]], [f[0], f[2], f[3]]]);
       for (let c = 0; c < v.types.length; c++) {
         const o = c > 0 ? v.offs[c - 1] : 0, t = v.types[c];
-        const n = Array.from(v.conn.slice(o, o + 4));
+        const n = Array.from(v.conn.slice(o, o + 8));
         if (t === 5 || t === 22) { tris.push([n[0], n[1], n[2]]); continue; }
-        for (const f of [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]) {
-          const tri = [n[f[0]], n[f[1]], n[f[2]]], key = tri.slice().sort((a, b) => a - b).join(",");
-          count.set(key, count.has(key) ? null : tri);
+        if (t === 9) { tris.push(...split(n.slice(0, 4))); continue; }
+        for (const f of t === 12 ? HEX_FACES : TET_FACES) {
+          const face = f.map((i) => n[i]), key = face.slice().sort((a, b) => a - b).join(",");
+          count.set(key, count.has(key) ? null : face);
         }
       }
-      for (const tri of count.values()) if (tri) tris.push(tri);
+      for (const face of count.values()) if (face) tris.push(...split(face));
       return tris;
     }
 

@@ -906,7 +906,7 @@ fn test_thermal_union() {
     var text: u8[>..] = [];
     read_file("examples/femahoy/warpage_thick_copper.skn", text);
     expect_lines("warpage_thick_copper", text, [
-        "                      [0.0, 0.365, 0.73, 0.75],\n                      [0.0, 0.0, 0.0, 25.0, 5.0, 0.73, 0.0, 0.0, 0.73, 25.0, 5.0, 0.75]);",
+        "runtime::mesh_union([0.0, 0.0, 0.0, 25.0, 5.0, 0.73, 0.0, 0.0, 0.73, 25.0, 5.0, 0.75],\n                       [0.0, 0.0, 0.0], 0.5);",
         "face(runtime::point_set(\"point_origin\", 0.0, 0.0, 0.0), \"origin\");",
         "runtime::material(120000.0, 0.28);",
         "runtime::material_box(120000.0, 0.28, 0.0001, 0.0, 0.0, 0.0, 25.0, 5.0, 0.73);",

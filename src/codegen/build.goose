@@ -80,7 +80,7 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
             var words: const u8[:][>..] = [];
             words.push(word);
             guard web_program(path, text, words, program) else { return false; };
-            let dofs = elements_gen::dof_estimate();
+            let dofs = web_dof_estimate();
             if dofs >= most {
                 most = dofs;
                 set256(end, word);
@@ -144,7 +144,7 @@ fn page_program(path: u8[:], text: u8[:], base: u8[:], slots: i64[:]) -> u8[>..]
         while end < body.len && body[end] != '\n' { end++; }
         let line = body[at..end];
         if line == "fn main() {" { out.append("fn web_run() {"); }
-        else if line == "    print_records();" { out.append("    print_records();\n    web_quality();"); }
+        else if line == "    print_records();" && web_simplex { out.append("    print_records();\n    web_quality();"); }
         else if !(line.len > 7 && line[..7] == "import ") { out.append(line); }
         out.push('\n');
         at = end + 1;

@@ -18,7 +18,7 @@
 
 These notes describe the planned architecture for the
 [specification](skein_spec.md). The repository already contains a front end,
-mesh tools, native solvers and a browser solve for the simplex models.
+mesh tools, native solvers and a browser solve for the simplex and hex models.
 The SIR pipeline and the viewer remain planned work. See the [command reference](command_line.md) for the
 current interface and the [roadmap](roadmap.md) for the planned phases.
 
@@ -243,7 +243,7 @@ The browser runs the same Goose code, compiled to WebAssembly:
 |---|---|
 | `check`, `fmt`, `lint` | planned, in the editor, with no server |
 | mesher | yes, in the page of `skein build --target wasm` |
-| solve | yes, for the simplex models whose data stacks fit in 15 GB |
+| solve | yes, for the simplex and hex models whose memory fits in 15 GB |
 | viewer | planned, WebGL. The page draws the deformed surface mesh on a 2D canvas. |
 
 The browser target compiles the C that Goose writes with `emcc`, as earlier
@@ -254,7 +254,10 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    each end of the range of each param. The number literals that change
    become slots of the program of the page (`src/codegen/web.goose`).
    Reason: the program holds each value as a literal, and the page has no
-   Goose compiler.
+   Goose compiler. The program of a union of boxes gives the boxes and
+   the mesh size to `runtime::mesh_union`, which computes the grid lines.
+   Reason: the number of grid lines changes with the size of a box, and
+   a list of the lines would change the structure of the program.
 2. It writes the program of the page. It holds the parser, the checker,
    the generator, the mesher and the solvers. For the values of the page,
    it generates the program again, takes the literals of the slots from
@@ -280,10 +283,17 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    Worker and a module of its own. Thus a new value stops the run before
    it, and the memory of a run goes back when it ends.
 
-The page runs the simplex models only (`tri` or `tet` cells). Sample 01
-(the cantilever) is the validated model of the page. The Hisada
-interposer model (`examples/package/interposer_warpage.skn`, `hex27`
-cells) does not run in the page yet.
+The page runs the simplex models (`tri` or `tet` cells) and the hex
+models (a box, a sector or a union of boxes). Sample 01 (the cantilever)
+and the Hisada interposer model (`examples/package/interposer_warpage.skn`,
+`hex27` cells) are the validated models of the page. The interposer at
+the default values has 4839 cells and 139 449 dofs, and its memory limit
+is 2.9 GB (native peak: 1.7 GB). In Chromium 156, a run meshes and solves
+in 214 s on one thread (native: 263 s on all threads). For a value
+between the study cases of each of `t_int`, `t_rdl`, `h_bump`, `f_bump`
+and `x_off`, the warpage at point A in the page is that of `skein run
+--set` to 2e-8. Native runs with a number of threads other than 1 add
+their sums in another sequence, so they are not bit for bit.
 
 The front end needs little memory. The solver needs much more, so the
 browser limit on memory sets the size of the models that it can solve.

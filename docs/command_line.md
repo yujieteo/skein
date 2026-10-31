@@ -36,7 +36,7 @@ models. It reports the verification checks that its solver implements.
 | `skein lint model.skn` | `check`, then the lint rules | Current |
 | `skein verify model.skn` | `check`, the mesh, and the pre-solve verification. No solve. | Current: mesh quality only |
 | `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Current: `fv`, `dg`, and scalar `rkpm` and `gfd` models |
-| `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex models only |
+| `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex and hex models |
 | `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
 | `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current |
 | `skein view model.skn` | opens the results in the WebGL viewer | Planned |
@@ -320,7 +320,7 @@ in the browser (implementation.md §8). The page has a control for each
 `param` with a range of literals, for example `param L: Length = 200 mm
 in 100 mm..400 mm`. When a control changes, the page meshes the model
 again, solves it with the new values, and shows the records of the run
-in TOON, the `mesh_quality` record and the deformed mesh. The run in the
+in TOON, the `mesh_quality` record of a `tri` or `tet` mesh and the deformed mesh. The run in the
 page gives the same records and VTU file as `skein run --set` with the
 same values. The page also shows the records of a native run at the
 default values.
@@ -337,10 +337,11 @@ and the page gives the size of the model.
 
 Current limits:
 
-- only the models of the simplex generator (`tri` or `tet` cells).
-  Sample 01 (the cantilever) is the validated model of the page. The
-  Hisada interposer model (`examples/package/interposer_warpage.skn`,
-  `hex27` cells) does not run in the page yet;
+- only the models of the simplex generator (`tri` or `tet` cells) and
+  of the hex generator (a box, a sector or a union of boxes, `hex`
+  cells). Sample 01 (the cantilever) and the Hisada interposer model
+  (`examples/package/interposer_warpage.skn`, `hex27` cells) are the
+  validated models of the page;
 - a value must not change the structure of the program, for example the
   number of steps or of shapes. `build` stops with an error for such a
   `param`;

@@ -27,7 +27,7 @@
 // sector r0, r1, t0, t1, z0 and z1 (r, θ and z).
 //
 // The mesh is the unstructured mesh of fem.goose. mesh_box and
-// mesh_annulus are its first meshers, and mesh_grid meshes a union of boxes. The state is global: one mesh, a material for each cell, one set of supports and one
+// mesh_annulus are its first meshers, and mesh_union meshes a union of boxes. The state is global: one mesh, a material for each cell, one set of supports and one
 // set of loads. A second load step calls `clear_loads`, applies its loads
 // and solves again. A second mesh (a sweep over a dimension) starts again
 // at `mesh_box`, which clears all of the state.
@@ -68,12 +68,15 @@ fn mesh_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, z
 }
 
 // Meshes the union of the boxes of `boxes` (x0, y0, z0, x1, y1, z1 for
-// each) with 27-node hexahedra on the grid lines lx, ly and lz. A cell of
-// the grid is in the mesh if its centre is in a box. The node set and the
-// face set x0, x1, y0, y1, z0 and z1 hold the boundary on each bounding
-// plane of the grid. Clears the state as `mesh_box` does.
-fn mesh_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
-    build_grid(lx, ly, lz, boxes);
+// each) with 27-node hexahedra of at most `size`, on the grid lines of
+// `grid_lines`, with a plane through each point of `points`. A cell of the
+// grid is in the mesh if its centre is in a box. The node set and the face
+// set x0, x1, y0, y1, z0 and z1 hold the boundary on each bounding plane of
+// the grid. The program computes the grid, so that a new value of
+// a param changes the values of the call and not its form (the browser
+// solve, docs/implementation.md §8). Clears the state as `mesh_box` does.
+fn mesh_union(boxes: f64[:], points: f64[:], size: f64) {
+    build_grid(grid_lines(boxes, points, 0, size), grid_lines(boxes, points, 1, size), grid_lines(boxes, points, 2, size), boxes);
 }
 
 // Writes the mesh and its named sets in the directory `dir`, for the
