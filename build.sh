@@ -5,8 +5,10 @@
 #   ./build.sh test     build, then build each src/<part>/test.goose with
 #                       the checks of goose --debug (Power of Ten rule 10),
 #                       run it, and check the generated C
-#                       (scripts/generated_c.sh) and the Power of Ten rules
-#                       1, 3, 4, 5 and 7 (scripts/power_of_ten.sh)
+#                       (scripts/generated_c.sh). That script runs each
+#                       model, whose solves check rule 3, and skein run
+#                       checks rule 7. Then scripts/power_of_ten.sh checks
+#                       rules 1, 4 and 5.
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.
