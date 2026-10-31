@@ -13,6 +13,7 @@ let cav: Surface = rect((0, 0) m, (a, a))
 let lid: Curve = boundary(cav, y == a)
 let walls: Curve = boundary(cav, y < a)
 let corner: Point = point((0, 0) m)
+let upper_probe: Point = point((a/2, 0.8516 m))
 
 material fluid {
     rho: Density = 1 kg/m^3
@@ -48,6 +49,6 @@ step steady: static {
 }
 
 // Ghia et al. (1982), Table I, at two points of the vertical centreline.
-expect upper: v.x at (a/2, 0.8516 m) == 0.23151 m/s within 0.05 m/s
+expect upper: v.x at upper_probe == 0.23151 m/s within 0.05 m/s
 
 expect lower: v.x at (a/2, 0.2813 m) == -0.15662 m/s within 0.05 m/s

@@ -825,7 +825,8 @@ let REPORT_FIX = "write v.x at (x, y), p at (x, y), integral((sigma*n).x, wall),
 
 fn report(item: i64) {
     let e = first(item);
-    if !whole_vector(e) && !result_ok(e) { return; }
+    let good = if whole_vector(e) { point_ok(e) } else { result_ok(e) };
+    if !good { return; }
     var r = Report { expr: e, label: [] };
     codegen::set256(r.label, source_of(item));
     reports.push(r);
@@ -850,6 +851,22 @@ fn whole_vector(e: i64) -> bool {
     return other >= 0;
 }
 
+// The point of `f at p`: a vector, or a Point that a let names.
+fn at_point(p: i64) -> Q {
+    let i = named_of(p, POINT);
+    return quantity(if i >= 0 { arg(named[i].value, 0) } else { p });
+}
+
+// Whether the point of `f at p` is a vector (x, y), with an error if not.
+fn point_ok(e: i64) -> bool {
+    let before = syntax::errors.len;
+    let p = at_point(child(e, 1));
+    if p.n != 2 && syntax::errors.len == before {
+        unsupported(tok(child(e, 1)), "the point of 'at' is not a vector (x, y)", "write at (x, y) m, or the name of a point((x, y) m)");
+    }
+    return syntax::errors.len == before;
+}
+
 // `integral((sigma*n).x, wall)`: the component, or -1.
 fn traction_integral(e: i64) -> i64 {
     guard is_call(e, "integral") && syntax::child_count(e) == 3 && named_of(arg(e, 1), BOUNDARY) >= 0 else { return -1; }
@@ -866,7 +883,7 @@ recursive fn result_ok(e: i64) -> bool {
         let what, other = point_field(e);
         if what < 0 { unsupported(tok(e), str("'", source_of(child(e, 0)), "' at a point is not in the flow generator"), REPORT_FIX); }
         if other >= 0 { unsupported(tok(e), str("the vector '", source_of(child(e, 0)), "' at a point is only in a report, not in an expect or a + - * /"), REPORT_FIX); }
-        return what >= 0 && other < 0;
+        return what >= 0 && other < 0 && point_ok(e);
     }
     if is_call(e, "integral") {
         if traction_integral(e) >= 0 { use_region(named_of(arg(e, 1), BOUNDARY)); }
@@ -1154,7 +1171,7 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
     if k == syntax::N_AT {
         var what, other = point_field(e);
         if other >= 0 && vector_comp >= 0 { what = vector_comp; }
-        let at = scaled(quantity(child(e, 1)));
+        let at = scaled(at_point(child(e, 1)));
         let d = if what == 2 { PRESSURE_D } else { VELOCITY_D };
         format(out, "at(", VALUE_NAMES[what], ", ");
         lit(out, at.v[0]);
