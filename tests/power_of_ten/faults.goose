@@ -6,6 +6,7 @@ import os;
 import runtime from "../../src/runtime";
 import elements from "../../src/elements";
 import shells from "../../src/shells";
+import flow from "../../src/flow";
 import solvers from "../../src/solvers";
 
 fn main() {
@@ -46,6 +47,16 @@ fn main() {
         shells::force(0, 0, 1.0);
     } else if call == "shells_mesh_cylinder" {
         shells::mesh_cylinder(1.0, 0.0, 1.0, 0.0, 1.0, 2, 2, 0, 1.0, 0.0, 0.0);
+    } else if call == "flow_mesh" {
+        flow::mesh_from_arrays([0.0, 0.0, 1.0, 0.0, 0.0, 1.0], [0, 1, 3], 2);
+    } else if call == "flow_fluid" {
+        flow::fluid(1.0, 0.0, true, flow::SUPG);
+    } else if call == "flow_fix" {
+        flow::fix_velocity(0, 1.0);
+    } else if call == "flow_solve" {
+        flow::solve_steady(1.0e-8);
+    } else if call == "flow_value" {
+        flow::value_at(flow::VALUE_P, 0.0, 0.0);
     } else if call == "solvers_multiply" {
         var y: f64[2] = [0.0, 0.0];
         solvers::multiply([0, 1], [0], [1.0], [1.0], y);

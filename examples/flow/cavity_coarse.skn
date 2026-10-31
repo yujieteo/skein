@@ -1,0 +1,53 @@
+// The lid-driven cavity of samples/02_cavity.skn at Re = 100 on a coarse
+// mesh, with the equations written out. P1 cells with SUPG/PSPG, and the
+// lid refined to half the size.
+
+model cavity_coarse: 2d, SI
+
+let a: Length = 1 m
+let U: Velocity = 1 m/s
+
+scales a, U, 1 kg/m^3
+
+let cav: Surface = rect((0, 0) m, (a, a))
+let lid: Curve = boundary(cav, y == a)
+let walls: Curve = boundary(cav, y < a)
+let corner: Point = point((0, 0) m)
+
+material fluid {
+    rho: Density = 1 kg/m^3
+    mu: DynViscosity = 0.01 Pa*s
+}
+
+mesh m on cav {
+    size: a/16
+    cell: tri
+    refine lid: a/32
+}
+
+physics flow on cav solves v: Vector<Velocity>, p: Pressure {
+    material fluid
+    assume incompressible, newtonian, laminar
+    let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    eq rho*grad(v)*v - div(sigma) = 0
+    eq div(v) = 0
+}
+
+method flow: cg {
+    mesh: m
+    order: { v: 1, p: 1 }
+    stabilize: supg_pspg
+}
+
+step steady: static {
+    bc lid: v = (U, 0)
+    bc walls: v = 0
+    bc corner: p = 0
+    solve { nonlinear: newton, linear: gmres, precond: ilu0, rtol: 1e-8 }
+    report p at (a/2, a/2)
+}
+
+// Ghia et al. (1982), Table I, at two points of the vertical centreline.
+expect upper: v.x at (a/2, 0.8516 m) == 0.23151 m/s within 0.05 m/s
+
+expect lower: v.x at (a/2, 0.2813 m) == -0.15662 m/s within 0.05 m/s

@@ -40,6 +40,21 @@ Phase 1 delivers:
 5. `skein fmt` and `skein check`, with TOON and JSON output;
 6. a test for each error id.
 
+## Phase 3 status
+
+Phase 3 is in three tasks: flow, solid, and the mesher with the task pool.
+
+| Item | Status |
+|---|---|
+| stabilized Stokes and Navier-Stokes (SUPG/PSPG) | done: `src/flow/`, steady, 2D, P1/P1 and P2/P1 triangles |
+| the scaled SIR (§21) | done for the flow models: `src/flow/gen.goose` |
+| the `stokes` and `navier_stokes` templates | done |
+| birth and death, submodels, AMG, LOBPCG, the task pool | open |
+
+Gate: samples 02 and 06 run. Sample 02 passes each `expect` against Ghia
+et al.: the largest difference is 0.005 m/s, and the limit is 0.02 m/s.
+Samples 03 and 04 and the gap G36 are open.
+
 ## Risks
 
 | Risk | Effect | What to do |
