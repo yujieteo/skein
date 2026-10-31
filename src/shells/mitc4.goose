@@ -197,40 +197,6 @@ fn mat3_row(m: f64[9], r0: i64, j: i64) -> f64[3] {
     return [m[0] * x + m[1] * y + m[2] * z, m[3] * x + m[4] * y + m[5] * z, m[6] * x + m[7] * y + m[8] * z];
 }
 
-// The stiffness ke of shell cell c, by 2 × 2 Gauss points.
-fn shell_stiffness(c: i64) {
-    guard c >= 0 && c < shells.len && shells[c].section >= 0 && shells[c].section < sections.len else { abort("shell_stiffness: 0 <= c < shells.len, and its section < sections.len"); }
-    load_cell(c);
-    let s = sections[shells[c].section];
-    let kd = DRILL * s.a[8];
-    for &v in ke { v = 0.0; }
-    var gen: f64[192] = [0.0; 192];      // N, M and Q of each dof column j: 8 rows of 24
-    for gp in 4 {
-        let xi = if gp % 2 == 0 { -GAUSS } else { GAUSS };
-        let eta = if gp < 2 { -GAUSS } else { GAUSS };
-        local_rows(c, xi, eta);
-        for j in 24 {
-            let am = mat3_row(s.a, 0, j);
-            let bk = mat3_row(s.b, 72, j);
-            let bm = mat3_row(s.b, 0, j);
-            let dk = mat3_row(s.d, 72, j);
-            for k in 3 {
-                gen[24 * k + j] = am[k] + bk[k];
-                gen[72 + 24 * k + j] = bm[k] + dk[k];
-            }
-            gen[144 + j] = s.s[0] * rows[144 + j] + s.s[1] * rows[168 + j];
-            gen[168 + j] = s.s[2] * rows[144 + j] + s.s[3] * rows[168 + j];
-        }
-        for i in 24 {
-            for j in 24 {
-                var v = kd * rows[192 + i] * rows[192 + j];
-                for k in 8 { v += rows[24 * k + i] * gen[24 * k + j]; }
-                ke[24 * i + j] += v * area;
-            }
-        }
-    }
-}
-
 // Adds a load per area (qx, qy, qz) on cell c. With `normal`, the load is
 // a pressure qx along the top normal e3 instead.
 fn shell_load(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {

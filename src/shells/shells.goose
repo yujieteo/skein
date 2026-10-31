@@ -19,3 +19,4 @@ import .beam;
 import .solve;
 import .mesh;
 import .vtu;
+import .kernels;   // shell_stiffness and beam_stiffness

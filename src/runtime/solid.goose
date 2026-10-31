@@ -1,7 +1,7 @@
-// The linear elastic solid: the material, the element routine of a 3D cell
-// of any type in the registry, the Jacobian of a 3D cell, the face weights
-// of a hexahedron, and the registry entry of the 27-node hexahedron (the
-// triquadratic Lagrange cell).
+// The linear elastic solid: the material, the Jacobian of a 3D cell, the
+// face weights of a hexahedron, and the registry entry of the 27-node
+// hexahedron (the triquadratic Lagrange cell). Its element routine,
+// hex27_stiffness, is in kernels.goose.
 //
 // The local node a of a hex27 cell is at (a % 3, a / 3 % 3, a / 9) on the
 // lattice of the reference points -1, 0 and 1 along each axis. Its local
@@ -127,58 +127,3 @@ var quad_w: f64[>..] = [];
 var shape_n: f64[>..] = [];
 var shape_dn: f64[>..] = [];
 var grad: f64[>..] = [];      // the gradient of each shape function at a quadrature point
-
-// The stiffness of the 3D cell c, with 3 dofs for each node:
-// K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV.
-fn solid_stiffness(c: i64, ke: f64[>..]&) -> bool {
-    guard c >= 0 && c < cell_count() && cell_start[c + 1] - cell_start[c] == CELL_NODES[cell_type[c]] else { abort("solid_stiffness: a cell with the nodes of its type"); }
-    let t = cell_type[c] as i64;
-    guard CELL_DIMS[t] == 3 && cell_quadrature(t, quad_xi, quad_w) else { return false; }
-    let nn = CELL_NODES[t];
-    let size = 3 * nn;
-    ke.clear();
-    for i in size * size { ke.push(0.0); }
-    grad.clear();
-    for i in size { grad.push(0.0); }
-    for w, g in quad_w {
-        let xi: f64[3] = [quad_xi[3 * g], quad_xi[3 * g + 1], quad_xi[3 * g + 2]];
-        guard cell_shape(t, xi, shape_n, shape_dn) else { return false; }
-        var jac: f64[9] = [0.0; 9];
-        cell_jacobian(c, shape_dn, jac);
-        var inv: f64[9] = [0.0; 9];
-        let det = inverse3(jac, inv);
-        assert(det > 0.0);
-        for l in nn {
-            for s in 3 {
-                grad[3 * l + s] = inv[3 * s] * shape_dn[3 * l] + inv[3 * s + 1] * shape_dn[3 * l + 1]
-                    + inv[3 * s + 2] * shape_dn[3 * l + 2];
-            }
-        }
-        add_elastic(grad, nn, w * det, ke);
-    }
-    return true;
-}
-
-// Adds dv times the integrand of solid_stiffness to ke, for `count` shape
-// functions with the gradients grad[3 i + s]. ke has 3 count rows.
-fn add_elastic(grad: f64[:], count: i64, dv: f64, ke: f64[>..]&) {
-    guard count > 0 && grad.len == 3 * count && ke.len == 9 * count * count else { abort("add_elastic: 3 count gradients and a 3 count square ke"); }
-    let size = 3 * count;
-    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    let mu = young / (2.0 * (1.0 + poisson));
-    for i in count {
-        for j in count {
-            let dot = grad[3 * i] * grad[3 * j] + grad[3 * i + 1] * grad[3 * j + 1]
-                + grad[3 * i + 2] * grad[3 * j + 2];
-            for p in 3 {
-                let row = size * (3 * i + p) + 3 * j;
-                for q in 3 {
-                    var v = lambda * grad[3 * i + p] * grad[3 * j + q]
-                        + mu * grad[3 * i + q] * grad[3 * j + p];
-                    if p == q { v += mu * dot; }
-                    ke[row + q] += v * dv;
-                }
-            }
-        }
-    }
-}

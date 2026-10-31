@@ -131,7 +131,9 @@ constants for each kernel. This lets the C compiler vectorize them, and
 A kernel longer than 60 lines is split into functions by blocks of the cell
 matrix (spec §18.3). Each block function is straight-line code, and one
 short function calls them in order. A test measures each generated
-function.
+function. The emitter writes the kernels into `kernels.goose` of each
+runtime package, and `build/test_codegen write` writes them again after a
+change to the emitter.
 
 The plan is the part with loops. It is short and the same for each model,
 except the names of the kernels.

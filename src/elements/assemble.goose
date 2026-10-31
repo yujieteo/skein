@@ -10,6 +10,7 @@ import math;
 namespace elements;
 import .shape;
 import .mesh;
+import .kernels;   // cell_matrix
 
 let ELASTIC = 0;
 let HEAT = 1;
@@ -150,45 +151,9 @@ fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
 
 // --- the cell matrix ---------------------------------------------------------
 
+// cell_matrix(c) of kernels.goose fills ke and fe for cell c.
 var ke: f64[900];       // (per_cell ncomp)², row ncomp l + p for component p of node l
 var fe: f64[30];
-
-// The stiffness or the conductivity of cell c, and its source vector:
-// elastic K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV,
-// f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.
-fn cell_matrix(c: i64) {
-    let m = per_cell * ncomp;
-    guard c >= 0 && c < cell_count() && physics >= 0 && m <= fe.len && m * m <= ke.len else { abort("cell_matrix: c < cell_count(), a physics, and ke and fe hold the dofs of a cell"); }
-    for &v in ke { v = 0.0; }
-    for &v in fe { v = 0.0; }
-    for qp in quad_count(dim) {
-        let xi, w = quad_point(dim, qp);
-        let dv = w * cell_geometry(c, xi) * thickness;
-        for i in per_cell {
-            if physics == HEAT { fe[i] += source * shp[i] * dv; }
-            if physics == ELASTIC {
-                for p in dim { fe[ncomp * i + p] += volume_force[p] * shp[i] * dv; }
-            }
-            for j in per_cell {
-                var dot = 0.0;
-                for t in dim { dot += grad[3 * i + t] * grad[3 * j + t]; }
-                if physics == HEAT {
-                    ke[m * i + j] += conductivity * dot * dv;
-                    continue;
-                }
-                for p in dim {
-                    let row = m * (ncomp * i + p) + ncomp * j;
-                    for q in dim {
-                        var v = lame * grad[3 * i + p] * grad[3 * j + q]
-                            + shear * grad[3 * i + q] * grad[3 * j + p];
-                        if p == q { v += shear * dot; }
-                        ke[row + q] += v * dv;
-                    }
-                }
-            }
-        }
-    }
-}
 
 // --- the sparsity pattern and the assembly -----------------------------------
 
