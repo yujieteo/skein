@@ -244,13 +244,19 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    gives the records and the VTU file of `skein run --set`, bit for bit.
 3. It runs that program natively at the default values and at the corner
    of the ranges with the most dofs, and measures the peak of each Goose
-   data stack. A run that fails stops the build with an error.
+   data stack and the peak resident memory. A run that fails stops the
+   build with an error.
 4. It compiles the C with `emcc` to 64-bit WebAssembly (memory64). Each
    data stack gets a fixed region: 1.5 times the larger peak of the two
-   runs. Reason: WebAssembly memory has no address-space reservation and
+   runs, 1 MB at least. Reason: WebAssembly memory has no address-space reservation and
    no guard pages (Goose `docs/design/wasm.md`, fixed partitions). A
    canary gap behind each region replaces the guard gap: each end of the
-   run checks it, and an overrun stops the run with exit status 4.
+   run checks it, and an overrun stops the run with exit status 4. The
+   memory starts at 64 MB and grows to the regions plus 1.5 times the
+   larger heap peak (the peak resident memory less the data stacks). A
+   growth that the browser refuses stops the run, and the page shows an
+   error with that limit. The page cannot catch the kernel OOM killer: a
+   host with no free memory can still stop the tab.
 5. It writes one HTML page with the module in it. Each run has a Web
    Worker and a module of its own. Thus a new value stops the run before
    it, and the memory of a run goes back when it ends.
@@ -262,11 +268,12 @@ cells) does not run in the page yet.
 
 The front end needs little memory. The solver needs much more, so the
 browser limit on memory sets the size of the models that it can solve.
-Sample 01 at its default values has 70 244 cells and 319 320 dofs. Its
-regions take 4.3 GB of memory64. In Chromium 156, a run at L = 127 mm
-meshes and solves in 41 s on one thread. At the corner L = 400 mm,
-P = 10 kN (87 524 cells, 401 160 dofs), it takes 132 s and 2.3 GB in
-node 24.
+Sample 01 at its default values has 70 244 cells and 319 320 dofs. The
+data stacks hold almost all of its memory, and the heap is near zero. Its
+memory limit is 3.2 GB. In Chromium 156, a run at the default values
+meshes and solves in 50 s on one thread, with a renderer peak of 1.8 GB
+(native: 1.6 GB). At the corner L = 400 mm, P = 10 kN (87 524 cells,
+401 160 dofs), it takes 87 s and 2.2 GB (native: 1.9 GB).
 
 ## 9. Results and the viewer
 

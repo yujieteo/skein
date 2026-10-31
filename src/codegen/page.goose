@@ -61,11 +61,12 @@ let PAGE_MAIN = """
 
     """;
 
-// The profile of the native run: the resident MB of each data stack
-// region at the end, on stderr.
+// The profile of the native run, on stderr: the resident MB of each data
+// stack region at the end, and the peak resident MB of the process.
 let PROFILE_C = """
 
     #include <sys/mman.h>
+    #include <sys/resource.h>
     #include <unistd.h>
     static void skein_profile(void) {
         long page = sysconf(_SC_PAGESIZE);
@@ -80,7 +81,9 @@ let PROFILE_C = """
             free(v);
             fprintf(stderr, "%s%zu", i ? "," : "", (top * (size_t)page + (1u << 20) - 1) >> 20);
         }
-        fprintf(stderr, "\n");
+        struct rusage use;
+        getrusage(RUSAGE_SELF, &use);
+        fprintf(stderr, "\nskein-rss: %ld\n", (use.ru_maxrss + 1023) / 1024);
         fflush(stderr);
     }
 
@@ -215,14 +218,15 @@ let PAGE_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@MODEL@ in the browser</title>
     <style>
-    :root { color-scheme: light dark; --bg: #ffffff; --fg: #1b1b1b; --muted: #606060; --line: #c8c8c8; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #e8e8e8; --muted: #a0a0a0; --line: #444444; } }
+    :root { color-scheme: light dark; --bg: #ffffff; --fg: #1b1b1b; --muted: #606060; --line: #c8c8c8; --bad: #b00020; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #e8e8e8; --muted: #a0a0a0; --line: #444444; --bad: #ff6b6b; } }
     body { background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
     pre { overflow-x: auto; border: 1px solid var(--line); padding: 8px; font-size: 12px; }
     .param { display: grid; grid-template-columns: 5em 1fr 10em; gap: 8px; align-items: center; margin: 6px 0; }
     .param input[type=number] { width: 7em; }
     canvas { display: block; width: 100%; aspect-ratio: 2 / 1; border: 1px solid var(--line); }
     #state { color: var(--muted); }
+    #error { color: var(--bad); font-weight: 600; }
     </style>
     </head>
     <body>
@@ -230,6 +234,7 @@ let PAGE_HTML = """
     <p id="note"></p>
     <div id="params"></div>
     <p><button id="solve">Solve in the page</button> <span id="state"></span></p>
+    <p id="error"></p>
     <canvas id="view" width="1200" height="600"></canvas>
     <p id="summary"></p>
     <h2>Run in the page</h2>
@@ -380,7 +385,16 @@ let PAGE_HTML = """
       return i >= 0 && i + 1 < lines.length ? lines[i + 1].trim().split(",") : null;
     }
 
-    const state = document.getElementById("state");
+    const state = document.getElementById("state"), error = document.getElementById("error");
+
+    // The message of a run that failed.
+    function failure(r) {
+      if (/memory|OOM|RangeError|allocat/i.test(r.err)) {
+        return "The browser could not give this run the memory that it can need, up to " + MEMORY_MB + " MB. Close other tabs or programs " +
+          "and solve again, or run the model natively with" + r.sets.map((w) => ' --set "' + w + '"').join("") + ".";
+      }
+      return "The run failed with exit " + r.code + ". The log below gives the cause.";
+    }
     const values = {};
     for (const p of PARAMS) {
       values[p.name] = p.value;
@@ -401,10 +415,12 @@ let PAGE_HTML = """
     async function run() {
       if (!MODULE.length) return;
       state.textContent = "meshing and solving in the page...";
+      error.textContent = "";
       const r = await skeinSolve(values);
       if (r.code === -2) return;
       document.getElementById("out").textContent = r.sets.join("  ") + "\n\n" + r.out + (r.err ? "\n" + r.err : "");
       state.textContent = "exit " + r.code + " in " + r.seconds.toFixed(1) + " s";
+      if (r.code !== 0) error.textContent = failure(r);
       const vtu = Object.values(r.files)[0];
       if (vtu) {
         const d = draw(parseVtu(vtu));
@@ -418,12 +434,12 @@ let PAGE_HTML = """
     const row = solveRow(NATIVE);
     if (!MODULE.length) {
       document.getElementById("solve").disabled = true;
-      document.getElementById("note").textContent = "This model is too large for the memory of the browser: its data stacks need " +
+      document.getElementById("note").textContent = "This model is too large for the memory of the browser: it needs " +
         MEMORY_MB + " MB, and the page has " + MAX_MEMORY_MB + " MB." + (row ? " The native run has " + row[1] + " cells and " + row[2] +
         " dofs, and took " + NATIVE_SECONDS.toFixed(1) + " s." : "") + " The page shows the native results.";
     } else {
-      document.getElementById("note").textContent = "Each control meshes and solves the model again in the page (WebAssembly, one thread, " +
-        MEMORY_MB + " MB of data stacks). The native run at the default values took " + NATIVE_SECONDS.toFixed(1) + " s.";
+      document.getElementById("note").textContent = "Each control meshes and solves the model again in the page (WebAssembly, one thread, up to " +
+        MEMORY_MB + " MB of memory). The native run at the default values took " + NATIVE_SECONDS.toFixed(1) + " s.";
     }
     </script>
     </body>

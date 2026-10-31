@@ -285,10 +285,13 @@ default values.
 
 It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
 `emcc` on `PATH`. It runs the model natively twice: at the default values
-and at the corner of the param ranges with the most dofs. The data stacks
-of these runs set the memory of the page. A model whose data stacks need
-more than 15 GB gets a page with the native results only, and the page
-gives the size of the model.
+and at the corner of the param ranges with the most dofs. A native run
+that fails stops `build` with an error. The peak memory of these runs
+sets the memory limit of the page: the author sets nothing. The memory of
+a run starts at 64 MB and grows to that limit. If the browser cannot give
+the memory, the run stops and the page shows an error with the limit. A
+model that needs more than 15 GB gets a page with the native results only,
+and the page gives the size of the model.
 
 Current limits:
 
@@ -296,7 +299,6 @@ Current limits:
   Sample 01 (the cantilever) is the validated model of the page. The
   Hisada interposer model (`examples/package/interposer_warpage.skn`,
   `hex27` cells) does not run in the page yet;
-- `build` stops with an error if a native run fails;
 - a value must not change the structure of the program, for example the
   number of steps or of shapes. `build` stops with an error for such a
   `param`;

@@ -14,9 +14,10 @@
 // gap behind it. WebAssembly memory has no reservation and no guard
 // pages, so each stack gets a fixed region of memory64. Its size is the
 // larger peak of the stack in two native runs, at the default values and
-// at the corner of the param ranges with the most dofs, times 1.5. A
-// canary gap behind each region stops the
-// run with an error if a stack overruns it. A model whose regions need
+// at the corner of the param ranges with the most dofs, times 1.5 (1 MB
+// at least). A canary gap behind each region stops the run with an error
+// if a stack overruns it. The memory of the module grows to the regions
+// and 1.5 times the larger heap peak of the two runs. A model that needs
 // more than the browser gives (MAX_MEMORY_MB) gets the page without the
 // module, with the native results and its size.
 import std;
@@ -152,10 +153,10 @@ fn page_program(path: u8[:], text: u8[:], base: u8[:], slots: i64[:]) -> u8[>..]
     return out;
 }
 
-// The data stack peaks of the native run, in MB, from the line
-// `skein-profile: a,b,...` of `err`.
-fn profile_peaks(err: u8[:], out: i64[>..]&) -> bool {
-    let key = "skein-profile: ";
+// The numbers of the line `<key>a,b,...` of `err`: the data stack
+// peaks (MB) of the native run for `skein-profile: `, and its peak
+// resident MB for `skein-rss: `.
+fn profile_numbers(err: u8[:], key: u8[:], out: i64[>..]&) -> bool {
     var at = -1;
     for i in 0..err.len - key.len + 1 {
         if at < 0 && err[i..i + key.len] == key { at = i + key.len; }
@@ -262,9 +263,10 @@ fn link_sources(dir: u8[:]) -> bool {
 
 // Runs the profile of `dir` with the words of --set `sets`. Its standard
 // output goes to `out` in `dir`. It gives the peak of each data stack in
-// `peaks` (MB) and the seconds of the run. False, with an error, if the
-// run fails or gives no profile.
-fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> bool, f64 {
+// `peaks` (MB), the seconds of the run, and the peak MB of the heap: the
+// peak resident MB less the data stacks. False, with an error, if the run
+// fails or gives no profile.
+fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> bool, f64, i64 {
     var command = str("cd ", shell_quoted(dir), " && SKEIN_THREADS=1 ./profile");
     for w in sets { format(command, " ", shell_quoted(w)); }
     format(command, " > ", out, " 2> profile.err");
@@ -278,13 +280,16 @@ fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> 
     read_file(str(dir, "/profile.err"), err);
     guard status == 0 else {
         write_stderr(str("skein build: the native run failed with exit status ", status, ":\n", err));
-        return false, seconds;
+        return false, seconds, 0;
     };
-    guard profile_peaks(err, peaks) else {
+    var rss: i64[>..] = [];
+    guard profile_numbers(err, "skein-profile: ", peaks) && profile_numbers(err, "skein-rss: ", rss) && rss.len == 1 else {
         write_stderr(str("skein build: the native run gave no profile:\n", err));
-        return false, seconds;
+        return false, seconds, 0;
     };
-    return true, seconds;
+    var heap = rss[0];
+    for p in peaks { heap -= p; }
+    return true, seconds, max(heap, 0);
 }
 
 // Builds main.goose of `dir` to C, runs the profile at the default values
@@ -309,20 +314,29 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
     var peaks: i64[>..] = [];
     var more: i64[>..] = [];
     let none: u8[..256][>..] = [];
-    let ran, seconds = profile_run(dir, none, "native.toon", peaks);
-    guard ran && (corner.len == 0 || profile_run(dir, corner, "corner.toon", more)) && (more.len == 0 || more.len == peaks.len) else { return 1; };
+    let ran, seconds, heap = profile_run(dir, none, "native.toon", peaks);
+    var heap_corner = 0;
+    if ran && corner.len > 0 {
+        let corner_ran, _, h = profile_run(dir, corner, "corner.toon", more);
+        guard corner_ran else { return 1; };
+        heap_corner = h;
+    }
+    guard ran && (more.len == 0 || more.len == peaks.len) else { return 1; };
     var table: u8[>..] = [];
-    var total = 0;
+    // The memory of the module: the regions, 1.5 times the larger heap
+    // peak, and 64 MB for the loader and the files, in 64 MB steps.
+    var total = ceil(1.5 * max(heap, heap_corner)) as! i64 + 64;
     var largest = 1;
     for p, i in peaks {
-        let mb = max(8, ceil(1.5 * max(p, if more.len > 0 { more[i] } else { 0 })) as! i64);
+        let mb = max(1, ceil(1.5 * max(p, if more.len > 0 { more[i] } else { 0 })) as! i64);
         format(table, if i > 0 { "," } else { "" }, mb);
         total += mb;
         largest = max(largest, mb);
     }
+    total = (total + 63) / 64 * 64;
     var glue: u8[>..] = [];
     if total <= MAX_MEMORY_MB {
-        guard wasm_module(dir, model, c, table, largest, glue) else { return 1; };
+        guard wasm_module(dir, model, c, table, largest, total, glue) else { return 1; };
     }
     var native: u8[>..] = [];
     read_file(str(dir, "/native.toon"), native);
@@ -337,7 +351,9 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
 
 // Compiles main.c with the region `table` (MB, comma separated) to the
 // WebAssembly module and its loader, one file of JavaScript, in `glue`.
-fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, glue: u8[>..]&) -> bool {
+// The memory of the module starts at 64 MB and grows to `memory_mb` at
+// most. A growth that the browser cannot give stops the run with an error.
+fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, memory_mb: i64, glue: u8[>..]&) -> bool {
     var wasm: u8[>..] = [];
     var patched: u8[>..] = [];
     patched.append(c);
@@ -348,7 +364,7 @@ fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, g
     let js = str(dir, "/", model, ".js");
     let emcc = str("emcc -O3 -w ", q, "/wasm.c -o ", shell_quoted(js), " -DGS_STACK_RESERVE='(", largest, "ull<<20)' -DGS_STACK_GAP=65536",
                    " -sMEMORY64=1 -sMODULARIZE=1 -sEXPORT_NAME=createSkein -sENVIRONMENT=worker,node -sSINGLE_FILE=1",
-                   " -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=16GB -sEXIT_RUNTIME=1 -sFORCE_FILESYSTEM=1",
+                   " -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=", memory_mb, "MB -sEXIT_RUNTIME=1 -sFORCE_FILESYSTEM=1",
                    " -sEXPORTED_RUNTIME_METHODS=ENV,FS 1>&2");
     write_stderr("skein build: emcc\n");
     guard shell(emcc) == 0 && read_file(js, glue) else {
