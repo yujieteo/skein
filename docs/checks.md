@@ -11,6 +11,10 @@
 
 </details>
 
+This document describes the language design. The
+[command reference](command_line.md) states the current executable limits.
+A valid language construct can still exceed the native solver support.
+
 This is the catalogue of every diagnostic that the Skein tools give. Each
 diagnostic has one **id**, a snake_case name. An id never changes and is
 never used again for a different rule. The tools print the id, the file,

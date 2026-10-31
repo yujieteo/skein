@@ -16,9 +16,11 @@
 
 </details>
 
-These notes say how the compiler and the runtime will implement the
-[specification](skein_spec.md). They are a plan: no code exists yet. The
-[roadmap](roadmap.md) gives the sequence.
+These notes describe the planned architecture for the
+[specification](skein_spec.md). The repository already contains a front end,
+mesh tools and native solvers. The SIR pipeline, browser target and viewer
+remain planned work. See the [command reference](command_line.md) for the
+current interface and the [roadmap](roadmap.md) for the planned phases.
 
 ---
 

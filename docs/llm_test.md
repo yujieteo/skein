@@ -6,9 +6,11 @@ than an Abaqus or APDL deck on both measures, the syntax changes. The test
 also measures the size of the diff of small edits, because a person must
 review each change that an LLM makes.
 
-**Status:** the protocol and the reference decks are ready. The test has not
-run, because it needs `skein check`, which phase 1 builds. The results
-table is empty.
+**Status:** this protocol has no recorded results in §7. `skein check`
+is available. Separate experiments have results in the
+[cantilever comparison](readability.md#41-results) and the
+[B787 study](studies/b787/readability.md#3-llm-runs). Those experiments do
+not complete this protocol.
 
 ---
 

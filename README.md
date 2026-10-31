@@ -1,8 +1,8 @@
 # Skein
 
 Skein is a typed, units-checked language for numerical simulation. It
-compiles to [Goose](https://aardappel.github.io/goose/), and Goose compiles
-to C and WebAssembly.
+compiles to [Goose](https://aardappel.github.io/goose/), which generates C
+for native executables. The WebAssembly target remains planned work.
 
 ```skein
 model cantilever: 3d, mm_N_MPa_s
@@ -36,16 +36,16 @@ step load: static {
 }
 ```
 
-**Status:** this repository holds the specification and the start of the
-compiler. `skein check` parses and type-checks a model. `skein lint` checks
-it and gives the lint warnings, and with `--mesh` the warnings that need the
-mesh. `skein fmt` rewrites a file in the standard
-layout. `skein export --format stl` writes the surface of a shape as STL.
+**Status:** the compiler has a front end and native solvers for a limited
+set of models. `skein check` parses and type-checks a model. `skein lint` checks
+it and reports lint diagnostics. With `--mesh`, it also applies the rules
+that need a mesh. `skein verify` creates the mesh and checks its quality.
+`skein md` writes a model as a Markdown document. `skein fmt` rewrites a
+file in the standard layout. `skein export --format stl` writes the surface of a shape as STL.
 `skein run --study` runs each case of a `grid`, `zip` or `sample`
 study on parallel workers, and prints the table of the cases. The
-[roadmap](docs/roadmap.md) gives the phases.
-Phase 1 is the front end: the parser, the type and unit checker,
-`skein fmt` and `skein check`.
+[command reference](docs/command_line.md) states the current limits. The
+[roadmap](docs/roadmap.md) gives the planned phases.
 
 ## Building
 
@@ -83,18 +83,21 @@ golden files again and read the diff:
 ./build/skein md examples/femahoy/heat_fin.skn > tests/md/heat_fin.md
 ```
 
-| Directory | Contents |
+| Path | Purpose |
 |---|---|
-| `src/skein.goose` | the command line |
-| `src/syntax/` | the syntax tree (`tree.goose`), the lexer (`lexer.goose`) and the parser (`parser.goose`, `units.goose`) |
-| `src/fmt/` | `skein fmt` (`fmt.goose`) |
-| `src/runtime/` | the solver that generated code calls (`api.goose`): the unstructured mesh, the node and face sets and the element registry (`fem.goose`), a hexahedron mesher for a box or a sector of an annulus (`mesh.goose`), the linear elastic solid and the 27-node hexahedron (`solid.goose`), the 8-node hexahedron with incompatible modes (`hex8i.goose`), the assembly, the linear solver interface with CG and Jacobi, and the Newton interface (`solve.goose`), VTU output (`vtu.goose`), and one registration file for each phase 2 lane (`lane_*.goose`) |
-| `src/solvers/` | the sparse solvers of `solve { linear: gmres, precond: ilu0 }`, which `src/runtime/lane_solvers.goose` calls: CSR operations (`sparse.goose`), ILU(0) (`ilu.goose`), GMRES(m) (`krylov.goose`) and Newton with a backtracking line search (`newton.goose`) |
-| `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
-| `src/codegen/` | `skein run` for one linear static box or quarter of a tube: the Goose code generator (`codegen.goose`), the template and procedure dispatch tables (`dispatch.goose`) with one registration file for each phase 2 lane (`lane_*.goose`), and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
-| `src/elements/` | `skein run` for a simplex model (`gen.goose`): P1 and P2 triangles and tetrahedra (`shape.goose`, `mesh.goose`) for the `linear_elastic` and `heat` templates, with assembly (`assemble.goose`), CG with Jacobi (`solve.goose`) and output (`post.goose`) |
-| `src/check/` | the type and unit checker, `skein check` (`check.goose`) and the lint rules of `skein lint` that need no mesh (`lint.goose`). The rules that need the mesh are in `src/mesher/lint.goose`. |
-| `src/shells/` | the shell, beam and laminate solver (roadmap lane 5): the MITC4 shell (`mitc4.goose`), the Timoshenko beam with offsets (`beam.goose`), laminate sections (`laminate.goose`), a cylinder mesher (`mesh.goose`) and a skyline LDLᵀ solve (`solve.goose`), the `skein run` generator for a cylindrical shell (`gen.goose`) and a VTU writer (`vtu.goose`) |
+| `src/skein.goose` | command dispatch |
+| `src/syntax/` | syntax tree, lexer, parser and library files |
+| `src/check/` | type and unit checks, lint rules and parameter dependencies |
+| `src/fmt/` | source layout |
+| `src/cli/` | language card for `skein help --llm` |
+| `src/md/` | model documents |
+| `src/codegen/` | native code generation and study execution |
+| `src/runtime/` | hexahedron meshes, solid elements, solvers and VTU output |
+| `src/solvers/` | sparse matrices, ILU(0), GMRES and Newton |
+| `src/elements/` | triangle and tetrahedron elements for elasticity and heat |
+| `src/mesher/` | geometry meshes, mesh checks and STL export |
+| `src/shells/` | shell, beam and laminate solver routines, plus code generation for cylindrical shells |
+| `src/transient/` | transient heat solver routines |
 
 ## Why Skein
 
@@ -102,7 +105,8 @@ Abaqus, APDL and NASTRAN decks are hard to write and hard to check. Their
 units are a convention that the user must remember. Their physics is a fixed
 element library. Their errors appear late, in the solver.
 
-Skein changes these things:
+The [command reference](docs/command_line.md) states which tools exist now.
+The language design has these goals:
 
 - **Physics in strong form.** You write `div(sigma) = 0` and the
   constitutive law, as in a textbook. The compiler derives the weak form,
@@ -128,8 +132,8 @@ Skein changes these things:
   output, and stable diagnostic ids with a fix. One item on each line and
   no column alignment, so a small change gives a small diff.
 - **Dimensions done right.** Each model has a `scales` line, and the
-  solver works in scaled variables. `skein check --groups` prints `Re`,
-  `Pr` and the other groups of the model. A `param` and a `study` sweep a
+  solver works in scaled variables. The planned `skein check --groups`
+  command prints `Re`, `Pr` and the other groups of the model. A `param` and a `study` sweep a
   model, with the cases on parallel workers.
 
 Simulation is the core. Parametric parts, export for manufacture and
