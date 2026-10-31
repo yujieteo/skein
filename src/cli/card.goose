@@ -82,7 +82,7 @@ let CARD = """
     ```
 
     - `mesh` settings: `size` (required), `cell` (`tet` by default, `hex` for a
-      `box` or a quarter of a tube only), `refine region: size`.
+      union of `box` regions or a quarter of a tube only), `refine region: size`.
     - `linear_elastic` is a standard template: small strain, isotropic. It
       needs the material properties `E` and `nu`. It defines the stress
       `sigma` for use in `bc`, `output` and `report`. Its body force is 0

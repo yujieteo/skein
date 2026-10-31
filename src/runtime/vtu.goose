@@ -11,8 +11,8 @@ import .solve;
 
 // The VTK cell type of each cell type (fem.goose): triangle, quadratic
 // triangle, tetra, quadratic tetra, hexahedron, hexahedron (the sub-cells
-// of hex27), quad, line and hexahedron (hex8i).
-let VTK_TYPES: i64[9] = [5, 22, 10, 24, 12, 12, 9, 3, 12];
+// of hex27), quad, line, hexahedron (hex8i) and quad.
+let VTK_TYPES: i64[10] = [5, 22, 10, 24, 12, 12, 9, 3, 12, 9];
 
 // The local nodes of sub-hexahedron (i, j, k) of a hex27 cell, in the VTK
 // order of a hexahedron.

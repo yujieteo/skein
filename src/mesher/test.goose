@@ -195,6 +195,17 @@ fn test_lint() {
     }
     expect_mesh_lints("a loft and a polar pattern",
                       solid("loft(circle((0, 0) m, 4 m), rect((-2, -2) m, (2, 2) m), 3 m) | pattern_polar(cylinder((4, 0, 0) m, (0, 0, 1), 1 m, 3 m), (0, 0, 1), 6)"), "");
+    // cell: hex makes the grid on a union of boxes, with a plane on each
+    // face of the boxes of the model, and needs a union of boxes. Only its
+    // planes use the layer, so it is an unused_let.
+    fn grid_model(region: u8[:], cell: u8[:]) -> u8[>..] {
+        return str("model t: 3d, SI\nscales 1 m\nlet s: Solid = ", region, "\nlet layer: Solid = box((0, 0, 0) m, (1, 1, 0.3) m)\n",
+                   "mesh m on s {\n    size: 0.25 m\n    cell: ", cell, "\n}\n");
+    }
+    expect_mesh_lints("cell: hex on a box", grid_model("box((0, 0, 0) m, (1, 1, 1) m)", "hex"), "unused_let\n");
+    if mesher::cell_count() != 80 { fail(str("lint --mesh cell: hex on a box: ", mesher::cell_count(), " cells, not 80")); }
+    expect_mesh_lints("cell: hex on a cylinder", grid_model("cylinder((0, 0, 0) m, (0, 0, 1), 1 m, 1 m)", "hex"), "unused_let\nverify_unsupported\n");
+    expect_mesh_lints("cell: quad in 3D", grid_model("box((0, 0, 0) m, (1, 1, 1) m)", "quad"), "unused_let\nverify_unsupported\n");
     // `skein lint` applies the rules that need the mesh only with --mesh.
     let path = "build/mesh_lint_strip.skn";
     guard write_file(path, strip("", "1")) else {
@@ -203,6 +214,44 @@ fn test_lint() {
     }
     expect_lint_command("with no --mesh", ["skein", "lint", path], "");
     expect_lint_command("with --mesh", ["skein", "lint", "--mesh", path], "bending_lock\n");
+}
+
+// Meshes g with a grid, and checks the counts of cells and nodes, the
+// measure and the quality.
+fn grid_case(what: u8[:], g: i64, dim: i64, size: f64, planes: i64[:], cells: i64, nodes: i64, exact: f64) {
+    if !mesher::mesh_grid(g, dim, size, planes) { fail(str(what, ": not a union of boxes")); }
+    let q = mesher::mesh_quality();
+    print(what, ", size ", size, "\n", q);
+    if q.cells != cells || q.nodes != nodes { fail(str(what, ": ", q.cells, " cells and ", q.nodes, " nodes, not ", cells, " and ", nodes)); }
+    if abs(q.measure - exact) > 1.0e-10 * exact { fail(str(what, ": the measure is ", q.measure, ", not ", exact)); }
+    if !mesher::quality_passes(q) { fail(str(what, ": mesh_quality")); }
+}
+
+// The grid of quad and hex cells on a union of boxes (spec §9.2).
+fn test_grid() {
+    // The heated block of femahoy grid-heated-block-ccx, in mm: a plate
+    // 100 x 100 x 10 and a block 30 x 30 x 20 on it. Along x and y, the
+    // planes 35 and 65 give 4, 3 and 4 cells. Along z, 1 cell in the plate
+    // and 2 in the block. The plate has 11 x 11 cells and 12 x 12 x 2
+    // nodes, the block 3 x 3 x 2 cells and 4 x 4 x 2 more nodes.
+    mesher::clear_shapes();
+    let plate = mesher::box(0.0, 0.0, 0.0, 100.0, 100.0, 10.0);
+    let top = mesher::box(35.0, 35.0, 10.0, 65.0, 65.0, 30.0);
+    grid_case("grid on a plate and a block", mesher::union(plate, top), 3, 10.0, [], 139, 320, 118000.0);
+    // A layer of 0.3 of a unit cube: the face of the layer is a plane, so
+    // z has 2 cells below it and 3 above it.
+    let cube = mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+    let layer = mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 0.3);
+    grid_case("grid on a cube with a layer", cube, 3, 0.25, [layer], 80, 150, 1.0);
+    let q = mesher::mesh_quality();
+    if abs(q.max_aspect - 0.25 / 0.15) > 1.0e-9 { fail(str("grid on a cube with a layer: the aspect is ", q.max_aspect)); }
+    // The 2D L of 2 rects: 2 cells along each axis at size 9, 3 quads in
+    // the L, and 8 nodes.
+    let l_rects = mesher::union(mesher::rect(0.0, 0.0, 10.0, 2.0), mesher::rect(0.0, 0.0, 2.0, 10.0));
+    grid_case("2D grid on an L of 2 rects", l_rects, 2, 9.0, [], 3, 8, 36.0);
+    if mesher::mesh_grid(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0), 3, 0.5, []) {
+        fail("grid on a cylinder: it is not a union of boxes");
+    }
 }
 
 fn main() {
@@ -354,6 +403,7 @@ fn main() {
     mesh_case("2D plate with a row of 4 holes", holes, 0.5, holes_area,
               (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
 
+    test_grid();
     test_lint();
 
     if failures > 0 { exit(1); }

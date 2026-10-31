@@ -1,8 +1,7 @@
 // femahoy: validation/cases/warpage-thick-copper/job.inp
-// blocked-by: G19
 // 1/4 of a wafer slice of 50 x 10 mm: 0.73 mm of silicon with 20 um of copper
 // (Calabretta et al. 2021). A uniform heating of 40 K bends it. Linear
-// thermoelastic, 3D, quadratic tetrahedra. The reference is the measured
+// thermoelastic, 3D, quadratic hexahedra. The reference is the measured
 // rate 0.700 um/K: the end moves -0.028 mm, within 12 %.
 
 model warpage_thick_copper: 3d, mm_N_MPa_s
@@ -30,11 +29,11 @@ material copper {
     alpha: Expansion = 1.64e-5 K^-1
 }
 
-// gap G19: femahoy uses a C3D20R grid with 1 cell through the copper.
+// The grid plane on the face z = 0.73 mm gives 1 cell through the copper, as the
+// C3D20R grid of femahoy has.
 mesh m on slice {
     size: 0.5 mm
-    cell: tet
-    refine cu: 0.02 mm
+    cell: hex
 }
 
 physics solid on slice solves u: Vector<Length> {

@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-layered-wall/wall/grid.toml
-// blocked-by: G19
 // A building wall of plaster, insulation and brick, with a convection on
 // each side. Steady heat conduction, 3D, linear hexahedra. The reference
 // is the thermal circuit of resistances in series.
@@ -34,12 +33,11 @@ material brick {
     k: Conductivity = 0.8 W/(m*K)
 }
 
-// femahoy min_cells 2: 2 cells through the plaster.
-// gap G19: the spec does not put a grid plane on each face of a layer.
+// femahoy min_cells 2: 2 cells through the plaster. The face of each layer is a
+// grid plane.
 mesh m on wall {
-    size: 0.05 m
+    size: 0.0075 m
     cell: hex
-    refine plaster_layer: 0.0075 m
 }
 
 physics thermal on wall solves T: Temperature = 293.15 K {

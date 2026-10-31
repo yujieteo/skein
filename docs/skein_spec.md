@@ -934,7 +934,7 @@ mesh m on beam {
 | Setting | Type | Default | Meaning |
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
-| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `hex` needs a `box` region or a quarter of a tube. `quad` on a `rect` is a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. |
+| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `hex` needs a union of `box` regions, or a quarter of a tube. `quad` on a union of `rect` regions is a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. |
 | `grade` | `Real` | 1.3 | largest ratio of the size of two neighbour cells |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
@@ -968,9 +968,17 @@ licences are not compatible with Apache 2.0.
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
-| `quad`, `hex` | a structured grid on a `box` or `rect`, or in r, θ and z on a quarter of a tube: `(cylinder - cylinder) & box`, with the box corner on the axis |
+| `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ and z on a quarter of a tube: `(cylinder - cylinder) & box`, with the box corner on the axis |
 | `quad` on another `Surface` | the triangles of the 2D case, then the merge of each pair of triangles into a quad (Blossom-Quad, Remacle et al. 2012). A triangle stays where no pair has an acceptable quality. |
 | boundary layers | prisms or quads extruded along the normal of the surface, then the core mesh |
+
+On a union of boxes or rects, each face of each `box` or `rect` of the
+model is a grid plane: the faces of the region, and the faces of the boxes
+that `let` items join with `|`, `&` and `-`, for example a material layer.
+Between two neighbour planes, the grid has the fewest equal cells that are
+not longer than `size`. A cell is in the mesh if its centre is in the
+region. Thus no cell crosses a material face, and a thin layer has one
+cell through it.
 
 The sharp edges come from the CSG tree: each intersection of the surfaces
 of two primitives with a dihedral angle that `feature_angle` marks is a
