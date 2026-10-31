@@ -105,5 +105,7 @@ fn rigid_setup(a: f64[:]) -> bool {
 fn check_memory(entries: i64) {
     let vectors = if solver_name == "gmres" { GMRES_RESTART + 8 } else { 6 };
     let fix = if preconditioner_name == "jacobi" { "" } else { ", or write solve { linear: cg, precond: jacobi } in the step: it needs less memory, but it can need many more iterations" };
-    solvers::memory_check(str("box ", solver_name, " ", preconditioner_name), entries, dof_total(), vectors, fix);
+    // The mesh that each cell_worker copies at its spawn.
+    let mesh = 8 * (coords.len + cell_start.len + cell_nodes.len + cell_young.len + cell_poisson.len) + cell_type.len;
+    solvers::memory_check(str("box ", solver_name, " ", preconditioner_name), entries, dof_total(), vectors, mesh, fix);
 }

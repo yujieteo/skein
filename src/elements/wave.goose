@@ -250,7 +250,7 @@ fn wave_assemble() {
     // The restart vectors of GMRES, and its (m + 1) × m Hessenberg matrix
     // (8 MB for m = 1000) as vectors of the dofs.
     let m = wave_restart(dof_total());
-    solvers::memory_check("simplex wave gmres ilu0", col.len, dof_total(), m + 9 + (m + 1) * m / max(dof_total(), 1), "");
+    solvers::memory_check("simplex wave gmres ilu0", col.len, dof_total(), m + 9 + (m + 1) * m / max(dof_total(), 1), 0, "");
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     var me: f64[200] = [0.0; 200];

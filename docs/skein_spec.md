@@ -2152,7 +2152,9 @@ better than parallel assembly in one case.
 its matrix and before the values (`src/solvers/memory.goose`). The
 estimate is the resident memory at the check, plus a measured number of
 bytes for each entry of the pattern and for each dof for its solution
-path, plus the vectors of its solver. The pattern is what the program really builds, so
+path, plus the vectors of its solver. On more than 1 thread, it adds two
+copies of the mesh for each thread: each worker of the assembly holds its
+spawn argument and its globals. The pattern is what the program really builds, so
 the estimate needs no table of cell types or physics. If the estimate
 on the threads of the case does not fit but the estimate on 1 thread
 fits, the solve goes on with 1 thread. If the estimate on 1 thread

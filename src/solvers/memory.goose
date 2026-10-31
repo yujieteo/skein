@@ -7,12 +7,15 @@
 //
 //     peak = RSS now + entries × (bytes of the path + bytes of the threads)
 //                    + dofs × (bytes of the path + vectors × 8)
+//                    + threads × (THREAD_BYTES + 2 × mesh)
 //
 // The RSS now holds the mesh and the pattern. `vectors` is the number of
 // vectors of one value for each dof that the solver of the path holds
 // (the basis of GMRES, the blocks of LOBPCG), which the caller knows. The
 // constants of each path are the measured peak less the RSS at the check
-// and less the vectors, for each entry.
+// and less the vectors, for each entry. `mesh` is the bytes of the globals
+// that each worker of the assembly copies at its spawn (the mesh), which
+// the caller knows, or 0 if the path has no such workers.
 //
 // The free memory (the budget) is 0.9 × min(MemAvailable, memory.max −
 // memory.current of each cgroup of the process), read once. In a study,
@@ -82,9 +85,12 @@ let MEMORY_PATHS = [
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
 ];
 
-// The bytes of each worker thread of a case: its stacks and its copy of
-// the mesh. Measured: 16 workers of the assembly of the closed cylinder
-// (box lane, 143,787 dofs) took 23 MB more than 1 thread.
+// The bytes of each worker thread of a case: its stacks. Measured: 16
+// workers of the assembly of the closed cylinder (box lane, 143,787 dofs)
+// took 23 MB more than 1 thread. Each worker also holds its spawn argument
+// and its globals, two copies of `mesh`. Measured on 2026-11-01: linear
+// steady heat (conduction slab, 915,756 tets, 34 MB of mesh) took 57 MB
+// more for each thread.
 let THREAD_BYTES = 1.5e6;
 
 // The fraction of the free memory that the cases may take. Reason: the
@@ -180,18 +186,18 @@ fn memory_path(name: u8[:]) -> MemoryPath {
 }
 
 // The bytes above the RSS of a solve on path `p` with a pattern of
-// `entries` entries, `vectors` vectors of `dofs` values and `threads`
-// threads.
-fn path_bytes(p: MemoryPath, entries: i64, dofs: i64, vectors: i64, threads: i64) -> f64 {
-    guard entries >= 0 && dofs >= 0 && vectors >= 0 && threads >= 1 else { abort("path_bytes: entries, dofs and vectors >= 0, and threads >= 1"); }
+// `entries` entries, `vectors` vectors of `dofs` values, `mesh` bytes that
+// each worker copies and `threads` threads.
+fn path_bytes(p: MemoryPath, entries: i64, dofs: i64, vectors: i64, mesh: i64, threads: i64) -> f64 {
+    guard entries >= 0 && dofs >= 0 && vectors >= 0 && mesh >= 0 && threads >= 1 else { abort("path_bytes: entries, dofs, vectors and mesh >= 0, and threads >= 1"); }
     let bytes = p.entry_bytes * entries + (p.dof_bytes + 8.0 * vectors) * dofs;
     guard threads > 1 else { return bytes; };
-    return bytes + p.thread_bytes * entries + THREAD_BYTES * threads;
+    return bytes + p.thread_bytes * entries + (THREAD_BYTES + 2.0 * mesh) * threads;
 }
 
 // The peak bytes of a solve on path `name`, from the RSS now (path_bytes).
-fn memory_estimate(name: u8[:], entries: i64, dofs: i64, vectors: i64) -> f64 {
-    return resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, case_threads());
+fn memory_estimate(name: u8[:], entries: i64, dofs: i64, vectors: i64, mesh: i64) -> f64 {
+    return resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, mesh, case_threads());
 }
 
 var memory_checks = 0;   // the checks of the run
@@ -203,8 +209,8 @@ var memory_checks = 0;   // the checks of the run
 // estimate, the budget and `fix`, the lower-memory choice of the path or "". It also asks the kernel to kill
 // this case first if the memory runs out (oom_score_adj 1000, which a
 // process may set on itself).
-fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) {
-    var need = memory_estimate(name, entries, dofs, vectors);
+fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, mesh: i64, fix: u8[:]) {
+    var need = memory_estimate(name, entries, dofs, vectors, mesh);
     memory_checks++;
     var probe: u8[>..] = [];
     if env("SKEIN_MEMORY_PROBE", probe) {
@@ -213,7 +219,7 @@ fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) 
     }
     write_file("/proc/self/oom_score_adj", "1000");
     let have = memory_budget();
-    let one = resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, 1);
+    let one = resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, mesh, 1);
     if have > 0.0 && need > have && one <= have {
         write_stderr(str("skein run: the solve runs on 1 thread, since ", case_threads(), " threads need about ", mb(need), " MB and ", mb(have), " MB is free\n"));
         threads = 1;
