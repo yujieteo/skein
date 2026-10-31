@@ -32,8 +32,8 @@ material steel {
     nu: Real = 0.3
 }
 
-// gap G36: quad cells need a union of rects, so the parts use triangles. ccx uses CPE4: order: 1
-// on quad cells.
+// gap G36: the mesher makes quad cells only on a union of rects, so the parts use
+// triangles. ccx uses CPE4: order: 1 on quad cells.
 mesh m on parts {
     size: 2 mm
     cell: tri

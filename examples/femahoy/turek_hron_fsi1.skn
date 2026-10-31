@@ -41,8 +41,8 @@ mesh mf on fluid_dom {
     refine cyl_wall | wet_fluid: 0.005 m
 }
 
-// gap G36: quad cells need a union of rects, so the flag uses triangles. ccx uses C3D8I:
-// order: 1 and family: incompatible on hex cells.
+// gap G36: the mesher makes quad cells only on a union of rects, so the flag uses
+// triangles. ccx uses C3D8I: order: 1 and family: incompatible on hex cells.
 mesh ms on bar {
     size: 0.005 m
     cell: tri

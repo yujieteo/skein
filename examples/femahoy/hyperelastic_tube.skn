@@ -36,8 +36,9 @@ material rubber {
     Kb: Pressure = 4000 MPa
 }
 
-// gap G36: quad cells need a union of rects, so the tube uses triangles. ccx uses CPE8R:
-// order: 2, family: serendipity and quadrature: reduced on quad cells.
+// gap G36: the mesher makes quad cells only on a union of rects, so the tube uses
+// triangles. ccx uses CPE8R: order: 2, family: serendipity and quadrature: reduced on
+// quad cells.
 mesh m on quarter {
     size: 1.25 mm
     cell: tri

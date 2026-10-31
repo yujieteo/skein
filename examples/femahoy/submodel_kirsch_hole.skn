@@ -28,7 +28,7 @@ material steel {
     nu: Real = 0.3
 }
 
-// gap G36: femahoy uses CPE8R quads on the ring. The Skein grid needs a union of rects.
+// gap G36: femahoy uses CPE8R quads on the ring. The mesher makes quads only on a union of rects.
 mesh m on ring {
     size: 1 mm
     cell: tri
