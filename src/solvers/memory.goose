@@ -73,6 +73,11 @@ struct MemoryPath {
 //     flow                sample 02 at a/128, 102,675 dofs: 24.2 (val, lu and pre). Not
 //                         measured on 16 threads: the 16 of simplex cg amg, which also
 //                         has rows_start.
+//     grid                the examples/grid models at the sizes 0.004, 0.008 and 0.002 m, on
+//                         2026-11-01, with no output: fv gmres -7.7 (62,500 dofs), dg order 2
+//                         gmres -0.9 (140,625 dofs), fv ssprk3 0.3 (250,000 dofs). fv and dg
+//                         size the matrix and the vectors of the state before the check, so
+//                         the RSS at the check holds them. No threads.
 let MEMORY_PATHS = [
     MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "box cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 1.0 },
@@ -83,6 +88,8 @@ let MEMORY_PATHS = [
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
+    MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "grid ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
 ];
 
 // The bytes of each worker thread of a case: its stacks. Measured: 16

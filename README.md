@@ -42,6 +42,8 @@ step load: static {
 set of models. `skein check` parses and type-checks a model. `skein lint` checks
 it and reports lint diagnostics. With `--mesh`, it also applies the rules
 that need a mesh. `skein verify` creates the mesh and checks its quality.
+`skein verify convergence` solves an `fv` or `dg` model on finer meshes
+and checks the order of convergence of each `expect` of two fields.
 `skein md` writes a model as a Markdown document. `skein fmt` rewrites a
 file in the standard layout. `skein export` writes the surface of a shape as STL or as tessellated STEP AP242.
 `skein run --study` runs each case of a `grid`, `zip` or `sample`

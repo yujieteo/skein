@@ -45,6 +45,9 @@ examples/femahoy/scordelis_lo_roof.skn
 examples/femahoy/warpage_thick_copper.skn
 examples/flow/cavity_coarse.skn
 examples/flow/poiseuille_stokes.skn
+examples/grid/mms_dg_static.skn
+examples/grid/mms_fv_static.skn
+examples/grid/mms_fv_transient.skn
 examples/lame_profile.skn
 examples/shells/thin_cylinder_shell.skn
 samples/02_cavity.skn
