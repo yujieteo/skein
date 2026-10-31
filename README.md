@@ -98,6 +98,7 @@ golden files again and read the diff:
 | `src/mesher/` | geometry meshes, mesh checks and STL export |
 | `src/shells/` | shell, beam and laminate solver routines, plus code generation for cylindrical shells |
 | `src/transient/` | transient heat solver routines |
+| `src/flow/` | stabilized Stokes and Navier-Stokes solver routines, plus code generation for 2D flow |
 
 ## Why Skein
 
