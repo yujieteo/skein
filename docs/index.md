@@ -42,6 +42,6 @@ gives the phases.
 * [B787 study](studies/b787/readability.md): a fuselage model in Skein and
   Abaqus, with edit comparisons and LLM results.
 * [The LLM test](llm_test.md): how to measure whether an LLM writes Skein
-  better than an Abaqus or APDL deck.
+  better than a CalculiX deck that femahoy runs.
 * [Readability](readability.md): one cantilever in Skein and in femahoy,
   three edit tasks with diff sizes, and the end-to-end LLM workflow results.

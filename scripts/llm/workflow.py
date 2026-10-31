@@ -9,6 +9,8 @@ the rounds, the tokens, the wall time and the result.
     scripts/llm/workflow.py skein --out DIR   # the model gets `skein help --llm`
     scripts/llm/workflow.py inp --out DIR     # a CalculiX deck for femahoy, no card
 
+--request picks one of the short requests of REQUESTS.
+
 Path `skein`: the check is `skein check`, the run is `skein run`.
 Path `inp`: the check and the run are one `fh run` (femahoy gives the deck to
 ccx, which is the parser of the deck).
@@ -28,8 +30,13 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-REQUEST = ("a steel cantilever 1 m x 50 mm x 100 mm, fixed at one end, "
-           "1 kN tip load, report the tip deflection")
+REQUESTS = {
+    "cantilever": ("a steel cantilever 1 m x 50 mm x 100 mm, fixed at one "
+                   "end, 1 kN tip load, report the tip deflection"),
+    "plate": ("an aluminium plate 100 mm x 50 mm x 2 mm, plane stress, one "
+              "short edge fixed, 10 MPa tension on the other short edge, "
+              "report the elongation"),
+}
 SYSTEM = ("You write simulation input files. Answer with the complete file "
           "in one fenced code block.")
 ASK = {
@@ -121,10 +128,11 @@ def inp_value(text):
 
 
 def one_run(path, n, args, card):
-    work = args.out / f"{path}-{n}"
+    work = args.out / f"{path}-{args.request}-{n}"
     work.mkdir(parents=True, exist_ok=True)
     session = str(uuid.uuid4())
-    prompt = "\n\n".join(x for x in (card, REQUEST, ASK[path]) if x)
+    prompt = "\n\n".join(x for x in (card, REQUESTS[args.request], ASK[path])
+                         if x)
     record = {"path": path, "run": n, "first_try_pass": "no", "passed": "no",
               "repair_rounds": 0, "input_tokens": 0, "output_tokens": 0}
     start = time.monotonic()
@@ -168,11 +176,11 @@ FIELDS = ["path", "run", "model", "first_try_pass", "passed", "repair_rounds",
           "reaction"]
 
 
-def toon(records):
+def toon(records, request):
     rows = [",".join(json.dumps(r.get(f, "")) if isinstance(r.get(f, ""), str)
                      else str(r.get(f, "")) for f in FIELDS) for r in records]
     head = f"runs[{len(records)}]{{{','.join(FIELDS)}}}:"
-    return "\n".join([f"date: {date.today()}", f"request: {json.dumps(REQUEST)}",
+    return "\n".join([f"date: {date.today()}", f"request: {json.dumps(request)}",
                       head] + ["  " + r for r in rows]) + "\n"
 
 
@@ -180,6 +188,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("path", choices=["skein", "inp"])
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--request", choices=REQUESTS, default="cantilever")
     p.add_argument("--runs", type=int, default=3)
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--model", default="claude-opus-5-5")
@@ -193,12 +202,14 @@ def main():
         status, card = run([str(args.skein), "help", "--llm"], ROOT)
         if status != 0:
             sys.exit(f"workflow: skein help --llm failed:\n{card}")
+    request = REQUESTS[args.request]
+    results = args.out / f"results-{args.path}-{args.request}.toon"
     records = []
     for n in range(1, args.runs + 1):
         records.append(one_run(args.path, n, args, card))
-        print(toon(records[-1:]).splitlines()[-1], flush=True)
-        (args.out / f"results-{args.path}.toon").write_text(toon(records))
-    print(toon(records), end="")
+        print(toon(records[-1:], request).splitlines()[-1], flush=True)
+        results.write_text(toon(records, request))
+    print(toon(records, request), end="")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,7 @@
 # Skein samples
 
 These six models show the main parts of the language. Read the
-[tutorial](../docs/tutorial.md) first. The samples are the reference
-answers of the [LLM test](../docs/llm_test.md). Each sample has a
+[tutorial](../docs/tutorial.md) first. Each sample has a
 one-line header and a `scales` line (spec §21.2).
 
 The compiler cannot check a model yet, so the samples do not run.
