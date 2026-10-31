@@ -331,6 +331,46 @@ fn test_output() {
     }
 }
 
+// The default methods of `src` (spec §13), one "physics,mesh,order,stabilize" per line.
+fn expect_chosen(what: u8[:], src: u8[:], want: u8[:]) {
+    check::check_text("t.skn", src);
+    var got: u8[>..] = [];
+    for c in check::chosen {
+        format(got, c.physics, ",", c.mesh, ",", c.order, ",", c.stabilize, "\n");
+    }
+    if got == want && check::diags.len == 0 { return; }
+    failures++;
+    print("FAIL ", what, ": got [", got, "] and ", check::diags.len, " diagnostics");
+}
+
+fn test_method_defaults() {
+    let elastic = str(H, SOLID, "\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n");
+    expect_chosen("a solid", elastic, "s,m1,2,none\n");
+    expect_chosen("the mesh on the region of the physics", str(elastic, "mesh m2 on f { size: 0.2 m }\n"), "s,m1,2,none\n");
+    expect_chosen("a method item", str(elastic, "method s: cg { order: 1 }\n"), "");
+    expect_chosen("Taylor-Hood and SUPG", str(H2, FLOW), "flow,m1,{ v: 2, p: 1 },supg\n");
+    let heat = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nmaterial cu {\n    k: Conductivity = 400 W/(m*K)\n    rho: Density = 8900 kg/m^3\n    c_p: SpecificHeat = 385 J/(kg*K)\n}\nmesh m1 on b { size: 0.1 m }\n");
+    expect_chosen("conduction", str(heat, "physics h on b: heat solves T: Temperature {\n    material cu\n}\n"), "h,m1,2,none\n");
+    expect_chosen("convection of a heat", str(heat, "let w: Vector<Velocity> = (1, 0, 0) m/s\nphysics h on b solves T: Temperature {\n    material cu\n    eq rho*c_p*dot(w, grad(T)) - div(k*grad(T)) = 0 W/m^3\n}\n"),
+                  "h,m1,2,supg\n");
+    expect_chosen("convection in a let", str(heat, "let w: Vector<Velocity> = (1, 0, 0) m/s\nphysics h on b solves T: Temperature {\n    material cu\n    let adv: Power/Volume = rho*c_p*dot(w, grad(T))\n    let net: Power/Volume = adv\n    eq net - div(k*grad(T)) = 0 W/m^3\n}\n"),
+                  "h,m1,2,supg\n");
+    // The report: TOON and JSON.
+    check::check_text("t.skn", str(H2, FLOW));
+    var toon: u8[>..] = [];
+    check::write_toon(toon);
+    var json: u8[>..] = [];
+    check::write_json(json);
+    if find(toon[..], "method[1]{physics,kind,mesh,order,stabilize}:\n  flow,cg,m1,\"{ v: 2, p: 1 }\",supg\n") < 0 {
+        failures++;
+        print("FAIL method TOON: got [", toon, "]");
+    }
+    if find(json[..], "\"method\":[{\"physics\":\"flow\",\"kind\":\"cg\",\"mesh\":\"m1\",\"order\":\"{ v: 2, p: 1 }\",\"stabilize\":\"supg\"}]") < 0 {
+        failures++;
+        print("FAIL method JSON: got [", json, "]");
+    }
+}
+
 // The ids of the diagnostics of `skein lint` on `src`, one per line.
 fn lint_ids(src: u8[:]) -> u8[>..] {
     check::lint_text("t.skn", src);
@@ -438,6 +478,7 @@ fn main() {
     test_types();
     test_physics();
     test_conditions();
+    test_method_defaults();
     test_steps();
     test_shells();
     test_studies();

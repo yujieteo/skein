@@ -133,6 +133,7 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
             let p = physics[cur_phys];
             if eqs < p.count { note_fluxes(s, p.first + eqs); }
             note_high_derivs(s, 0);
+            if convection(k.first, 0) || convection(syntax::nodes[k.first].next, 0) { physics[cur_phys].convective = true; }
             eqs++;
         },
         syntax::N_PLASTIC => {
@@ -154,7 +155,7 @@ fn check_physics(n: i64) {
     let k = syntax::nodes[n];
     let psym = declare(S_PHYSICS, k.tok, n, kind_ty(K_DECL));
     physics.push(Phys { sym: psym, node: n, region: -1, template: -1, first: syms.len, count: 0,
-                        has_method: false, plastic: false, incompressible: false });
+                        has_method: false, plastic: false, incompressible: false, convective: false });
     cur_phys = physics.len - 1;
     assumed.clear();
     var uses = -1;
@@ -715,20 +716,137 @@ fn inf_sup(p: i64, b: i64, tok: i64) {
 // `method_missing`: a physics with a region and no method needs exactly
 // one mesh on its region (spec §13). The checker has no geometry, so it
 // counts the meshes on the same region, or all meshes when no mesh names it.
+// A physics that takes the defaults goes to `chosen` for the check report.
 fn method_missing() {
-    for p in physics {
+    for p, i in physics {
         if p.has_method || p.region < 0 { continue; }
         var all = 0;
         var same = 0;
+        var any_mesh = -1;
+        var same_mesh = -1;
         for s in syms {
             if s.kind != S_MESH { continue; }
             all++;
-            if same_region(syntax::nodes[s.node].first, p.region) { same++; }
+            any_mesh = s.tok;
+            if same_region(syntax::nodes[s.node].first, p.region) {
+                same++;
+                same_mesh = s.tok;
+            }
         }
-        if same == 1 || (same == 0 && all == 1) { continue; }
         let name = tok_text(syms[p.sym].tok);
+        if same == 1 || (same == 0 && all == 1) {
+            choose(i, if same == 1 { same_mesh } else { any_mesh });
+            continue;
+        }
         let msg: u8[>..] = if all == 0 { str("the physics '", name, "' has no method and the model has no mesh") }
                            else { str("the physics '", name, "' has no method, and ", all, " meshes can hold its region") };
         error(syms[p.sym].tok, "method_missing", msg, str("add method ", name, ": cg { mesh: <name> }"));
     }
+}
+
+// Adds the default method of physics `p` on the mesh named by `mesh_tok` to
+// `chosen` (spec §13).
+fn choose(p: i64, mesh_tok: i64) {
+    let ph = physics[p];
+    var c = Chosen { physics: [], mesh: [], order: [], stabilize: [] };
+    let name = tok_text(syms[ph.sym].tok);
+    c.physics.append(name[..min(name.len, 64)]);
+    c.mesh.append(tok_text(mesh_tok)[..min(tok_text(mesh_tok).len, 64)]);
+    let first = if ph.count > 0 { default_order(ph.first) } else { 2 };
+    var same = true;
+    for j in ph.count {
+        if default_order(ph.first + j) != first { same = false; }
+    }
+    var order: u8[>..] = [];
+    if same {
+        format(order, first);
+    } else {
+        order.append("{ ");
+        for j in ph.count {
+            if j > 0 { order.append(", "); }
+            format(order, tok_text(syms[ph.first + j].tok), ": ", default_order(ph.first + j));
+        }
+        order.append(" }");
+    }
+    c.order.append(order[..min(order.len, 256)]);
+    c.stabilize.append(if ph.convective { "supg" } else { "none" });
+    chosen.push(c);
+}
+
+// The default `cg` order of unknown `u` (spec §13): 2, except 1 for a
+// pressure that pairs with a velocity under `incompressible` (Taylor-Hood).
+fn default_order(u: i64) -> i64 {
+    let p = syms[u].phys;
+    guard p >= 0 && physics[p].incompressible && is_pressure(syms[u].ty) else { return 2; };
+    let ph = physics[p];
+    for j in ph.count {
+        if is_velocity(syms[ph.first + j].ty) { return 1; }
+    }
+    return 2;
+}
+
+fn is_velocity(t: Ty) -> bool { is_num(t) && t.rank == 1 && t.dim == LENGTH - TIME }
+
+fn is_pressure(t: Ty) -> bool { is_num(t) && t.rank == 0 && t.dim == FORCE - dim_pow(LENGTH, 2) }
+
+// True when the expression `n` has a convection term: `grad(a)*w`,
+// `w*grad(a)`, `dot(w, grad(a))` or `dot(grad(a), w)`, with `w` a name of
+// a vector of velocities and each side perhaps a product with other
+// factors (spec §13, the default `stabilize`). A name of a physics `let`
+// gives the convection terms of its value, to `depth` 16.
+recursive fn convection(n: i64, depth: i64) -> bool {
+    guard n >= 0 && depth <= 16 else { return false; };
+    let k = syntax::nodes[n];
+    if k.kind == syntax::N_NAME {
+        let s = visible.get(key(tok_text(k.tok)));
+        return s && syms[s].kind == S_LET && syms[s].phys == cur_phys && syms[s].node >= 0
+               && convection(syntax::nodes[syms[s].node].last, depth + 1);
+    }
+    var a = -1;
+    var b = -1;
+    if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
+        a = k.first;
+        b = syntax::nodes[a].next;
+    } else if k.kind == syntax::N_CALL && tok_text(syntax::nodes[k.first].tok) == "dot" {
+        let x = syntax::nodes[k.first].next;
+        if x >= 0 && syntax::nodes[x].next >= 0 {
+            a = syntax::nodes[x].first;
+            b = syntax::nodes[syntax::nodes[x].next].first;
+        }
+    }
+    if a >= 0 && b >= 0 && ((factor(a, true) && factor(b, false)) || (factor(b, true) && factor(a, false))) { return true; }
+    var c = k.first;
+    while c >= 0 {
+        if convection(c, depth) { return true; }
+        c = syntax::nodes[c].next;
+    }
+    return false;
+}
+
+// True when the product `n` has a factor `grad(…)` (`grad` true) or a
+// velocity name (`grad` false).
+recursive fn factor(n: i64, grad: bool) -> bool {
+    let k = syntax::nodes[n];
+    if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
+        return factor(k.first, grad) || factor(syntax::nodes[k.first].next, grad);
+    }
+    return if grad { is_grad(n) } else { velocity_name(n) };
+}
+
+fn is_grad(n: i64) -> bool {
+    let k = syntax::nodes[n];
+    return k.kind == syntax::N_CALL && syntax::nodes[k.first].kind == syntax::N_NAME && tok_text(syntax::nodes[k.first].tok) == "grad";
+}
+
+// True when `n` is a name of a vector of velocities: a local of a template,
+// or a symbol of the model.
+fn velocity_name(n: i64) -> bool {
+    guard syntax::nodes[n].kind == syntax::N_NAME else { return false; };
+    let name = tok_text(syntax::nodes[n].tok);
+    for i in 0..locals.len {
+        let l = locals[locals.len - 1 - i];
+        if l.name == name { return is_velocity(l.ty); }
+    }
+    let s = visible.get(key(name));
+    return s && is_velocity(syms[s].ty);
 }

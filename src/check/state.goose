@@ -118,6 +118,7 @@ struct Phys {
     has_method: bool,
     plastic: bool,
     incompressible: bool,
+    convective: bool, // an eq has a convection term, for the default `stabilize`
 }
 
 var physics: Phys[>..];
@@ -180,6 +181,17 @@ struct Free {
 
 var free: Free[>..];
 
+// The method that the checker chose for a physics with no method item, for
+// the check report (spec §13).
+struct Chosen {
+    physics: u8[..64],
+    mesh: u8[..64],
+    order: u8[..256],
+    stabilize: u8[..16],
+}
+
+var chosen: Chosen[>..];
+
 // Empties the state for a new file.
 fn reset_state() {
     diags.clear();
@@ -215,6 +227,7 @@ fn reset_state() {
     scale_dims.clear();
     used_dims.clear();
     free.clear();
+    chosen.clear();
 }
 
 fn add_sym(kind: i64, tok: i64, node: i64, ty: Ty) -> i64 {

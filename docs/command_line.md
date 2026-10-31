@@ -187,6 +187,14 @@ free_boundary[1]{physics,field,region,condition}:
   solid,u,"boundary(beam) - root - tip","sigma*n = 0"
 ```
 
+Then it prints the method that it chose for each physics with no `method`
+item (spec §13). A physics with a `method` item has no row:
+
+```toon
+method[1]{physics,kind,mesh,order,stabilize}:
+  solid,cg,m,2,none
+```
+
 ### 6.3 Verification
 
 ```toon
