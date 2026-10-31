@@ -448,12 +448,21 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
             error(first_tok(a.node[0]), "type_mismatch", str("the mode number is ", ty_str(t0), ", not Int"),
                   "give the number of the mode, for example eigenvalue(1)");
         }
-        let proc = if in_expect && cur_step < 0 { last_proc } else { cur_proc };
+        let after = in_expect && cur_step < 0;
+        let proc = if after { eig_proc } else { cur_proc };
+        let count = if after { eig_count } else { cur_count };
+        guard (in_expect || in_report) && (proc == "modal" || proc == "buckling") else {
+            error(tok, "eigenvalue_step", "eigenvalue needs a modal or a buckling step",
+                  "use eigenvalue in a report or an expect of a modal or buckling step, or in an expect after one");
+            return any_ty();
+        };
+        let k, ok = literal_value(a.node[0]);
+        if ok && count >= 0 && (k < 1.0 || k > count) {
+            error(first_tok(a.node[0]), "eigenvalue_step", str("mode ", k as i64, " is outside 1..", count, " of the step"),
+                  str("give a mode number from 1 to ", count, ", or raise the count of the step"));
+        }
         if proc == "modal" { return num_ty(dim_pow(TIME, -1), 0); }
-        if proc == "buckling" { return base_ty(B_REAL); }
-        error(tok, "type_mismatch", "eigenvalue needs a modal or a buckling step",
-              "use eigenvalue in a step with modal or buckling, or in an expect after one");
-        return any_ty();
+        return base_ty(B_REAL);
     }
     if name == "results" {
         guard arity(tok, name, a, 1, 2) else { return any_ty(); }

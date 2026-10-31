@@ -118,6 +118,7 @@ fn check_step(n: i64) {
     cur_proc.clear();
     let pn = tok_text(syntax::nodes[pr].tok);
     cur_proc.append(pn[..min(pn.len, 32)]);
+    cur_count = proc_count(pr);
     last_reports.clear();
     var c = syntax::nodes[pr].next;
     while c >= 0 {
@@ -173,8 +174,36 @@ fn check_step(n: i64) {
         c = s.next;
     }
     last_proc = cur_proc;
+    if cur_proc == "modal" || cur_proc == "buckling" {
+        eig_proc = cur_proc;
+        eig_count = cur_count;
+    }
     cur_proc.clear();
+    cur_count = -1;
     cur_step = -1;
+}
+
+// The literal `count` of a `modal` or `buckling` step, its first argument,
+// or -1 when no literal gives it (spec §14.2).
+fn proc_count(pr: i64) -> i64 {
+    var a = syntax::nodes[pr].first;
+    var i = 0;
+    while a >= 0 {
+        let k = syntax::nodes[a];
+        if (k.aux >= 0 && tok_text(k.aux) == "count") || (k.aux < 0 && i == 0) {
+            let v, ok = literal_value(k.first);
+            return if ok { v as i64 } else { -1 };
+        }
+        i++;
+        a = k.next;
+    }
+    return -1;
+}
+
+// The value of a literal number, which no param or --set can change.
+fn literal_value(n: i64) -> f64, bool {
+    guard syntax::nodes[n].kind == syntax::N_NUMBER else { return 0.0, false; }
+    return const_value(n);
 }
 
 // --- expect (spec §15.3) -------------------------------------------------------------------

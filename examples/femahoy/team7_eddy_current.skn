@@ -74,7 +74,6 @@ method em: cg {
     family: nedelec
 }
 
-// gap G9: a procedure argument cannot be a list, also a list of one frequency.
 step ac: harmonic(freq: [f0]) {
     // gap G26: no infinite region. femahoy maps a shell from 0.35 m to 0.45 m to infinity.
     // Here a = 0 on the sphere of 0.45 m.
@@ -86,9 +85,10 @@ step ac: harmonic(freq: [f0]) {
 }
 
 // The time factor is exp(im*omega*t). Thus Bz at 0 deg is the real part, and Bz at 90 deg is
-// minus the imaginary part.
-// gap G7: no real and imaginary parts. femahoy checks each part within 6% + 1 G. Here the
-// complex value is checked within 6% of its modulus + 1 G.
-expect bz_36: curl(a).z at (36, 72, 34) mm == -22.13*gauss - 4.15*gauss*im within 0.06*22.52*gauss + gauss
-expect bz_126: curl(a).z at (126, 72, 34) mm == 78.11*gauss - 4.97*gauss*im within 0.06*78.27*gauss + gauss
-expect bz_162: curl(a).z at (162, 72, 34) mm == 60.44*gauss - 14.15*gauss*im within 0.06*62.07*gauss + gauss
+// minus the imaginary part. femahoy checks each part within 6% + 1 G.
+expect bz0_36: re(curl(a).z at (36, 72, 34) mm) == -22.13*gauss within 0.06*22.13*gauss + gauss
+expect bz90_36: -imag(curl(a).z at (36, 72, 34) mm) == 4.15*gauss within 0.06*4.15*gauss + gauss
+expect bz0_126: re(curl(a).z at (126, 72, 34) mm) == 78.11*gauss within 0.06*78.11*gauss + gauss
+expect bz90_126: -imag(curl(a).z at (126, 72, 34) mm) == 4.97*gauss within 0.06*4.97*gauss + gauss
+expect bz0_162: re(curl(a).z at (162, 72, 34) mm) == 60.44*gauss within 0.06*60.44*gauss + gauss
+expect bz90_162: -imag(curl(a).z at (162, 72, 34) mm) == 14.15*gauss within 0.06*14.15*gauss + gauss

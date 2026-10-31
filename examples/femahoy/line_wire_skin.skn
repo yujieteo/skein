@@ -46,10 +46,9 @@ method eddy: cg { mesh: m, order: 1 }
 // The box walls are perfect conductors and carry the return current.
 bc walls: Az = 0
 
-// gap G9: a procedure argument cannot be a list. femahoy also solves 1 kHz, 10 kHz and 100 kHz.
+// femahoy also solves 1 kHz, 10 kHz and 100 kHz, but it checks only 1 MHz.
 step skin: harmonic(freq: [f0]) {
     output Az, J
 }
 
-// gap G7: no real() of a Complex value. The check is
-// real(E0/integral(J, wire)) == 4.29286576531e-2 V/(A*m) within 0.4%.
+expect r: re(E0/integral(J, wire)) == 4.29286576531e-2 V/(A*m) within 0.4%

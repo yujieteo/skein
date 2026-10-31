@@ -60,12 +60,11 @@ bc ywalls: E.z = 0
 bc port_in: Hs*n = im*beta/mu0*(E - dot(E, n)*n) - 2*im*beta/mu0*e10
 bc port_out: Hs*n = im*beta/mu0*(E - dot(E, n)*n)
 
-// gap G9: a procedure argument cannot be a list, also a list of one frequency.
 step response: harmonic(freq: [f0]) {
     output E
 }
 
-// gap G7: no real() and imag() of a Complex value. femahoy tests each part within 0.012.
-// Here the test is on the complex difference.
-expect s11: integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1 == 0.075518 - 0.187732*im within 0.012
-expect s21: integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out) == 0.908557 + 0.365483*im within 0.012
+expect s11_re: re(integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1) == 0.075518 within 0.012
+expect s11_im: imag(integral(dot(E, e10), port_in)/integral(dot(e10, e10), port_in) - 1) == -0.187732 within 0.012
+expect s21_re: re(integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out)) == 0.908557 within 0.012
+expect s21_im: imag(integral(dot(E, e10), port_out)/integral(dot(e10, e10), port_out)) == 0.365483 within 0.012

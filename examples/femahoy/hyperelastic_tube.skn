@@ -22,7 +22,6 @@ let inner: Curve = boundary(quarter, bore)
 
 /// One Ogden term mp/al*(sum of the isochoric stretches^al - 3), with c1, c2 the in-plane
 /// eigenvalues of C and the axial stretch 1 (plane strain).
-// gap G30: the exponents al/2 and -al/3 are not integer constants (§6.1).
 fn ogden(c1: Real, c2: Real, jac: Real, mp: Pressure, al: Real) -> Energy/Volume = mp/al*(jac^(-al/3)*(c1^(al/2) + c2^(al/2) + 1) - 3)
 
 // mu_p of the paper. Kb = 2/D1 with D1 = 0.0005 1/MPa of job.inp.

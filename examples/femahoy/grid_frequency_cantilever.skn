@@ -35,4 +35,4 @@ step mode_1: modal(count: 1) {
     output u
 }
 
-// gap G6: no name gives the frequency of mode 1, so f1 = 417.758 Hz is not an expect line.
+expect f1: eigenvalue(1) == 417.758 Hz within 1%

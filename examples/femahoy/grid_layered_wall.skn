@@ -9,8 +9,7 @@ let w: Length = 0.2 m
 let h_in: HeatTransfer = 8 W/(m^2*K)
 let h_out: HeatTransfer = 25 W/(m^2*K)
 let T_in: Temperature = 20 degC
-// gap G29: "-5 degC" reads as -(278.15 K), so this is -5 degC in K.
-let T_out: Temperature = 268.15 K
+let T_out: Temperature = -5 degC
 
 scales 0.315 m, 25 K, 10 W/m^2
 
