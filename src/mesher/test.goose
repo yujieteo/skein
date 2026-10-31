@@ -264,7 +264,7 @@ fn test_lint() {
     }
     expect_mesh_lints("cell: hex on a box", grid_model("box((0, 0, 0) m, (1, 1, 1) m)", "hex"), "unused_let\n");
     if mesher::cell_count() != 80 { fail(str("lint --mesh cell: hex on a box: ", mesher::cell_count(), " cells, not 80")); }
-    expect_mesh_lints("cell: hex on a cylinder", grid_model("cylinder((0, 0, 0) m, (0, 0, 1), 1 m, 1 m)", "hex"), "unused_let\nverify_unsupported\n");
+    expect_mesh_lints("cell: hex on a cylinder", grid_model("cylinder((0, 0, 0) m, (0, 0, 1), 1 m, 1 m)", "hex"), "unused_let\n");
     expect_mesh_lints("cell: quad in 3D", grid_model("box((0, 0, 0) m, (1, 1, 1) m)", "quad"), "unused_let\nverify_unsupported\n");
     // bending_lock is for triangles and tetrahedra only: an order-1 hex
     // grid on a thin bar does not lock.
@@ -324,6 +324,137 @@ fn test_grid() {
     grid_case("2D grid on an L of 2 rects", l_rects, 2, 9.0, [], 3, 8, 36.0);
     if mesher::mesh_grid(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0), 3, 0.5, []) {
         fail("grid on a cylinder: it is not a union of boxes");
+    }
+}
+
+// The quad, triangle and hex cells are conforming: each edge (2D) or face
+// (3D) is in one cell or in two, and the nodes of each edge or face in one
+// cell are on the boundary of g. A face of a hex is keyed by its 3 lowest
+// nodes.
+fn expect_cells_conforming(what: u8[:], g: i64) {
+    let n = mesher::point_count();
+    let hex_faces: i64[4][6] = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
+    var faces = dictionary<i64, i64> {};
+    var nodes = dictionary<i64, i64> {};    // a node of each face of one cell
+    fn add(f: i64[..4]) {
+        var v = f;
+        sort(v);
+        let key = if v.len == 2 { v[0] * n + v[1] } else { (v[0] * n + v[1]) * n + v[2] };
+        faces.update(key, 0) { it += 1; };
+        for x in f { nodes.insert(key * 4 + nodes_of(key), x); }
+    }
+    fn nodes_of(key: i64) -> i64 {
+        var k = 0;
+        while nodes.contains(key * 4 + k) { k++; }
+        return k;
+    }
+    for c in mesher::cell_count() {
+        let t = runtime::cell_type[c] as i64;
+        if t == runtime::HEX8 {
+            for f in 6 {
+                var v: i64[..4] = [];
+                for i in 4 { v.push(mesher::cell_node(c, hex_faces[f][i])); }
+                add(v);
+            }
+        } else {
+            let k = if t == runtime::QUAD4 { 4 } else { 3 };
+            for i in k { add([mesher::cell_node(c, i), mesher::cell_node(c, (i + 1) % k)]); }
+        }
+    }
+    let b = mesher::bounds(g);
+    let tol = 1.0e-6 * sqrt((b[3] - b[0]) * (b[3] - b[0]) + (b[4] - b[1]) * (b[4] - b[1]) + (b[5] - b[2]) * (b[5] - b[2]));
+    var bad = 0;
+    faces.each() { key, count =>
+        if count > 2 { bad++; }
+        if count == 1 {
+            for k in 4 {
+                let v = nodes.get(key * 4 + k);
+                guard v else { break; };
+                let p = mesher::vertex(v);
+                if abs(mesher::phi(g, p[0], p[1], p[2])) > tol { bad++; }
+            }
+        }
+    };
+    if bad > 0 { fail(str(what, ": ", bad, " faces are not conforming")); }
+}
+
+// Meshes g with quad or hex cells, and checks the quality, the measure
+// against `exact` within `tolerance`, and the conformity. Returns the
+// number of triangles.
+fn cells_case(what: u8[:], g: i64, dim: i64, size: f64, exact: f64, tolerance: f64) -> i64 {
+    if !mesher::mesh_cells(g, dim, size, []) { fail(str(what, ": the mesher did not finish")); }
+    let q = mesher::mesh_quality();
+    var tris = 0;
+    for c in mesher::cell_count() {
+        if runtime::cell_type[c] as i64 == runtime::TRI3 { tris++; }
+    }
+    let err = (q.measure - exact) / exact;
+    print(what, ", size ", size, "\n", q, "\n  triangles: ", tris, "\n  error: ", err, " (tolerance ", tolerance, ")");
+    if !mesher::quality_passes(q) { fail(str(what, ": mesh_quality")); }
+    if abs(err) > tolerance { fail(str(what, ": the measure is ", q.measure, ", not ", exact, " within ", tolerance)); }
+    expect_cells_conforming(what, g);
+    return tris;
+}
+
+// The quad and hex cells on a region that is not a union of boxes (spec
+// §9.2, femahoy gap G36).
+fn test_cells() {
+    // A quarter of a ring 1 <= r <= 2 at size 0.2: 5 cells along r and
+    // ceil(π / 0.2) = 16 along θ. Each cell is the quad of the chords, so
+    // the area is 16 (2^2 - 1^2) sin(π / 32) / 2.
+    mesher::clear_shapes();
+    let ring = mesher::subtract(mesher::intersect(mesher::circle(0.0, 0.0, 2.0), mesher::rect(0.0, 0.0, 2.0, 2.0)),
+                                mesher::circle(0.0, 0.0, 1.0));
+    let ring_area = 16.0 * 3.0 * sin(PI / 32.0) / 2.0;
+    cells_case("quarter ring", ring, 2, 0.2, ring_area, 1.0e-12);
+    if mesher::cell_count() != 80 || mesher::point_count() != 102 { fail("quarter ring: not 80 cells and 102 nodes"); }
+    // The quarter of the tube of height 1, the other form (o - i) & b: 5
+    // layers of the ring.
+    let tube = mesher::intersect(mesher::subtract(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0),
+                                                  mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)),
+                                 mesher::box(0.0, 0.0, 0.0, 2.0, 2.0, 1.0));
+    cells_case("quarter tube", tube, 3, 0.2, ring_area, 1.0e-12);
+    if mesher::cell_count() != 400 || mesher::point_count() != 612 { fail("quarter tube: not 400 cells and 612 nodes"); }
+    // Blossom-Quad on the plate with a hole: the merge keeps the area of
+    // the triangles, and few triangles stay.
+    let plate = mesher::subtract(mesher::rect(0.0, 0.0, 2.0, 1.0), mesher::circle(1.0, 0.5, 0.25));
+    mesher::mesh_2d(plate, 0.05);
+    let tri_area = mesher::mesh_quality().measure;
+    let tri_count = mesher::cell_count();
+    let tris = cells_case("Blossom-Quad on a plate with a hole", plate, 2, 0.05, tri_area, 1.0e-12);
+    let quads = mesher::cell_count() - tris;
+    if 2 * quads + tris != tri_count { fail(str("Blossom-Quad: ", quads, " quads and ", tris, " triangles from ", tri_count)); }
+    if 10 * tris > mesher::cell_count() { fail(str("Blossom-Quad: ", tris, " of ", mesher::cell_count(), " cells are triangles")); }
+    // The swept grid on the quarter of a rod of radius 1 and length 3, as
+    // in femahoy taylor-bar-impact: no triangle stays, and the chords of
+    // the arc lose at most h^2 / (8 R) of the area for each unit of arc.
+    let rod = mesher::intersect(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 3.0), mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 3.0));
+    let rod_volume = 0.75 * PI;
+    cells_case("swept hex grid on a quarter of a rod", rod, 3, 0.2, rod_volume, tolerance(0.5 * PI * 3.0, 1.0, 0.0, 0.2, rod_volume));
+    for c in mesher::cell_count() {
+        if runtime::cell_type[c] as i64 != runtime::HEX8 { fail("swept hex grid: a cell is not a hex"); }
+    }
+    // The mapped grid on a block with a hole along x: not a prism along z.
+    let holed = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0), mesher::cylinder(0.0, 0.5, 0.5, 1.0, 0.0, 0.0, 0.25, 2.0));
+    let block_volume = 2.0 - 2.0 * PI * 0.0625;
+    cells_case("mapped hex grid on a block with a hole", holed, 3, 0.1, block_volume, tolerance(2.0 * TAU * 0.25, 0.25, 0.0, 0.1, block_volume));
+    // A unit square, a clockwise rhombus with angles of 30 degrees, and a
+    // quad with an edge of zero length: only the square gives angles.
+    mesher::clear_mesh(2);
+    let s0 = mesher::add_point(0.0, 0.0, 0.0);
+    let s1 = mesher::add_point(1.0, 0.0, 0.0);
+    let s2 = mesher::add_point(1.0, 1.0, 0.0);
+    let s3 = mesher::add_point(0.0, 1.0, 0.0);
+    mesher::add_grid_cell([s0, s1, s2, s3]);
+    let r0 = mesher::add_point(2.0, 0.0, 0.0);
+    let r1 = mesher::add_point(2.0 + 0.5 * sqrt(3.0), 0.5, 0.0);
+    let r2 = mesher::add_point(3.0 + 0.5 * sqrt(3.0), 0.5, 0.0);
+    let r3 = mesher::add_point(3.0, 0.0, 0.0);
+    mesher::add_grid_cell([r0, r1, r2, r3]);
+    mesher::add_grid_cell([s1, s1, r0, s2]);
+    let bad = mesher::mesh_quality();
+    if bad.inverted != 2 || bad.min_angle != 90.0 || bad.max_angle != 90.0 {
+        fail(str("bad quads: ", bad.inverted, " inverted, angles ", bad.min_angle, " to ", bad.max_angle));
     }
 }
 
@@ -626,6 +757,7 @@ fn main() {
     test_refine();
 
     test_grid();
+    test_cells();
     test_lint();
     test_export();
 

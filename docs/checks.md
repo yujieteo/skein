@@ -197,7 +197,7 @@ mesh or the assembled operator:
 |---|---|---|
 | `rigid_body` | each rigid-body mode of each solid region (3 in 2D, 6 in 3D) is removed by the essential conditions or by a coupling | no free mode |
 | `pressure_level` | an incompressible flow with essential velocity on all of the boundary fixes the pressure at a point or by its mean | one reference |
-| `mesh_quality` | the worst cells of each mesh: the minimum and the maximum dihedral angle in 3D, the minimum angle in 2D | 3D: 5° to 175°. 2D: at least 10°. |
+| `mesh_quality` | the worst cells of each mesh: the minimum and the maximum dihedral angle in 3D, the minimum angle in 2D. On `quad` and `hex` cells, the angles between the edges at each corner. | 3D: 5° to 175°. 2D: at least 10°. |
 | `points_quality` | the fill distance divided by the separation distance of each point cloud | at most 4 |
 | `material_admissible` | `E` > 0, −1 < `nu` < 0.5, `rho` > 0, `mu` > 0, `k` > 0, where the material gives them | the physical range |
 

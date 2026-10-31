@@ -49,11 +49,12 @@ Phase 3 is in three tasks: flow, solid, and the mesher with the task pool.
 | stabilized Stokes and Navier-Stokes (SUPG/PSPG) | done: `src/flow/`, steady, 2D, P1/P1 and P2/P1 triangles |
 | the scaled SIR (§21) | done for the flow models: `src/flow/gen.goose` |
 | the `stokes` and `navier_stokes` templates | done |
-| birth and death, submodels, AMG, LOBPCG, the task pool | open |
+| the work-stealing task pool (§20.5) | done for the cases of a study: `src/codegen/run.goose` |
+| birth and death, submodels, AMG, LOBPCG | open |
 
 Gate: `scripts/generated_c.sh` runs samples 02 and 06. Sample 02 passes
-each `expect` against Ghia et al. within the limit of 0.02 m/s.
-Samples 03 and 04 and the gap G36 are open.
+each `expect` against Ghia et al. within the limit of 0.02 m/s. The gap
+G36 is closed. Samples 03 and 04 are open.
 
 ## Risks
 

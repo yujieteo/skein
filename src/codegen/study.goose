@@ -365,6 +365,46 @@ fn study_workers(want: i64, h: i64, case_bytes: f64, memory: f64) -> i64, i64 {
     return k, max(1, h / k);
 }
 
+// The work-stealing task pool (spec §20.5). Goose threads share no memory
+// and have no atomics or locks, so the thread that runs the pool owns the
+// queue of each worker, and a worker gets its task as the argument of its
+// spawn. Worker w starts with the block of tasks q[2 w] <= t < q[2 w + 1].
+// It takes the task at the head of its own queue. A worker with an empty
+// queue takes the task at the tail of the longest other queue.
+struct Pool {
+    q: i64[>..],
+}
+
+// The pool of the tasks 0 to `tasks` - 1 on `workers` workers.
+fn new_pool(tasks: i64, workers: i64) -> Pool {
+    var p = Pool { q: [] };
+    for w in workers {
+        p.q.push(tasks * w / workers);
+        p.q.push(tasks * (w + 1) / workers);
+    }
+    return p;
+}
+
+// The next task of worker w, or -1 if no queue has a task.
+fn take_task(p: Pool&, w: i64) -> i64 {
+    if p.q[2 * w] < p.q[2 * w + 1] {
+        p.q[2 * w]++;
+        return p.q[2 * w] - 1;
+    }
+    var victim = -1;
+    var most = 0;
+    for v in p.q.len / 2 {
+        let left = p.q[2 * v + 1] - p.q[2 * v];
+        if left > most {
+            victim = v;
+            most = left;
+        }
+    }
+    guard victim >= 0 else { return -1; };
+    p.q[2 * victim + 1]--;
+    return p.q[2 * victim + 1];
+}
+
 // --- the table (spec §20.6) ----------------------------------------------------
 
 fn set1024(into: u8[..1024]&, s: u8[:]) {

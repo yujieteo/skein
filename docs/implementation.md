@@ -180,9 +180,10 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
   file. Reason: the mesher has recursive functions, and Power of Ten rule
   1 forbids them in a generated program and its runtime.
 
-In phase 3, one work-stealing task pool runs the cases of a study and the
-parallel parts of each case (spec §20.5). Each worker has a queue of
-tasks. An idle worker takes a task from the queue of another worker.
+In phase 3, one work-stealing task pool runs the cases of a study (spec
+§20.5). Each worker has a queue of cases. An idle worker takes a case from
+the queue of another worker. A case is a separate program, so the parallel
+parts of a case are not tasks of the pool.
 
 ---
 
