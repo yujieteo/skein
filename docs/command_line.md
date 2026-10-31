@@ -176,6 +176,8 @@ For a flow model, `run` makes the mesh itself and writes it to
 `flow.xy` and `flow.tri` in the results directory of the model or the
 case. The generated program reads the mesh from these files.
 Each case gets its threads in the environment variable `SKEIN_THREADS`.
+The program of a model reads it for its assembly and its solves. Without
+it, the program uses all hardware threads.
 
 ---
 

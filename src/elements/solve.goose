@@ -11,20 +11,17 @@ import os;
 namespace elements;
 import .mesh;
 import .assemble;
+import solvers from "../solvers";
 
 var last_iterations = 0;
 var last_seconds = 0.0;
 
 let CG_TOLERANCE = 1.0e-12;   // the residual relative to the larger of the load and the first residual
 
-// y = K x
+// y = K x, on the workers of solvers::rows_start during a solve.
 fn multiply(x: f64[:], y: f64[:]) {
     guard x.len == y.len && row_start.len == y.len + 1 && col.len == val.len else { abort("multiply: x and y have one entry for each row of the matrix"); }
-    for r in y.len {
-        var s = 0.0;
-        for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
-        y[r] = s;
-    }
+    solvers::rows_multiply(row_start, col, val, x, y);
 }
 
 fn dot(a: f64[:], b: f64[:]) -> f64 {
@@ -52,6 +49,7 @@ fn solve_system() -> bool {
     var q = zeros(n);
     var inv_diag = zeros(n);
     let sizes = state_sizes();
+    solvers::rows_start(row_start, col, val);
     for d in n { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
     multiply(sol, q);
     var f2 = 0.0;
@@ -89,6 +87,7 @@ fn solve_system() -> bool {
         rz = rz_new;
         for d in n { p[d] = z[d] + beta * p[d]; }
     }
+    solvers::rows_stop();
     guard state_sizes() == sizes else { abort("solve_system: a solve grows no array of the state (rule 3)"); }
     last_iterations = it;
     last_seconds = clock() - start;

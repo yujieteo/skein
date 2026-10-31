@@ -6,9 +6,19 @@ namespace solvers;
 // y = A x
 fn multiply(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[:]) {
     guard row_start.len == y.len + 1 && col.len == val.len && x.len == y.len else { abort("multiply: row_start has y.len + 1 entries, col and val one size, x and y one size"); }
+    multiply_rows(row_start, col, val, x, y);
+}
+
+// y = the rows of A in row_start, col and val, times x. row_start[0] is
+// the start of the first of these rows: col and val hold only these rows.
+// The workers of pool.goose and multiply share it, so a row is the same
+// sum on each number of threads.
+fn multiply_rows(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[:]) {
+    guard row_start.len == y.len + 1 && col.len == val.len && row_start[y.len] - row_start[0] == col.len else { abort("multiply_rows: row_start has y.len + 1 entries, and col and val hold these rows"); }
+    let base = row_start[0];
     for r in y.len {
         var s = 0.0;
-        for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
+        for e in row_start[r] - base..row_start[r + 1] - base { s += val[e] * x[col[e]]; }
         y[r] = s;
     }
 }

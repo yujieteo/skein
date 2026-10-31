@@ -155,12 +155,14 @@ A sparse matrix is CSR in three arrays. The solvers use no other storage.
 | Newton | with a backtracking line search and the load ramp of `static(ramp:)` |
 | LOBPCG | for `modal` and `buckling` |
 | AMG | smoothed aggregation |
-| threads | assembly and the matrix-vector product run in Goose workers over a colouring |
+| threads | assembly and the matrix-vector product of CG run in Goose workers (`src/solvers/pool.goose`) |
 
 Goose threads share no memory. A worker gets a range of cells as a flat
 job, computes the cell matrices, and returns them in a flat result. The main
-program adds them into the matrix. This costs one copy for each cell
-matrix, and it needs no locks.
+program adds them into the matrix in cell order. This costs one copy for
+each cell matrix, and it needs no locks and no colouring. For CG, each
+worker holds a block of the rows of the matrix, and computes those rows of
+each product.
 
 The package `flow` in `src/flow/` solves steady incompressible flow in 2D
 (spec §17.2). Its notes:
@@ -180,10 +182,10 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
   file. Reason: the mesher has recursive functions, and Power of Ten rule
   1 forbids them in a generated program and its runtime.
 
-In phase 3, one work-stealing task pool runs the cases of a study (spec
-§20.5). Each worker has a queue of cases. An idle worker takes a case from
-the queue of another worker. A case is a separate program, so the parallel
-parts of a case are not tasks of the pool.
+One work-stealing task pool runs the cases of a study (spec §20.5). Each
+worker has a queue of cases. An idle worker takes a case from the queue of
+another worker. A case is a separate program, so each case has its own
+pool for its assembly and its solves.
 
 ---
 

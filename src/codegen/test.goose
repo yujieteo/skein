@@ -645,6 +645,24 @@ fn test_study_run() {
     }
 }
 
+// The threads of a case (spec §20.5): a run of a model on 1 thread and on
+// 4 threads gives the same reports and the same VTU files. The sed removes
+// the seconds of each solve. One model of the runtime and one of the
+// package elements.
+fn test_case_threads() {
+    for m in [["examples/femahoy/grid_cantilever.skn", "grid_cantilever"], ["examples/elements/kirsch_plate_tri.skn", "kirsch_plate_tri"]] {
+        var c: u8[>..] = [];
+        format(c, "cd build && for t in 1 4; do rm -rf .skein/results/", m[1], " && SKEIN_THREADS=$t ./skein run ../", m[0],
+               " 2>/dev/null | sed 's/,[0-9.e+-]*,yes$//' > threads$t.out && cat .skein/results/", m[1],
+               "/*.vtu >> threads$t.out || exit 1; done && cmp -s threads1.out threads4.out");
+        c.push(0);
+        if system(c[0]) != 0 {
+            failures++;
+            print("FAIL ", m[0], " gives other results on 1 and on 4 threads, or does not run");
+        }
+    }
+}
+
 // The number of lines of the longest function of `program`, from its `fn`
 // line to its closing brace.
 fn longest_fn(program: u8[:]) -> i64 {
@@ -773,6 +791,7 @@ fn main() {
     test_study_workers();
     test_pool();
     test_study_run();
+    test_case_threads();
     test_split();
     test_unchecked_status();
     if failures > 0 {

@@ -218,7 +218,7 @@ emitter.
 |---|---|---|
 | only `param` can change (§20.1) | a reviewer finds each input. The dependency analysis is exact. | a user must mark a value `param` before a study can vary it |
 | Go-style workers over typed queues (§20.3) | no shared memory, so no data races. A failed case does not stop the study. The same design works on native threads and Web Workers. | each worker holds its own copy of the shared mesh. Memory grows with the number of workers. §20.5 limits the workers by memory. |
-| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. A slow case does not stop the start of the other cases. | Goose has no atomics or locks, so the thread of the runner owns the queues, and each task costs one spawn and one message (G3.2b). A case is a separate program, so the work in a case is not a task of the pool. |
+| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. A slow case does not stop the start of the other cases. | Goose has no atomics or locks, so the thread of the runner owns the queues, and each task costs one spawn and one message (G3.2b). A case is a separate program, so each case has a second pool for its assembly and its solves. Its workers hold one more copy of the matrix. |
 
 ---
 
