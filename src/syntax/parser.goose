@@ -135,7 +135,7 @@ fn exponent() -> i64 {
     let t = expect(TK_NUMBER, "an exponent");
     let v, ok = parse_flt(text(t));
     let h = v * 2.0;
-    if !ok || h != (h as i64) || h > 128.0 {
+    if !ok || h > 128.0 || h != (h as! i64) {
         fail(str("the exponent '", text(t), "' is not a multiple of 0.5"), "write a whole number or a half, for example 2 or 0.5");
     }
     let n = h as i64;

@@ -13,6 +13,11 @@
 # run can run.
 set -eu
 
+if [ $# -eq 0 ]; then
+    echo "usage: scripts/power_of_ten.sh main.goose..." >&2
+    exit 2
+fi
+
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 
 # The absolute path of file $1.

@@ -6,6 +6,7 @@ import syntax from "../syntax";
 import .codegen;
 import .study;
 import .split;
+import .status;
 import check from "../check";   // study.goose writes TOON with it
 
 extern "libc.so.6" {
@@ -664,6 +665,21 @@ fn test_split() {
     expect_unsplit("a return",str(calls(0, 40), "    if done { return; }\n", calls(40, 40)));
 }
 
+fn test_unchecked_status() {
+    let checked = "fn solve() {\n    converged = runtime::solve_static();\n    let ok = shells::solve();\n    if !elements::solve() { failed = true; }\n}\n";
+    if codegen::unchecked_status(checked) != 0 {
+        failures++;
+        print("FAIL unchecked status: a checked solver call is line ", codegen::unchecked_status(checked));
+    }
+    for call in ["runtime::solve_static();", "elements::solve();", "shells::solve();"] {
+        let program = str("fn solve() {\n    report();\n    ", call, "\n}\n");
+        if codegen::unchecked_status(program) != 3 {
+            failures++;
+            print("FAIL unchecked status: '", call, "' is line ", codegen::unchecked_status(program), ", not 3");
+        }
+    }
+}
+
 fn main() {
     test_grid_cantilever();
     test_closed_cylinder();
@@ -678,6 +694,7 @@ fn main() {
     test_study_workers();
     test_study_run();
     test_split();
+    test_unchecked_status();
     if failures > 0 {
         print(failures, " codegen tests failed");
         exit(1);
