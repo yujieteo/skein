@@ -131,7 +131,7 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
             let r = expr_ty(syntax::nodes[k.first].next);
             sum_ty(k.tok, l, r, "=");
             let p = physics[cur_phys];
-            if has_reduction(s) {
+            if has_reduction(s, s) {
                 let f = field_use(s);
                 if f >= 0 && has_diff(s) {
                     error(f, "global_eq", str("a field PDE eq cannot use mean or integral (spec §10.5), but this eq has '", tok_text(f), "'"),
@@ -191,14 +191,38 @@ recursive fn has_diff(n: i64) -> bool {
     return false;
 }
 
-recursive fn has_reduction(n: i64) -> bool {
+// True if `n` has mean or integral. The walk goes into the value of each
+// `let` that `n` names: a let of the physics before the statement `before`,
+// else a let of the model.
+recursive fn has_reduction(n: i64, before: i64) -> bool {
     if is_reduction(n) { return true; }
-    var c = syntax::nodes[n].first;
+    let k = syntax::nodes[n];
+    if k.kind == syntax::N_NAME {
+        let l = let_before(tok_text(k.tok), before);
+        if l >= 0 { return has_reduction(syntax::nodes[l].last, l); }
+        let s = visible.get(key(tok_text(k.tok)));
+        return s && syms[s].kind == S_LET && syms[s].phys < 0 && syms[s].node >= 0
+               && has_reduction(syntax::nodes[syms[s].node].last, -1);
+    }
+    var c = k.first;
     while c >= 0 {
-        if has_reduction(c) { return true; }
+        if has_reduction(c, before) { return true; }
         c = syntax::nodes[c].next;
     }
     return false;
+}
+
+// The last `let` of the current physics with the name `name` before the
+// statement `before`, or -1.
+fn let_before(name: str, before: i64) -> i64 {
+    guard before >= 0 && cur_phys >= 0 else { return -1; }
+    var found = -1;
+    var c = syntax::nodes[physics[cur_phys].node].first;
+    while c >= 0 && c != before {
+        if syntax::nodes[c].kind == syntax::N_LET && tok_text(syntax::nodes[c].tok) == name { found = c; }
+        c = syntax::nodes[c].next;
+    }
+    return if c == before { found } else { -1 };
 }
 
 // The token of the first field that `n` uses outside mean and integral, or
@@ -305,7 +329,7 @@ fn check_physics(n: i64) {
     c = k.first;
     while c >= 0 {
         if syntax::nodes[c].kind == syntax::N_EQN {
-            if k_eq < physics[cur_phys].count && has_reduction(c) && !has_diff(c) { globals.push(physics[cur_phys].first + k_eq); }
+            if k_eq < physics[cur_phys].count && has_reduction(c, c) && !has_diff(c) { globals.push(physics[cur_phys].first + k_eq); }
             k_eq++;
         }
         c = syntax::nodes[c].next;

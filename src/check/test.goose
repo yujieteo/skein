@@ -271,6 +271,9 @@ fn test_physics() {
     let periodic = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet Q: Power/Volume = 1 W/m^3\nmaterial m {\n    k: Conductivity = 400 W/(m*K)\n}\nmesh m1 on b { size: 0.1 m }\n");
     expect_id("global_eq", str(periodic, "physics h on b solves T: Temperature {\n    material m\n    eq -div(k*grad(T)) = Q - mean(Q, b)\n}\n"));
     expect_id("global_eq", str(periodic, "physics h on b solves T: Temperature {\n    material m\n    let L: Power/Volume = -div(k*grad(T))\n    eq L = Q - mean(Q, b)\n}\n"));
+    expect_id("global_eq", str(periodic, "physics h on b solves T: Temperature {\n    material m\n    let qm: Power/Volume = mean(Q, b)\n    eq -div(k*grad(T)) = Q - qm\n}\n"));
+    expect_clean("a mean stress in a let sets a global mean strain", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    let m: Pressure = mean(sigma.zz, b)\n    eq div(sigma) = 0\n    eq m = 100 MPa\n}\n"));
+    expect_id("global_eq", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    let m: Pressure = mean(sigma.zz, b)\n    eq div(sigma) = 0\n    eq m = x*1 MPa/m\n}\n"));
 }
 
 fn test_conditions() {
