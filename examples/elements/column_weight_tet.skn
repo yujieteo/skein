@@ -11,7 +11,7 @@ let a: Length = 100 mm
 let L: Length = 2000 mm
 let g: Acceleration = 9.81 m/s^2
 
-scales L, 200 GPa
+scales L, 200 GPa, 7850 kg/m^3
 
 let column: Solid = box((0, 0, 0) mm, (a, a, L))
 let base: Surface = boundary(column, z == 0 mm)
