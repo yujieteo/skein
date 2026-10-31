@@ -1351,6 +1351,9 @@ physics with no `method` item takes the defaults:
 - `stabilize: supg` when the equations have a convection term, and `none`
   when they do not.
 
+A `cg`, `dg` or `fv` method with no `mesh` setting takes the same mesh as
+the default.
+
 Reason: these defaults are the right choice for most solid, heat and
 laminar flow models, and they cut a block of 4 lines from each of them.
 `skein check` prints the method that it chose.
