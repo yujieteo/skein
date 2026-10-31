@@ -1072,6 +1072,24 @@ physics oscillator solves q: Length {
 A global unknown may appear in a physics with a region. Then the system
 couples an ODE and a PDE, for example a lumped spring on a solid.
 
+`mean(f, r)` and `integral(f, r)` (§14.5) are valid in the `eq` of a global
+unknown. In a physics with a region, the unknown of an `eq` with `mean` or
+`integral` is a global unknown. Outside `mean` and `integral`, that `eq`
+uses no field: no `x`, `y`, `z`, `n` or `tau`, and no unknown with a region
+[`global_eq`]. A `let` in the `eq` follows the same rule.
+
+```skein
+physics cell on b solves u: Vector<Length>, ez: Real {
+    material fibre on f, matrix on b - f
+    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer(e3, e3))
+    eq div(sigma) = 0
+    eq mean(sigma.zz, b) = 100 MPa
+}
+```
+
+Reason: the effective modulus of a periodic cell needs a mean strain that
+a mean stress sets (femahoy gap G15).
+
 ### 10.6 Inelastic materials
 
 A physics can hold **state variables**: values at each integration point
@@ -2254,7 +2272,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
-| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)` | reports (§14.5) |
+| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
 | `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |

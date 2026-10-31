@@ -50,6 +50,10 @@ gives the roadmap phase that closes the gap:
   exponents in halves, and the expectation of
   [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)
   compares `K_I` in `MPa*mm^0.5`.
+- Phase 2 closes G15. Spec [§10.5](skein_spec.md#105-odes-and-global-unknowns)
+  allows `mean` and `integral` in the `eq` of a global unknown, and
+  [grid_fibre_composite_cell.skn](../examples/femahoy/grid_fibre_composite_cell.skn)
+  uses it.
 - Phase 2 closes G17. Spec [§12.1](skein_spec.md#121-form) states
   `rigid(p)` and `moment`, and the top of
   [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn) uses
@@ -97,7 +101,7 @@ comment.
 | G12 | An angle from a ratio: the shock angle. | `validation/cases/wedge-oblique-shock/check.toml:19` | Appendix A has `tan` but no inverse. The model checks `tan(beta)`. | Add `atan` and `atan2` to Appendix A. | 1 |
 | G13 | The directivity and the efficiency of an antenna from a near-to-far-field transform. | `validation/cases/dipole-king-middleton/omega12.5/openems.py:65` | Report functions act on regions of the mesh only (§14.5). | A report function `far_field(E, H, surface, direction)`. | 5 |
 | G14 | A stress intensity factor in MPa·mm^0.5. | `validation/cases/fracture-centre-crack/check.toml:7` | A dimension has integer exponents, and `sqrt` needs even exponents (§6.1). The model checks the shape factor `K_I/(S*sqrt(pi*a))`, with the same tolerance. | Allow exponents in halves (§6.1). | 2, closed by [§6.1](skein_spec.md#61-dimensions) |
-| G15 | The effective Young's modulus of a periodic cell under a mean stress. | `validation/cases/grid-fibre-composite-cell/check.toml:31` | The mean strain must be a global unknown that a mean stress fixes, but `mean` is valid only in `output`, `report` and `expect` (§14.5). | Allow `mean(f, r)` and `integral(f, r)` in the `eq` of a global unknown (§10.5). | 2 |
+| G15 | The effective Young's modulus of a periodic cell under a mean stress. | `validation/cases/grid-fibre-composite-cell/check.toml:31` | The mean strain must be a global unknown that a mean stress fixes, but `mean` is valid only in `output`, `report` and `expect` (§14.5). | Allow `mean(f, r)` and `integral(f, r)` in the `eq` of a global unknown (§10.5). | 2, closed by [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
 | G16 | A concentrated force on a node (`*CLOAD`). | `validation/cases/topology-mbb-beam/60x20/job.inp:2517`, `fixtures/results/cantilever-2step/cantilever-2step.inp` | §8.3 says that a `Point` can be the region of a point load, but §12.1 gives no left side for a force at a point: `n` has no value there. `cantilever_2step.skn` uses a traction with the same resultant. | On a `Point` region, read a natural condition `F*n = P` as the force `P`, with the dimension of `F` times area. | 1 |
 | G17 | A rigid constraint of a boundary (`*EQUATION`): the face stays straight and can turn. | `validation/cases/contact-cattaneo/mesh.inp:13915` | §12 has only essential and natural conditions. The model puts tractions with the same force and moment on the face. | A built-in `rigid(p)` for the right side of an essential `bc`. A `bc` on the `Point` `p` takes the force and the moment. | 2, closed by [§12.1](skein_spec.md#121-form) |
 
@@ -236,7 +240,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Two phases with a volume fraction (VOF) | dam-break-vof | mixture laws of `alpha` in physics `let` items | [§10.3](skein_spec.md#103-physics) |
 | Tait equation of state | dam-break-martin-moyce | `p = B*((1/J)^7 - 1)` | [§10.3](skein_spec.md#103-physics) |
 | A material on each element set or grid part | most multi-material cases | `material a on r1, b on r2` | [§10.3](skein_spec.md#103-physics) |
-| A homogenized material of a periodic cell | grid-laminate-cell, grid-fibre-composite-cell | one physics for each load case, `symmetry s: bloch { k: 0 }`, `mean` in `expect` | [§12.6](skein_spec.md#126-symmetry-groups), [§14.5](skein_spec.md#145-output-and-report), gap [G15](#gaps-that-remove-a-check) |
+| A homogenized material of a periodic cell | grid-laminate-cell, grid-fibre-composite-cell | one physics for each load case, `symmetry s: bloch { k: 0 }`, `mean` in `expect`, a mean strain as a global unknown | [§12.6](skein_spec.md#126-symmetry-groups), [§14.5](skein_spec.md#145-output-and-report), [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
 | Rigid body mass and inertia | slider-crank | `let` constants in the kinetic energy | [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
 
 ### Steps

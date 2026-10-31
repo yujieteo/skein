@@ -262,6 +262,12 @@ fn test_physics() {
     expect_id("assumption_conflict", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume finite_strain\n}\n"));
     expect_id("assumption_space", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_stress(1 mm)\n}\n"));
     expect_id("assumption_invalid", str(elastic, "physics s on b solves u: Vector<Length> {\n    material steel\n    assume incompressible\n    eq div(hooke(E, nu, strain(u))) = 0\n}\n"));
+    // mean and integral in the eq of a global unknown (spec §10.5, gap G15).
+    expect_clean("a mean stress sets a global mean strain", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) = 100 MPa\n}\n"));
+    expect_clean("an integral in the eq of an ODE", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nphysics pull solves F: Force {\n    eq F = integral(u.x*1 GPa/m, f)\n}\n"));
+    expect_id("global_eq", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) + sigma.zz = 100 MPa\n}\n"));
+    expect_id("global_eq", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) = x*1 MPa/m\n}\n"));
+    expect_id("global_eq", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nphysics pull solves F: Force {\n    eq F = integral(u.x*1 GPa/m, f) + u.x*1 N/m\n}\n"));
 }
 
 fn test_conditions() {

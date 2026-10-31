@@ -1,8 +1,9 @@
 // femahoy: validation/cases/grid-fibre-composite-cell/round/grid.toml
-// blocked-by: G15
 // 2 periodic unit cells of carbon fibres along z in epoxy: round fibres (f = 0.5) and
 // square fibres (f = 0.36, square/grid.toml). The conductivity across the round fibres
 // is checked against Rayleigh (1892): 0.5829156886 W/(m K). Along z, the means are exact.
+// The 2 materials have the same Poisson ratio, so the modulus along the square fibres is the
+// mean of the 2 moduli: 0.36*230 GPa + 0.64*3.5 GPa = 85040 MPa.
 
 model fibre_composite_cell: 3d, SI
 
@@ -12,6 +13,8 @@ let Gm: Temperature/Length = 1 K/m
 let e1: Vector<Real> = (1.0, 0.0, 0.0)
 let e2: Vector<Real> = (0.0, 1.0, 0.0)
 let e3: Vector<Real> = (0.0, 0.0, 1.0)
+// The mean stress along z of the square cell.
+let S0: Pressure = 100 MPa
 
 scales 1 m, 1 K, 1 W/(m*K), 1000 kg/m^3
 
@@ -41,11 +44,15 @@ let s_pin: Point = point((2000.1, 0.1, 0.25) mm)
 material epoxy {
     k: Conductivity = 0.2 W/(m*K)
     rho: Density = 1.2e-9 t/mm^3
+    E: Pressure = 3.5e3 MPa
+    nu: Real = 0.3
 }
 
 material carbon {
     k: Conductivity = 10 W/(m*K)
     rho: Density = 1.8e-9 t/mm^3
+    E: Pressure = 230e3 MPa
+    nu: Real = 0.3
 }
 
 mesh mesh_r on round_cell {
@@ -92,10 +99,26 @@ physics square_kz on sq_cell solves Ts: Temperature {
     eq div(qs) = 0
 }
 
+// The mean strains ex, ey and ez are global unknowns: their eqs set the mean stress.
+physics square_e on sq_cell solves us: Vector<Length>, ex: Real, ey: Real, ez: Real {
+    material epoxy on sq_matrix, carbon on sq_fibre
+    assume small_strain, isotropic
+    let sig_s: Tensor2<Pressure> = hooke(
+        E,
+        nu,
+        strain(us) + ex*outer(e1, e1) + ey*outer(e2, e2) + ez*outer(e3, e3),
+    )
+    eq div(sig_s) = 0
+    eq mean(sig_s.xx, sq_cell) = 0 MPa
+    eq mean(sig_s.yy, sq_cell) = 0 MPa
+    eq mean(sig_s.zz, sq_cell) = S0
+}
+
 method round_kx: cg { mesh: mesh_r, order: 1 }
 method round_ky: cg { mesh: mesh_r, order: 1 }
 method round_kz: cg { mesh: mesh_r, order: 1 }
 method square_kz: cg { mesh: mesh_s, order: 1 }
+method square_e: cg { mesh: mesh_s, order: 1 }
 
 step cells: static {
     // The fluctuation is periodic, so 1 point fixes its level.
@@ -103,7 +126,8 @@ step cells: static {
     bc r_pin: Ty = 0
     bc r_pin: Tz = 0
     bc s_pin: Ts = 0
-    output Tx, Ty, Tz, Ts
+    bc s_pin: us = 0
+    output Tx, Ty, Tz, Ts, us
 }
 
 // The effective conductivity is the mean flux over the mean gradient.
@@ -113,4 +137,5 @@ expect round_kyy: -mean(qy.y, round_cell)/Gm == 0.5829156886 W/(m*K) within 0.1%
 expect round_kzz: -mean(qz.z, round_cell)/Gm == 5.0979694697 W/(m*K) within 0.1%
 expect square_kzz: -mean(qs.z, sq_cell)/Gm == 3.728 mW/(mm*K) within 0.1%
 expect square_density: mean(rho_s, sq_cell) == 1.416e-9 t/mm^3 within 0.1%
-// gap G15: no effective stiffness of a periodic cell, so square_ez = 85040 MPa is not an expect line.
+// The effective modulus is the mean stress over the mean strain.
+expect square_ez: S0/ez == 85040 MPa within 0.1%
