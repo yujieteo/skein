@@ -214,6 +214,24 @@ struct Source {
     set: u8[..256],
 }
 
+// A material on a region (`material backfill on lift1`): the shape of the
+// region, and the law of the material in the units of the model.
+struct Law {
+    g: i64,
+    item: i64,      // the material item
+    young: f64,
+    poisson: f64,
+    force: f64[3],
+    label: u8[..256],
+}
+
+// `birth r` or `death r` of a step: the shape of r.
+struct Change {
+    g: i64,
+    birth: bool,
+    label: u8[..256],
+}
+
 struct Report {
     expr: i64,
     label: u8[..256],
@@ -227,6 +245,8 @@ struct Step {
     bc_count: i64,
     first_report: i64,
     report_count: i64,
+    first_change: i64,
+    change_count: i64,
     output: bool,
 }
 
@@ -280,7 +300,11 @@ var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var flux_name: u8[..64];        // sigma or q
 var material_name: u8[..64];
-var material_node = -1;
+var material_node = -1;         // the material of law 0: of the cells that no other material holds
+var material_items: i64[>..];   // each material item
+var region_laws: Law[>..];      // the other materials, on regions
+var changes: Change[>..];       // the birth and death statements of the steps
+var interfaces: i64[>..];       // the shapes whose boundary the mesh keeps
 var young = 0.0;
 var poisson = -1.0;
 var conductivity = 0.0;
@@ -324,6 +348,10 @@ fn reset() {
     flux_name = [];
     material_name = [];
     material_node = -1;
+    material_items.clear();
+    region_laws.clear();
+    changes.clear();
+    interfaces.clear();
     young = 0.0;
     poisson = -1.0;
     conductivity = 0.0;
@@ -559,7 +587,7 @@ fn shape_body(region: i64) {
     geo = GEO_SHAPE;
 }
 
-let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
+let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm or abs(x) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
 // Adds the planes of condition `cond` to `s`.
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
@@ -586,6 +614,11 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         let c = scalar_value(child(inner, 1));
         let d = scalar_value(child(cond, 1));
         return face_plane(cond, axis, c - d, s) && face_plane(cond, axis, c + d, s);
+    }
+    // abs(x) == d: the planes x == -d and x == d.
+    if inner >= 0 && kind(inner) == syntax::N_NAME && axis_of(name(inner)) >= 0 && s.axes.len + 2 <= s.axes.cap {
+        let d = scalar_value(child(cond, 1));
+        return face_plane(cond, axis_of(name(inner)), -d, s) && face_plane(cond, axis_of(name(inner)), d, s);
     }
     let is_plane = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" &&
         kind(child(cond, 0)) == syntax::N_NAME;
@@ -630,12 +663,31 @@ fn surface(n: i64) {
 }
 
 fn material(n: i64) {
-    if material_node >= 0 {
-        unsupported(tok(n), "a second material: this generator has one", "remove the second material");
-        return;
+    material_items.push(n);
+    if material_node < 0 {
+        material_node = n;
+        set64(material_name, name(n));
     }
-    material_node = n;
-    set64(material_name, name(n));
+}
+
+fn find_material(word: u8[:]) -> i64 {
+    for m in material_items { if name(m) == word { return m; } }
+    return -1;
+}
+
+// The shape of a region of cells: of a material, a birth or a death. The
+// mesh keeps its boundary (mesher::add_interface), so a cell is in it or
+// out of it as a whole.
+fn region_shape(r: i64) -> i64 {
+    let v = mesher::eval_value(r);
+    guard ok() else { return -1; }
+    guard v.n == 0 && geo == GEO_SHAPE && dim == 2 else {
+        unsupported(tok(r), "a region of cells needs a 2d body of the mesher: the 3d mesher keeps no interfaces",
+                    "use one material and no birth or death in a 3d model");
+        return -1;
+    };
+    interfaces.push(v.g);
+    return v.g;
 }
 
 // The material property `word`, or -1.
@@ -649,8 +701,26 @@ fn property(word: u8[:]) -> i64 {
     return -1;
 }
 
+// Reads the material of law 0, then the one of each region law.
 fn read_material() {
     guard material_node >= 0 else { return; }
+    let base = material_node;
+    if physics == HEAT && region_laws.len > 0 {
+        unsupported(tok(base), "a material on a region of a heat physics is not in this generator", "use one material");
+    }
+    for &w in region_laws {
+        material_node = w.item;
+        read_law();
+        w.young = young;
+        w.poisson = poisson;
+    }
+    material_node = base;
+    read_law();
+}
+
+// Reads the material `material_node` into young and poisson, or
+// conductivity.
+fn read_law() {
     var p = first(material_node);
     while p >= 0 {
         let w = name(p);
@@ -772,9 +842,23 @@ fn physics_item(n: i64) {
             if unknown_name.len > 0 { unsupported(tok(c), "a second unknown", PHYSICS_FIX); }
             set64(unknown_name, name(c));
         } else if k == syntax::N_MATASSIGN {
-            let m = first(c);
-            if syntax::child_count(c) != 1 || first(m) >= 0 {
-                unsupported(tok(c), "this generator gives one material to the whole physics", PHYSICS_FIX);
+            // The first material is law 0. Each other one holds its region.
+            var m = first(c);
+            while m >= 0 {
+                let item = find_material(name(m));
+                if item < 0 {
+                    unsupported(tok(m), str("'", name(m), "' is not a material of the model"), PHYSICS_FIX);
+                } else if m == first(c) {
+                    material_node = item;
+                    set64(material_name, name(m));
+                } else if first(m) < 0 {
+                    unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
+                } else {
+                    var w = Law { g: region_shape(first(m)), item: item, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
+                    codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
+                    region_laws.push(w);
+                }
+                m = next(m);
             }
         } else if k == syntax::N_ASSUME {
             assumptions(c);
@@ -853,8 +937,15 @@ fn heat_source() {
 
 // The body force b of linear_elastic: a vector, for example rho*(0, 0, -g)
 // with rho of the material.
+// The body force b of law 0 and of each region law, with the rho of each.
 fn body_force_arg() {
     guard body_node >= 0 else { return; }
+    let base = material_node;
+    for &w in region_laws {
+        material_node = w.item;
+        w.force = value(body_node).v;
+    }
+    material_node = base;
     let v = value(body_node);
     if v.n != dim {
         unsupported(tok(body_node), str("the body force b of this ", dim, "d model is a vector of ", dim, " components"),
@@ -940,7 +1031,7 @@ fn step(n: i64) {
         unsupported(tok(proc), "this generator has only static steps with no arguments", "write step load: static { ... }");
     }
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                   first_report: reports.len, report_count: 0, output: false };
+                   first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false };
     set64(s.name, name(n));
     var c = next(proc);
     while c >= 0 {
@@ -962,13 +1053,26 @@ fn step(n: i64) {
             }
         } else if k == syntax::N_EXPECT {
             expect(c, steps.len);
+        } else if k == syntax::N_BIRTH || k == syntax::N_DEATH {
+            var r = first(c);
+            while r >= 0 {
+                if kind(r) == syntax::N_WHERE {
+                    unsupported(tok(r), "birth and death with where are not in this generator", "select the cells with a region");
+                } else {
+                    var ch = Change { g: region_shape(r), birth: k == syntax::N_BIRTH, label: [] };
+                    codegen::set256(ch.label, str(if ch.birth { "birth " } else { "death " }, source_of(r)));
+                    changes.push(ch);
+                }
+                r = next(r);
+            }
         } else {
-            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report and expect");
+            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report, expect, birth and death");
         }
         c = next(c);
     }
     s.own_count = bcs.len - s.first_own;
     s.report_count = reports.len - s.first_report;
+    s.change_count = changes.len - s.first_change;
     steps.push(s);
 }
 
@@ -1284,6 +1388,14 @@ let PRELUDE = """
         }
     }
 
+    // A region of cells with no cell is a fault of the model.
+    fn cells(found: bool, what: u8[:]) {
+        if !found {
+            write_stderr(str("skein run: no cell is in the region of '", what, "': give a finer mesh\n"));
+            failed = true;
+        }
+    }
+
     // A point outside the mesh is a fault of the model.
     fn point(found: bool, expr: u8[:]) {
         if !found {
@@ -1488,9 +1600,13 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
     if share.stages >= 2 && share.reads {
+        for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
         codegen::emit_share(out, "", "elements::read_solution", share, s.name);
     } else {
+        // After the clear: clear_bcs keeps the solution of the last step,
+        // which a birth reads.
         out.append("    elements::clear_bcs();\n");
+        for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
         // The fixed values first: a load on a node that a later fix holds
         // still counts in the reaction.
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
@@ -1526,6 +1642,12 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         out.append(");\n");
     }
     out.append("}\n\n");
+}
+
+fn emit_change(out: u8[>..]&, ch: Change) {
+    format(out, "    cells(elements::", if ch.birth { "birth(" } else { "kill(" }, ch.g, "), ");
+    quoted(out, ch.label);
+    out.append(");\n");
 }
 
 // `let v, found = <sample at p>;`
@@ -1604,6 +1726,8 @@ fn dof_estimate() -> i64 {
     if geo == GEO_SHAPE {
         mesher::clear_refine();
         for r in refines { mesher::add_refine(r.g, r.size, r.surface); }
+        mesher::clear_interfaces();
+        for g in interfaces { mesher::add_interface(g); }
         let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
         let points = if done { mesher::point_count() } else { 0 };
         let nodes = if order == 2 { points * (if dim == 3 { 8 } else { 4 }) } else { points };
@@ -1650,6 +1774,7 @@ fn emit_shapes(out: u8[>..]&) {
         lit(out, r.size);
         format(out, ", ", if r.surface { "true" } else { "false" }, ");\n");
     }
+    for g in interfaces { format(out, "    mesher::add_interface(", g, ");\n"); }
 }
 
 // Writes the Goose program of the model that `read` read. The program
@@ -1736,6 +1861,17 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         if body_node >= 0 {
             out.append("    elements::body_force(");
             lits(out, body_force);
+            out.append(");\n");
+        }
+        for w in region_laws {
+            format(out, "    cells(elements::material_in(", w.g, ", ");
+            lit(out, w.young);
+            out.append(", ");
+            lit(out, w.poisson);
+            out.append(", ");
+            lits(out, w.force);
+            out.append("), ");
+            quoted(out, w.label);
             out.append(");\n");
         }
     }
