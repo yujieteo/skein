@@ -66,6 +66,7 @@ G36 is closed. Samples 03 and 04 run with `skein run`, and each
 |---|---|
 | the WebGL viewer | done as `skein report` ([command_line.md §12](command_line.md#12-the-html-report)): one offline HTML file with the source, the solver tables and the results of each study case, `src/report/`. The browser solve is the next task. |
 | thermal strain on a union of boxes (spec §10.4) | done: `hooke(E, nu, strain(u) - alpha*(T - T0)*I)` with constant temperatures, a material on each box or union of boxes, 27-node hexahedra on a grid with a plane on each box face and through each Point of a bc, and supports at Points (`src/codegen/codegen.goose`, `src/runtime/mesh.goose`). `warpage_thick_copper.skn` passes its `expect`: -0.0271 mm against the measured -0.028 mm (Calabretta et al. 2021). |
+| the interposer warpage of Hisada et al. 2012 | the model is in [interposer_warpage.skn](../examples/package/interposer_warpage.skn), with the unknown RDL thickness, bump layer and chip offset as params. Its study `sweep` of 72 cases keeps the order of Figure 7, but at the best set only 3 of 9 cases are within 25 % (ratios 0.54 to 0.98), so its `expect` fails. |
 
 ## Risks
 
