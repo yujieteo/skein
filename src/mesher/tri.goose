@@ -107,7 +107,7 @@ recursive fn collect_curves(g: i64, tx: f64, ty: f64) -> bool {
         for i in s.b - 1 { curves.push(Curve { kind: SPAN, p: [tx, ty, g, i] }); }
         let a = fill_point(g, s.b - 1);
         let b = fill_point(g, 0);
-        line(a[0], a[1], b[0], b[1]);
+        if a[0] != b[0] || a[1] != b[1] { line(a[0], a[1], b[0], b[1]); }
         return true;
     }
     if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT {

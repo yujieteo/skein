@@ -221,14 +221,15 @@ recursive fn shape_call(n: i64) -> Value {
             if p.n != 2 { reader_fault(syntax::nodes[argument(c, i)].tok, str("argument ", i + 1, " of spline is not a vector of 2"), "write (x, y)"); }
             let k = polygon_scratch.len;
             // A point equal to the one before it is not a new point. The
-            // last point equal to the first closes the curve with no line.
+            // last point equal to the first gives a closing line of length 0.
             let same = k > mark && p.v[0] == polygon_scratch[k - 2] && p.v[1] == polygon_scratch[k - 1];
-            let closes = k > mark + 2 && i == syntax::child_count(c) - 2 && p.v[0] == polygon_scratch[mark] && p.v[1] == polygon_scratch[mark + 1];
-            if same || closes { continue; }
+            if same { continue; }
             polygon_scratch.push(p.v[0]);
             polygon_scratch.push(p.v[1]);
         }
-        let points = (polygon_scratch.len - mark) / 2;
+        let end = polygon_scratch.len;
+        let closed = end - mark > 2 && polygon_scratch[end - 2] == polygon_scratch[mark] && polygon_scratch[end - 1] == polygon_scratch[mark + 1];
+        let points = (end - mark) / 2 - (if closed { 1 } else { 0 });
         guard points >= 3 && syntax::errors.len == 0 else {
             reader_fault(syntax::nodes[c].tok, str("the spline of fill has ", points, " different points"), "give 3 or more points");
             polygon_scratch.resize(mark);
