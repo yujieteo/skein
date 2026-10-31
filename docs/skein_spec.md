@@ -1464,12 +1464,13 @@ use in another place, or with no such step, is an error
 [`eigenvalue_step`].
 
 `when(f, value)` is the first time at which `f`, a scalar reduced over a
-region, gets to `value`, a `Time` [`rank_mismatch`]. `value` has the dimension of `f`
-[`unit_mismatch`], and it must be a constant [`not_constant`]. The run
-finds the first time step at which `f` crosses `value`, and interpolates
-linearly in that time step. If `f` never gets to `value`, an `expect` of it
-fails. `when` is valid only in a `report` of a `transient` step, or in an
-`expect` whose last step is `transient` [`when_step`].
+region, gets to `value`, a `Time` [`rank_mismatch`]. `value` has the
+dimension of `f` [`unit_mismatch`], and it must be a constant
+[`not_constant`]. The run finds the first time step at which `f` crosses
+`value`, and interpolates linearly in that time step. If `f` never gets to
+`value`, an `expect` of it fails. `when` is valid only in a `report` of a
+`transient` step, or in an `expect` whose last step is `transient`
+[`when_step`].
 
 ```skein
 let front: Length = max(x + u.x, column)
