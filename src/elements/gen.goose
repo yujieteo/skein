@@ -1222,7 +1222,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
     if share.stages >= 2 && share.reads {
-        codegen::emit_share(out, "elements::read_solution", share, s.name);
+        codegen::emit_share(out, "", "elements::read_solution", share, s.name);
     } else {
         out.append("    elements::clear_bcs();\n");
         // The fixed values first: a load on a node that a later fix holds
@@ -1232,7 +1232,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         out.append("    solve(");
         quoted(out, s.name);
         out.append(");\n");
-        if share.stages >= 2 { codegen::emit_share(out, "elements::write_solution", share, s.name); }
+        if share.stages >= 2 { codegen::emit_share(out, "!failed && ", "elements::write_solution", share, s.name); }
     }
     format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }
@@ -1345,7 +1345,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
     if share.stages >= 1 && share.reads {
-        codegen::emit_share(out, "elements::read_mesh", share, "");
+        codegen::emit_share(out, "", "elements::read_mesh", share, "");
     } else {
         format(out, "    // mesh on ", body_name, ": P", order, " ", cell, " of at most ", mesh_size, " ", sys.length);
         if geo == GEO_HOLE {
@@ -1374,7 +1374,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             }
             out.append(");\n");
         }
-        if share.stages >= 1 { codegen::emit_share(out, "elements::write_mesh", share, ""); }
+        if share.stages >= 1 { codegen::emit_share(out, "", "elements::write_mesh", share, ""); }
     }
     format(out, "    // physics ", physics_name, ", material ", material_name, "\n");
     if physics == HEAT {

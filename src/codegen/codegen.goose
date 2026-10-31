@@ -1351,9 +1351,10 @@ struct Share {
 fn no_share() -> Share { return Share { dir: [], stages: 0, reads: false }; }
 
 // The call `call(dir)`, or `call(dir, step)` when `step` is not empty, of a
-// case that shares stages. The case stops when the call fails.
-fn emit_share(out: u8[>..]&, call: u8[:], share: Share, step: u8[:]) {
-    format(out, "    if !", call, "(");
+// case that shares stages, made only when the condition `when` holds. The
+// case stops when the call fails.
+fn emit_share(out: u8[>..]&, when: u8[:], call: u8[:], share: Share, step: u8[:]) {
+    format(out, "    if ", when, "!", call, "(");
     quoted(out, share.dir);
     if step.len > 0 {
         out.append(", ");
@@ -1559,7 +1560,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: Share) {
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
     if share.stages >= 2 && share.reads {
-        emit_share(out, "runtime::read_solution", share, s.name);
+        emit_share(out, "", "runtime::read_solution", share, s.name);
     } else {
         emit_solve(out, si, share);
     }
@@ -1611,7 +1612,7 @@ fn emit_solve(out: u8[>..]&, si: i64, share: Share) {
     out.append(", ");
     quoted(out, s.preconditioner);
     out.append(");\n");
-    if share.stages >= 2 { emit_share(out, "runtime::write_solution", share, s.name); }
+    if share.stages >= 2 { emit_share(out, "!failed && ", "runtime::write_solution", share, s.name); }
 }
 
 fn emit_point(out: u8[>..]&, at: f64[3]) {
@@ -1728,7 +1729,7 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&
     }
     out.append("fn main() {\n");
     if share.stages >= 1 && share.reads {
-        emit_share(out, "runtime::read_mesh", share, "");
+        emit_share(out, "", "runtime::read_mesh", share, "");
     } else {
         if mesh_lane == MESHER {
             mesher_emit(out);
@@ -1737,7 +1738,7 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&
         } else if !elements_emit_mesh(out) {
             emit_core_mesh(out);
         }
-        if share.stages >= 1 { emit_share(out, "runtime::write_mesh", share, ""); }
+        if share.stages >= 1 { emit_share(out, "", "runtime::write_mesh", share, ""); }
     }
     if template == CORE {
         format(out, "    // material ", material_name, "\n    runtime::material(");
