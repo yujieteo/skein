@@ -28,12 +28,6 @@ fn case_threads() -> i64 {
     return threads;
 }
 
-// Sets the threads of the case to n, in place of SKEIN_THREADS.
-fn use_threads(n: i64) {
-    guard n >= 1 else { abort("use_threads: n >= 1"); }
-    threads = n;
-}
-
 // --- the assembly on blocks of cells --------------------------------------------
 
 // The cells of a task of the assembly. Reason: one message for each cell

@@ -1913,9 +1913,9 @@ simd fn k_solid_tet4(x: double3[4], lam: f64, mu: f64, k: f64[144]&) {
 
 thread_fn assemble_worker() {
     loop {
-        let job = qget<runtime::ColourJob>();
-        guard job.first >= 0 else { break; }
-        qput(runtime::assemble_range(job, k_solid_tet4));
+        let job = qget<solvers::CellJob>();
+        guard job.lo >= 0 else { break; }
+        qput(runtime::assemble_cells(job, k_solid_tet4));
     }
 }
 ```
@@ -1930,7 +1930,7 @@ gives the phase of each part.
 
 | Part | Contents |
 |---|---|
-| sparse | CSR matrices, colouring, assembly |
+| sparse | CSR matrices, assembly |
 | linear | CG, GMRES(m), Jacobi, ILU(0) |
 | nonlinear | Newton with line search, load ramps |
 | eigen | LOBPCG (Knyazev 2001) for `modal` and `buckling` |
@@ -2071,7 +2071,7 @@ run.
 ### 20.5 Threads for a case and threads for a study
 
 A machine has `H` hardware threads. A study with `k` workers gives each case
-`max(1, H / k)` threads for assembly and solves. The default `k` is
+`max(1, H / k)` threads for assembly and CG solves. The default `k` is
 `min(H, number of cases)`. `--jobs k` sets it. Reason: cases are
 independent, so parallel cases scale better than parallel assembly in one
 case. But a study with fewer cases than threads still uses all threads.
@@ -2103,10 +2103,11 @@ copy of the data that it uses:
 - Assembly: a task is a block of 16 cells. A free worker takes the next
   task from one queue, and gives the cell matrices of its cells. A worker
   copies the mesh when it starts.
-- A solve: each worker holds a block of the rows of the matrix, so the
+- A CG solve: each worker holds a block of the rows of the matrix, so the
   workers together hold one more copy of the matrix. For each product of
   the matrix and a vector, the thread of the case sends the vector to each
-  worker, and each worker gives the product of its rows.
+  worker, and each worker gives the product of its rows. GMRES(m) and the
+  other solvers run on one thread.
 
 The thread of the case adds the cell matrices in cell order. Each row of
 a product is the same sum on each number of threads. Thus the results do
