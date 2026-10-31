@@ -1541,6 +1541,7 @@ fn read(prog: i64) -> bool {
     }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
     if ok() { step_bcs(); }
+    if ok() { harmonic_values(); }
     if ok() { supports(); }
     return ok();
 }
@@ -1593,6 +1594,22 @@ fn step_bcs() {
         steps[i].first_bc = active.len;
         steps[i].bc_count = set.len;
         for b in set { active.push(b); }
+    }
+}
+
+// The Complex values of each frequency of each harmonic step: c, s and the
+// bcs at its omega, so that a fault in them stops the model here.
+fn harmonic_values() {
+    for s in steps {
+        if s.procedure != HARMONIC { continue; }
+        for f in freqs[s.first_freq..s.first_freq + s.freq_count] {
+            omega_now = 2.0 * PI * f;
+            let c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
+            if wave_s_node >= 0 { cval(wave_s_node); }
+            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_SOURCE { cval(b.node); } }
+            if pml_g >= 0 && !(c[0] > 0.0) { unsupported(pml_tok, "the pml needs c > 0 in div(grad(u)) + c*u = s", PML_FIX); }
+            if !ok() { return; }
+        }
     }
 }
 
@@ -2078,7 +2095,6 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     }
     lit(out, s.damping);
     out.append(");\n");
-    if pml_g >= 0 && !(c[0] > 0.0) { unsupported(pml_tok, "the pml needs c > 0 in div(grad(u)) + c*u = s", PML_FIX); }
     if pml_g >= 0 {
         format(out, "    elements::pml(", pml_g, ", ");
         lits(out, pml_lo);
