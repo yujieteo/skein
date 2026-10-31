@@ -170,8 +170,11 @@ The solver determines each file name.
 Case 1 writes the stages that no varied parameter reaches (spec §20.4) to
 `.skein/studies/<model>/<study>/shared/`, and the other cases read them:
 the mesh, and also the solution of each step when the varied parameters
-reach only `expect` and `report` expressions. The shell generator shares
-no stages.
+reach only `expect` and `report` expressions. The shell and flow
+generators share no stages.
+For a flow model, `run` makes the mesh itself and writes it to
+`flow.xy` and `flow.tri` in the results directory of the model or the
+case. The generated program reads the mesh from these files.
 Each case gets its threads in the environment variable `SKEIN_THREADS`.
 
 ---

@@ -4,9 +4,9 @@ These six models show the main parts of the language. Read the
 [tutorial](../docs/tutorial.md) first. Each sample has a
 one-line header and a `scales` line (spec §21.2).
 
-The compiler cannot check a model yet, so the samples do not run.
-Phase 1 of the [roadmap](../docs/roadmap.md) makes each of them pass
-`skein check` and `skein fmt --check`.
+Each sample passes `skein check` and `skein fmt --check`. `skein run`
+runs samples 02 and 06. The [roadmap](../docs/roadmap.md) gives the
+phase of the others.
 
 ```
 skein check 01_cantilever.skn

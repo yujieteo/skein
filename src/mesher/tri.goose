@@ -19,6 +19,11 @@
 //    If that point encroaches a segment, the segment is split instead. A
 //    triangle whose smallest angle is at a corner of 2 segments below
 //    MIN_ANGLE cannot reach it, so only its circumradius counts.
+//
+// `size` is the size far from each `refine` (spec §9.1). Near a refined
+// segment or circle, the size is the refine size plus (grade - 1) times
+// the distance, so that the size of two neighbour cells changes by at most
+// the factor `grade`.
 import std;
 import math;
 import dictionary;
@@ -73,6 +78,76 @@ struct Segment {
 
 var segments: Segment[>..] = [];
 var fan: i64[>..] = [];         // scratch of insert, by point
+
+// --- the size --------------------------------------------------------------------
+
+// A `refine` on a segment from (p0, p1) to (p2, p3) (LINE), or on a circle
+// of centre (p0, p1) and radius p2 (ARC), with the size h there.
+struct Refine {
+    kind: i64,
+    p: f64[4],
+    h: f64,
+}
+
+var refines: Refine[>..] = [];
+var grade = 1.3;
+
+// The calls before mesh_2d that set the refines and the grade. mesh_2d
+// keeps them.
+fn clear_refines() {
+    refines.clear();
+    grade = 1.3;
+}
+
+fn set_grade(g: f64) {
+    guard g > 1.0 else { abort("set_grade: g > 1"); }
+    grade = g;
+}
+
+fn refine_segment(x0: f64, y0: f64, x1: f64, y1: f64, h: f64) {
+    guard h > 0.0 else { abort("refine_segment: h > 0"); }
+    refines.push(Refine { kind: LINE, p: [x0, y0, x1, y1], h: h });
+}
+
+fn refine_circle(cx: f64, cy: f64, r: f64, h: f64) {
+    guard h > 0.0 && r > 0.0 else { abort("refine_circle: h > 0 and r > 0"); }
+    refines.push(Refine { kind: ARC, p: [cx, cy, r, 0.0], h: h });
+}
+
+// The distance from (x, y) to refine k.
+fn refine_distance(k: i64, x: f64, y: f64) -> f64 {
+    let p = refines[k].p;
+    if refines[k].kind == ARC { return abs(sqrt((x - p[0]) * (x - p[0]) + (y - p[1]) * (y - p[1])) - p[2]); }
+    let ux = p[2] - p[0];
+    let uy = p[3] - p[1];
+    let l2 = ux * ux + uy * uy;
+    let t = if l2 > 0.0 { clamp(((x - p[0]) * ux + (y - p[1]) * uy) / l2, 0.0, 1.0) } else { 0.0 };
+    let dx = x - p[0] - t * ux;
+    let dy = y - p[1] - t * uy;
+    return sqrt(dx * dx + dy * dy);
+}
+
+// The target edge length at (x, y).
+fn local_size(size: f64, x: f64, y: f64) -> f64 {
+    var h = size;
+    for k in refines.len { h = min(h, refines[k].h + (grade - 1.0) * refine_distance(k, x, y)); }
+    return h;
+}
+
+// The number of cells of edge local_size in the box b of g: the integral
+// of 1 / h² on a lattice of 200 × 200 points.
+fn cell_estimate(b: f64[6], size: f64) -> f64 {
+    let w = b[3] - b[0];
+    let h = b[4] - b[1];
+    var sum = 0.0;
+    for i in 200 {
+        for j in 200 {
+            let s = local_size(size, b[0] + (i + 0.5) * w / 200.0, b[1] + (j + 0.5) * h / 200.0);
+            sum += 1.0 / (s * s);
+        }
+    }
+    return sum * w * h / 40000.0;
+}
 
 // --- the boundary ----------------------------------------------------------------
 
@@ -289,13 +364,27 @@ fn boundary_point(x: f64, y: f64, tol: f64) -> i64 {
     return px.len - 1;
 }
 
-// Cuts curve c from ta to tb into segments no longer than `size`.
+// Cuts curve c from ta to tb into segments no longer than local_size:
+// the cuts are at equal steps of the integral of 1 / local_size, on 64
+// samples for each segment of `size`.
 fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64) {
-    let n = max(ceil(curve_length(c) * (tb - ta) / size - 1.0e-9) as i64, if curves[c].kind == ARC { 3 } else { 1 });
+    let length = curve_length(c) * (tb - ta);
+    let m = max(64 * ceil(length / size) as i64, 64);
+    var steps: f64[>..] = [0.0];     // the integral at sample k
+    for k in m {
+        let x, y = curve_point(c, ta + (tb - ta) * (k + 0.5) / m);
+        steps.push(steps[k] + length / m / local_size(size, x, y));
+    }
+    let n = max(ceil(steps[m] - 1.0e-9) as i64, if curves[c].kind == ARC { 3 } else { 1 });
     var prev = -1;
     var tprev = ta;
+    var k = 0;
     for i in n + 1 {
-        let t = ta + (tb - ta) * i / n;
+        // the parameter where the integral is steps[m] i / n
+        let want = steps[m] * i / n;
+        while k < m - 1 && steps[k + 1] < want { k++; }
+        let part = if steps[k + 1] > steps[k] { clamp((want - steps[k]) / (steps[k + 1] - steps[k]), 0.0, 1.0) } else { 0.0 };
+        let t = if i == n { tb } else { ta + (tb - ta) * (k + part) / m };
         let x, y = curve_point(c, t);
         let v = boundary_point(x, y, tol);
         if i > 0 && v != prev {
@@ -759,17 +848,22 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     sample_boundary(g, size, diameter);
     find_corners();
     for v in 3..px.len { insert_existing(v, locate(px[v], py[v])); }
-    // A budget of points: 20 times the points of a uniform mesh of the box.
-    let budget = 20 * (ceil(w / size) as i64 + 2) * (ceil(h / size) as i64 + 2) + 100 * px.len;
+    // A budget of points: 20 times the points of a uniform mesh of the box,
+    // or of the cells of the box with the refines.
+    let uniform = (ceil(w / size) + 2.0) * (ceil(h / size) + 2.0);
+    let estimate = if refines.len > 0 { max(uniform, cell_estimate(b, size)) } else { uniform };
+    let budget = 20 * (estimate as! i64) + 100 * px.len;
     var done = recover_segments(budget);
     let ratio = 1.0 / (2.0 * sin(radians(MIN_ANGLE)));
-    let largest = size / sqrt(3.0) * (1.0 + 1.0e-9);
     while done {
         classify();
         var inserted = false;
         for t in talive.len {
             if !talive[t] || !tin[t] { continue; }
             let x, y, r, q, apex = circumcentre(t);
+            let gx = (px[tv[3 * t]] + px[tv[3 * t + 1]] + px[tv[3 * t + 2]]) / 3.0;
+            let gy = (py[tv[3 * t]] + py[tv[3 * t + 1]] + py[tv[3 * t + 2]]) / 3.0;
+            let largest = local_size(size, gx, gy) / sqrt(3.0) * (1.0 + 1.0e-9);
             if (q <= ratio || sharp(apex, MIN_ANGLE)) && r <= largest { continue; }
             if px.len >= budget { done = false; break; }
             var split = false;

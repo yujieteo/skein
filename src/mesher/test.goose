@@ -553,6 +553,57 @@ fn test_export() {
     export_case("a model with an error", str(holed, "let bad: Length = 2 s\n"), ["--geometry", "s"], 1);
 }
 
+// The longest edge of a 2D mesh with both ends within `d` of the line
+// y = y0, or of the circle of centre (cx, cy) and radius r.
+fn longest_near(d: f64, y0: f64, cx: f64, cy: f64, r: f64, circle: bool) -> f64 {
+    fn near(p: f64[3]) -> bool {
+        let e = if circle { abs(sqrt((p[0] - cx) * (p[0] - cx) + (p[1] - cy) * (p[1] - cy)) - r) } else { abs(p[1] - y0) };
+        return e <= d + 1.0e-12;
+    }
+    var longest = 0.0;
+    for c in mesher::cell_count() {
+        for i in 3 {
+            let a = mesher::vertex(mesher::cell_node(c, i));
+            let b = mesher::vertex(mesher::cell_node(c, (i + 1) % 3));
+            if near(a) && near(b) { longest = max(longest, mesher::norm3(mesher::sub3(a, b))); }
+        }
+    }
+    return longest;
+}
+
+// `refine` (spec §9.1): the edges next to a refined segment and a refined
+// circle are no longer than the refine size, the far edges stay near
+// `size`, and the mesh has far fewer cells than a uniform mesh of the
+// refine size.
+fn test_refine() {
+    let square = mesher::rect(0.0, 0.0, 1.0, 1.0);
+    mesher::clear_refines();
+    mesher::refine_segment(0.0, 1.0, 1.0, 1.0, 1.0 / 128.0);
+    let lid_ok = mesher::mesh_2d(square, 1.0 / 16.0);
+    let lid = longest_near(0.0, 1.0, 0.0, 0.0, 0.0, false);
+    let lid_cells = mesher::cell_count();
+    print("2D refine on a segment: ", lid_cells, " cells, longest edge on the segment ", lid);
+    if !lid_ok || !mesher::quality_passes(mesher::mesh_quality()) { fail("2D refine on a segment: the mesher or mesh_quality"); }
+    expect_conforming("2D refine on a segment", square);
+    if lid > 1.01 / 128.0 { fail(str("2D refine on a segment: an edge on the segment is ", lid)); }
+    if lid_cells > 20000 { fail(str("2D refine on a segment: ", lid_cells, " cells")); }
+
+    let channel = mesher::subtract(mesher::rect(-2.0, -2.0, 6.0, 2.0), mesher::circle(0.0, 0.0, 0.05));
+    mesher::clear_refines();
+    mesher::refine_circle(0.0, 0.0, 0.05, 0.0025);
+    let cyl_ok = mesher::mesh_2d(channel, 0.1);
+    let at_cyl = longest_near(0.0, 0.0, 0.0, 0.0, 0.05, true);
+    let far = longest_near(0.5, 2.0, 0.0, 0.0, 0.0, false);
+    let cyl_cells = mesher::cell_count();
+    print("2D refine on a circle: ", cyl_cells, " cells, longest edge on the circle ", at_cyl, ", near y = 2 ", far);
+    if !cyl_ok || !mesher::quality_passes(mesher::mesh_quality()) { fail("2D refine on a circle: the mesher or mesh_quality"); }
+    expect_conforming("2D refine on a circle", channel);
+    if at_cyl > 1.01 * 0.0025 { fail(str("2D refine on a circle: an edge on the circle is ", at_cyl)); }
+    if far < 0.05 { fail(str("2D refine on a circle: the far edges are ", far, ", not near the size 0.1")); }
+    if cyl_cells > 60000 { fail(str("2D refine on a circle: ", cyl_cells, " cells")); }
+    mesher::clear_refines();
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -703,6 +754,7 @@ fn main() {
               (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
 
     test_fill();
+    test_refine();
 
     test_grid();
     test_cells();

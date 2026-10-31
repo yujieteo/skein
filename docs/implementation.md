@@ -162,6 +162,24 @@ job, computes the cell matrices, and returns them in a flat result. The main
 program adds them into the matrix. This costs one copy for each cell
 matrix, and it needs no locks.
 
+The package `flow` in `src/flow/` solves steady incompressible flow in 2D
+(spec §17.2). Its notes:
+
+- The unknowns are scaled (§21.2). `src/flow/gen.goose` gets the
+  reference length, mass and time from the `scales` line, and divides each
+  input by its reference value. It multiplies each report, `expect` and
+  VTU value by its reference value again.
+- The Jacobian of a cell is the forward difference of the cell residual.
+  Reason: τ_M changes with the velocity, and the difference includes that
+  derivative.
+- The dofs of each node are together, in the reverse Cuthill-McKee
+  sequence. The ILU(0) preconditioner adds the PSPG pressure term when the
+  equations have no PSPG. Reason: Taylor-Hood pressure rows have a zero
+  diagonal.
+- `skein run` makes the mesh, and the generated program reads it from a
+  file. Reason: the mesher has recursive functions, and Power of Ten rule
+  1 forbids them in a generated program and its runtime.
+
 In phase 3, one work-stealing task pool runs the cases of a study (spec
 §20.5). Each worker has a queue of cases. An idle worker takes a case from
 the queue of another worker. A case is a separate program, so the parallel
@@ -185,6 +203,11 @@ The 3D path:
 4. Smooth by optimal Delaunay triangulation, and refuse a move that makes a
    cell worse.
 5. Measure each cell. Give the worst cells to the check `mesh_quality`.
+
+The 2D mesher has a size field for `refine`: the size at a point is
+`min(size, h + (grade - 1) d)`, with `d` the distance to the refined
+segment or circle. The boundary points are at equal steps of the integral
+of 1/size along each curve.
 
 For a cell order above 1, the mesher puts the extra nodes on the true
 surface by a projection along ∇φ.

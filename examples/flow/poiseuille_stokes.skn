@@ -1,0 +1,41 @@
+// Plane Poiseuille flow in a channel, driven by a body force G along x,
+// with the stokes template on Taylor-Hood cells (the method defaults).
+// The exact solution is u = G/(2 mu) y (H - y), so P2 holds it to the
+// round-off, and the force of each wall on the flow is -G H L/2 along x.
+
+model poiseuille_stokes: 2d, SI
+
+let L: Length = 4 m
+let H: Length = 1 m
+let G: Force/Volume = 2 N/m^3
+
+scales H, 0.5 m/s, 1 kg/m^3
+
+let ch: Surface = rect((0, 0) m, (L, H))
+let walls: Curve = boundary(ch, y == 0 m || y == H)
+let ends: Curve = boundary(ch, x == 0 m || x == L)
+let top: Curve = boundary(ch, y == H)
+
+material oil {
+    rho: Density = 1 kg/m^3
+    mu: DynViscosity = 0.5 Pa*s
+}
+
+mesh m on ch {
+    size: 0.25 m
+    cell: tri
+}
+
+physics flow on ch: stokes((G, 0)) solves v: Vector<Velocity>, p: Pressure {
+    material oil
+}
+
+step steady: static {
+    bc walls: v = 0
+    bc ends: v.y = 0
+    solve { nonlinear: newton, linear: gmres, precond: ilu0, rtol: 1e-10 }
+    report v at (L/2, H/2)
+    report drag = integral((sigma*n).x, top)
+    expect centre: v.x at (L/2, H/2) == G*H^2/(8*mu) within 1e-6 m/s
+    expect wall: integral((sigma*n).x, top) == -G*H*L/2 within 0.0001%
+}
