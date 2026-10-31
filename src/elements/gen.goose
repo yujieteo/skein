@@ -1052,6 +1052,7 @@ let PRELUDE = """
     var results: u8[>..] = [];
     var result_count = 0;
     var failed = false;
+    var converged = false;
 
     // Appends `s` as a TOON value, in quotes when it needs them.
     fn toon(into: u8[>..]&, s: u8[:]) {
@@ -1112,7 +1113,7 @@ let PRELUDE = """
     }
 
     fn solve(step: u8[:]) {
-        let converged = elements::solve();
+        converged = elements::solve();
         format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
                elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
@@ -1232,7 +1233,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         out.append("    solve(");
         quoted(out, s.name);
         out.append(");\n");
-        if share.stages >= 2 { codegen::emit_share(out, "!failed && ", "elements::write_solution", share, s.name); }
+        if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, s.name); }
     }
     format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }

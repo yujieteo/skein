@@ -1377,6 +1377,7 @@ let PRELUDE = """
     var results: u8[>..] = [];
     var result_count = 0;
     var failed = false;
+    var converged = false;
 
     // Appends `s` as a TOON value, in quotes when it needs them.
     fn toon(into: u8[>..]&, s: u8[:]) {
@@ -1443,7 +1444,7 @@ let PRELUDE = """
 
     fn solve(step: u8[:], solver: u8[:], preconditioner: u8[:]) {
         runtime::linear_solver(solver, preconditioner);
-        let converged = runtime::solve_static();
+        converged = runtime::solve_static();
         format(solves, "  ", step, ",", runtime::dof_count(), ",", runtime::cg_iterations(), ",",
                runtime::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
@@ -1612,7 +1613,7 @@ fn emit_solve(out: u8[>..]&, si: i64, share: Share) {
     out.append(", ");
     quoted(out, s.preconditioner);
     out.append(");\n");
-    if share.stages >= 2 { emit_share(out, "!failed && ", "runtime::write_solution", share, s.name); }
+    if share.stages >= 2 { emit_share(out, "converged && ", "runtime::write_solution", share, s.name); }
 }
 
 fn emit_point(out: u8[>..]&, at: f64[3]) {

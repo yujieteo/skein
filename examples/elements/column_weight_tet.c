@@ -1403,6 +1403,7 @@ typedef struct {
     gs_stack gs_gstk_results_g;
     int64_t result_count_g;
     uint8_t failed_g;
+    uint8_t converged_g;
 } gs_globals_t;
 static gs_globals_t gs_globals_main;
 #define GS_GL (&gs_globals_main)
@@ -2056,7 +2057,7 @@ static void main_g(int64_t gs_sp) {
                 *(uint8_t *)t153 = t85;
                 t153 += 1;
                 GS_GL->checks_g.len++;
-                GS_GL->check_count_g = gs_add_i64(GS_GL->check_count_g, 1, gs_file4, 55);
+                GS_GL->check_count_g = gs_add_i64(GS_GL->check_count_g, 1, gs_file4, 56);
                 if ((uint8_t)(!pass_g)) {
                     GS_GL->failed_g = 1;
                 }
@@ -3209,9 +3210,8 @@ static void step_weight_g(int64_t gs_sp) {
     step_g = t61;
     {
         uint8_t *t157 = (&GS_GL->gs_gstk_solves_g)->top;
-        uint8_t converged_g;
         uint8_t t63 = elements_solve_system_g8(gs_sp + 0);
-        converged_g = t63;
+        GS_GL->converged_g = t63;
         int64_t t64 = 2;
         gs_memcpy(t157, (const uint8_t *)(((uint8_t *)gs_str25)), (size_t)t64);
         t157 += t64;
@@ -3259,7 +3259,7 @@ static void step_weight_g(int64_t gs_sp) {
         gs_memcpy(t157, (const uint8_t *)(((uint8_t *)gs_str26)), (size_t)t76);
         t157 += t76;
         GS_GL->solves_g.len += t76;
-        if (converged_g) {
+        if (GS_GL->converged_g) {
             t79.data = ((uint8_t *)gs_str27); t79.len = 3;
             t78 = t79;
         } else {
@@ -3275,8 +3275,8 @@ static void step_weight_g(int64_t gs_sp) {
         gs_memcpy(t157, (const uint8_t *)(((uint8_t *)gs_str29)), (size_t)t82);
         t157 += t82;
         GS_GL->solves_g.len += t82;
-        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file4, 79);
-        if ((uint8_t)(!converged_g)) {
+        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file4, 80);
+        if ((uint8_t)(!GS_GL->converged_g)) {
             GS_GL->failed_g = 1;
         }
         (&GS_GL->gs_gstk_solves_g)->top = t157;
@@ -3404,7 +3404,7 @@ static void step_weight_g(int64_t gs_sp) {
             *(uint8_t *)t160 = t123;
             t160 += 1;
             GS_GL->reports_g.len++;
-            GS_GL->report_count_g = gs_add_i64(GS_GL->report_count_g, 1, gs_file4, 44);
+            GS_GL->report_count_g = gs_add_i64(GS_GL->report_count_g, 1, gs_file4, 45);
             (&GS_GL->gs_gstk_reports_g)->top = t160;
         }
         GS(gs_sp + 0)->top = t99.base;
@@ -3466,7 +3466,7 @@ static void step_weight_g(int64_t gs_sp) {
         gs_memcpy(t161, (const uint8_t *)(((uint8_t *)gs_str29)), (size_t)t143);
         t161 += t143;
         GS_GL->results_g.len += t143;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 115);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 116);
         (&GS_GL->gs_gstk_results_g)->top = t161;
     }
     L127:;
@@ -4091,10 +4091,10 @@ static uint8_t elements_solve_system_g8(int64_t gs_sp) {
     L134:;
     double t145 = t131;
     double t146 = gs_sqrt(t145);
-    uint8_t converged_g = (uint8_t)((double)((double)(t146)) <= (double)(target_g));
+    uint8_t converged_g_2 = (uint8_t)((double)((double)(t146)) <= (double)(target_g));
     int64_t it_g = 0;
     for (;;) {
-        if (converged_g) goto L147;
+        if (converged_g_2) goto L147;
         if (!((uint8_t)((int64_t)((int64_t)(it_g)) < (int64_t)(gs_mul_i64((int64_t)(10), n_g, gs_file5, 69))))) goto L147;
         t149.data = (double *)((p_g.base)); t149.len = (p_g.len);
         x_g_2 = t149;
@@ -4218,7 +4218,7 @@ static uint8_t elements_solve_system_g8(int64_t gs_sp) {
         double t220 = t206;
         double t221 = gs_sqrt(t220);
         if ((uint8_t)((double)((double)(t221)) <= (double)(target_g))) {
-            converged_g = 1;
+            converged_g_2 = 1;
             goto L147;
         }
         int64_t t222 = n_g;
@@ -4276,7 +4276,7 @@ static uint8_t elements_solve_system_g8(int64_t gs_sp) {
     double t251 = ((double)(t250) / (double)(1000000000.0));
     GS_GL->elements_last_seconds_g8 = ((double)(t251) - (double)(start_g));
     uint8_t t252;
-    t252 = converged_g;
+    t252 = converged_g_2;
     GS(gs_sp + 4)->top = inv_diag_g.base;
     GS(gs_sp + 3)->top = q_g.base;
     GS(gs_sp + 2)->top = p_g.base;
@@ -6289,7 +6289,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
         *(uint8_t *)t99 = t91;
         t99 += 1;
         GS_GL->checks_g.len++;
-        GS_GL->check_count_g = gs_add_i64(GS_GL->check_count_g, 1, gs_file4, 55);
+        GS_GL->check_count_g = gs_add_i64(GS_GL->check_count_g, 1, gs_file4, 56);
         if ((uint8_t)(!pass_g)) {
             GS_GL->failed_g = 1;
         }
@@ -7780,6 +7780,7 @@ static void gs_init_globals(void) {
     GS_GL->results_g.len = 0;
     GS_GL->result_count_g = 0;
     GS_GL->failed_g = 0;
+    GS_GL->converged_g = 0;
 }
 
 static void gs_program_init(int argc, char **argv) {
