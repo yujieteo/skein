@@ -593,6 +593,14 @@ step ring: transient(end: 2 s, dt: 1 ms, scheme: generalized_alpha(0.8)) {
 }
 ```
 
+A physics with a region may also solve a global unknown. Its `eq` uses
+`mean(f, r)` or `integral(f, r)`, for example a mean stress that sets a
+mean strain:
+
+```skein
+eq mean(sigma.zz, cell) = 100 MPa
+```
+
 Spec: [§10.5](skein_spec.md#105-odes-and-global-unknowns).
 
 ---

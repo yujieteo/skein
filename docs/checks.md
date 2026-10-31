@@ -97,6 +97,7 @@ in the file stays in the review.
 |---|---|---|---|---|
 | `template_eq` | §4.2 | a physics that uses a template adds an `eq` | `physics s on b: linear_elastic solves u: … { eq … }` | write the physics in full, from the source of the template |
 | `eq_count` | §10.3 | the number of `eq` lines is not the number of unknowns | `solves v, p` with one `eq` | the missing equation's unknown |
+| `global_eq` | §10.5 | the `eq` of a global unknown uses a field outside `mean` and `integral` | `eq mean(sigma.zz, b) + sigma.zz = S0` | the field to put in `mean(f, r)` or `integral(f, r)`. A field PDE with a mean term is not valid |
 | `material_cover` | §10.3 | a point of the region has no material, or two | | the uncovered region |
 | `material_prop_missing` | §4 | a physics uses a property that one of its materials lacks | `rho` used, `steel` has no `rho` | the material to change |
 | `material_prop_type` | §4 | two materials give one property with different types | | the two types |

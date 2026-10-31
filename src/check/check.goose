@@ -23,6 +23,7 @@ fn check_text(path: u8[:], text: u8[:]) {
     reset_state();
     objectives.clear();
     high_derivs.clear();
+    globals.clear();
     std_prog = -1;
     let f = syntax::add_file(path, text);
     syntax::lex(f);

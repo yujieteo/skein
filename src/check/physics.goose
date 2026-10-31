@@ -131,6 +131,16 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
             let r = expr_ty(syntax::nodes[k.first].next);
             sum_ty(k.tok, l, r, "=");
             let p = physics[cur_phys];
+            if has_reduction(s, s) {
+                let f = field_use(s);
+                if f >= 0 && has_diff(s) {
+                    error(f, "global_eq", str("a field PDE eq cannot use mean or integral (spec §10.5), but this eq has '", tok_text(f), "'"),
+                          "remove the mean or integral term from this eq");
+                } else if f >= 0 {
+                    error(f, "global_eq", str("'", tok_text(f), "' is a field outside mean and integral in the eq of a global unknown"),
+                          str("put '", tok_text(f), "' in mean(f, r) or integral(f, r)"));
+                }
+            }
             if eqs < p.count { note_fluxes(s, p.first + eqs); }
             note_high_derivs(s, 0);
             if convection(k.first, 0) || convection(syntax::nodes[k.first].next, 0) { physics[cur_phys].convective = true; }
@@ -149,6 +159,105 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
         },
         _ => {},
     }
+}
+
+// --- global unknowns (spec §10.5) -----------------------------------------------------------
+
+// The global unknowns of a physics with a region: each one pairs with an eq
+// that has mean(f, r) or integral(f, r).
+var globals: i64[>..];
+
+fn is_reduction(n: i64) -> bool {
+    guard syntax::nodes[n].kind == syntax::N_CALL else { return false; }
+    let name = call_name(syntax::nodes[n].first);
+    return name == "mean" || name == "integral";
+}
+
+fn is_diff(n: i64) -> bool {
+    guard syntax::nodes[n].kind == syntax::N_CALL else { return false; }
+    let name = call_name(syntax::nodes[n].first);
+    return name == "grad" || name == "div" || name == "curl" || name == "strain";
+}
+
+// True if `n` has grad, div, curl or strain outside mean and integral.
+recursive fn has_diff(n: i64) -> bool {
+    if is_reduction(n) { return false; }
+    if is_diff(n) { return true; }
+    var c = syntax::nodes[n].first;
+    while c >= 0 {
+        if has_diff(c) { return true; }
+        c = syntax::nodes[c].next;
+    }
+    return false;
+}
+
+// True if `n` has mean or integral. The walk goes into the value of each
+// `let` that `n` names: a let of the physics before the statement `before`,
+// else a let of the model.
+recursive fn has_reduction(n: i64, before: i64) -> bool {
+    if is_reduction(n) { return true; }
+    let k = syntax::nodes[n];
+    if k.kind == syntax::N_NAME {
+        let l = let_before(tok_text(k.tok), before);
+        if l >= 0 { return has_reduction(syntax::nodes[l].last, l); }
+        let s = visible.get(key(tok_text(k.tok)));
+        return s && syms[s].kind == S_LET && syms[s].phys < 0 && syms[s].node >= 0
+               && has_reduction(syntax::nodes[syms[s].node].last, -1);
+    }
+    var c = k.first;
+    while c >= 0 {
+        if has_reduction(c, before) { return true; }
+        c = syntax::nodes[c].next;
+    }
+    return false;
+}
+
+// The last `let` of the current physics with the name `name` before the
+// statement `before`, or -1.
+fn let_before(name: str, before: i64) -> i64 {
+    guard before >= 0 && cur_phys >= 0 else { return -1; }
+    var found = -1;
+    var c = syntax::nodes[physics[cur_phys].node].first;
+    while c >= 0 && c != before {
+        if syntax::nodes[c].kind == syntax::N_LET && tok_text(syntax::nodes[c].tok) == name { found = c; }
+        c = syntax::nodes[c].next;
+    }
+    return if c == before { found } else { -1 };
+}
+
+// The token of the first field that `n` uses outside mean and integral, or
+// -1. A field is x, y, z, n, tau, an unknown that is not global, or grad, div,
+// curl or strain. The walk goes into the value of each `let`.
+recursive fn field_use(n: i64) -> i64 {
+    if is_reduction(n) { return -1; }
+    let k = syntax::nodes[n];
+    if is_diff(n) { return syntax::nodes[k.first].tok; }
+    if k.kind == syntax::N_NAME {
+        let name = tok_text(k.tok);
+        let s = visible.get(key(name));
+        if !s { return -1; }
+        if syms[s].kind == S_BUILTIN && (name == "x" || name == "y" || name == "z" || name == "n" || name == "tau") { return k.tok; }
+        if syms[s].kind == S_UNKNOWN && physics[syms[s].phys].region >= 0 && !has_sym(globals, s) { return k.tok; }
+        if syms[s].kind == S_LET && syms[s].node >= 0 {
+            let f = field_use(syntax::nodes[syntax::nodes[syms[s].node].first].next);
+            if f >= 0 { return k.tok; }
+        }
+        return -1;
+    }
+    var c = k.first;
+    while c >= 0 {
+        let f = field_use(c);
+        if f >= 0 { return f; }
+        c = syntax::nodes[c].next;
+    }
+    return -1;
+}
+
+fn has_sym(list: i64[:], v: i64) -> bool {
+    for x in list {
+        if x == v { return true; }
+    }
+    return false;
 }
 
 fn check_physics(n: i64) {
@@ -211,6 +320,17 @@ fn check_physics(n: i64) {
                 if syntax::nodes[m].first >= 0 { region_ty(syntax::nodes[m].first); }
                 m = syntax::nodes[m].next;
             }
+        }
+        c = syntax::nodes[c].next;
+    }
+    // An eq with mean or integral, and with no grad, div, curl or strain
+    // outside them, makes its unknown global (spec §10.5).
+    var k_eq = 0;
+    c = k.first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_EQN {
+            if k_eq < physics[cur_phys].count && has_reduction(c, c) && !has_diff(c) { globals.push(physics[cur_phys].first + k_eq); }
+            k_eq++;
         }
         c = syntax::nodes[c].next;
     }
