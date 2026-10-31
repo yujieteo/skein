@@ -2071,7 +2071,7 @@ run.
 ### 20.5 Threads for a case and threads for a study
 
 A machine has `H` hardware threads. A study with `k` workers gives each case
-`max(1, H / k)` threads for assembly and solves. The default `k` is
+`max(1, H / k)` threads for assembly and matrix products. The default `k` is
 `min(H, number of cases)`. `--jobs k` sets it. Reason: cases are
 independent, so parallel cases scale better than parallel assembly in one
 case. But a study with fewer cases than threads still uses all threads.
