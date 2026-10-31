@@ -438,6 +438,8 @@ fn parse_block(lists: bool) -> i64 {
             expect(TK_COLON, "':'");
             let k = tokens[t].kind;
             add(b, node2(if k == KW_REFINE { N_REFINE } else if k == KW_LAYERS { N_LAYERS } else { N_CRACK_TIP }, t, region, expr()));
+        } else if lists && at(KW_EXPECT) {
+            add(b, expect_statement(true));
         } else {
             let name = label("a setting name");
             add(b, node1(N_SETTING, name, setting_value(lists)));
@@ -781,6 +783,7 @@ fn step_statement() -> i64 {
         KW_RELEASE => { advance(); return node1(N_RELEASE, t, expr()); },
         KW_BIRTH => { return active_set(N_BIRTH); },
         KW_DEATH => { return active_set(N_DEATH); },
+        KW_EXPECT => { return expect_statement(false); },
         KW_SOLVE => { advance(); return node1(N_SOLVE, t, parse_block(false)); },
         KW_ADAPT => { advance(); return node1(N_ADAPT, t, parse_block(false)); },
         KW_OUTPUT => {
@@ -813,7 +816,7 @@ fn step_statement() -> i64 {
         },
         _ => {
             return fail_expected("a statement of a step",
-                                 "start the line with bc, release, birth, death, solve, adapt, output or report");
+                                 "start the line with bc, release, birth, death, solve, adapt, output, report or expect");
         },
     }
 }
@@ -834,15 +837,22 @@ fn step_decl() -> i64 {
     return n;
 }
 
-fn expect_decl() -> i64 {
+// An `expect`: an item, a statement of a step or, with `lists`, an entry
+// of a study, whose expected value and `within` can be lists (spec §15.3).
+fn expect_statement(lists: bool) -> i64 {
     advance();
     let n = node(N_EXPECT, expect_ident("a name"));
     expect(TK_COLON, "':'");
     add(n, add_expr());
     expect(TK_EQ, "'=='");
-    add(n, add_expr());
+    add(n, if lists && at(TK_LBRACKET) { list() } else { add_expr() });
     expect(KW_WITHIN, "'within'");
-    add(n, expr());
+    add(n, if lists && at(TK_LBRACKET) { list() } else { expr() });
+    return n;
+}
+
+fn expect_decl() -> i64 {
+    let n = expect_statement(false);
     end_statement();
     return n;
 }

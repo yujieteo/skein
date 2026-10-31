@@ -54,6 +54,12 @@ fn kind(t: i64) -> i64 {
 
 fn line(t: i64) -> i64 { syntax::tokens[t].line }
 
+// The precedence of `t` (prec), and whether `t` opens a list (listopen). An
+// added comma has neither.
+fn precedence(t: i64) -> i64 { if t == ADDED_COMMA { 0 } else { prec[t] } }
+
+fn opens_list(t: i64) -> bool { t != ADDED_COMMA && listopen[t] }
+
 fn is_comment(t: i64) -> bool {
     let k = kind(t);
     return k == syntax::TK_COMMENT || k == syntax::TK_DOC_COMMENT;
@@ -304,7 +310,7 @@ fn add_cuts(s: i64, n: i64, d: i64[:], level: i64, p: i64) {
     for i in 0..n - 1 {
         if d[i] != level { continue; }
         let t = pool[s + i];
-        if (p == 0 && kind(t) == syntax::TK_COMMA) || (p > 0 && prec[t] == p) { cut_pool.push(i); }
+        if (p == 0 && kind(t) == syntax::TK_COMMA) || (p > 0 && precedence(t) == p) { cut_pool.push(i); }
     }
 }
 
@@ -313,7 +319,7 @@ fn add_cuts(s: i64, n: i64, d: i64[:], level: i64, p: i64) {
 fn low_prec(s: i64, n: i64, d: i64[:], level: i64, most: i64) -> i64 {
     var low = 0;
     for i in 0..n - 1 {
-        let p = prec[pool[s + i]];
+        let p = precedence(pool[s + i]);
         if d[i] == level && p > 0 && p <= most && (low == 0 || p < low) { low = p; }
     }
     return low;
@@ -329,7 +335,7 @@ fn widest_list(s: i64, n: i64, ind: i64, d: i64[:], top: i64, fit: bool) -> i64,
     var best_width = -1;
     let all = width(s, n);
     for i in 0..n {
-        if d[i] != top || !listopen[pool[s + i]] { continue; }
+        if d[i] != top || !opens_list(pool[s + i]) { continue; }
         let j = close_at(s, n, i);
         if j < 0 { continue; }
         let inner = width(s + i + 1, j - i - 1);

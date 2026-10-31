@@ -1,5 +1,5 @@
 // femahoy: validation/cases/optics-mie-cylinder/res40/meep_case.py
-// blocked-by: G10 G26
+// blocked-by: G26
 // A plane wave of light (E along the axis, TM) scatters on a dielectric cylinder of radius a
 // and index 2 in air. The scattered field Ez solves the Helmholtz equation in 2D.
 // Reference: the series solution (Bohren and Huffman 1983): Q = 2.862930 at x = k*a = 1.
@@ -61,5 +61,4 @@ study spectrum: grid {
 
 // gap G7: no real part and no complex conjugate. Q = (scattered power per length)/(2*a times
 // the incident intensity) needs Re(Ez*conj(H)). The checks: Q = 2.862930, 4.293232, 3.613747
-// and 2.582972 at ka = 1, 2, 2.5 and 3, each within 1%.
-// gap G10: no expect for each study case.
+// and 2.582972 at ka = 1, 2, 2.5 and 3, each within 1%, in an expect of the study spectrum.

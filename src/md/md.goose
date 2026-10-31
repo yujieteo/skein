@@ -599,8 +599,13 @@ fn block_list(b: i64) {
     if b < 0 || first(b) < 0 { return; }
     var c = first(b);
     while c >= 0 {
-        out.append("- ");
         let k = node_kind(c);
+        // The expects of a study follow the list (procedure_item).
+        if k == syntax::N_EXPECT {
+            c = next(c);
+            continue;
+        }
+        out.append("- ");
         if k == syntax::N_SETTING {
             code_node(c);
             out.append(": ");
@@ -988,6 +993,14 @@ fn procedure_item(n: i64, title: u8[:]) {
     procedure(c);
     out.append(".\n\n");
     block_list(next(c));
+    var e = first(next(c));
+    while e >= 0 {
+        if node_kind(e) == syntax::N_EXPECT {
+            e = expect_table(e);
+        } else {
+            e = next(e);
+        }
+    }
 }
 
 fn step_item(n: i64) {
@@ -1002,6 +1015,10 @@ fn step_item(n: i64) {
         let k = node_kind(c);
         if k == syntax::N_BC {
             c = bc_table(c);
+            continue;
+        }
+        if k == syntax::N_EXPECT {
+            c = expect_table(c);
             continue;
         }
         if k == syntax::N_OUTPUT {

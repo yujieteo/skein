@@ -216,6 +216,7 @@ struct Expect {
     within: f64,
     relative: bool,
     label: u8[..256],
+    step: i64,      // the step that checks it at its end, or -1 for an item
 }
 
 var geometry_names: u8[..64][>..];
@@ -794,8 +795,10 @@ fn step(n: i64) {
                 report(r);
                 r = next(r);
             }
+        } else if k == syntax::N_EXPECT {
+            expect(c, steps.len);
         } else {
-            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output and report");
+            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report and expect");
         }
         c = next(c);
     }
@@ -866,7 +869,8 @@ fn point_field(e: i64, errors: bool) -> i64, i64 {
     return what, comp;
 }
 
-fn expect(n: i64) {
+// An `expect` item (step -1), or an `expect` of step `step`.
+fn expect(n: i64, step: i64) {
     let left = child(n, 0);
     let right = child(n, 1);
     let within = child(n, 2);
@@ -886,7 +890,7 @@ fn expect(n: i64) {
         return;
     }
     var x = Expect { name: [], what: what, comp: comp, at: value(child(left, 1)).v, want: scalar_value(right),
-                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [] };
+                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step };
     // A tolerance of a temperature is a difference, not a degC value.
     if kind(within) == syntax::N_NUMBER && first(within) >= 0 && source_of(first(within)) == "degC" {
         x.within -= 273.15;
@@ -948,7 +952,7 @@ fn read(prog: i64) -> bool {
         } else if k == syntax::N_STEP {
             step(c);
         } else if k == syntax::N_EXPECT {
-            expect(c);
+            expect(c, -1);
         }
         c = next(c);
     }
@@ -1237,6 +1241,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     }
     format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }
+    for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
         var path: u8[>..] = [];
         format(path, results_dir, "/", s.name, ".vtu");
@@ -1404,7 +1409,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         }
     }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
-    for x in expects { emit_expect(out, x); }
+    for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for s in skipped {
         out.append("    not_run(");
         quoted(out, s);

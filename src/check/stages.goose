@@ -67,7 +67,8 @@ fn param_stage(prog: i64, name: u8[:]) -> i64 {
         if kind == syntax::N_STEP {
             var s = syntax::nodes[c].first;
             while s >= 0 {
-                if uses_name(s, reached) { stage = max(stage, if syntax::nodes[s].kind == syntax::N_REPORT { STAGE_POST } else { STAGE_SOLVE }); }
+                let post = syntax::nodes[s].kind == syntax::N_REPORT || syntax::nodes[s].kind == syntax::N_EXPECT;
+                if uses_name(s, reached) { stage = max(stage, if post { STAGE_POST } else { STAGE_SOLVE }); }
                 s = syntax::nodes[s].next;
             }
         } else if !declares_value(kind) && kind != syntax::N_STUDY && uses_name(c, reached) {

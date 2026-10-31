@@ -1,5 +1,5 @@
 // femahoy: validation/cases/naca0012-ladson/a4.04/system/controlDict
-// blocked-by: G10 G24
+// blocked-by: G24
 // NACA 0012 at Re = 6 million, incompressible and steady, fully turbulent with the
 // Spalart-Allmaras model, at 3 angles of attack. Reference: Ladson (1988), NASA TM-4074,
 // Table IX: cl 0.4316, cd 0.00823 at 4.04 deg. cd 0.00809 at -0.05 deg.
@@ -185,11 +185,20 @@ step steady: static {
     report cd = -integral(dot(sigma*n, e_d), wall)/(0.5*rho_f*U^2*chord)
 }
 
+// The tolerance is 4% + 0.0015. Ladson gives no cl at -0.05 deg, so the study lift has only
+// the other two angles.
 study angles: grid {
     aoa: [-0.05, 4.04, 10.12] deg
+    expect cd_a: -integral(dot(sigma*n, e_d), wall)/(0.5*rho_f*U^2*chord) ==
+        [0.00809, 0.00823, 0.01201] within [
+            0.04*0.00809 + 0.0015,
+            0.04*0.00823 + 0.0015,
+            0.04*0.01201 + 0.0015,
+        ]
 }
 
-// The expectations hold for the default aoa = 4.04 deg. The tolerance is 4% + 0.0015.
-// gap G10: no expect for each study case. cd 0.00809 at -0.05 deg, cl 1.0707 and cd 0.01201 at 10.12 deg.
-expect cl_a4: -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord) == 0.4316 within 0.04*0.4316 + 0.0015
-expect cd_a4: -integral(dot(sigma*n, e_d), wall)/(0.5*rho_f*U^2*chord) == 0.00823 within 0.04*0.00823 + 0.0015
+study lift: grid {
+    aoa: [4.04, 10.12] deg
+    expect cl_a: -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord) ==
+        [0.4316, 1.0707] within [0.04*0.4316 + 0.0015, 0.04*1.0707 + 0.0015]
+}

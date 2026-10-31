@@ -90,7 +90,7 @@ fn check_item(n: i64) {
         syntax::N_CONTACT, syntax::N_INTERFACE => { check_pair(n); },
         syntax::N_SYMMETRY => { check_symmetry(n); },
         syntax::N_STEP => { check_step(n); },
-        syntax::N_EXPECT => { check_expect(n); },
+        syntax::N_EXPECT => { check_expect(n, 0); },
         syntax::N_ALLOW => { check_allow(n); },
         syntax::N_SCALES => { check_scales(n); },
         syntax::N_STUDY => { check_study(n); },

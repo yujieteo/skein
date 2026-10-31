@@ -316,6 +316,7 @@ struct Expect {
     within: f64,
     relative: bool,
     label: u8[..256],
+    step: i64,      // the step that checks it at its end, or -1 for an item
 }
 
 var solid_names: u8[..64][>..];
@@ -828,8 +829,10 @@ fn step(n: i64) {
                 }
                 r = next(r);
             }
+        } else if k == syntax::N_EXPECT {
+            expect(c, steps.len);
         } else {
-            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output and report");
+            unsupported(tok(c), "the step statement is not in this slice", "use only bc, output, report and expect");
         }
         c = next(c);
     }
@@ -839,14 +842,15 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-fn expect(n: i64) {
+// An `expect` item (step -1), or an `expect` of step `step`.
+fn expect(n: i64, step: i64) {
     let f, good = field(child(n, 0), true);
     if !good {
         if ok() { unsupported(tok(child(n, 0)), "an expect compares one component", "write w.z, or reaction(end).x"); }
         return;
     }
     var x = Expect { name: [], field: f, want: scalar_value(child(n, 1)), within: scalar_value(child(n, 2)),
-                     relative: kind(child(n, 2)) == syntax::N_PERCENT, label: [] };
+                     relative: kind(child(n, 2)) == syntax::N_PERCENT, label: [], step: step };
     set64(x.name, name(n));
     codegen::set256(x.label, str(source_of(child(n, 1)), " within ", source_of(child(n, 2))));
     expects.push(x);
@@ -885,7 +889,7 @@ fn read(prog: i64) -> bool {
         } else if k == syntax::N_STEP {
             step(c);
         } else if k == syntax::N_EXPECT {
-            expect(c);
+            expect(c, -1);
         } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this slice"),
                         "remove it: this slice runs one linear static shell");
@@ -1397,6 +1401,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     quoted(out, s.name);
     format(out, ");\n    equilibrium(\"", codegen::system.force, "\");\n");
     for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }
+    for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
         var path: u8[>..] = [];
         format(path, results_dir, "/", s.name, ".vtu");
@@ -1485,7 +1490,7 @@ fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     lits(out, axis);
     out.append(");\n");
     for s in steps { format(out, "    step_", s.name, "();\n"); }
-    for x in expects { emit_expect(out, x); }
+    for x in expects { if x.step < 0 { emit_expect(out, x); } }
     out.append("    print_records();\n");
     out.append("    if failed { exit(1); }\n");
     out.append("}\n");

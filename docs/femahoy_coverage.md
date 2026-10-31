@@ -41,6 +41,17 @@ gives the roadmap phase that closes the gap:
 - Phase 2 closes G5. Spec [§5.6](skein_spec.md#56-tables) states `sum`,
   and the new model
   [fit_nist_pontius.skn](../examples/femahoy/fit_nist_pontius.skn) uses it.
+- Phase 2 closes G10. Spec [§15.3](skein_spec.md#153-expect) lets an
+  `expect` stand in a step and in a study. The step `inflate_25` of
+  [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn) checks
+  the force at 2.5. The studies of
+  [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn),
+  [naca0012_ladson.skn](../examples/femahoy/naca0012_ladson.skn),
+  [naca23012_flap.skn](../examples/femahoy/naca23012_flap.skn) and
+  [dipole_king_middleton.skn](../examples/femahoy/dipole_king_middleton.skn)
+  check each case, and the `minimize` study of
+  [shape_hole_biaxial.skn](../examples/femahoy/shape_hole_biaxial.skn)
+  checks its best case.
 - Phase 2 closes G11. Spec [§14.5](skein_spec.md#145-output-and-report)
   states `when`, and the expectations of
   [dam_break_vof.skn](../examples/femahoy/dam_break_vof.skn) and
@@ -129,7 +140,7 @@ comment.
 | G6 | The frequency of mode k (`FREQ`) and the buckling factor of mode k (`BUCKLE`). | `validation/cases/frequency-cantilever/check.toml:9`, `validation/cases/buckling-column/check.toml:7`, `validation/cases/grid-free-block-modes-ccx/check.toml:13`, `validation/cases/grid-cavity-te101/check.toml:10` | `modal` and `buckling` give eigenpairs (§14.2), but no expression names an eigenvalue (§14.5, Appendix A). | A built-in `eigenvalue(k: Int)`, for `report` and `expect`: a `Frequency` after `modal`, a `Real` load factor after `buckling`. | 1 |
 | G7 | The real part, the imaginary part, the magnitude and the phase of a complex result (S-parameters, impedance, R and L of a line). | `validation/cases/grid-waveguide-te10/check.toml:10`, `validation/cases/line-bars-getdp/check.toml:11`, `validation/cases/acoustics-pulsating-sphere/check.toml:17`, `validation/cases/team7-eddy-current/50hz/case.pro:89` | §5.1 defines `Complex<D>` and `im`, but Appendix A has no function that takes a part of a complex value. | Add `re`, `imag`, `arg` and `conj` to Appendix A, and accept `Complex` in `abs`. | 1 |
 | G8 | The angular frequency of the step in a load or a wall impedance: a base acceleration, a surface impedance of copper. | `validation/cases/random-vibration-cantilever/job.inp:27`, `validation/cases/grid-cavity-te101/cavity/grid.toml:20` | No built-in name gives the frequency of a `harmonic` or `modal` step (§14.2, Appendix A). | A built-in constant `omega`, the angular frequency of the current `harmonic` frequency or `modal` eigenvalue. | 4 |
-| G10 | A check after an earlier step, a check for each case of a parameter sweep, and a check of the optimum of a shape loop. | `validation/cases/hyperelastic-tube/check.toml:18`, `validation/cases/cavity-devahldavis/check.toml:40`, `validation/cases/naca0012-ladson/check.toml:19`, `validation/cases/shape-hole-biaxial/check.toml:23` | §15.3 runs each `expect` once, after the last step, with the default `param` values. | Let `expect` stand in a `step` (checked at the end of the step) and in a `study` block (checked for each case, and for the best case of `minimize`). | 2 |
+| G10 | A check after an earlier step, a check for each case of a parameter sweep, and a check of the optimum of a shape loop. | `validation/cases/hyperelastic-tube/check.toml:18`, `validation/cases/cavity-devahldavis/check.toml:40`, `validation/cases/naca0012-ladson/check.toml:19`, `validation/cases/shape-hole-biaxial/check.toml:23` | §15.3 runs each `expect` once, after the last step, with the default `param` values. | Let `expect` stand in a `step` (checked at the end of the step) and in a `study` block (checked for each case, and for the best case of `minimize`). | 2, closed by [§15.3](skein_spec.md#153-expect) |
 | G11 | The time at which a value gets to a level: the front of a dam break. | `validation/cases/dam-break-vof/check.toml:19`, `validation/cases/dam-break-martin-moyce/check.toml:17` | Reports give values at the end of a step only (§14.5, §15.3). | A report function `when(expr, value)`: the first time at which `expr` gets to `value`. | 2, closed by [§14.5](skein_spec.md#145-output-and-report) |
 | G12 | An angle from a ratio: the shock angle. | `validation/cases/wedge-oblique-shock/check.toml:19` | Appendix A has `tan` but no inverse. The model checks `tan(beta)`. | Add `atan` and `atan2` to Appendix A. | 1 |
 | G13 | The directivity and the efficiency of an antenna from a near-to-far-field transform. | `validation/cases/dipole-king-middleton/omega12.5/openems.py:65` | Report functions act on regions of the mesh only (§14.5). | A report function `far_field(E, H, surface, direction)`. | 5 |
@@ -305,7 +316,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A submodel: the global model runs first | submodel-kirsch-hole | `let global: Results = results(file, step:)` | [§15.1](skein_spec.md#151-results), [§15.2](skein_spec.md#152-submodels) |
 | Fluid-structure coupling (preCICE) | turek-hron-fsi1 | `interface fsi: wet_fluid, wet_solid { mesh_motion: harmonic }` | [§10.7](skein_spec.md#107-fsi-interfaces) |
 | Conjugate heat transfer of 2 regions | cht-heated-channel | 2 physics and `bc` lines on the shared boundary | [§10.4](skein_spec.md#104-coupling), [§12.1](skein_spec.md#121-form) |
-| Case folders for each parameter value | cavity-devahldavis, naca0012-ladson, naca23012-flap, dipole-king-middleton, optics-mie-cylinder | `param` and `study s: grid` | [§20.1](skein_spec.md#201-param), [§20.2](skein_spec.md#202-study), gap [G10](#gaps-that-remove-a-check) |
+| Case folders for each parameter value | cavity-devahldavis, naca0012-ladson, naca23012-flap, dipole-king-middleton, optics-mie-cylinder | `param`, and `study s: grid` with an `expect` for each case | [§20.1](skein_spec.md#201-param), [§20.2](skein_spec.md#202-study), [§15.3](skein_spec.md#153-expect) |
 | Shape optimization (Nelder-Mead) | shape-hole-biaxial | `study s: minimize(objective, method: nelder_mead, max_cases)` | [§20.2](skein_spec.md#202-study), gap [G25](#gaps-that-change-the-discretization-or-the-physics) |
 | Topology optimization (SIMP) | topology-mbb-beam, topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
 | A least-squares curve fit | fit-nist-pontius | the normal equations: `sum(expr)` over the rows of a table, and a physics of global unknowns | [§5.6](skein_spec.md#56-tables), [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
@@ -388,7 +399,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | The time at which a front gets to a position | dam-break-vof, dam-break-martin-moyce | `when(front, value)` in an `expect` | [§14.5](skein_spec.md#145-output-and-report) |
 | A shock angle | wedge-oblique-shock | `tan` of the angle | gap [G12](#gaps-that-remove-a-check) |
 | Directivity and efficiency of an antenna | dipole-king-middleton | none | gap [G13](#gaps-that-remove-a-check) |
-| A check after an earlier step | hyperelastic-tube | `report` in the step | gap [G10](#gaps-that-remove-a-check) |
+| A check after an earlier step | hyperelastic-tube | `expect` in the step | [§15.3](skein_spec.md#153-expect) |
 | The compliance of a design | topology-mbb-beam | none | gap [G1](#gaps-that-block-a-case) |
 | `rel_tol` and `abs_tol` of `check.toml` | each case | `within p%` or `within` an absolute value | [§15.3](skein_spec.md#153-expect) |
 

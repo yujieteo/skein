@@ -411,10 +411,10 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
             error(first_tok(a.node[1]), "not_constant", "the value of when must be a constant, but it varies in space or time",
                   "use a value that does not depend on x, y, z, t or a field");
         }
-        let proc = if in_expect { last_proc } else { cur_proc };
+        let proc = if in_expect && cur_step < 0 { last_proc } else { cur_proc };
         if proc != "transient" || (!in_expect && !in_report) {
             error(tok, "when_step", "when needs a transient step",
-                  "use when in a report of a transient step, or in an expect after one");
+                  "use when in a report or an expect of a transient step, or in an expect after one");
         }
         return num_ty(TIME, 0);
     }
@@ -448,7 +448,7 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
             error(first_tok(a.node[0]), "type_mismatch", str("the mode number is ", ty_str(t0), ", not Int"),
                   "give the number of the mode, for example eigenvalue(1)");
         }
-        let proc = if in_expect { last_proc } else { cur_proc };
+        let proc = if in_expect && cur_step < 0 { last_proc } else { cur_proc };
         if proc == "modal" { return num_ty(dim_pow(TIME, -1), 0); }
         if proc == "buckling" { return base_ty(B_REAL); }
         error(tok, "type_mismatch", "eigenvalue needs a modal or a buckling step",

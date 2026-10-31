@@ -123,11 +123,39 @@ fn test_crack_tip() {
     }
 }
 
+// The expects of a step and of a study are tables after their other
+// entries, not list entries (gap G10).
+fn test_expects() {
+    let model = "examples/elements/heated_bar_study_tet.skn";
+    var text: u8[>..] = [];
+    read_file(model, text);
+    let at = find(text, "    report heat_out");
+    let step = str(text[..at], "    expect hot: T at (0.0025, 0.01, 0.01) m == 14.7 degC within 1 K\n", text[at..]);
+    var result: u8[>..] = [];
+    if !md::md_text(model, step, result) {
+        failures++;
+        print("FAIL expects: the model has ", check::diags.len, " errors");
+        return;
+    }
+    let wants = [
+        "| `hot` | $T\\ \\text{at}\\ (0.0025, 0.01, 0.01)\\ \\mathrm{m}$ | $14.7\\ {}^{\\circ}\\mathrm{C}$ | $1\\ \\mathrm{K}$ | 43 |",
+        "- `qv`: $[10^{7}, 2\\times 10^{7}]\\ \\mathrm{W}/\\mathrm{m}^{3}$\n\n| Name |",
+        "| `centre_q` | $T\\ \\text{at}\\ (0.0025, 0.01, 0.01)\\ \\mathrm{m}$ | $[14.734270656, 29.468541312]\\ {}^{\\circ}\\mathrm{C}$ | $\\mathit{band}$ |",
+    ];
+    for w in wants {
+        if find(result, w) < 0 {
+            failures++;
+            print("FAIL expects: no '", w, "' in:\n", result);
+        }
+    }
+}
+
 fn main() {
     test_golden();
     test_deterministic();
     test_escapes();
     test_crack_tip();
+    test_expects();
     if failures > 0 {
         print("md: ", failures, " failures");
         exit(1);

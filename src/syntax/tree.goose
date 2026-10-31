@@ -205,10 +205,10 @@ let N_CONTACT = 27;      // tok: name. region, region, N_BLOCK
 let N_INTERFACE = 28;    // tok: name. region, region, N_BLOCK
 let N_SYMMETRY = 29;     // tok: name. N_PROC, N_BLOCK
 let N_STEP = 30;         // tok: name. N_PROC, step statements
-let N_EXPECT = 31;       // tok: name. left, right, within
+let N_EXPECT = 31;       // tok: name. left, right, within. An item, a step statement or a study entry
 let N_ALLOW = 32;        // tok: check id, aux: the reason string
 let N_SCALES = 33;       // tok: `scales`. the scales
-let N_STUDY = 34;        // tok: name. N_PROC, N_BLOCK
+let N_STUDY = 34;        // tok: name. N_PROC, N_BLOCK of N_SETTING and N_EXPECT
 let N_MANUFACTURE = 35;  // tok: `manufacture`. region, N_PROC, N_BLOCK
 let N_TOLERANCE = 36;    // tok: name. value, low, high, [N_BLOCK]
 

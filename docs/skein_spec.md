@@ -202,7 +202,7 @@ manufacture = "manufacture" region ":" procedure block NL ;  (* entry = setting 
 tolerance   = "tolerance" ident ":" expr "in" expr ".." expr [ block ] NL ;
 letdecl     = "let" ident ":" type "=" expr NL ;
 scales      = "scales" expr { "," expr } NL ;
-study       = "study" ident ":" procedure block NL ;  (* entry = ident ":" ( list | range ) | setting *)
+study       = "study" ident ":" procedure block NL ;  (* entry = ident ":" ( list | range ) | setting | check *)
 list        = "[" expr { "," expr } "]" [ unitexpr ] ;
 range       = expr ".." expr ;
 tabledecl   = "table" ident "{" column { "," column } "}" ":" NL
@@ -252,9 +252,11 @@ stepstmt    = bcdecl | "release" region
             | "death" region { "," region } [ "where" expr ]
             | "solve" block | "adapt" block
             | "output" expr { "," expr } [ "every" expr ]
-            | "report" [ ident "=" ] expr { "," [ ident "=" ] expr } ;
+            | "report" [ ident "=" ] expr { "," [ ident "=" ] expr }
+            | check ;
 
-expect      = "expect" ident ":" addexpr "==" addexpr "within" expr NL ;
+expect      = check NL ;
+check       = "expect" ident ":" addexpr "==" addexpr "within" expr ;  (* in a study, list | addexpr and list | expr *)
 allow       = "allow" ident ":" string NL ;
 
 region      = expr ;
@@ -1589,9 +1591,9 @@ force of each stringer, not only of all of them.
 `eigenvalue(k: Int)` is the eigenvalue of mode `k` of a `modal` step, or
 of a `buckling` step. For a `modal` step, it is the natural frequency
 f = ω/(2π) in Hz, a `Frequency`. For a `buckling` step, it is a `Real` load
-factor. Mode 1 is the lowest. In a `report`, the step is the step of the
-report. In an `expect`, the step is the last `modal` or `buckling` step. A
-use in another place, or with no such step, is an error
+factor. Mode 1 is the lowest. In a `report` or an `expect` of a step, the
+step is that step. In another `expect`, the step is the last `modal` or
+`buckling` step. A use in another place, or with no such step, is an error
 [`eigenvalue_step`]. A `k` outside `1..count` of the step is also an error
 [`eigenvalue_step`].
 
@@ -1600,9 +1602,9 @@ region, gets to `value`, a `Time` [`rank_mismatch`]. `value` has the
 dimension of `f` [`unit_mismatch`], and it must be a constant
 [`not_constant`]. The run finds the first time step at which `f` crosses
 `value`, and interpolates linearly in that time step. If `f` never gets to
-`value`, an `expect` of it fails. `when` is valid only in a `report` of a
-`transient` step, or in an `expect` whose last step is `transient`
-[`when_step`].
+`value`, an `expect` of it fails. `when` is valid only in a `report` or an
+`expect` of a `transient` step, or in another `expect` whose last step is
+`transient` [`when_step`].
 
 ```skein
 let front: Length = max(x + u.x, column)
@@ -1689,11 +1691,41 @@ An expectation is a test on the results. The two sides are scalars or
 vectors at points, or two field expressions on a region. For two field
 expressions, the test compares the L2 norm of the difference with
 `within`. This is how a model states a manufactured or analytic solution
-for `skein verify convergence` ([command line](command_line.md)). The run evaluates it after the
-last step and reports it as a post-solve verification result. `within`
+for `skein verify convergence` ([command line](command_line.md)). `within`
 takes an absolute value with the dimension of the sides, or a percent of
 the right side. A table column in the expression makes one test for each
-row. A failed expectation gives a non-zero exit status.
+row. A failed expectation gives a non-zero exit status. The run reports
+each expectation as a post-solve verification result. The place of the
+`expect` sets when the run evaluates it:
+
+| Place | The run evaluates it |
+|---|---|
+| an item | after the last step |
+| a statement of a step | at the end of the step, after its reports |
+| an entry of a `study` (§20.2) | after the last step of each case. In a `minimize` study, only in the best case. |
+
+```skein
+step inflate_25: static(ramp: 20) {
+    bc inner: u = (15 mm)/A_in*(x, y)
+    expect f_25: reaction(inner).x == 5.74269 N within 0.2%
+}
+
+study ra_sweep: grid {
+    Ra: [10000, 100000]
+    expect nu: mean(-grad(T).x, hot)*a/dT == [2.243, 4.519] within 0.6%
+}
+```
+
+In a `grid` or a `zip` study, the right side and `within` can each be a
+list with one value for each case, in the order of the cases (§20.2). A
+list in another place, or a list with a different number of values, is an
+error [`expect_cases`]. Each case of a study also evaluates the `expect`
+items and the `expect` statements of the steps, with the values of the
+case.
+
+Reason: a test can need a check after an earlier step, a check for each
+case of a sweep with its own reference value, and a check of the optimum of
+a shape study (femahoy gap G10).
 
 ---
 
@@ -2012,6 +2044,9 @@ run is a **case**. The procedure after the colon makes the cases:
 - `minimize` is gradient-free. Gradients by adjoint are in the roadmap
   (phase 5). `objective` names a scalar `report` of the last step
   [`study_objective`].
+- An entry can be an `expect` (§15.3). Each case evaluates it, and a
+  `minimize` study evaluates it in the best case. The cases of a `grid` are
+  in the order of the Cartesian product, with the last entry the fastest.
 
 ### 20.3 How cases run: Go-style concurrency
 
