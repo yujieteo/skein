@@ -1072,9 +1072,9 @@ physics oscillator solves q: Length {
 A global unknown may appear in a physics with a region. Then the system
 couples an ODE and a PDE, for example a lumped spring on a solid.
 
-`mean(f, r)` and `integral(f, r)` (§14.5) are valid only in the `eq` of a
-global unknown. In a physics with a region, the unknown of an `eq` with
-`mean` or `integral` is a global unknown, but only if the `eq` has no
+In a physics, `mean(f, r)` and `integral(f, r)` (§14.5) are valid only in
+the `eq` of a global unknown. In a physics with a region, the unknown of an
+`eq` with `mean` or `integral` is a global unknown, but only if the `eq` has no
 `grad`, `div`, `curl` or `strain` outside `mean` and `integral`. Outside
 `mean` and `integral`, an `eq` with `mean` or `integral` uses no field: no
 `x`, `y`, `z`, `n` or `tau`, no `grad`, `div`, `curl` or `strain`, and no
