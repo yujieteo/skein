@@ -12,6 +12,7 @@ import math;
 import dictionary;
 namespace elements;
 import .shape;
+import .csg;
 
 var dim = 0;
 var order = 1;
@@ -70,6 +71,7 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     map_hi = hi;
     bbox_lo = lo;
     bbox_hi = hi;
+    body_shape = -1;
 }
 
 // The position of lattice point (i, j, k), which may be a midpoint.
@@ -300,7 +302,7 @@ fn load_array<T>(dir: const u8[:], name: u8[:], into: T[>..]&) -> bool {
 
 // Writes the mesh in the files of the directory `dir`.
 fn save_mesh(dir: const u8[:]) -> bool {
-    let sizes: i64[>..] = [dim, order, per_cell];
+    let sizes: i64[>..] = [dim, order, per_cell, body_shape];
     var bbox: f64[>..] = [];
     bbox.append(bbox_lo);
     bbox.append(bbox_hi);
@@ -312,11 +314,12 @@ fn save_mesh(dir: const u8[:]) -> bool {
 fn load_mesh(dir: const u8[:]) -> bool {
     var sizes: i64[>..] = [];
     var bbox: f64[>..] = [];
-    guard load_array(dir, "sizes", sizes) && sizes.len == 3 && load_array(dir, "bbox", bbox) && bbox.len == 6 &&
+    guard load_array(dir, "sizes", sizes) && sizes.len == 4 && load_array(dir, "bbox", bbox) && bbox.len == 6 &&
           load_array(dir, "coords", coords) && load_array(dir, "conn", conn) else { return false; };
     dim = sizes[0];
     order = sizes[1];
     per_cell = sizes[2];
+    body_shape = sizes[3];
     for t in 3 {
         bbox_lo[t] = bbox[t];
         bbox_hi[t] = bbox[3 + t];

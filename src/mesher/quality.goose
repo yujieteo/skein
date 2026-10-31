@@ -39,6 +39,27 @@ fn cross3(a: f64[3], b: f64[3]) -> f64[3] {
 }
 fn norm3(a: f64[3]) -> f64 { return sqrt(dot3(a, a)); }
 
+// Adds the triangle of vertices v and longest edge `longest` to q.
+fn triangle_quality(v: f64[3][4], longest: f64, q: Quality&) {
+    let area = 0.5 * cross3(sub3(v[1], v[0]), sub3(v[2], v[0]))[2];
+    q.measure += area;
+    if area <= 0.0 {
+        q.inverted++;
+        return;
+    }
+    var perimeter = 0.0;
+    for i in 3 {
+        let a = sub3(v[(i + 1) % 3], v[i]);
+        let b = sub3(v[(i + 2) % 3], v[i]);
+        let angle = degrees(acos(clamp(dot3(a, b) / (norm3(a) * norm3(b)), -1.0, 1.0)));
+        q.min_angle = min(q.min_angle, angle);
+        q.max_angle = max(q.max_angle, angle);
+        perimeter += norm3(a);
+    }
+    let inradius = 2.0 * area / perimeter;
+    q.max_aspect = max(q.max_aspect, longest / (2.0 * sqrt(3.0) * inradius));
+}
+
 fn mesh_quality() -> Quality {
     var q = Quality { cells: cell_count(), nodes: point_count(), min_angle: 180.0, max_angle: 0.0,
                       max_aspect: 0.0, measure: 0.0, inverted: 0 };
@@ -56,20 +77,7 @@ fn mesh_quality() -> Quality {
             for j in i + 1..k { longest = max(longest, norm3(sub3(v[i], v[j]))); }
         }
         if mesh_dim == 2 {
-            let area = 0.5 * cross3(sub3(v[1], v[0]), sub3(v[2], v[0]))[2];
-            q.measure += area;
-            if area <= 0.0 { q.inverted++; continue; }
-            var perimeter = 0.0;
-            for i in 3 {
-                let a = sub3(v[(i + 1) % 3], v[i]);
-                let b = sub3(v[(i + 2) % 3], v[i]);
-                let angle = degrees(acos(clamp(dot3(a, b) / (norm3(a) * norm3(b)), -1.0, 1.0)));
-                q.min_angle = min(q.min_angle, angle);
-                q.max_angle = max(q.max_angle, angle);
-                perimeter += norm3(a);
-            }
-            let inradius = 2.0 * area / perimeter;
-            q.max_aspect = max(q.max_aspect, longest / (2.0 * sqrt(3.0) * inradius));
+            triangle_quality(v, longest, q);
         } else {
             let volume = dot3(sub3(v[1], v[0]), cross3(sub3(v[2], v[0]), sub3(v[3], v[0]))) / 6.0;
             q.measure += volume;

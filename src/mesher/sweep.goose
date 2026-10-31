@@ -113,9 +113,9 @@ fn mesh_sector(g: i64, dim: i64, size: f64) -> bool {
     return true;
 }
 
-// The 2D section of g between z0 and z1, if g is a prism along z there:
-// each box, cylinder along z and extrude of g holds [z0, z1]. Else -1.
-recursive fn section(g: i64, z0: f64, z1: f64) -> i64 {
+// The 2D section of node g alone, or -2 if it is a union, intersect or
+// subtract: its section is the same operation on the sections of its parts.
+fn own_section(g: i64, z0: f64, z1: f64) -> i64 {
     let s = shapes[g];
     let p = s.p;
     let b = bounds(g);
@@ -124,13 +124,37 @@ recursive fn section(g: i64, z0: f64, z1: f64) -> i64 {
     if s.kind == BOX { return rect(p[0], p[1], p[3], p[4]); }
     if s.kind == CYLINDER { return if round_shape(g, 3) { circle(p[0], p[1], p[6]) } else { -1 }; }
     if s.kind == EXTRUDE { return s.a; }
-    guard s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT else { return -1; };
-    let a = section(s.a, z0, z1);
-    guard a >= 0 else { return -1; };
     // A shape that is subtracted may hold more than [z0, z1], not less.
-    let c = section(s.b, z0, z1);
-    guard c >= 0 else { return -1; };
-    return add_shape(s.kind, a, c, default<f64[8]>());
+    return if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT { -2 } else { -1 };
+}
+
+// The 2D section of g between z0 and z1, if g is a prism along z there:
+// each box, cylinder along z and extrude of g holds [z0, z1]. Else -1. A
+// stack walks the tree of g, with no recursion (rule 1).
+fn section(g: i64, z0: f64, z1: f64) -> i64 {
+    var todo: i64[>..] = [g];     // the nodes; -1 - n after the parts of node n
+    var done: i64[>..] = [];      // the sections, in the sequence of the nodes
+    while todo.len > 0 {
+        let n = todo[todo.len - 1];
+        todo.pop();
+        if n < 0 {
+            let c = done[done.len - 1];
+            done.pop();
+            let a = done[done.len - 1];
+            done.pop();
+            done.push(if a >= 0 && c >= 0 { add_shape(shapes[-1 - n].kind, a, c, default<f64[8]>()) } else { -1 });
+            continue;
+        }
+        let own = own_section(n, z0, z1);
+        if own != -2 {
+            done.push(own);
+            continue;
+        }
+        todo.push(-1 - n);
+        todo.push(shapes[n].b);
+        todo.push(shapes[n].a);
+    }
+    return done[0];
 }
 
 // Sweeps the quads of the 2D section s from z0 to z1. False as mesh_2d.

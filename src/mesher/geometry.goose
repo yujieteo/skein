@@ -318,7 +318,23 @@ fn wedge_phi(angle: f64, x: f64, z: f64) -> f64 {
     return if angle <= PI { max(low, high) } else { min(low, high) };
 }
 
-recursive fn phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
+// A step of the walk of phi: shape g at the point q, the next child k,
+// and the value of the children before k.
+struct Frame {
+    g: i64,
+    q: f64[3],
+    k: i64,
+    acc: f64,
+}
+
+var frames: Frame[>..] = [];
+
+fn is_leaf(kind: i64) -> bool {
+    return kind == BOX || kind == RECT || kind == CYLINDER || kind == CIRCLE || kind == POLYGON || kind == FILL;
+}
+
+// The signed distance from (x, y, z) to shape g with no children.
+fn leaf_phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
     let s = shapes[g];
     let p = s.p;
     if s.kind == BOX || s.kind == RECT {
@@ -348,38 +364,79 @@ recursive fn phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
     }
     if s.kind == POLYGON { return polygon_phi(s.a, s.b, x, y); }
     if s.kind == FILL { return fill_phi(g, x, y); }
-    if s.kind == EXTRUDE { return slab(phi(s.a, x, y, 0.0), z, p[0]); }
-    if s.kind == REVOLVE {
-        let d = phi(s.a, sqrt(x * x + z * z), y, 0.0);
-        if p[0] >= TAU - 1.0e-12 { return d; }
-        return max(d, wedge_phi(p[0], x, z));
-    }
-    if s.kind == LOFT {
-        let t = clamp(z / p[0], 0.0, 1.0);
-        return slab((1.0 - t) * phi(s.a, x, y, 0.0) + t * phi(s.b, x, y, 0.0), z, p[0]);
-    }
-    if s.kind == PATTERN || s.kind == PATTERN_POLAR {
-        var f = 1.0e300;
-        for k in s.b {
-            if s.kind == PATTERN {
-                f = min(f, phi(s.a, x - k * p[0], y - k * p[1], z - k * p[2]));
-            } else {
-                let q = turn([x, y, z], [p[0], p[1], p[2]], -TAU * k / s.b);
-                f = min(f, phi(s.a, q[0], q[1], q[2]));
-            }
-        }
-        return f;
-    }
-    let fa = phi(s.a, x, y, z);
-    let fb = phi(s.b, x, y, z);
-    if s.kind == UNION { return min(fa, fb); }
-    if s.kind == INTERSECT { return max(fa, fb); }
-    return max(fa, -fb);
+    return fill_phi(g, x, y);
 }
 
-// The bounding box of node g: x0, y0, z0, x1, y1, z1. A 2D shape has
-// z0 = z1 = 0.
-recursive fn bounds(g: i64) -> f64[6] {
+fn child_count(s: Shape) -> i64 {
+    if s.kind == EXTRUDE || s.kind == REVOLVE { return 1; }
+    if s.kind == PATTERN || s.kind == PATTERN_POLAR { return s.b; }
+    return 2;
+}
+
+// Child k of shape s, and the point q in the frame of that child.
+fn child_at(s: Shape, k: i64, q: f64[3]) -> i64, f64[3] {
+    let p = s.p;
+    if s.kind == EXTRUDE || s.kind == LOFT { return if k == 0 { s.a } else { s.b }, [q[0], q[1], 0.0]; }
+    if s.kind == REVOLVE { return s.a, [sqrt(q[0] * q[0] + q[2] * q[2]), q[1], 0.0]; }
+    if s.kind == PATTERN { return s.a, [q[0] - k * p[0], q[1] - k * p[1], q[2] - k * p[2]]; }
+    if s.kind == PATTERN_POLAR { return s.a, turn(q, [p[0], p[1], p[2]], -TAU * k / s.b); }
+    return if k == 0 { s.a } else { s.b }, q;
+}
+
+// Adds the value v of child k of shape s at q to acc, the value of the
+// children before k.
+fn combine(s: Shape, k: i64, q: f64[3], acc: f64, v: f64) -> f64 {
+    if s.kind == LOFT {
+        let t = clamp(q[2] / s.p[0], 0.0, 1.0);
+        return if k == 0 { (1.0 - t) * v } else { acc + t * v };
+    }
+    if s.kind == PATTERN || s.kind == PATTERN_POLAR { return min(acc, v); }
+    if k == 0 { return v; }
+    if s.kind == UNION { return min(acc, v); }
+    if s.kind == INTERSECT { return max(acc, v); }
+    return max(acc, -v);
+}
+
+// The value of shape s at q from acc, the value of its children.
+fn finish(s: Shape, q: f64[3], acc: f64) -> f64 {
+    if s.kind == EXTRUDE || s.kind == LOFT { return slab(acc, q[2], s.p[0]); }
+    if s.kind == REVOLVE && s.p[0] < TAU - 1.0e-12 { return max(acc, wedge_phi(s.p[0], q[0], q[2])); }
+    return acc;
+}
+
+// The signed distance from (x, y, z) to shape g, < 0 inside. A stack of
+// frames walks the tree of g, with no recursion (rule 1 of
+// docs/tradeoffs.md §6). Each child has a smaller index than its shape, so
+// the stack holds at most g + 1 frames.
+fn phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
+    if is_leaf(shapes[g].kind) { return leaf_phi(g, x, y, z); }
+    frames.clear();
+    frames.push(Frame { g: g, q: [x, y, z], k: 0, acc: 1.0e300 });
+    var v = 0.0;    // the value of the last frame that finished
+    while frames.len > 0 {
+        let f = frames.len - 1;
+        let s = shapes[frames[f].g];
+        let q = frames[f].q;
+        if is_leaf(s.kind) {
+            v = leaf_phi(frames[f].g, q[0], q[1], q[2]);
+            frames.pop();
+            continue;
+        }
+        if frames[f].k > 0 { frames[f].acc = combine(s, frames[f].k - 1, q, frames[f].acc, v); }
+        if frames[f].k == child_count(s) {
+            v = finish(s, q, frames[f].acc);
+            frames.pop();
+            continue;
+        }
+        let c, cq = child_at(s, frames[f].k, q);
+        frames[f].k++;
+        frames.push(Frame { g: c, q: cq, k: 0, acc: 1.0e300 });
+    }
+    return v;
+}
+
+// The bounding box of shape g with no children.
+fn leaf_bounds(g: i64) -> f64[6] {
     let s = shapes[g];
     let p = s.p;
     if s.kind == BOX { return [p[0], p[1], p[2], p[3], p[4], p[5]]; }
@@ -419,21 +476,23 @@ recursive fn bounds(g: i64) -> f64[6] {
         }
         return b;
     }
+    abort("leaf_bounds: a shape with no children");
+}
+
+// The bounding box of shape g from a and b, the boxes of its children.
+fn own_bounds(g: i64, a: f64[6], b: f64[6]) -> f64[6] {
+    let s = shapes[g];
+    let p = s.p;
     if s.kind == EXTRUDE {
-        let a = bounds(s.a);
         return [a[0], a[1], 0.0, a[3], a[4], p[0]];
     }
     if s.kind == REVOLVE {
-        let a = bounds(s.a);
         let r = max(abs(a[0]), abs(a[3]));
         return [-r, a[1], -r, r, a[4], r];
     }
     if s.kind == LOFT {
-        let a = bounds(s.a);
-        let b = bounds(s.b);
         return [min(a[0], b[0]), min(a[1], b[1]), 0.0, max(a[3], b[3]), max(a[4], b[4]), p[0]];
     }
-    let a = bounds(s.a);
     if s.kind == PATTERN {
         var u: f64[6] = a;
         for c in 3 {
@@ -459,7 +518,6 @@ recursive fn bounds(g: i64) -> f64[6] {
         return u;
     }
     if s.kind == SUBTRACT { return a; }
-    let b = bounds(s.b);
     var u: f64[6] = a;
     for c in 3 {
         if s.kind == UNION {
@@ -471,6 +529,33 @@ recursive fn bounds(g: i64) -> f64[6] {
         }
     }
     return u;
+}
+
+var box_scratch: f64[>..] = [];    // scratch of bounds: 6 values for each shape
+
+// The bounding box of shape g: x0, y0, z0, x1, y1, z1. A 2D shape has
+// z0 = z1 = 0. Each child has a smaller index than its shape, so one pass
+// over the shapes up to g gives the box of each child first.
+fn bounds(g: i64) -> f64[6] {
+    box_scratch.clear();
+    for i in g + 1 {
+        let s = shapes[i];
+        var box: f64[6] = [0.0; 6];
+        if is_leaf(s.kind) {
+            box = leaf_bounds(i);
+        } else {
+            let two = s.kind == LOFT || s.kind == UNION || s.kind == INTERSECT;
+            box = own_bounds(i, box_of(s.a), if two { box_of(s.b) } else { box_of(s.a) });
+        }
+        box_scratch.append(box);
+    }
+    return box_of(g);
+}
+
+fn box_of(i: i64) -> f64[6] {
+    var box: f64[6] = [0.0; 6];
+    for c in 6 { box[c] = box_scratch[6 * i + c]; }
+    return box;
 }
 
 // The point x moved onto the boundary φ = 0 of g: Newton steps along the

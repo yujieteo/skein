@@ -8,6 +8,7 @@ import elements from "../../src/elements";
 import shells from "../../src/shells";
 import flow from "../../src/flow";
 import solvers from "../../src/solvers";
+import mesher from "../../src/mesher";
 
 fn main() {
     let a = args();

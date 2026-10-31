@@ -465,8 +465,13 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return base_ty(B_REAL);
     }
     if name == "results" {
-        guard arity(tok, name, a, 1, 2) else { return any_ty(); }
-        return results_ty(tok, a.node[0], if a.count > 1 { a.node[1] } else { -1 });
+        guard arity(tok, name, a, 1, 3) else { return any_ty(); }
+        var step = -1;
+        var case = -1;
+        for i in 1..a.count {
+            if a.name[i] >= 0 && tok_text(a.name[i]) == "case" { case = a.node[i]; } else { step = a.node[i]; }
+        }
+        return results_ty(tok, a.node[0], step, case);
     }
     // Geometry (spec §8).
     if name == "boundary" {

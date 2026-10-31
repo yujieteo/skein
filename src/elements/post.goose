@@ -10,6 +10,7 @@ namespace elements;
 import .shape;
 import .mesh;
 import .assemble;
+import .stages;
 
 let FIELD_VALUE = 0;    // component comp of u, or T
 let FIELD_STRESS = 1;   // sigma at comp = 3 i + j
@@ -54,6 +55,7 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
 fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 && ncomp <= 3 && sol.len == dof_total() else { abort("cell_field: a field, 0 <= comp < 9 and a solution of each dof"); }
     cell_geometry(c, xi);
+    use_law(c);
     if what == FIELD_VALUE {
         var v = 0.0;
         if comp < ncomp {
@@ -62,11 +64,14 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
         return v;
     }
     // du[3 a + t] = du_a / dx_t
+    // A born cell is strain-free at its birth (stages.goose).
+    let b = born.len > 0 && born[c] != 0;
     var du: f64[9] = [0.0; 9];
     for l in per_cell {
         let n = cell_node(c, l);
         for a in ncomp {
-            for t in dim { du[3 * a + t] += sol[ncomp * n + a] * grad[3 * l + t]; }
+            let v = sol[ncomp * n + a] - (if b { birth_u[(per_cell * c + l) * ncomp + a] } else { 0.0 });
+            for t in dim { du[3 * a + t] += v * grad[3 * l + t]; }
         }
     }
     if what == FIELD_FLUX { return if comp < dim { -conductivity * du[comp] } else { 0.0 }; }
@@ -83,9 +88,9 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     return s;
 }
 
-// The field at point (x, y, z), and whether a cell holds the point. A point
+// The field at point (x, y, z), and whether a live cell holds the point. A point
 // a little outside the mesh, as on the arc of a hole between two nodes,
-// takes the nearest cell.
+// takes the nearest live cell.
 fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 else { abort("field_at: a field and 0 <= comp < 9"); }
     guard cell_count() > 0 && sol.len > 0 else { return 0.0, false; }
@@ -96,6 +101,7 @@ fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     var best = -1;
     var best_l = -1.0e300;
     for c in cell_count() {
+        if !is_live(c) { continue; }
         let l = barycentric(c, p);
         var lowest = l[0];
         for a in 1..dim + 1 { lowest = min(lowest, l[a]); }
@@ -109,8 +115,30 @@ fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
         }
     }
     if count > 0 { return sum / count, true; }
+    guard best >= 0 else { return 0.0, false; };
     let l = barycentric(best, p);
     return cell_field(best, [l[1], l[2], l[3]], what, comp), best_l >= -0.1;
+}
+
+// The largest von Mises stress at the nodes of the region, from the
+// stress of each live cell at the node. 0 if the region holds no node.
+fn region_max_von_mises() -> f64 {
+    guard physics == ELASTIC && sol.len == dof_total() else { abort("region_max_von_mises: an elastic model and a solution"); }
+    var most = 0.0;
+    for c in cell_count() {
+        if !is_live(c) { continue; }
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if !on_region(n) { continue; }
+            let b = barycentric(c, [node_x(n, 0), node_x(n, 1), node_x(n, 2)]);
+            var s: f64[9] = [0.0; 9];
+            for k in 9 { s[k] = cell_field(c, [b[1], b[2], b[3]], FIELD_STRESS, k); }
+            let d = (s[0] - s[4]) * (s[0] - s[4]) + (s[4] - s[8]) * (s[4] - s[8]) + (s[8] - s[0]) * (s[8] - s[0]);
+            let t = s[1] * s[1] + s[5] * s[5] + s[2] * s[2];
+            most = max(most, sqrt(0.5 * d + 3.0 * t));
+        }
+    }
+    return most;
 }
 
 // --- VTU -----------------------------------------------------------------------

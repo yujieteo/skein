@@ -14,21 +14,26 @@ import .mesh;
 // Appends the lo and hi corners of each box of shape g to `out`, 6 numbers
 // for each box (z = 0 for a rect). False if g is not a union of boxes or of
 // rects.
-recursive fn box_union(g: i64, out: f64[>..]&) -> bool {
-    let s = shapes[g];
-    if s.kind == UNION { return box_union(s.a, out) && box_union(s.b, out); }
-    if s.kind == BOX {
-        for i in 6 { out.push(s.p[i]); }
-        return true;
+fn box_union(g: i64, out: f64[>..]&) -> bool {
+    var todo: i64[>..] = [g];
+    while todo.len > 0 {
+        let s = shapes[todo[todo.len - 1]];
+        todo.pop();
+        if s.kind == UNION {
+            todo.push(s.b);
+            todo.push(s.a);
+        } else if s.kind == BOX {
+            for i in 6 { out.push(s.p[i]); }
+        } else if s.kind == RECT {
+            for i in [0, 1] { out.push(s.p[i]); }
+            out.push(0.0);
+            for i in [2, 3] { out.push(s.p[i]); }
+            out.push(0.0);
+        } else {
+            return false;
+        }
     }
-    if s.kind == RECT {
-        for i in [0, 1] { out.push(s.p[i]); }
-        out.push(0.0);
-        for i in [2, 3] { out.push(s.p[i]); }
-        out.push(0.0);
-        return true;
-    }
-    return false;
+    return true;
 }
 
 // The grid lines along axis a, from lo to hi: the planes of `boxes` in

@@ -127,7 +127,7 @@ fn test_grid_cantilever() {
         "face(runtime::traction(\"x1\", 0.0, 0.0, -1.0), \"tip\");",
         "largest = max(largest, 1.0 * runtime::face_area(\"x1\"));",
         "equilibrium(rx, ry, rz, largest, \"N\");",
-        "solve(\"load\", \"cg\", \"jacobi\");",
+        "solve(\"load\", \"cg\", \"amg\");",
         "let x, y, z = runtime::reaction(\"x0\");",
         "report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\"));",
         "output(\"RESULTS/load.vtu\");",
@@ -329,7 +329,7 @@ fn test_dispatch() {
                  "error unsupported 16:9 the template heat has no generator in this build");
     expect_error("a transient step", replace(model(MM, str(MESH, STEP)), "load: static", "load: transient"),
                  "error unsupported 19:12 the procedure transient has no generator in this build");
-    // The linear solver of a step: cg with jacobi, or a pair of the solvers lane.
+    // The linear solver of a step: cg with amg (the default), cg with jacobi, or a pair of the solvers lane.
     let solve = "    solve { linear: cg, precond: jacobi }\n";
     expect_lines("cg with jacobi", model(MM, str(MESH, replace(STEP, "    output u\n", solve))),
                  ["solve(\"load\", \"cg\", \"jacobi\");"]);
@@ -601,11 +601,15 @@ fn test_study_run() {
     }
     var table: u8[>..] = [];
     read_file("build/.skein/studies/heated_bar_study_tet/lengths.toon", table);
-    for want in ["jobs: 2\n", "cases[3]{case,lx,status,verify,heat_out,centre,time_s}:\n", "  1,0.005 m,ok,pass,-20.0", "  3,0.01 m,ok,pass,-40.0"] {
+    for want in ["jobs: 2\n", "cases[3]{case,lx,status,verify,heat_out,centre,time_s}:\n"] {
         if find(table, want) < 0 {
             failures++;
             print("FAIL skein run --study: no '", want, "' in:\n", table);
         }
+    }
+    if !has_heat(table, "  1,0.005 m,ok,pass,", 20) || !has_heat(table, "  3,0.01 m,ok,pass,", 40) {
+        failures++;
+        print("FAIL skein run --study: the heat of case 1 is not -20 W, or of case 3 not -40 W, in:\n", table);
     }
     // lx reaches the mesh, so each case meshes. qv reaches only the physics:
     // case 2 reads the mesh of case 1, and gives twice its heat.
@@ -617,21 +621,23 @@ fn test_study_run() {
     table.clear();
     read_file(str(studies, "/sources.toon"), table);
     // G10: the expect of the study holds in each case.
-    for want in ["{case,qv,status,verify,heat_out,centre,centre_q,time_s}", "  1,1e7 W/m^3,ok,pass,-20.0", "  2,2e7 W/m^3,ok,fail,-40.0", " W,fail,pass,"] {
+    for want in ["{case,qv,status,verify,heat_out,centre,centre_q,time_s}", "  2,2e7 W/m^3,ok,fail,-", " W,fail,pass,"] {
         if find(table, want) < 0 {
             failures++;
             print("FAIL skein run --study sources: no '", want, "' in:\n", table);
         }
     }
+    if !has_heat(table, "  1,1e7 W/m^3,ok,pass,", 20) || !has_heat(table, "ok,fail,", 40) {
+        failures++;
+        print("FAIL skein run --study sources: the heat of case 1 is not -20 W, or of case 2 not -40 W, in:\n", table);
+    }
     // band reaches only the expect: case 2 reads the solution of case 1,
     // so the study solves once, and the tolerance of case 2 is too small.
     table.clear();
     read_file(str(studies, "/bands.toon"), table);
-    for want in ["  1,0.0147 K,ok,pass,-20.0", "  2,1e-12 K,ok,fail,-20.0"] {
-        if find(table, want) < 0 {
-            failures++;
-            print("FAIL skein run --study bands: no '", want, "' in:\n", table);
-        }
+    if !has_heat(table, "  1,0.0147 K,ok,pass,", 20) || !has_heat(table, "  2,1e-12 K,ok,fail,", 20) {
+        failures++;
+        print("FAIL skein run --study bands: the heat of case 1 or 2 is not -20 W in:\n", table);
     }
     // The solve record of a case (command_line.md §6) has one row for each solve.
     for c in ["1", "2"] {
@@ -662,6 +668,13 @@ fn test_case_threads() {
             print("FAIL ", m[0], " gives other results on 1 and on 4 threads, or does not run");
         }
     }
+}
+
+// True if `table` has `row` and then the heat -w W, to the round-off of the
+// AMG solve: -w.0, -w.000000000001 or -(w - 1).999999999999.
+fn has_heat(table: u8[:], row: u8[:], w: i64) -> bool {
+    return find(table, str(row, "-", w, ".0 W")) >= 0 || find(table, str(row, "-", w, ".00000000000")) >= 0 ||
+           find(table, str(row, "-", w - 1, ".99999999999")) >= 0;
 }
 
 // The number of lines of the longest function of `program`, from its `fn`

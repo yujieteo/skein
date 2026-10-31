@@ -353,6 +353,62 @@ fn case_source(text: u8[:], c: i64) -> u8[>..] {
     return out;
 }
 
+// The model `text` of `path` with the value of each `--set name=value` of
+// `sets` in place of the default value of its `param` (spec §20.1). The
+// checker then checks the value as source text, with its type and its
+// range. False if a word is not name=value or names no param of the model
+// file: the message is on stderr.
+fn set_source(path: u8[:], text: u8[:], sets: const u8[:][:], out: u8[>..]&) -> bool {
+    out.clear();
+    let prog = syntax::parse_model(path, text);
+    guard prog >= 0 else {
+        out.append(text);
+        return true;
+    };
+    var los: i64[>..] = [];
+    var his: i64[>..] = [];
+    var values: i64[>..] = [];
+    for s, i in sets {
+        var eq = -1;
+        for c, j in s { if c == '=' && eq < 0 { eq = j; } }
+        guard eq > 0 && eq + 1 < s.len else {
+            write_stderr(str("skein run: --set takes name=value, not '", s, "'\n"));
+            return false;
+        };
+        let p = find_param(prog, s[..eq]);
+        var lo = -1;
+        var hi = -1;
+        if p >= 0 { lo, hi = source_span(syntax::nodes[syntax::nodes[p].first].next); }
+        guard p >= 0 && hi <= syntax::files[0].len else {
+            write_stderr(str("skein run: the model file has no param '", s[..eq], "' for --set\n"));
+            return false;
+        };
+        for l in los {
+            guard l != lo else {
+                write_stderr(str("skein run: --set gives '", s[..eq], "' two values\n"));
+                return false;
+            };
+        }
+        los.push(lo);
+        his.push(hi);
+        values.push(i);
+    }
+    var order: i64[>..] = [];
+    for k in los.len { order.push(k); }
+    sort(order) { a, b => los[a] < los[b] }
+    var at = 0;
+    for k in order {
+        let s = sets[values[k]];
+        var eq = 0;
+        while s[eq] != '=' { eq++; }
+        out.append(text[at..los[k]]);
+        format(out, "(", s[eq + 1..], ")");
+        at = his[k];
+    }
+    out.append(text[at..]);
+    return true;
+}
+
 // --- the workers (spec §20.5) --------------------------------------------------
 
 // The number k of cases that run at the same time, and the threads of each

@@ -122,6 +122,8 @@ let BASE_UNITS = [
     // skein-elements: the heat units of src/elements/gen.goose. Each system uses the kelvin.
     BaseUnit { name: "W", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
     BaseUnit { name: "K", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
+    // The frequency of eigenvalue(k) of a modal step (src/elements/eigen.goose).
+    BaseUnit { name: "Hz", u: Unit { f: 1.0, l: 0, m: 0, t: -2 } },
 ];
 
 let PREFIX_CHARS = "numckMG";
@@ -168,7 +170,7 @@ fn unit_name(t: i64) -> Unit {
         }
     }
     unsupported(t, str("the unit '", word, "' is not in this slice"),
-                "use m, g, t, s, N, Pa or bar, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
+                "use m, g, t, s, N, Pa, bar, W, K or Hz, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
     return Unit { f: 1.0, l: 0, m: 0, t: 0 };
 }
 
@@ -465,6 +467,36 @@ fn reset() {
     poisson = -1.0;
     depth = 0;
     system = SYSTEMS[0];
+}
+
+// `s` in single quotes for the shell.
+fn shell_quoted(s: u8[:]) -> u8[>..] {
+    var out: u8[>..] = [];
+    out.push('\'');
+    for c in s {
+        if c == '\'' { out.append("'\\''"); } else { out.push(c); }
+    }
+    out.push('\'');
+    return out;
+}
+
+// The directory of the results of model `model`, run with the --set words
+// `sets`: .skein/results/<model>, and with --set, set/<words> in it. The
+// words are joined by ',', with no spaces and with '_' for '/'. So a run
+// with other values does not write over the results of the model, and a
+// submodel finds the state of the case that it needs (spec §15.1).
+fn results_path(model: u8[:], sets: const u8[:][:]) -> u8[>..] { return set_path(".skein/results/", model, sets); }
+
+// The directory `root`<model>, and with --set, set/<words> in it.
+fn set_path(root: u8[:], model: u8[:], sets: const u8[:][:]) -> u8[>..] {
+    var p = str(root, model);
+    for w, i in sets {
+        p.append(if i == 0 { "/set/" } else { "," });
+        for c in w {
+            if c == '/' { p.push('_'); } else if c != ' ' { p.push(c); }
+        }
+    }
+    return p;
 }
 
 fn set64(into: u8[..64]&, s: u8[:]) {
@@ -940,7 +972,7 @@ fn step(n: i64) {
                    first_bc: 0, bc_count: 0, first_report: reports.len, report_count: 0, output: false };
     set64(s.name, name(n));
     set64(s.solver, "cg");
-    set64(s.preconditioner, "jacobi");
+    set64(s.preconditioner, "amg");   // spec §14.4
     // A procedure of a lane goes to its generator (dispatch.goose).
     let p = procedure_lane(name(proc));
     if p > CORE {
@@ -987,7 +1019,7 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-let SOLVE_FIX = "write solve { linear: cg, precond: jacobi }";
+let SOLVE_FIX = "write solve { linear: cg, precond: amg }, or precond: jacobi";
 
 // `solve { linear: <solver>, precond: <preconditioner> }`. A pair other
 // than cg with jacobi goes to the solvers lane (lane_solvers.goose).

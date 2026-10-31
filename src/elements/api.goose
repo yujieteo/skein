@@ -17,7 +17,8 @@
 //
 // The state is global: one mesh, one physics, one set of fixed dofs and one
 // set of loads. A boundary call (`fix`, `traction`, `flux`, `reaction`)
-// acts on the region of the last `plane`, `also_plane` or `hole` call.
+// acts on the region of the last `plane`, `also_plane`, `hole`, `surface`
+// or `also_surface` call.
 // These give false when the region holds no node.
 import std;
 namespace elements;
@@ -26,6 +27,10 @@ import .mesh;
 import .assemble;
 import .solve;
 import .post;
+import .csg;
+import .source;
+import .stages;
+import .eigen;
 
 let X = 0;
 let Y = 1;
@@ -48,6 +53,15 @@ fn mesh_hole(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: 
              r: f64, size: f64, fine: f64) {
     build_hole(d, ord, [x0, y0, z0], [x1, y1, z1], r, size, fine);
     physics = -1;
+}
+
+// Meshes the shape g of src/mesher/ (built with its functions, for
+// example mesher::subtract(mesher::box(...), mesher::cylinder(...))) with
+// cells of order `ord` and size `size` in dimension d, and smaller at the
+// targets of mesher::add_refine. False if the mesher does not finish.
+fn mesh_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
+    physics = -1;
+    return build_shape(d, ord, g, size);
 }
 
 // Meshes with the cells `vertices` of dimension `d` (d + 1 nodes each, in
@@ -91,6 +105,19 @@ fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
            load_array(dir, str(step, ".val"), val) && load_array(dir, str(step, ".source"), assembled_source);
 }
 
+// Writes the mesh, the material and the solution of step `step` in the
+// directory `dir`, for a `results` of another model (spec §15.1). False if
+// it cannot write a file.
+fn write_state(dir: const u8[:], step: const u8[:]) -> bool { return save_state(dir, step); }
+
+// Reads the state that `write_state` wrote for step `step` in `dir` as the
+// field of a submodel cut. The scales convert a length, a value of the
+// unknown and a modulus of the other model into the units of this model.
+// False if it cannot read it.
+fn read_state(dir: const u8[:], step: const u8[:], length_scale: f64, value_scale: f64, modulus_scale: f64) -> bool {
+    return load_source(dir, step, length_scale, value_scale, modulus_scale);
+}
+
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
     guard length > 0.0 && size > 0.0 else { abort("cells_for: length > 0 and size > 0"); }
@@ -110,6 +137,23 @@ fn body_force(bx: f64, by: f64, bz: f64) {
     volume_force = [bx, by, bz];
 }
 
+// Gives the cells in the shape g of src/mesher/ the elastic material of E
+// and nu, with the body force per volume (bx, by, bz), after `elastic` and
+// `body_force` set the material of the other cells. False if g holds no
+// cell.
+fn material_in(g: i64, E: f64, nu: f64, bx: f64, by: f64, bz: f64) -> bool {
+    return add_law(g, E, nu, [bx, by, bz]) > 0;
+}
+
+// Removes the cells in the shape g from the live set, for the next solves
+// (spec §14.3). False if g holds no cell.
+fn kill(g: i64) -> bool { return kill_cells(g) > 0; }
+
+// Adds the dead cells in the shape g to the live set, strain-free on the
+// solution of the last step. Call it after `clear_bcs`. False if g holds
+// no cell.
+fn birth(g: i64) -> bool { return birth_cells(g) > 0; }
+
 // Steady heat conduction with conductivity k and a uniform source q per
 // volume. In 2D, t is the thickness.
 fn heat(k: f64, q: f64, t: f64) { set_heat(k, q, t); }
@@ -124,7 +168,7 @@ fn plane(axis: i64, value: f64) -> bool {
 // region is their union. It gives false when the plane holds no node.
 fn also_plane(axis: i64, value: f64) -> bool {
     guard axis >= 0 && axis < 3 && region.len < 8 else { abort("also_plane: 0 <= axis < 3 and at most 8 parts"); }
-    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0 });
+    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
@@ -135,13 +179,35 @@ fn also_plane(axis: i64, value: f64) -> bool {
 fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
-    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r });
+    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1 });
     return region_node_count() > 0;
+}
+
+// Selects the surface of the shape g of src/mesher/: the nodes where φ of
+// g is 0.
+fn surface(g: i64) -> bool {
+    region.clear();
+    return also_surface(g);
+}
+
+// Adds the surface of the shape g to the region of the last call that
+// selects a region. It gives false when the surface holds no node.
+fn also_surface(g: i64) -> bool {
+    guard g >= 0 && region.len < 8 else { abort("also_surface: a shape and at most 8 parts"); }
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    let k = region.len - 1;
+    for n in node_count() { if on_part(n, k) { return true; } }
+    return false;
 }
 
 // Holds component `comp` (X, Y, Z, or ALL) of u, or T (comp 0), at `v` on
 // the region.
 fn fix(comp: i64, v: f64) { fix_region(comp, v); }
+
+// Holds the unknown on the region at the field of the last `read_state`,
+// interpolated at each node with the shape functions of the other mesh. It
+// gives the number of nodes of the region outside the other mesh.
+fn fix_state() -> i64 { return fix_region_source(); }
 
 // Adds a uniform traction (force per area) on the region.
 fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
@@ -150,10 +216,11 @@ fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 
 // Removes the fixed values, the loads and the solution, for the next
-// step. The mesh and the physics stay.
+// step. The mesh, the physics and the live set stay. The solution stays as
+// the value of the nodes that no live cell holds.
 fn clear_bcs() { clear_conditions(); }
 
-// Assembles and solves by CG with a Jacobi preconditioner. Returns false
+// Assembles and solves by CG with an AMG preconditioner. Returns false
 // if CG does not converge.
 fn solve() -> bool { return solve_system(); }
 
@@ -179,6 +246,30 @@ fn reaction() -> f64, f64, f64 {
     return r[0], r[1], r[2];
 }
 
+// The check `submodel_cut`: on each part of the region, the resultant force
+// of the stress of this model and of the field of the last `read_state`.
+// It gives the largest difference of the two, and the largest resultant of
+// the other model.
+fn cut_difference() -> f64, f64 {
+    var most = 0.0;
+    var scale = 0.0;
+    for k in region.len {
+        let own, other = part_resultants(k);
+        var d = 0.0;
+        var s = 0.0;
+        for t in 3 {
+            d += (own[t] - other[t]) * (own[t] - other[t]);
+            s += other[t] * other[t];
+        }
+        most = max(most, sqrt(d));
+        scale = max(scale, sqrt(s));
+    }
+    return most, scale;
+}
+
+// The largest von Mises stress at the nodes of the region.
+fn max_von_mises() -> f64 { return region_max_von_mises(); }
+
 // The sum of the reactions on all fixed dofs, for the check `equilibrium`.
 fn total_reaction() -> f64, f64, f64 {
     let r = all_reaction();
@@ -198,6 +289,37 @@ fn load_scale() -> f64 { return load_magnitude(); }
 
 // Writes the mesh and the solution, with the name `field`, to a VTU file.
 fn write_vtu(path: const u8[:], field: const u8[:]) -> bool { return write_vtu_file(path, field); }
+
+// The density of the mass of a modal step.
+fn set_density(rho: f64) {
+    guard rho > 0.0 else { abort("set_density: rho > 0"); }
+    density = rho;
+}
+
+// The `count` lowest modes of K x = ω² M x on the free dofs (spec §14.2).
+// False if LOBPCG does not converge.
+fn modal(count: i64) -> bool { return eigen_solve(MASS, count); }
+
+// The `count` lowest load factors λ of (K + λ K_G) x = 0, with K_G of the
+// stress of the solution of the last step. False if LOBPCG does not
+// converge.
+fn buckling(count: i64) -> bool { return eigen_solve(GEOMETRIC, count); }
+
+// eigenvalue(k) of the last modal or buckling step: a frequency in 1/s of
+// the time of the units, or a load factor.
+fn eigenvalue(k: i64) -> f64 { return mode_value(k); }
+
+// Writes mode k of the last modal or buckling step as the unknown.
+fn write_mode(path: const u8[:], field: const u8[:], k: i64) -> bool {
+    guard k >= 1 && modes.len >= k * sol.len else { abort("write_mode: 1 <= k <= the count of the last eigen step"); }
+    var keep: f64[>..] = [];
+    keep.append(sol);
+    let n = sol.len;
+    for d in n { sol[d] = modes[n * (k - 1) + d]; }
+    let done = write_vtu_file(path, field);
+    for d in n { sol[d] = keep[d]; }
+    return done;
+}
 
 // Facts about the mesh and the last solve, for the report.
 fn dof_count() -> i64 { return dof_total(); }

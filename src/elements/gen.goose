@@ -6,10 +6,13 @@
 // unknown. The physics block decides the equations: the template
 // `linear_elastic(b)` or `heat(q_v)`, or the same statements written out
 // (`hooke(E, nu, strain(u))` with `div(sigma) = 0`, `-k*grad(T)` or
-// `fourier(k, T)` with `div(q) = q_v`). The geometry is a box or a rect,
-// less a cylinder or a circle on its corner (lo.x, lo.y): the quarter
-// model of a plate with a hole. Each other construct gives an error
-// `unsupported` at its token, with a fix.
+// `fourier(k, T)` with `div(q) = q_v`). A box or a rect, and one less a
+// cylinder or a circle on its corner (lo.x, lo.y) (the quarter model of a
+// plate with a hole), get the structured meshes of src/elements/mesh.goose.
+// Each other shape of the mesher reader (src/mesher/verify.goose) gets the
+// mesh of src/mesher/, with its refine lines: the generated program builds
+// the shapes of the reader again and meshes them. Each other construct
+// gives an error `unsupported` at its token, with a fix.
 //
 // The dispatch tables of src/codegen/dispatch.goose add a template or a
 // procedure to the box model of src/codegen/codegen.goose. A model of this
@@ -21,6 +24,7 @@ import math;
 namespace elements_gen;
 import syntax from "../syntax";
 import codegen.codegen;
+import mesher from "../mesher";   // the reader of the geometry, and its shapes
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }
@@ -156,6 +160,7 @@ fn scalar_value(n: i64) -> f64 {
 
 let GEO_BOX = 0;
 let GEO_HOLE = 1;
+let GEO_SHAPE = 2;
 
 let ELASTIC = 0;
 let HEAT = 1;
@@ -165,25 +170,66 @@ let PLANE_STRESS = 1;
 let PLANE_STRAIN = 2;
 
 // The bc kinds: a fixed value of the unknown or a component of it, a
-// traction `sigma*n` or a heat flux `dot(q, n)`.
+// traction `sigma*n` or a heat flux `dot(q, n)`, or the unknown of another
+// model on the cut of a submodel.
 let BC_FIX = 0;
 let BC_LOAD = 1;
+let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
 
-// A region of the boundary: the union of planes `axis == value`, or the
-// surface of the hole.
+// A region of the boundary: the union of planes `axis == value` and of
+// the surfaces of the shapes `shapes` of the mesher, or the surface of the
+// hole.
 struct Surf {
     name: u8[..64],
     hole: bool,
     axes: i64[..6],
     values: f64[..6],
+    shapes: i64[..6],
+}
+
+// A refine line of the mesh of a shape: the shape, the size, and whether
+// the target is the surface of the shape (src/mesher/refine.goose).
+struct Refine {
+    g: i64,
+    size: f64,
+    surface: bool,
 }
 
 struct Bc {
     surf: i64,      // index in `surfs`
     kind: i64,
-    comp: i64,      // -1 for all components
+    comp: i64,      // -1 for all components, or the index in `sources` of BC_SOURCE
     v: f64[3],
     tok: i64,
+}
+
+// A `results` of another model (spec §15.1): the let, the file, its model
+// and unit system, the step, and the --set word of `case:`, or "".
+struct Source {
+    name: u8[..64],
+    path: u8[..256],
+    model: u8[..64],
+    system: i64,
+    step: u8[..64],
+    set: u8[..256],
+}
+
+// A material on a region (`material backfill on lift1`): the shape of the
+// region, and the law of the material in the units of the model.
+struct Law {
+    g: i64,
+    item: i64,      // the material item
+    young: f64,
+    poisson: f64,
+    force: f64[3],
+    label: u8[..256],
+}
+
+// `birth r` or `death r` of a step: the shape of r.
+struct Change {
+    g: i64,
+    birth: bool,
+    label: u8[..256],
 }
 
 struct Report {
@@ -199,13 +245,22 @@ struct Step {
     bc_count: i64,
     first_report: i64,
     report_count: i64,
+    first_change: i64,
+    change_count: i64,
     output: bool,
+    procedure: i64,     // STATIC, MODAL or BUCKLING
+    count: i64,         // the modes of a modal or buckling step
 }
+
+let STATIC = 0;
+let MODAL = 1;
+let BUCKLING = 2;
 
 // What a point field samples (api.goose: value_at, stress_at, flux_at).
 let FIELD_VALUE = 0;
 let FIELD_STRESS = 1;
 let FIELD_FLUX = 2;
+let FIELD_EIGEN = 3;    // eigenvalue(comp + 1)
 
 struct Expect {
     name: u8[..64],
@@ -217,6 +272,7 @@ struct Expect {
     relative: bool,
     label: u8[..256],
     step: i64,      // the step that checks it at its end, or -1 for an item
+    modal: bool,    // an eigenvalue of a modal step: a frequency
 }
 
 var geometry_names: u8[..64][>..];
@@ -227,6 +283,8 @@ var lo: f64[3];
 var hi: f64[3];
 var hole_r = 0.0;
 var hole_name: u8[..64];
+var body_shape = -1;            // the shape of the mesher of GEO_SHAPE
+var refines: Refine[>..];
 var body_name: u8[..64];
 var surfs: Surf[>..];
 var bcs: Bc[>..];
@@ -236,6 +294,8 @@ var reports: Report[>..];
 var steps: Step[>..];
 var expects: Expect[>..];
 var skipped: u8[..256][>..];
+var sources: Source[>..];
+var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_tok = -1;
@@ -248,7 +308,11 @@ var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var flux_name: u8[..64];        // sigma or q
 var material_name: u8[..64];
-var material_node = -1;
+var material_node = -1;         // the material of law 0: of the cells that no other material holds
+var material_items: i64[>..];   // each material item
+var region_laws: Law[>..];      // the other materials, on regions
+var changes: Change[>..];       // the birth and death statements of the steps
+var interfaces: i64[>..];       // the shapes whose boundary the mesh keeps
 var young = 0.0;
 var poisson = -1.0;
 var conductivity = 0.0;
@@ -256,8 +320,12 @@ var source = 0.0;
 var source_node = -1;           // the right side of the eq, or -1 for 0
 var body_node = -1;             // the argument b of linear_elastic, or -1
 var body_force: f64[3] = [0.0; 3];
+var density = 0.0;
+var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0, report_count: 0,
+                      first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0 };   // the step that step() reads
 
 fn reset() {
+    density = 0.0;
     codegen::reset();
     dim = 3;
     geometry_names.clear();
@@ -266,6 +334,8 @@ fn reset() {
     geo = GEO_BOX;
     hole_r = 0.0;
     hole_name = [];
+    body_shape = -1;
+    refines.clear();
     body_name = [];
     surfs.clear();
     bcs.clear();
@@ -275,6 +345,8 @@ fn reset() {
     steps.clear();
     expects.clear();
     skipped.clear();
+    sources.clear();
+    cut_source = -1;
     mesh_size = 0.0;
     mesh_fine = 0.0;
     mesh_tok = -1;
@@ -288,6 +360,10 @@ fn reset() {
     flux_name = [];
     material_name = [];
     material_node = -1;
+    material_items.clear();
+    region_laws.clear();
+    changes.clear();
+    interfaces.clear();
     young = 0.0;
     poisson = -1.0;
     conductivity = 0.0;
@@ -326,9 +402,23 @@ fn geometry_call(n: i64) -> i64 {
     return n;
 }
 
+let SHAPE_NAMES = ["box", "rect", "cylinder", "circle", "polygon", "fill", "extrude", "revolve", "loft", "pattern", "pattern_polar"];
+
 fn is_shape(n: i64) -> bool {
-    return n >= 0 &&
-        (is_call(n, "box") || is_call(n, "rect") || is_call(n, "cylinder") || is_call(n, "circle"));
+    guard n >= 0 && kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME else { return false; }
+    for s in SHAPE_NAMES { if name(child(n, 0)) == s { return true; } }
+    return false;
+}
+
+// Whether `n` is a shape: a shape call, the name of one, or |, & and - of
+// shapes.
+recursive fn geometric(n: i64) -> bool {
+    if kind(n) == syntax::N_NAME { return find_geometry(name(n)) >= 0; }
+    if kind(n) == syntax::N_BINARY {
+        let op = syntax::text(tok(n));
+        return (op == "|" || op == "&" || op == "-") && geometric(child(n, 0)) && geometric(child(n, 1));
+    }
+    return is_shape(n);
 }
 
 fn header(n: i64) {
@@ -351,29 +441,115 @@ fn header(n: i64) {
 // `let` and `param`: a geometry value, a boundary, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
-    let geometric = is_shape(v) ||
-        kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-" && is_shape(geometry_call(child(v, 0)));
     var w: u8[..64] = [];
     set64(w, name(n));
-    if geometric {
+    if geometric(v) {
         geometry_names.push(w);
         geometry_nodes.push(v);
     } else if is_call(v, "boundary") {
         surface_lets.push(n);
+    } else if is_call(v, "results") {
+        results_item(n, v);
     } else {
         codegen::value_names.push(w);
         codegen::value_nodes.push(v);
     }
 }
 
-let BODY_FIX = "write the body as box(p0, p1), or box(p0, p1) - cylinder(p0, (0, 0, 1), r, h) with the axis of the hole on the corner p0 (in 2d: rect and circle)";
+// `let global: Results = results(file, step: s, case: p)`. The file is
+// relative to the model file.
+fn results_item(n: i64, v: i64) {
+    var src = Source { name: [], path: [], model: [], system: -1, step: [], set: [] };
+    set64(src.name, name(n));
+    let file = arg(v, 0);
+    guard kind(file) == syntax::N_STRING else { return; };
+    let model_path = syntax::files[syntax::tokens[tok(file)].file].path;
+    var cut = 0;
+    for c, i in model_path { if c == '/' { cut = i + 1; } }
+    let quoted_file = name(file);
+    codegen::set256(src.path, str(model_path[..cut], quoted_file[1..quoted_file.len - 1]));
+    for i in 1..syntax::child_count(v) - 1 {
+        let a = child(v, i + 1);
+        let named = syntax::nodes[a].aux;
+        let x = first(a);
+        if named >= 0 && syntax::text(named) == "case" {
+            let p = if kind(x) == syntax::N_NAME { codegen::find_value(name(x)) } else { -1 };
+            guard p >= 0 else {
+                unsupported(tok(x), "the case of results is not a param", "write case: p, with p a param of this model");
+                return;
+            };
+            var word: u8[>..] = [];
+            format(word, name(x), "=", source_of(p));
+            codegen::set256(src.set, word);
+        } else if kind(x) == syntax::N_STRING {
+            let t = name(x);
+            set64(src.step, t[1..t.len - 1]);
+        }
+    }
+    var text: u8[>..] = [];
+    guard read_file(src.path, text) else {
+        unsupported(tok(file), str("cannot read '", src.path, "'"), "give the path of a model, relative to this file");
+        return;
+    };
+    let f = syntax::add_file(src.path, text);
+    syntax::lex(f);
+    let prog = syntax::parse(f);
+    var c = first(prog);
+    while c >= 0 {
+        if kind(c) == syntax::N_HEADER {
+            set64(src.model, name(c));
+            for sys, i in codegen::SYSTEM_NAMES { if sys == syntax::text(tok(child(c, 1))) { src.system = i; } }
+        }
+        c = next(c);
+    }
+    if src.model.len == 0 || src.system < 0 || src.step.len == 0 {
+        unsupported(tok(v), str("the model, the unit system or the step of '", src.path, "' is not in this generator"),
+                    "give a model file with a header such as model beam: 3d, SI, and a step");
+        return;
+    }
+    sources.push(src);
+}
+
+fn find_source(word: u8[:]) -> i64 {
+    for s, i in sources { if s.name == word { return i; } }
+    return -1;
+}
+
+let BODY_FIX = "write the body as a shape of box, cylinder, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -";
 
 fn corner(n: i64, i: i64) -> f64[3] {
     let v = value(arg(n, i));
     return v.v;
 }
 
-// The body of the physics: a box, or a box less a hole on its corner.
+// Whether shape `n` is a box (a rect in 2d), or one less a hole along z
+// with its axis on the corner (lo.x, lo.y): the structured meshes of
+// mesh_box and mesh_hole.
+fn structured(n: i64) -> bool {
+    let shape = if dim == 3 { "box" } else { "rect" };
+    let round = if dim == 3 { "cylinder" } else { "circle" };
+    let cut = kind(n) == syntax::N_BINARY;
+    let outer = if cut { geometry_call(child(n, 0)) } else { n };
+    guard outer >= 0 && is_call(outer, shape) && syntax::child_count(outer) == 3 else { return false; }
+    guard cut else { return true; }
+    let c = geometry_call(child(n, 1));
+    guard syntax::text(tok(n)) == "-" && c >= 0 && is_call(c, round) else { return false; }
+    let a = corner(outer, 0);
+    let b = corner(outer, 1);
+    let centre = corner(c, 0);
+    let tol = 1.0e-6 * max(abs(b[0] - a[0]), abs(b[1] - a[1]));
+    guard abs(centre[0] - min(a[0], b[0])) <= tol && abs(centre[1] - min(a[1], b[1])) <= tol else { return false; }
+    let r = scalar_value(arg(c, if dim == 3 { 2 } else { 1 }));
+    guard r > 0.0 && r < min(abs(b[0] - a[0]), abs(b[1] - a[1])) else { return false; }
+    guard dim == 3 else { return true; }
+    let axis = corner(c, 1);
+    let h = scalar_value(arg(c, 3));
+    return axis[0] == 0.0 && axis[1] == 0.0 && axis[2] > 0.0 && centre[2] <= min(a[2], b[2]) + tol &&
+        centre[2] + h >= max(a[2], b[2]) - tol;
+}
+
+// The body of the physics: a box, or a box less a hole on its corner, for
+// the structured meshes, else a shape of the mesher.
 fn body(region: i64) {
     let n = if kind(region) == syntax::N_NAME { find_geometry(name(region)) } else { -1 };
     if n < 0 {
@@ -381,59 +557,49 @@ fn body(region: i64) {
         return;
     }
     set64(body_name, name(region));
-    let shape = if dim == 3 { "box" } else { "rect" };
-    var outer = n;
-    var cut = -1;
-    if kind(n) == syntax::N_BINARY {
-        outer = geometry_call(child(n, 0));
-        cut = child(n, 1);
-    }
-    if outer < 0 || !is_call(outer, shape) || syntax::child_count(outer) != 3 {
-        unsupported(tok(n), str("the body is not one ", shape, ", or one ", shape, " less a hole"), BODY_FIX);
+    if !structured(n) {
+        shape_body(region);
         return;
     }
+    let outer = if kind(n) == syntax::N_BINARY { geometry_call(child(n, 0)) } else { n };
     let a = corner(outer, 0);
     let b = corner(outer, 1);
     for j in 3 {
         lo[j] = min(a[j], b[j]);
         hi[j] = max(a[j], b[j]);
-        if j < dim && lo[j] == hi[j] { unsupported(tok(outer), str("the ", shape, " has no size"), BODY_FIX); }
+        if j < dim && lo[j] == hi[j] { unsupported(tok(outer), "the body has no size", BODY_FIX); }
     }
-    guard cut >= 0 else { return; }
+    guard kind(n) == syntax::N_BINARY else { return; }
+    let cut = child(n, 1);
     let c = geometry_call(cut);
-    let round = if dim == 3 { "cylinder" } else { "circle" };
-    if c < 0 || !is_call(c, round) {
-        unsupported(tok(cut), str("the hole is not a ", round), BODY_FIX);
-        return;
-    }
     if kind(cut) == syntax::N_NAME { set64(hole_name, name(cut)); }
-    let centre = corner(c, 0);
-    let tol = 1.0e-6 * max(hi[0] - lo[0], hi[1] - lo[1]);
-    if abs(centre[0] - lo[0]) > tol || abs(centre[1] - lo[1]) > tol {
-        unsupported(tok(c), "the axis of the hole is not on the corner (lo.x, lo.y) of the body", BODY_FIX);
-        return;
-    }
-    if dim == 3 {
-        let axis = corner(c, 1);
-        let r = scalar_value(arg(c, 2));
-        let h = scalar_value(arg(c, 3));
-        if abs(axis[0]) > 0.0 || abs(axis[1]) > 0.0 || axis[2] <= 0.0 || centre[2] > lo[2] + tol ||
-           centre[2] + h < hi[2] - tol {
-            unsupported(tok(c), "the hole does not go along z through the body", BODY_FIX);
-            return;
-        }
-        hole_r = r;
-    } else {
-        hole_r = scalar_value(arg(c, 1));
-    }
-    if hole_r <= 0.0 || hole_r >= min(hi[0] - lo[0], hi[1] - lo[1]) {
-        unsupported(tok(c), "the radius of the hole is not between 0 and the size of the body", BODY_FIX);
-        return;
-    }
+    hole_r = scalar_value(arg(c, if dim == 3 { 2 } else { 1 }));
     geo = GEO_HOLE;
 }
 
-let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, an || of these, or boundary(plate, bore) for the hole";
+// The body as a shape of the mesher reader: its bounds give lo and hi.
+fn shape_body(region: i64) {
+    let v = mesher::eval_value(region);
+    guard ok() else { return; }
+    guard v.n == 0 else {
+        unsupported(tok(region), "the region of the physics is not a shape", BODY_FIX);
+        return;
+    }
+    let b = mesher::bounds(v.g);
+    let three = b[5] > b[2];
+    guard three == (dim == 3) else {
+        unsupported(tok(region), str("the body is not a ", dim, "d shape"), BODY_FIX);
+        return;
+    }
+    for j in 3 {
+        lo[j] = b[j];
+        hi[j] = b[3 + j];
+    }
+    body_shape = v.g;
+    geo = GEO_SHAPE;
+}
+
+let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm or abs(x) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
 // Adds the planes of condition `cond` to `s`.
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
@@ -444,6 +610,28 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         s.hole = true;
         return true;
     }
+    if geo == GEO_SHAPE && geometric(cond) && s.shapes.len < s.shapes.cap {
+        let v = mesher::eval_value(cond);
+        guard v.n == 0 else { return false; }
+        s.shapes.push(v.g);
+        return true;
+    }
+    // abs(x - c) == d: the planes x == c - d and x == c + d.
+    let is_abs = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" && is_call(child(cond, 0), "abs") &&
+        syntax::child_count(child(cond, 0)) == 2;
+    let inner = if is_abs { arg(child(cond, 0), 0) } else { -1 };
+    if inner >= 0 && kind(inner) == syntax::N_BINARY && syntax::text(tok(inner)) == "-" && kind(child(inner, 0)) == syntax::N_NAME &&
+       axis_of(name(child(inner, 0))) >= 0 && s.axes.len + 2 <= s.axes.cap {
+        let axis = axis_of(name(child(inner, 0)));
+        let c = scalar_value(child(inner, 1));
+        let d = scalar_value(child(cond, 1));
+        return face_plane(cond, axis, c - d, s) && face_plane(cond, axis, c + d, s);
+    }
+    // abs(x) == d: the planes x == -d and x == d.
+    if inner >= 0 && kind(inner) == syntax::N_NAME && axis_of(name(inner)) >= 0 && s.axes.len + 2 <= s.axes.cap {
+        let d = scalar_value(child(cond, 1));
+        return face_plane(cond, axis_of(name(inner)), -d, s) && face_plane(cond, axis_of(name(inner)), d, s);
+    }
     let is_plane = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" &&
         kind(child(cond, 0)) == syntax::N_NAME;
     let axis = if is_plane { axis_of(name(child(cond, 0))) } else { -1 };
@@ -451,9 +639,16 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         unsupported(tok(cond), "the boundary is not a face of the body", SURF_FIX);
         return false;
     }
-    let v = scalar_value(child(cond, 1));
+    return face_plane(cond, axis, scalar_value(child(cond, 1)), s);
+}
+
+// Adds the plane `axis == v` of condition `cond` to `s`. On a box, it is a
+// face. On a shape, it holds a part of the surface, so it is in the bounds.
+fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
     let tol = 1.0e-6 * (hi[axis] - lo[axis]);
-    if abs(v - lo[axis]) > tol && abs(v - hi[axis]) > tol {
+    let face = abs(v - lo[axis]) <= tol || abs(v - hi[axis]) <= tol;
+    let inside = v >= lo[axis] - tol && v <= hi[axis] + tol;
+    if !face && (geo != GEO_SHAPE || !inside) {
         unsupported(tok(cond), "the plane is not a face of the body", SURF_FIX);
         return false;
     }
@@ -469,23 +664,42 @@ fn surface(n: i64) {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [] };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [] };
     set64(s.name, name(n));
     if !surf_parts(arg(v, 1), s) { return; }
-    if s.hole && s.axes.len > 0 {
-        unsupported(tok(v), "a boundary is the hole or planes, not both", "make two boundaries");
+    if s.hole && s.axes.len > 0 || s.shapes.len > 0 && s.axes.len > 0 {
+        unsupported(tok(v), "a boundary is a surface or planes, not both", "make two boundaries");
         return;
     }
     surfs.push(s);
 }
 
 fn material(n: i64) {
-    if material_node >= 0 {
-        unsupported(tok(n), "a second material: this generator has one", "remove the second material");
-        return;
+    material_items.push(n);
+    if material_node < 0 {
+        material_node = n;
+        set64(material_name, name(n));
     }
-    material_node = n;
-    set64(material_name, name(n));
+}
+
+fn find_material(word: u8[:]) -> i64 {
+    for m in material_items { if name(m) == word { return m; } }
+    return -1;
+}
+
+// The shape of a region of cells: of a material, a birth or a death. The
+// mesh keeps its boundary (mesher::add_interface), so a cell is in it or
+// out of it as a whole.
+fn region_shape(r: i64) -> i64 {
+    let v = mesher::eval_value(r);
+    guard ok() else { return -1; }
+    guard v.n == 0 && geo == GEO_SHAPE && dim == 2 else {
+        unsupported(tok(r), "a region of cells needs a 2d body of the mesher: the 3d mesher keeps no interfaces",
+                    "use one material and no birth or death in a 3d model");
+        return -1;
+    };
+    interfaces.push(v.g);
+    return v.g;
 }
 
 // The material property `word`, or -1.
@@ -499,8 +713,26 @@ fn property(word: u8[:]) -> i64 {
     return -1;
 }
 
+// Reads the material of law 0, then the one of each region law.
 fn read_material() {
     guard material_node >= 0 else { return; }
+    let base = material_node;
+    if physics == HEAT && region_laws.len > 0 {
+        unsupported(tok(base), "a material on a region of a heat physics is not in this generator", "use one material");
+    }
+    for &w in region_laws {
+        material_node = w.item;
+        read_law();
+        w.young = young;
+        w.poisson = poisson;
+    }
+    material_node = base;
+    read_law();
+}
+
+// Reads the material `material_node` into young and poisson, or
+// conductivity.
+fn read_law() {
     var p = first(material_node);
     while p >= 0 {
         let w = name(p);
@@ -514,8 +746,10 @@ fn read_material() {
     if physics == ELASTIC {
         let e = property("E");
         let nu = property("nu");
+        let rho = property("rho");
         if e >= 0 { young = scalar_value(e); }
         if nu >= 0 { poisson = scalar_value(nu); }
+        if rho >= 0 { density = scalar_value(rho); }
         if young <= 0.0 || poisson <= -1.0 || poisson >= 0.5 {
             unsupported(tok(material_node), "the material needs E > 0 and -1 < nu < 0.5",
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
@@ -543,7 +777,11 @@ fn mesh(n: i64) {
     var s = first(child(n, 1));
     while s >= 0 {
         let v = first(s);
-        if kind(s) == syntax::N_REFINE {
+        if kind(s) == syntax::N_REFINE && geo == GEO_SHAPE {
+            let g, surface = mesher::refine_target(first(s));
+            let size = scalar_value(child(s, 1));
+            if g >= 0 && size > 0.0 { refines.push(Refine { g: g, size: size, surface: surface }); }
+        } else if kind(s) == syntax::N_REFINE {
             let r = first(s);
             let si = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
             if si < 0 || !surfs[si].hole {
@@ -618,9 +856,23 @@ fn physics_item(n: i64) {
             if unknown_name.len > 0 { unsupported(tok(c), "a second unknown", PHYSICS_FIX); }
             set64(unknown_name, name(c));
         } else if k == syntax::N_MATASSIGN {
-            let m = first(c);
-            if syntax::child_count(c) != 1 || first(m) >= 0 {
-                unsupported(tok(c), "this generator gives one material to the whole physics", PHYSICS_FIX);
+            // The first material is law 0. Each other one holds its region.
+            var m = first(c);
+            while m >= 0 {
+                let item = find_material(name(m));
+                if item < 0 {
+                    unsupported(tok(m), str("'", name(m), "' is not a material of the model"), PHYSICS_FIX);
+                } else if m == first(c) {
+                    material_node = item;
+                    set64(material_name, name(m));
+                } else if first(m) < 0 {
+                    unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
+                } else {
+                    var w = Law { g: region_shape(first(m)), item: item, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
+                    codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
+                    region_laws.push(w);
+                }
+                m = next(m);
             }
         } else if k == syntax::N_ASSUME {
             assumptions(c);
@@ -699,8 +951,15 @@ fn heat_source() {
 
 // The body force b of linear_elastic: a vector, for example rho*(0, 0, -g)
 // with rho of the material.
+// The body force b of law 0 and of each region law, with the rho of each.
 fn body_force_arg() {
     guard body_node >= 0 else { return; }
+    let base = material_node;
+    for &w in region_laws {
+        material_node = w.item;
+        w.force = value(body_node).v;
+    }
+    material_node = base;
     let v = value(body_node);
     if v.n != dim {
         unsupported(tok(body_node), str("the body force b of this ", dim, "d model is a vector of ", dim, " components"),
@@ -743,7 +1002,18 @@ fn bc(n: i64) -> i64 {
     let t = source_of(target);
     let member = kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
         name(first(target)) == unknown_name;
-    if t == unknown_name {
+    let from = if kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME { find_source(name(first(v))) } else { -1 };
+    if t == unknown_name && from >= 0 {
+        if name(v) != unknown_name {
+            unsupported(tok(v), str("the cut takes '", name(v), "' of the other model"), str("write ", unknown_name, " = ", name(first(v)), ".", unknown_name));
+        }
+        if cut_source >= 0 && cut_source != from {
+            unsupported(tok(v), "a second results on a cut: this generator has one", "take the cut values from one results");
+        }
+        cut_source = from;
+        b.kind = BC_SOURCE;
+        b.comp = from;
+    } else if t == unknown_name {
         let x = value(v);
         if physics == ELASTIC && x.n == 1 && x.v[0] != 0.0 {
             unsupported(tok(v), "u is a vector", "write u = 0, or a vector");
@@ -771,12 +1041,12 @@ fn bc(n: i64) -> i64 {
 
 fn step(n: i64) {
     let proc = child(n, 0);
-    if name(proc) != "static" || first(proc) >= 0 {
-        unsupported(tok(proc), "this generator has only static steps with no arguments", "write step load: static { ... }");
-    }
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                   first_report: reports.len, report_count: 0, output: false };
+                   first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false,
+                   procedure: STATIC, count: 0 };
     set64(s.name, name(n));
+    procedure(proc, s);
+    step_now = s;
     var c = next(proc);
     while c >= 0 {
         let k = kind(c);
@@ -797,17 +1067,94 @@ fn step(n: i64) {
             }
         } else if k == syntax::N_EXPECT {
             expect(c, steps.len);
+        } else if k == syntax::N_BIRTH || k == syntax::N_DEATH {
+            var r = first(c);
+            while r >= 0 {
+                if kind(r) == syntax::N_WHERE {
+                    unsupported(tok(r), "birth and death with where are not in this generator", "select the cells with a region");
+                } else {
+                    var ch = Change { g: region_shape(r), birth: k == syntax::N_BIRTH, label: [] };
+                    codegen::set256(ch.label, str(if ch.birth { "birth " } else { "death " }, source_of(r)));
+                    changes.push(ch);
+                }
+                r = next(r);
+            }
         } else {
-            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report and expect");
+            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report, expect, birth and death");
         }
         c = next(c);
     }
     s.own_count = bcs.len - s.first_own;
     s.report_count = reports.len - s.first_report;
+    s.change_count = changes.len - s.first_change;
     steps.push(s);
 }
 
-let REPORT_FIX = "write report reaction(root), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
+let REPORT_FIX = "write report reaction(root), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
+
+// The procedure of a step: static with no arguments, or modal or buckling
+// with count, on an elastic model.
+fn procedure(proc: i64, s: Step&) {
+    let p = name(proc);
+    guard p == "modal" || p == "buckling" else {
+        if p != "static" || first(proc) >= 0 {
+            unsupported(tok(proc), "this generator has static steps with no arguments, and modal and buckling steps with count",
+                        "write step load: static { ... } or step modes: modal(count: 6) { ... }");
+        }
+        return;
+    };
+    s.procedure = if p == "modal" { MODAL } else { BUCKLING };
+    var a = first(proc);
+    while a >= 0 {
+        let named = syntax::nodes[a].aux;
+        if named >= 0 && syntax::text(named) == "count" {
+            s.count = scalar_value(first(a)) as! i64;
+        } else {
+            unsupported(tok(a), str("the argument of ", p, " is not in this generator"), str("write ", p, "(count: 6)"));
+        }
+        a = next(a);
+    }
+    if s.count < 1 { unsupported(tok(proc), str("a ", p, " step needs count >= 1"), str("write ", p, "(count: 6)")); }
+    if physics != ELASTIC { unsupported(tok(proc), str("a ", p, " step needs the linear_elastic template"), PHYSICS_FIX); }
+    if s.procedure == MODAL && (density <= 0.0 || region_laws.len > 0) {
+        unsupported(tok(proc), "a modal step needs the density rho of one material", "give rho: Density = 7850 kg/m^3 in the material");
+    }
+    if s.procedure == BUCKLING && steps.len == 0 {
+        unsupported(tok(proc), "a buckling step needs a static step before it: its stress", "add step preload: static { ... } before it");
+    }
+}
+
+// The step of an eigenvalue(k): with `own`, the step `step_now` that step()
+// reads, else the last modal or buckling step that read() has read.
+fn eigen_step(own: bool) -> Step {
+    var at = if own { step_now } else { Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0,
+                                               report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0 } };
+    if !own { for st in steps { if st.procedure != STATIC { at = st; } } }
+    return at;
+}
+
+// eigenvalue(k) of eigen_step(own): k - 1, or -1 if it is not a mode of it.
+fn eigen_index(e: i64, own: bool) -> i64 {
+    guard is_call(e, "eigenvalue") && syntax::child_count(e) == 2 else { return -1; }
+    let count = if eigen_step(own).procedure != STATIC { eigen_step(own).count } else { 0 };
+    let k = scalar_value(arg(e, 0)) as! i64;
+    if k < 1 || k > count {
+        unsupported(tok(e), str("eigenvalue(", k, ") is not a mode of the modal or buckling step"), str("give 1 <= k <= ", count));
+    }
+    return if k >= 1 && k <= count { k - 1 } else { -1 };
+}
+
+fn freq_unit() -> const u8[:] { return if codegen::system.t == 1.0 { "Hz" } else { "kHz" }; }
+
+// `max(von_mises(sigma), r)` of an elastic model, with r a boundary that a
+// let names.
+fn max_von_mises(e: i64) -> bool {
+    guard is_call(e, "max") && syntax::child_count(e) == 3 && physics == ELASTIC else { return false; }
+    let f = arg(e, 0);
+    let r = arg(e, 1);
+    return is_call(f, "von_mises") && syntax::child_count(f) == 2 && source_of(arg(f, 0)) == flux_name &&
+           kind(r) == syntax::N_NAME && find_surf(name(r)) >= 0;
+}
 
 fn report(item: i64) {
     let e = first(item);
@@ -820,7 +1167,9 @@ fn report(item: i64) {
     } else if kind(e) == syntax::N_AT {
         let what, comp = point_field(e, true);
         if what < 0 { return; }
-    } else {
+    } else if is_call(e, "eigenvalue") {
+        if eigen_index(e, true) < 0 { return; }
+    } else if !max_von_mises(e) {
         unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"), REPORT_FIX);
         return;
     }
@@ -880,6 +1229,9 @@ fn expect(n: i64, step: i64) {
     var comp = -1;
     if kind(left) == syntax::N_AT {
         what, comp = point_field(left, false);
+    } else if is_call(left, "eigenvalue") {
+        comp = eigen_index(left, step >= 0);
+        what = if comp >= 0 { FIELD_EIGEN } else { -1 };
     }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
@@ -889,8 +1241,9 @@ fn expect(n: i64, step: i64) {
         skipped.push(s);
         return;
     }
-    var x = Expect { name: [], what: what, comp: comp, at: value(child(left, 1)).v, want: scalar_value(right),
-                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step };
+    var x = Expect { name: [], what: what, comp: comp, at: if what == FIELD_EIGEN { [0.0; 3] } else { value(child(left, 1)).v }, want: scalar_value(right),
+                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
+                     modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL };
     // A tolerance of a temperature is a difference, not a degC value.
     if kind(within) == syntax::N_NUMBER && first(within) >= 0 && source_of(first(within)) == "degC" {
         x.within -= 273.15;
@@ -933,6 +1286,7 @@ fn read(prog: i64) -> bool {
     let at = if first(prog) >= 0 { tok(first(prog)) } else { tok(prog) };
     if physics_node < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if !ok() { return false; }
+    mesher::read_geometry(prog);
     physics_item(physics_node);
     if !ok() { return false; }
     for s in surface_lets { surface(s); }
@@ -990,17 +1344,17 @@ fn step_bcs() {
 fn supports() {
     for s in steps {
         var fixes = 0;
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX { fixes++; } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { fixes++; } }
         if fixes == 0 {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
         }
         for r in reports[s.first_report..s.first_report + s.report_count] {
-            if kind(r.expr) != syntax::N_CALL { continue; }
+            if !is_call(r.expr, "reaction") { continue; }
             let arg0 = arg(r.expr, 0);
             let si = find_surf(name(arg0));
             var on = false;
-            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX && b.surf == si { on = true; } }
+            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD && b.surf == si { on = true; } }
             if !on {
                 unsupported(tok(arg0), str("the boundary ", name(arg0), " is not fixed in step ", s.name, ", so it has no reaction"),
                             "report the reaction of a boundary with a fixed value");
@@ -1108,6 +1462,14 @@ let PRELUDE = """
         }
     }
 
+    // A region of cells with no cell is a fault of the model.
+    fn cells(found: bool, what: u8[:]) {
+        if !found {
+            write_stderr(str("skein run: no cell is in the region of '", what, "': give a finer mesh\n"));
+            failed = true;
+        }
+    }
+
     // A point outside the mesh is a fault of the model.
     fn point(found: bool, expr: u8[:]) {
         if !found {
@@ -1122,6 +1484,25 @@ let PRELUDE = """
                elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
         if !converged { failed = true; }
+    }
+
+    // A modal (or buckling) step: the count lowest modes, by LOBPCG.
+    fn eigen(step: u8[:], count: i64, modal: bool) {
+        converged = if modal { elements::modal(count) } else { elements::buckling(count) };
+        format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
+               elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        if !converged { failed = true; }
+    }
+
+    fn mode(path: u8[:], field: u8[:], k: i64) {
+        if !elements::write_mode(path, field, k) {
+            write_stderr(str("skein run: cannot write '", path, "'\n"));
+            failed = true;
+            return;
+        }
+        format(results, "  ", path, "\n");
+        result_count++;
     }
 
     // The sum of the reactions and the applied loads is 0 (checks.md,
@@ -1159,6 +1540,14 @@ let PRELUDE = """
         result_count++;
     }
 
+    // The state of a converged step, for a `results` of another model.
+    fn state(dir: u8[:], step: u8[:]) {
+        if converged && !elements::write_state(dir, step) {
+            write_stderr(str("skein run: cannot write the state of step '", step, "' in '", dir, "'\n"));
+            failed = true;
+        }
+    }
+
     fn print_records() {
         var s: u8[>..] = [];
         format(s, "report[", report_count, "]{step,expr,value}:\n", reports);
@@ -1169,6 +1558,80 @@ let PRELUDE = """
     }
 
     """;
+
+// The part of the program of a submodel (spec §15.2).
+let SUBMODEL_PRELUDE = """
+    extern "libc.so.6" {
+        fn system(command: const u8&) -> i32;
+    }
+
+    // Reads the state of step `step` of the other model in `dir`. If it is
+    // not there, `command` runs the other model first.
+    fn results(dir: u8[:], step: u8[:], file: u8[:], command: u8[:], scales: f64[3]) {
+        if elements::read_state(dir, step, scales[0], scales[1], scales[2]) { return; }
+        var c: u8[>..] = [];
+        c.append(command);
+        c.push(0);
+        if system(c[0]) != 0 { write_stderr(str("skein run: the run of '", file, "' for its results failed\n")); }
+        if !elements::read_state(dir, step, scales[0], scales[1], scales[2]) {
+            write_stderr(str("skein run: no state of step '", step, "' of '", file, "' in '", dir, "'\n"));
+            exit(1);
+        }
+    }
+
+    // Each node of the cut is in the mesh of the other model (checks.md,
+    // `submodel_outside`).
+    fn cut_outside(outside: i64, name: u8[:]) {
+        check("submodel_outside", outside == 0, str(outside, " nodes of ", name), "0 nodes");
+    }
+
+    // On each part of the cut, the resultant force of the submodel is the
+    // one of the other model, to 2 % of the largest (checks.md,
+    // `submodel_cut`).
+    fn cut_check(unit: u8[:]) {
+        let d, scale = elements::cut_difference();
+        check("submodel_cut", d <= 0.02 * scale, quantity(d, unit), quantity(0.02 * scale, unit));
+    }
+
+    """;
+
+// The size of the unit of pressure of unit system `sys` in SI.
+fn pressure_si(sys: codegen::System) -> f64 { return sys.m / (sys.l * sys.t * sys.t); }
+
+// Reads the state of the cut source, and runs its model first if the state
+// is not there. The run of the other model is locked, so the cases of a
+// study that need the same state run it once.
+fn emit_source(out: u8[>..]&) {
+    let src = sources[cut_source];
+    var sets: const u8[:][>..] = [];
+    if src.set.len > 0 { sets.push(src.set); }
+    let dir = codegen::results_path(src.model, sets);
+    var inner: u8[>..] = [];
+    format(inner, "test -e ", codegen::shell_quoted(str(dir, "/", src.step, ".state_sol")), " || exec ",
+           codegen::shell_quoted(str(resource_dir(), "skein")), " run ", codegen::shell_quoted(src.path));
+    if src.set.len > 0 { format(inner, " --set ", codegen::shell_quoted(src.set)); }
+    inner.append(" 1>&2");
+    var command: u8[>..] = [];
+    format(command, "mkdir -p ", codegen::shell_quoted(dir), " && flock ", codegen::shell_quoted(str(dir, "/.lock")), " sh -c ",
+           codegen::shell_quoted(inner));
+    let other = codegen::SYSTEMS[src.system];
+    let length = other.l / codegen::system.l;
+    format(out, "    // ", src.name, ": the state of step ", src.step, " of ", src.path, "\n    results(");
+    quoted(out, dir);
+    out.append(", ");
+    quoted(out, src.step);
+    out.append(", ");
+    quoted(out, src.path);
+    out.append(", ");
+    quoted(out, command);
+    out.append(", [");
+    lit(out, length);
+    out.append(", ");
+    lit(out, if physics == HEAT { 1.0 } else { length });
+    out.append(", ");
+    lit(out, pressure_si(other) / pressure_si(codegen::system));
+    out.append("]);\n");
+}
 
 // Selects the region of boundary `si`.
 fn emit_region(out: u8[>..]&, si: i64) {
@@ -1188,6 +1651,7 @@ fn emit_region(out: u8[>..]&, si: i64) {
         lit(out, s.values[i]);
         out.append(")");
     }
+    for g, i in s.shapes { format(out, if i == 0 { "elements::surface(" } else { " && elements::also_surface(" }, g, ")"); }
     out.append(", ");
     quoted(out, s.name);
     out.append(");\n");
@@ -1197,7 +1661,9 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     let s = surfs[b.surf];
     format(out, "    // bc ", s.name, "\n");
     emit_region(out, b.surf);
-    if b.kind == BC_LOAD && physics == HEAT {
+    if b.kind == BC_SOURCE {
+        format(out, "    cut_outside(elements::fix_state(), \"", s.name, "\");\n");
+    } else if b.kind == BC_LOAD && physics == HEAT {
         out.append("    elements::flux(");
         lit(out, b.v[0]);
         out.append(");\n");
@@ -1222,25 +1688,73 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     }
 }
 
+// A modal or buckling step: the bcs that fix, then LOBPCG. It writes a
+// file for each mode. The stages of a study share no mode.
+fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
+    let s = steps[si];
+    let modal = s.procedure == MODAL;
+    format(out, "// step ", s.name, ": ", if modal { "modal" } else { "buckling" }, "\nfn step_", s.name, "() {\n");
+    out.append("    elements::clear_bcs();\n");
+    for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
+    for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
+    out.append("    eigen(");
+    quoted(out, s.name);
+    format(out, ", ", s.count, ", ", if modal { "true" } else { "false" }, ");\n");
+    for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s, r); }
+    for x in expects { if x.step == si { emit_expect(out, x); } }
+    if s.output {
+        for k in 1..s.count + 1 {
+            var path: u8[>..] = [];
+            format(path, results_dir, "/", s.name, "_mode", k, ".vtu");
+            out.append("    mode(");
+            quoted(out, path);
+            out.append(", ");
+            quoted(out, unknown_name);
+            format(out, ", ", k, ");\n");
+        }
+    }
+    out.append("}\n\n");
+}
+
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) {
     let s = steps[si];
+    if s.procedure != STATIC {
+        emit_eigen_step(out, si, results_dir);
+        return;
+    }
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
+    // After the clear: clear_bcs keeps the solution of the last step,
+    // which a birth reads.
+    out.append("    elements::clear_bcs();\n");
+    for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
     if share.stages >= 2 && share.reads {
         codegen::emit_share(out, "", "elements::read_solution", share, s.name);
     } else {
-        out.append("    elements::clear_bcs();\n");
         // The fixed values first: a load on a node that a later fix holds
         // still counts in the reaction.
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX { emit_bc(out, b); } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_bc(out, b); } }
         out.append("    solve(");
         quoted(out, s.name);
         out.append(");\n");
         if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, s.name); }
+        // The state of the step, for a `results` of another model.
+        out.append("    state(");
+        quoted(out, results_dir);
+        out.append(", ");
+        quoted(out, s.name);
+        out.append(");\n");
     }
     format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
-    for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }
+    if physics == ELASTIC {
+        for b in active[s.first_bc..s.first_bc + s.bc_count] {
+            if b.kind != BC_SOURCE { continue; }
+            emit_region(out, b.surf);
+            format(out, "    cut_check(\"", reaction_unit(), "\");\n");
+        }
+    }
+    for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s, r); }
     for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
         var path: u8[>..] = [];
@@ -1254,21 +1768,39 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     out.append("}\n\n");
 }
 
+fn emit_change(out: u8[>..]&, ch: Change) {
+    format(out, "    cells(elements::", if ch.birth { "birth(" } else { "kill(" }, ch.g, "), ");
+    quoted(out, ch.label);
+    out.append(");\n");
+}
+
 // `let v, found = <sample at p>;`
 fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3]) {
     format(out, "        let ", var_name, ", found_", var_name, " = elements::");
     if what == FIELD_VALUE { format(out, "value_at(", comp, ", "); }
     if what == FIELD_FLUX { format(out, "flux_at(", AXES[comp], ", "); }
     if what == FIELD_STRESS { format(out, "stress_at(", AXES[comp / 3], ", ", AXES[comp % 3], ", "); }
+    if what == FIELD_EIGEN {
+        format(out, "eigenvalue(", comp + 1, "), true;\n");
+        return;
+    }
     lits(out, at);
     out.append(");\n");
 }
 
-fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
+fn emit_report(out: u8[>..]&, step: Step, r: Report) {
     format(out, "    // report ", r.label, "\n    {\n");
     let e = r.expr;
     var v: u8[>..] = [];
-    if kind(e) == syntax::N_CALL {
+    if is_call(e, "eigenvalue") {
+        format(out, "        let x = elements::eigenvalue(", scalar_value(arg(e, 0)) as! i64, ");\n");
+        format(v, "quantity(x, \"", if step.procedure == MODAL { freq_unit() } else { "" }, "\")");
+    } else if max_von_mises(e) {
+        out.append("    ");
+        emit_region(out, find_surf(name(arg(e, 1))));
+        out.append("        let x = elements::max_von_mises();\n");
+        format(v, "quantity(x, \"", codegen::system.pressure, "\")");
+    } else if kind(e) == syntax::N_CALL {
         out.append("    ");
         emit_region(out, find_surf(name(arg(e, 0))));
         out.append("        let x, y, z = elements::reaction();\n");
@@ -1295,7 +1827,7 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
         }
     }
     out.append("        report(");
-    quoted(out, step);
+    quoted(out, step.name);
     out.append(", ");
     quoted(out, r.label);
     format(out, ", ", v, ");\n    }\n");
@@ -1312,14 +1844,27 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", field_unit(x.what), "\", ");
+    let unit = if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
 }
 
 // The dofs of the mesh of the model that `read` read: for the hole, the
 // rows of cells that grow from `mesh_fine` by 1.25 (elements::grade_rows).
+// A shape is meshed: a P2 node is at each point and at each edge, and a
+// mesh has about 7 edges for each point in 3d, 3 in 2d.
 fn dof_estimate() -> i64 {
+    if geo == GEO_SHAPE {
+        mesher::clear_refine();
+        for r in refines { mesher::add_refine(r.g, r.size, r.surface); }
+        mesher::clear_interfaces();
+        for g in interfaces { mesher::add_interface(g); }
+        let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
+        let points = if done { mesher::point_count() } else { 0 };
+        let nodes = if order == 2 { points * (if dim == 3 { 8 } else { 4 }) } else { points };
+        return if physics == HEAT { nodes } else { dim * nodes };
+    }
     var cells: i64[3] = [1, 1, 1];
     if geo == GEO_HOLE {
         let w = hi[0] - lo[0];
@@ -1335,6 +1880,35 @@ fn dof_estimate() -> i64 {
     return if physics == HEAT { nodes } else { dim * nodes };
 }
 
+// The shapes of the mesher reader and the refine lines, again in the
+// program: mesh_shape meshes them, and a boundary can be the surface of one.
+fn emit_shapes(out: u8[>..]&) {
+    out.append("    // the shapes of the geometry, in the sequence of the mesher reader\n");
+    out.append("    mesher::clear_shapes();\n    mesher::clear_refine();\n");
+    if mesher::polygon_points.len > 0 {
+        out.append("    mesher::polygon_points.append([");
+        for v, i in mesher::polygon_points {
+            if i > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        out.append("]);\n");
+    }
+    for g in mesher::shapes {
+        format(out, "    mesher::add_shape(", g.kind, ", ", g.a, ", ", g.b, ", [");
+        for v, i in g.p {
+            if i > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        out.append("]);\n");
+    }
+    for r in refines {
+        format(out, "    mesher::add_refine(", r.g, ", ");
+        lit(out, r.size);
+        format(out, ", ", if r.surface { "true" } else { "false" }, ");\n");
+    }
+    for g in interfaces { format(out, "    mesher::add_interface(", g, ");\n"); }
+}
+
 // Writes the Goose program of the model that `read` read. The program
 // imports the elements from `elements_path` and writes its VTU files under
 // `results_dir`. In a study, it writes or reads the stages of `share`.
@@ -1343,23 +1917,32 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     format(out, "// All values are in the units of the model: length in ", sys.length, ", force in ", sys.force,
            ", temperature in K.\n");
+    let src = elements_path[..elements_path.len - "elements".len];
     out.append("import std;\nimport os;\nimport elements from ");
     quoted(out, elements_path);
-    out.append(";\n");
-    // The package elements imports the package solvers (the pool of the
-    // threads, src/solvers/pool.goose).
-    out.append("import solvers from ");
-    quoted(out, str(elements_path, "/../solvers"));
-    out.append(";\n");
+    out.append(";\nimport mesher from ");
+    quoted(out, str(src, "mesher"));
+    out.append(";   // the elements import it\nimport runtime from ");
+    quoted(out, str(src, "runtime"));
+    out.append(";   // the mesher imports it\nimport solvers from ");
+    quoted(out, str(src, "solvers"));
+    out.append(";   // the runtime imports it\n");
     out.append(PRELUDE);
+    if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
+    if geo == GEO_SHAPE { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
     } else {
         format(out, "    // mesh on ", body_name, ": P", order, " ", cell, " of at most ", mesh_size, " ", sys.length);
-        if geo == GEO_HOLE {
+        if geo == GEO_SHAPE {
+            format(out, ", by the mesher\n    if !elements::mesh_shape(", dim, ", ", order, ", ", body_shape, ", ");
+            lit(out, mesh_size);
+            out.append(") {\n        write_stderr(\"skein run: the mesher did not finish in its budget of points: give a larger size\\n\");\n");
+            out.append("        exit(1);\n    }\n");
+        } else if geo == GEO_HOLE {
             format(out, ", ", mesh_fine, " ", sys.length, " at the hole\n    elements::mesh_hole(", dim, ", ", order, ", ");
             lits(out, lo);
             out.append(", ");
@@ -1412,7 +1995,24 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             lits(out, body_force);
             out.append(");\n");
         }
+        if density > 0.0 {
+            out.append("    elements::set_density(");
+            lit(out, density);
+            out.append(");\n");
+        }
+        for w in region_laws {
+            format(out, "    cells(elements::material_in(", w.g, ", ");
+            lit(out, w.young);
+            out.append(", ");
+            lit(out, w.poisson);
+            out.append(", ");
+            lits(out, w.force);
+            out.append("), ");
+            quoted(out, w.label);
+            out.append(");\n");
+        }
     }
+    if cut_source >= 0 { emit_source(out); }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for s in skipped {

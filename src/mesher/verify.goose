@@ -1,5 +1,6 @@
 // `skein verify model.skn` (docs/command_line.md §1): `check`, then the
-// mesh of each `mesh` block and the pre-solve check mesh_quality. The
+// mesh of each `mesh` block, with its refine lines (refine.goose), and the
+// pre-solve check mesh_quality. The
 // other pre-solve checks are not in this version.
 //
 // The reader evaluates the geometry of the model: numbers with a length
@@ -296,6 +297,31 @@ recursive fn written_boxes(n: i64, out: i64[>..]&) {
     }
 }
 
+// The shape of the region `r` of a refine line, and whether the target is
+// its surface: the shape `b` of a let `boundary(a, b)`, or a shape. It
+// gives -1 on an error.
+fn refine_target(r: i64) -> i64, bool {
+    if syntax::nodes[r].kind == syntax::N_NAME {
+        let v = let_node(node_text(r));
+        let boundary = v >= 0 && syntax::nodes[v].kind == syntax::N_CALL && node_text(syntax::child(v, 0)) == "boundary";
+        if boundary && syntax::child_count(v) == 3 {
+            let b = eval_value(argument(v, 1));
+            guard b.n == 0 else {
+                reader_fault(syntax::nodes[r].tok, "the refine region is a boundary by a condition",
+                             "refine a shape, or a boundary(a, b) with a shape b");
+                return -1, false;
+            }
+            return b.g, true;
+        }
+    }
+    let g = eval_value(r);
+    guard g.n == 0 else {
+        reader_fault(syntax::nodes[r].tok, "the refine region is not a shape", "refine a let shape");
+        return -1, false;
+    }
+    return g.g, false;
+}
+
 // The record of one mesh, for the table of the report.
 struct MeshRecord {
     name: u8[..64],
@@ -319,6 +345,7 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
         return false;
     }
     var size = 0.0;
+    clear_refine();
     // A copy, not a slice of a string: mesh_3d and mesh_2d reallocate the
     // byte arrays of the runtime mesh.
     var cell: u8[..4] = [];
@@ -327,8 +354,12 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     var s = syntax::nodes[syntax::child(n, 1)].first;
     while s >= 0 {
         let value = syntax::nodes[s].first;
-        if syntax::nodes[s].kind != syntax::N_SETTING {
-            reader_fault(syntax::nodes[s].tok, "refine, layers and crack_tip are not in the mesher yet: it makes a uniform mesh",
+        if syntax::nodes[s].kind == syntax::N_REFINE {
+            let target, surface = refine_target(value);
+            let fine = eval_value(syntax::child(s, 1));
+            if target >= 0 && fine.n == 1 && fine.v[0] > 0.0 { add_refine(target, fine.v[0], surface); }
+        } else if syntax::nodes[s].kind != syntax::N_SETTING {
+            reader_fault(syntax::nodes[s].tok, "layers and crack_tip are not in the mesher yet",
                          "remove the line, and give a size that resolves the smallest feature");
         } else if node_text(s) == "size" {
             size = eval_value(value).v[0];
@@ -358,6 +389,10 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
         return false;
     }
     var done = false;
+    if cell == grid && targets.len > 0 {
+        reader_fault(syntax::nodes[n].tok, str("the mesher has no refine of ", grid, " cells"), str("remove the refine lines, or write cell: ", cell));
+        return false;
+    }
     if cell == grid {
         var planes: i64[>..] = [];
         for v in let_values { written_boxes(v, planes); }
@@ -395,7 +430,7 @@ fn read_geometry(prog: i64) -> i64 {
                 length_name.clear();
                 length_name.append("mm");
             }
-        } else if k == syntax::N_LET {
+        } else if k == syntax::N_LET || k == syntax::N_PARAM {
             var w: u8[..64] = [];
             w.append(node_text(item)[..min(node_text(item).len, 64)]);
             let_names.push(w);

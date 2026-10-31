@@ -22,8 +22,10 @@ set -eu
 # The models that skein run can run. Add a model here when skein run can run it.
 models="
 examples/closed_cylinder.skn
+examples/elements/buckling_column_tet.skn
 examples/elements/column_weight_tet.skn
 examples/elements/conduction_slab_tet.skn
+examples/elements/frequency_cantilever_tet.skn
 examples/elements/heated_bar_study_tet.skn
 examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn

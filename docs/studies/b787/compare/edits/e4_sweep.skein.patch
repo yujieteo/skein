@@ -4,27 +4,27 @@ index 3262150..46efd44 100644
 +++ b/e4_sweep/skein/door_corner.skn
 @@ -1,4 +1,4 @@
 -// blocked-by: G3 G31 G32 G33
-+// blocked-by: G3 G31 G32 G33 G10 G34
++// blocked-by: G3 G31 G32 G33 G10
  // Boeing 787 forward fuselage under cabin pressure: the door-corner
  // submodel of the problem sheet (../problem.md, 6.4). A 0.600 m square
  // panel of the x-s plane, centred on the centre of the upper aft corner
-@@ -8,12 +8,14 @@
+@@ -8,12 +8,12 @@
  
  model b787_door_corner: 3d, SI
  
-+// gap G34: results() takes no study case. Each case needs the global case
-+// with the same p_U.
- let global: Results = results("fuselage.skn", step: "pressurize")
- 
+-let global: Results = results("fuselage.skn", step: "pressurize")
+-
  let R: Length = 2.883 m
  let x_end: Length = 6.096 m
  let f_pitch: Length = 0.6096 m
 -let p_U: Pressure = 1.5*65.0 kPa
 +param p_U: Pressure = 1.5*65.0 kPa
++
++let global: Results = results("fuselage.skn", step: "pressurize", case: p_U)
  
  // Door 2, a Type A exit (sheet 2.3), and the pad-up band around it (2.4).
  let w_d: Length = 1.067 m
-@@ -216,3 +218,9 @@ expect c6_aft: e_hoop at Q_aft == global.e_hoop at Q_aft within 5%
+@@ -216,3 +216,9 @@ expect c6_aft: e_hoop at Q_aft == global.e_hoop at Q_aft within 5%
  
  // gap G33: global.e_hoop is not a field of the results.
  expect c6_top: e_hoop at Q_top == global.e_hoop at Q_top within 5%

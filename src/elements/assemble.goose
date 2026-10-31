@@ -11,6 +11,8 @@ namespace elements;
 import .shape;
 import .mesh;
 import .kernels;   // cell_matrix
+import .csg;
+import .stages;
 import solvers from "../solvers";
 
 let ELASTIC = 0;
@@ -60,6 +62,7 @@ fn start_physics(kind: i64, comps: i64) {
     guard per_cell > 0 && (kind == ELASTIC || kind == HEAT) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
     physics = kind;
     ncomp = comps;
+    clear_stages();
     fixed.clear();
     prescribed.clear();
     load.clear();
@@ -220,9 +223,11 @@ fn assemble() {
     let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
     if workers < 2 {
         for c in cell_count() {
-            cell_matrix(c);
+            if !is_live(c) { continue; }
+            cell_terms(c);
             add_cell(c, ke[..m * m], fe[..m]);
         }
+        use_law_0();
         return;
     }
     var ids: i64[>..] = [];
@@ -231,9 +236,25 @@ fn assemble() {
     for id in ids { thread_wait(id); }
 }
 
+// The matrix ke and the source fe of cell c, with the law of its region.
+// A born cell adds K_e u_b on its nodes (stages.goose).
+fn cell_terms(c: i64) {
+    let m = per_cell * ncomp;
+    use_law(c);
+    cell_matrix(c);
+    if born.len > 0 && born[c] != 0 {
+        for r in m {
+            var s = 0.0;
+            for k in m { s += ke[m * r + k] * birth_u[m * c + k]; }
+            fe[r] += s;
+        }
+    }
+}
+
 // A worker of the assembly: the matrix and then the source of each cell of
 // each task, one cell after the other. Its copy of the mesh is the copy of
-// the globals at its spawn.
+// the globals at its spawn. A dead cell sends the values of the cell before
+// it, and add_cells skips it.
 thread_fn cell_worker() {
     let m = per_cell * ncomp;
     var data: f64[>..] = [];
@@ -242,7 +263,7 @@ thread_fn cell_worker() {
         guard job.lo >= 0 else { break; };
         data.clear();
         for c in job.lo..job.hi {
-            cell_matrix(c);
+            if is_live(c) { cell_terms(c); }
             data.append(ke[..m * m]);
             data.append(fe[..m]);
         }
@@ -250,11 +271,12 @@ thread_fn cell_worker() {
     }
 }
 
-// Adds the matrix and the source of the cells lo <= c < hi, one cell after
-// the other in d.
+// Adds the matrix and the source of the live cells lo <= c < hi, one cell
+// after the other in d.
 fn add_cells(lo: i64, hi: i64, d: f64[:]) {
     let m = per_cell * ncomp;
     for c in lo..hi {
+        if !is_live(c) { continue; }
         let at = (c - lo) * (m * m + m);
         add_cell(c, d[at..at + m * m], d[at + m * m..at + m * m + m]);
     }
@@ -280,14 +302,17 @@ fn add_cell(c: i64, k: f64[:], f: f64[:]) {
 // --- boundary regions --------------------------------------------------------
 
 // A region of the boundary: a union of parts. A part is the plane where
-// coordinate `axis` is `value`, or the surface of the hole at distance
-// `radius` from the z axis through (cx, cy).
+// coordinate `axis` is `value`, the surface of the hole at distance
+// `radius` from the z axis through (cx, cy), or the surface of the shape
+// `shape` of src/mesher/. On the mesh of a shape (csg.goose), a plane
+// holds only the nodes on the surface of that shape.
 struct Part {
     hole: bool,
     axis: i64,
     value: f64,
     c: f64[2],
     r: f64,
+    shape: i64,
 }
 
 var region: Part[..8] = [];
@@ -296,7 +321,8 @@ fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
     let tol = geometry_tolerance();
     let p = region[k];
-    if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol; }
+    if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
+    if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
     let dy = node_x(n, 1) - p.c[1];
     return abs(sqrt(dx * dx + dy * dy) - p.r) <= tol;
@@ -377,6 +403,8 @@ fn add_region_load(gv: f64[3]) {
 }
 
 fn clear_conditions() {
+    held.clear();
+    held.append(sol);
     for &v in fixed { v = 0; }
     for &v in prescribed { v = 0.0; }
     for &v in load { v = 0.0; }
@@ -396,7 +424,7 @@ fn region_reaction() -> f64[3] {
         if !on_region(n) { continue; }
         for p in ncomp {
             let d = ncomp * n + p;
-            if fixed[d] == 0 { continue; }
+            if fixed[d] != 1 { continue; }
             var ku = 0.0;
             for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
             sum[p] += ku - load[d] - assembled_source[d];
@@ -411,7 +439,7 @@ fn all_reaction() -> f64[3] {
     var sum: f64[3] = [0.0, 0.0, 0.0];
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
-        if fixed[d] == 0 { continue; }
+        if fixed[d] != 1 { continue; }
         var ku = 0.0;
         for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
@@ -433,7 +461,7 @@ fn load_magnitude() -> f64 {
     guard row_start.len > 0 else { return sum; }
     var terms = 0.0;
     for d in sol.len {
-        if fixed[d] == 0 { continue; }
+        if fixed[d] != 1 { continue; }
         var ku = 0.0;
         for e in row_start[d]..row_start[d + 1] {
             ku += val[e] * sol[col[e]];

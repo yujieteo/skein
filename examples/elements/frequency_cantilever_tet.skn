@@ -1,0 +1,44 @@
+// The natural frequencies of a clamped steel beam of 100 x 10 x 5 mm, with
+// the linear_elastic template on P2 tetrahedra. Modal step: LOBPCG with
+// the AMG of K. The reference is mode 1 of Blevins (1979), Table 8-1:
+// 417.758 Hz, within 1 %. The femahoy model is
+// examples/femahoy/frequency_cantilever.skn.
+
+model frequency_cantilever_tet: 3d, mm_N_MPa_s
+
+let L: Length = 100 mm
+let W: Length = 10 mm
+let H: Length = 5 mm
+
+scales H, 210000 MPa, 7.85e-9 t/mm^3
+
+let beam: Solid = box((0, 0, 0) mm, (L, W, H))
+let fixed: Surface = boundary(beam, x == 0 mm)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+    rho: Density = 7.85e-9 t/mm^3
+}
+
+mesh m on beam {
+    size: 2.5 mm
+    cell: tet
+}
+
+physics solid on beam: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+bc fixed: u = 0
+
+step modes: modal(count: 3) {
+    output u
+    report eigenvalue(1)
+    report eigenvalue(2)
+}
+
+// f1 = 1.87510407^2/(2*pi*L^2)*sqrt(E*I/m), with m the mass for each length.
+expect f1: eigenvalue(1) == 417.758 Hz within 1%

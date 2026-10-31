@@ -11,5 +11,6 @@ import .quality;
 import .tri;
 import .tet;
 import .grid;
+import .refine;
 import .quad;
 import .sweep;

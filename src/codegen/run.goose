@@ -6,6 +6,8 @@
 //     .skein/build/<model>/main.goose    the generated program
 //     .skein/build/<model>/<model>       the executable
 //     .skein/results/<model>/<step>.vtu  the results of each step
+//     .skein/build/<model>/set/<words>/  the program of a run with --set
+//     .skein/results/<model>/set/<words>/ the results of a run with --set
 import std;
 import os;
 namespace codegen;
@@ -29,7 +31,7 @@ extern "libc.so.6" {
 // _SC_PAGESIZE (30) of Linux.
 fn memory_bytes() -> f64 { return sysconf(85) * sysconf(30); }
 
-let USAGE = "usage: skein run <file.skn> [--study <name> [--jobs k] [--format toon|json]]\n";
+let USAGE = "usage: skein run <file.skn> [--set name=value]... [--study <name> [--jobs k] [--format toon|json]]\n";
 
 // Runs `command` in the shell, and gives its exit status.
 fn shell(command: u8[:]) -> i64 {
@@ -39,17 +41,6 @@ fn shell(command: u8[:]) -> i64 {
     let status = system(c[0]);
     if status < 0 || (status & 0x7f) != 0 { return 3; }
     return (status >> 8) & 0xff;
-}
-
-// `s` in single quotes for the shell.
-fn shell_quoted(s: u8[:]) -> u8[>..] {
-    var out: u8[>..] = [];
-    out.push('\'');
-    for c in s {
-        if c == '\'' { out.append("'\\''"); } else { out.push(c); }
-    }
-    out.push('\'');
-    return out;
 }
 
 fn make_dirs(path: u8[:]) -> bool {
@@ -124,12 +115,15 @@ fn run(args: const u8[:][:]) -> i64 {
     var study_at = -1;
     var jobs = 0;
     var json = false;
+    var sets: const u8[:][>..] = [];
     var i = 0;
     while i < args.len {
         let a = args[i];
         let more = i + 1 < args.len;
         if a == "--study" && more {
             study_at = i + 1;
+        } else if a == "--set" && more {
+            sets.push(args[i + 1]);
         } else if a == "--jobs" && more {
             let k, good = parse_int(args[i + 1]);
             guard good && k >= 1 else {
@@ -159,6 +153,14 @@ fn run(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein run: cannot read '", path, "'\n"));
         return 1;
     }
+    if sets.len > 0 {
+        var set_text: u8[>..] = [];
+        guard set_source(path, text, sets, set_text) else { return 2; };
+        text.clear();
+        text.append(set_text);
+        check::check_text(path, text);
+        if check::error_count() > 0 { return check::finish(false); }
+    }
     if study_at >= 0 { return run_study(path, text, args[study_at], jobs, json); }
     let prog = syntax::parse_model(path, text);
     let lane = if prog >= 0 { read_model(prog) } else { -1 };
@@ -166,8 +168,8 @@ fn run(args: const u8[:][:]) -> i64 {
         fmt::write_errors();
         return 1;
     }
-    let build_dir = str(".skein/build/", model_name);
-    let results_dir = str(".skein/results/", model_name);
+    let build_dir = set_path(".skein/build/", model_name, sets);
+    let results_dir = results_path(model_name, sets);
     if !make_dirs(build_dir) || !make_dirs(results_dir) {
         write_stderr("skein run: cannot make the directory .skein\n");
         return 1;

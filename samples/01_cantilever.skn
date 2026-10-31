@@ -1,14 +1,16 @@
 // A steel cantilever with a lightening hole near the root, under an end
 // load. Linear static, 3D, quadratic tetrahedra (the default method).
-// Sample 04 is a submodel of the region around the hole.
+// Sample 04 is a submodel of the region around the hole. The study varies
+// the length and the load: `skein run 01_cantilever.skn --study sizes`,
+// or one case with `--set L=150mm --set P=3kN`.
 
 model cantilever: 3d, mm_N_MPa_s
 
-let L: Length = 200 mm
+param L: Length = 200 mm in 100 mm..400 mm
 let W: Length = 20 mm
 let H: Length = 40 mm
 let r: Length = 6 mm
-let P: Force = 2 kN
+param P: Force = 2 kN in 0.5 kN..10 kN
 
 scales H, P/(W*H)
 
@@ -38,4 +40,9 @@ step load: static {
     bc tip: sigma*n = (0, 0, -P/(W*H))
     output u, sigma, von_mises(sigma)
     report reaction(root)
+}
+
+study sizes: grid {
+    L: [150, 175, 200, 225] mm
+    P: [1, 2, 3, 4] kN
 }

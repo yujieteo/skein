@@ -449,12 +449,174 @@ fn test_runs() {
     }
 }
 
+// --- the submodel cut ------------------------------------------------------------
+
+// A box with the linear field of the patch test is the source of a smaller
+// box with other cells. The smaller box takes the field on its faces, so it
+// has the same field inside, and the stress resultants on its faces match.
+fn test_submodel() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 4, 4, 4);
+    elements::elastic(1000.0, 0.3);
+    for n in elements::node_count() {
+        if !on_boundary(n) { continue; }
+        for a in 3 {
+            elements::fixed[3 * n + a] = 1;
+            elements::prescribed[3 * n + a] = exact(n, a);
+        }
+    }
+    if !elements::solve() || !elements::write_state("build", "submodel_test") {
+        failures++;
+        print("FAIL submodel: the source does not solve or save");
+        return;
+    }
+    let lo: f64[3] = [0.2, 0.1, 0.3];
+    let hi: f64[3] = [0.7, 0.8, 0.9];
+    elements::mesh_box(3, 2, lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], 3, 3, 3);
+    elements::elastic(1000.0, 0.3);
+    guard elements::read_state("build", "submodel_test", 1.0, 1.0, 1.0) else {
+        failures++;
+        print("FAIL submodel: read_state");
+        return;
+    };
+    elements::plane(elements::X, lo[0]);
+    for t in 3 {
+        if t > 0 { elements::also_plane(t, lo[t]); }
+        elements::also_plane(t, hi[t]);
+    }
+    let outside = elements::fix_state();
+    if outside != 0 || !elements::solve() {
+        failures++;
+        print("FAIL submodel: ", outside, " cut nodes outside the source, or no solve");
+        return;
+    }
+    var err = 0.0;
+    for n in elements::node_count() {
+        for a in 3 { err = max(err, abs(elements::sol[3 * n + a] - exact(n, a))); }
+    }
+    let d, scale = elements::cut_difference();
+    print("submodel tet10: ", elements::dof_count(), " dofs, error of the nodal values ", err,
+          ", of the cut resultants ", d, " of ", scale);
+    if !(err <= 1.0e-10) || !(scale > 0.0) || !(d <= 1.0e-9 * scale) {
+        failures++;
+        print("FAIL submodel: the field or the cut resultants differ");
+    }
+    if elements::read_state("build", "no_such_step", 1.0, 1.0, 1.0) {
+        failures++;
+        print("FAIL submodel: read_state of a step with no state");
+    }
+}
+
+// --- materials, birth and death ---------------------------------------------------
+
+// Two blocks side by side, the left [0, 1] x [0, 1] and the right
+// [1, 2] x [0, 1], with nu = 0, stretched by u.y = 0.1 at y = 1 and held at
+// y = 0. Step 1 has the right block dead. Step 2 gives birth to it on the
+// stretched shape: the nearest live node of each new node is on x = 1, so
+// u_b = 0.1 y, and the right block has no stress. Step 3 kills the left
+// block: the right block alone then carries no force. A last case gives the
+// right block E2: the force is then 0.1 (E + E2).
+fn test_stages() {
+    let E = 1000.0;
+    let E2 = 3000.0;
+    mesher::clear_shapes();
+    let right = mesher::rect(1.0, 0.0, 2.0, 1.0);
+    let left = mesher::rect(0.0, 0.0, 1.0, 1.0);
+    fn stretch() {
+        elements::clear_bcs();
+        elements::plane(elements::Y, 0.0);
+        elements::fix(elements::ALL, 0.0);
+        elements::plane(elements::Y, 1.0);
+        elements::fix(elements::Y, 0.1);
+    }
+    fn top_force(what: u8[:], want: f64) {
+        if !elements::solve() {
+            failures++;
+            print("FAIL stages ", what, ": no solve");
+            return;
+        }
+        elements::plane(elements::Y, 1.0);
+        let rx, ry, rz = elements::reaction();
+        let tx, ty, tz = elements::total_reaction();
+        let fx, fy, fz = elements::applied_load();
+        let sl, found_l = elements::stress_at(elements::Y, elements::Y, 0.5, 0.5, 0.0);
+        let sr, found_r = elements::stress_at(elements::Y, elements::Y, 1.5, 0.5, 0.0);
+        print("stages ", what, ": force at y = 1 ", ry, ", sigma_yy left ", sl, ", right ", sr, ", out of balance ", ty + fy);
+        if abs(ry - want) > 1.0e-8 * E || abs(ty + fy) > 1.0e-8 * E {
+            failures++;
+            print("FAIL stages ", what, ": the force at y = 1 is ", ry, ", not ", want, ", or the reactions and loads do not balance");
+        }
+    }
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 4, 2, 1);
+    elements::elastic_plane_strain(E, 0.0, 1.0);
+    if !elements::kill(right) { failures++; print("FAIL stages: kill finds no cell"); }
+    stretch();
+    top_force("step 1, the left block", 0.1 * E);
+    stretch();
+    if !elements::birth(right) { failures++; print("FAIL stages: birth finds no cell"); }
+    top_force("step 2, the right block born strain-free", 0.1 * E);
+    let sr, found = elements::stress_at(elements::Y, elements::Y, 1.5, 0.5, 0.0);
+    if abs(sr) > 1.0e-8 * E { failures++; print("FAIL stages: the born block has the stress ", sr); }
+    stretch();
+    elements::kill(left);
+    top_force("step 3, the left block dead", 0.0);
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 4, 2, 1);
+    elements::elastic_plane_strain(E, 0.0, 1.0);
+    if !elements::material_in(right, E2, 0.0, 0.0, 0.0, 0.0) { failures++; print("FAIL stages: material_in finds no cell"); }
+    stretch();
+    top_force("two materials", 0.1 * (E + E2));
+}
+
+// LOBPCG (eigen.goose). A steel cantilever of 100 x 10 x 5 mm, clamped
+// at x = 0: its first natural frequency is 417.758 Hz (Blevins 1979, Table
+// 8-1). A steel column of 10 x 10 x 200 mm, fixed at the base, with 1 N on
+// the top: its first load factor is pi^2 E I / (4 L^2) = 10794.88
+// (Timoshenko and Gere 1961, Art. 2.1). Each within 1 %.
+fn test_eigen() {
+    let E = 210000.0;
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 1);
+    elements::elastic(E, 0.3);
+    elements::set_density(7.85e-9);
+    elements::clear_bcs();
+    elements::plane(elements::X, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    let modal = elements::modal(3);
+    let f1 = elements::eigenvalue(1);
+    print("modal: ", elements::dof_count(), " dofs, ", elements::cg_iterations(), " LOBPCG iterations, ",
+          elements::solve_seconds(), " s, f1 ", f1, " Hz, f2 ", elements::eigenvalue(2), " Hz, f3 ", elements::eigenvalue(3), " Hz");
+    if !modal || abs(f1 - 417.758) > 0.01 * 417.758 {
+        failures++;
+        print("FAIL modal: f1 is ", f1, " Hz, not 417.758 Hz within 1 %, or LOBPCG did not converge");
+    }
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 10.0, 10.0, 200.0, 2, 2, 20);
+    elements::elastic(E, 0.3);
+    elements::clear_bcs();
+    elements::plane(elements::Z, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    elements::plane(elements::Z, 200.0);
+    elements::traction(0.0, 0.0, -0.01);
+    if !elements::solve() { failures++; print("FAIL buckling: the preload does not solve"); }
+    elements::clear_bcs();
+    elements::plane(elements::Z, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    let buckled = elements::buckling(2);
+    let p1 = elements::eigenvalue(1);
+    print("buckling: ", elements::dof_count(), " dofs, ", elements::cg_iterations(), " LOBPCG iterations, ",
+          elements::solve_seconds(), " s, load factors ", p1, ", ", elements::eigenvalue(2));
+    if !buckled || abs(p1 - 10794.88) > 0.01 * 10794.88 {
+        failures++;
+        print("FAIL buckling: the load factor is ", p1, ", not 10794.88 within 1 %, or LOBPCG did not converge");
+    }
+}
+
 fn main() {
     test_patches();
     test_kirsch();
     test_heated_bar();
     test_body_force();
     test_equilibrium_scale();
+    test_submodel();
+    test_stages();
+    test_eigen();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");
