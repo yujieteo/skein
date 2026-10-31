@@ -114,9 +114,11 @@ physics el_th on unit_cell solves w_th: Vector<Length> {
     eq div(s_th) = 0
 }
 
-// The 8-node hex with incompatible modes of the grid solver.
-method cond_x: cg { mesh: m, order: 1, family: incompatible }
-method cond_z: cg { mesh: m, order: 1, family: incompatible }
+// The plain 8-node hex of the grid solver for heat conduction.
+method cond_x: cg { mesh: m, order: 1 }
+method cond_z: cg { mesh: m, order: 1 }
+
+// The 8-node hex with incompatible modes of the grid solver for elasticity.
 method el_xx: cg { mesh: m, order: 1, family: incompatible }
 method el_zz: cg { mesh: m, order: 1, family: incompatible }
 method el_yz: cg { mesh: m, order: 1, family: incompatible }
