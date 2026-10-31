@@ -1819,7 +1819,7 @@ static void main_g(int64_t gs_sp) {
     {
         double v_g;
         uint8_t found_v_g;
-        double t21 = elements_stress_at_g8(0, 0, 0.0, 1.0, 1.0, &found_v_g, gs_sp + 0);
+        double t21 = elements_stress_at_g8(0, 0, 0.0, 1.0, 0.5, &found_v_g, gs_sp + 0);
         v_g = t21;
         uint8_t found_g = found_v_g;
         t22.data = ((uint8_t *)gs_str0); t22.len = 7;
@@ -1866,7 +1866,7 @@ static void main_g(int64_t gs_sp) {
     {
         double v_g_2;
         uint8_t found_v_g_2;
-        double t42 = elements_stress_at_g8(1, 1, 1.0, 0.0, 1.0, &found_v_g_2, gs_sp + 0);
+        double t42 = elements_stress_at_g8(1, 1, 1.0, 0.0, 0.5, &found_v_g_2, gs_sp + 0);
         v_g_2 = t42;
         uint8_t found_g_2 = found_v_g_2;
         t43.data = ((uint8_t *)gs_str5); t43.len = 8;

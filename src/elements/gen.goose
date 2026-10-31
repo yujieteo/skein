@@ -110,9 +110,9 @@ recursive fn value(n: i64) -> Vec {
             unsupported(tok(n), "a product of two vectors, or a scalar divided by a vector", "multiply or divide a vector by a scalar");
             return a;
         }
-        var r = if a.n == 1 { b } else { a };
-        let f = if a.n == 1 { a.v[0] } else { b.v[0] };
-        for j in 3 { r.v[j] = if syntax::text(tok(n)) == "/" { a.v[j] / f } else { r.v[j] * f }; }
+        var r = if b.n == 1 { a } else { b };
+        let f = if b.n == 1 { b.v[0] } else { a.v[0] };
+        for j in 3 { r.v[j] = if syntax::text(tok(n)) == "/" { r.v[j] / f } else { r.v[j] * f }; }
         return r;
     }
     if k == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
