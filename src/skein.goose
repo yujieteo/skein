@@ -11,6 +11,7 @@ import check from "./check";
 import md from "./md";
 import mesher.verify;   // mesher lane: skein verify
 import mesher.lint;     // skein lint, with the rules that need the mesh
+import mesher.stl;      // skein export
 import runtime from "./runtime";   // mesher lane: the mesh type of the mesher
 import solvers from "./solvers";   // the runtime imports it
 
@@ -19,6 +20,7 @@ let USAGE = """
 
     commands:
       check   parse and type-check a model
+      export  write a let shape as an STL surface on standard output
       fmt     rewrite files in the standard layout
       help    print this text (help std: the standard library, help --llm: the language card)
       lint    check a model, then give the lint warnings
@@ -59,6 +61,7 @@ fn main() {
     if command == "check" { exit(check::command(args)); }
     if command == "lint" { exit(mesher::lint(args)); }
     if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
+    if command == "export" { exit(mesher::export_command(args)); }
     if command == "md" {
         var rest: const u8[:][>..] = [];
         for a in args[2..] { rest.push(a); }

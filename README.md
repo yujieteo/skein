@@ -40,7 +40,8 @@ step load: static {
 compiler. `skein check` parses and type-checks a model. `skein lint` checks
 it and gives the lint warnings, and with `--mesh` the warnings that need the
 mesh. `skein fmt` rewrites a file in the standard
-layout. `skein run --study` runs each case of a `grid`, `zip` or `sample`
+layout. `skein export --format stl` writes the surface of a shape as STL.
+`skein run --study` runs each case of a `grid`, `zip` or `sample`
 study on parallel workers, and prints the table of the cases. The
 [roadmap](docs/roadmap.md) gives the phases.
 Phase 1 is the front end: the parser, the type and unit checker,

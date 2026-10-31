@@ -265,13 +265,24 @@ skein export samples/01_cantilever.skn --geometry beam --format stl
 ```
 
 `export` writes one `geometry` value as a part file (spec §22.5). It needs
-no solve.
+no solve. It checks the model, meshes the `let` shape that `--geometry`
+names, and writes the STL to standard output:
+
+```
+skein export samples/01_cantilever.skn --geometry beam > beam.stl
+```
+
+The STL is ASCII. A `Solid` gives the closed surface of its tetrahedra,
+with each normal out of the solid. A 2D `Surface` gives its triangles in
+the plane z = 0. The coordinates are in the length unit of the header (mm
+for the mm systems, m for SI). An error of the model goes to standard
+error.
 
 | Option | Meaning |
 |---|---|
 | `--geometry <name>` | the geometry to write. Required. |
 | `--format stl\|step` | STL is a triangle mesh (phase 2). STEP is tessellated in phase 4 and exact in phase 5. |
-| `--size length` | the size of the triangles. Default: the mesh size of the model. |
+| `--size length` | the size of the triangles, for example `--size 2 mm`. Default: the `size` of the first `mesh` block on the geometry, else of the first `mesh` block. |
 
 `export` writes geometry only. Skein does not import a mesh or a CAD file
 (decision 8).

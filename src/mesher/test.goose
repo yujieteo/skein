@@ -11,6 +11,7 @@ import dictionary;
 import os;
 import .mesher;
 import .lint;
+import .stl;
 import syntax from "../syntax";   // the lint imports it
 import check from "../check";     // the lint imports it
 import runtime from "../runtime";   // the mesher imports it
@@ -267,6 +268,101 @@ fn test_grid() {
     }
 }
 
+// `skein export` of the model `src` with the options `words`: the exit
+// status is `want`. The result is the STL.
+fn export_case(what: u8[:], src: u8[:], words: const u8[:][:], want: i64) -> u8[>..] {
+    let path = "build/export_case.skn";
+    var out: u8[>..] = [];
+    guard write_file(path, src) else {
+        fail(str("cannot write ", path));
+        return out;
+    }
+    var copies: u8[..64][>..] = [];
+    for w in ["skein", "export", path] { copies.push(w); }
+    for w in words { copies.push(w); }
+    var args: u8[:][>..] = [];
+    for &w in copies { args.push(w[..]); }
+    let status = mesher::export_stl(args[..], out);
+    if status != want { fail(str("export ", what, ": the exit status is ", status, ", not ", want)); }
+    return out;
+}
+
+// Reads the facets of `stl`. Each facet has its normal of unit length and
+// in the direction of the right-hand rule of its vertices. The result is
+// the facet count, the volume by the divergence theorem, and the sum of
+// the area vectors, which is 0 on a closed surface.
+fn read_stl(what: u8[:], stl: u8[:]) -> i64, f64, f64[3] {
+    var count = 0;
+    var volume = 0.0;
+    var area: f64[3] = [0.0, 0.0, 0.0];
+    var normal: f64[3] = [0.0, 0.0, 0.0];
+    var p: f64[3][..3] = [];
+    for line in split(stl, '\n') {
+        let words = split(trim(line), ' ');
+        guard words.len >= 4 && (words[0] == "vertex" || words[0] == "normal" || words[1] == "normal") else { continue; };
+        let at = if words[0] == "vertex" { 1 } else { 2 };
+        var v: f64[3] = [0.0, 0.0, 0.0];
+        for j in 3 { v[j] = parse_flt(words[at + j]); }
+        if words[0] != "vertex" {
+            normal = v;
+            continue;
+        }
+        p.push(v);
+        guard p.len == 3 else { continue; };
+        let a = mesher::cross3(mesher::sub3(p[1], p[0]), mesher::sub3(p[2], p[0]));
+        if abs(mesher::norm3(normal) - 1.0) > 1.0e-9 || mesher::dot3(a, normal) <= 0.0 {
+            fail(str("export ", what, ": facet ", count, " has the normal ", normal[0], " ", normal[1], " ", normal[2]));
+        }
+        volume += mesher::dot3(p[0], mesher::cross3(p[1], p[2])) / 6.0;
+        for j in 3 { area[j] += 0.5 * a[j]; }
+        count++;
+        p.clear();
+    }
+    return count, volume, area;
+}
+
+// `skein export` (spec §22.5): the surface of the tetrahedra of a Solid,
+// closed and with its normals out, and the triangles of a 2D Surface.
+fn test_export() {
+    fn solid(region: u8[:], mesh: u8[:]) -> u8[>..] {
+        return str("model t: 3d, SI\nscales 1 m\nlet L: Length = 2 m\nlet s: Solid = ", region,
+                   "\nlet top: Surface = boundary(s, z == 1 m)\n", mesh);
+    }
+    let holed = solid("box((0, 0, 0) m, (2, 1, 1) m) - cylinder((1, 0.5, -1) m, (0, 0, 1), 0.3 m, 3 m)",
+                      "mesh m on s {\n    size: 0.25 m\n}\n");
+    let fine = export_case("a block with a hole", holed, ["--geometry", "s", "--format", "stl"], 0);
+    let n_fine, volume, area = read_stl("a block with a hole", fine);
+    let tets = mesher::mesh_quality().measure;
+    print("export a block with a hole: ", n_fine, " facets, volume ", volume, ", tetrahedra ", tets);
+    if !starts_with(fine, "solid s\n") || !ends_with(fine, "endsolid s\n") { fail("export a block with a hole: no solid and endsolid lines"); }
+    if n_fine == 0 || abs(volume - tets) > 1.0e-9 * tets { fail(str("export a block with a hole: the volume ", volume, " is not ", tets)); }
+    if mesher::norm3(area) > 1.0e-9 { fail(str("export a block with a hole: the surface is open, area sum ", mesher::norm3(area))); }
+    // --size sets the triangles in place of the size of the mesh block.
+    let coarse = export_case("--size 50 cm", holed, ["--geometry", "s", "--size", "50 cm"], 0);
+    let n_coarse, coarse_volume, coarse_area = read_stl("--size 50 cm", coarse);
+    if n_coarse == 0 || n_coarse >= n_fine { fail(str("export --size 50 cm: ", n_coarse, " facets, not fewer than ", n_fine)); }
+    if mesher::norm3(coarse_area) > 1.0e-9 { fail("export --size 50 cm: the surface is open"); }
+    let unmeshed = solid("box((0, 0, 0) m, (1, 1, 1) m)", "");
+    let n_cube, cube_volume, cube_area = read_stl("a cube", export_case("a cube", unmeshed, ["--geometry", "s", "--size", "500mm"], 0));
+    if n_cube == 0 || abs(cube_volume - 1.0) > 1.0e-12 { fail(str("export a cube: the volume is ", cube_volume, ", not 1")); }
+    // A 2D Surface: its triangles in the plane z = 0, with the normal +z.
+    let plate = "model t: 2d, SI\nscales 1 m\nlet p: Surface = rect((0, 0) m, (2, 1) m)\n";
+    let n_plate, plate_volume, plate_area = read_stl("a 2D rect", export_case("a 2D rect", plate, ["--geometry", "p", "--size", "0.25 m"], 0));
+    if n_plate == 0 || abs(plate_area[2] - 2.0) > 1.0e-12 { fail(str("export a 2D rect: the area is ", plate_area[2], ", not 2")); }
+    // Faults of the command line: exit status 2 and no STL.
+    export_case("an unknown let", holed, ["--geometry", "nope", "--size", "1 m"], 2);
+    export_case("--format step", holed, ["--geometry", "s", "--format", "step"], 2);
+    export_case("a size with no unit", holed, ["--geometry", "s", "--size", "3"], 2);
+    export_case("no --geometry", holed, ["--size", "1 m"], 2);
+    export_case("an unknown option", holed, ["--geometry", "s", "--sizes", "1 m"], 2);
+    export_case("with no mesh block and no --size", unmeshed, ["--geometry", "s"], 2);
+    // Faults of the model: exit status 1. A let that is not a shape, a
+    // Surface of a Solid that the mesher does not read, and a check error.
+    export_case("a Length", holed, ["--geometry", "L"], 1);
+    export_case("a boundary", holed, ["--geometry", "top"], 1);
+    export_case("a model with an error", str(holed, "let bad: Length = 2 s\n"), ["--geometry", "s"], 1);
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -418,6 +514,7 @@ fn main() {
 
     test_grid();
     test_lint();
+    test_export();
 
     if failures > 0 { exit(1); }
     print("mesher: all tests pass");
