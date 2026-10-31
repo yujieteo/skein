@@ -2077,13 +2077,15 @@ table:
 
 ```toon
 study: re_sweep
+jobs: 3
 cases[3]{case,Re,status,verify,cd,time_s}:
   1,10,ok,pass,2.81,4.2
   2,20,ok,pass,2.05,4.6
   3,40,ok,pass,1.54,5.1
 ```
 
-One column for each varied parameter, each named report and each `expect`.
+`jobs` is the number of cases that ran at the same time (§20.5). One
+column for each varied parameter, each named report and each `expect`.
 `verify` is `pass` when each verification check of the case passes.
 `--format json` gives the same records as JSON.
 

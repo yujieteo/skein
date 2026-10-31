@@ -23,6 +23,7 @@ models="
 examples/closed_cylinder.skn
 examples/elements/column_weight_tet.skn
 examples/elements/conduction_slab_tet.skn
+examples/elements/heated_bar_study_tet.skn
 examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn
 examples/elements/kirsch_plate_tri.skn

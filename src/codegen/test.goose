@@ -4,6 +4,12 @@ import std;
 import os;
 import syntax from "../syntax";
 import .codegen;
+import .study;
+import check from "../check";   // study.goose writes TOON with it
+
+extern "libc.so.6" {
+    fn system(command: const u8&) -> i32;
+}
 
 var failures = 0;
 
@@ -342,6 +348,162 @@ fn test_unsupported() {
     expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
 }
 
+// --- studies (spec §20) ---------------------------------------------------------
+
+let STUDY_MODEL = """
+    model t: 3d, SI
+
+    param a: Length = 1 m in 0.5 m..4 m
+    param b: Real = 2
+    let c: Length = a
+
+    step s: static {
+        report r = reaction(c)
+    }
+
+    expect e: a == 1 m within 1%
+    """;
+
+// Reads the study `study` of `STUDY_MODEL` with the study item `item`. It
+// gives the cases as lines of the varied values, or the first error.
+fn cases(item: u8[:]) -> u8[>..] {
+    let text = str(STUDY_MODEL, "\n", item);
+    let prog = syntax::parse_model("t.skn", text);
+    var out: u8[>..] = [];
+    if prog >= 0 && codegen::study_cases(prog, codegen::find_study(prog, "s")) {
+        for c in 0..codegen::case_count {
+            for p in 0..codegen::varied.len { format(out, if p > 0 { "; " } else { "" }, codegen::case_value(c, p)); }
+            out.push('\n');
+        }
+        return out;
+    }
+    let e = syntax::errors[0];
+    let t = syntax::tokens[e.tok];
+    format(out, "error ", e.id, " ", t.line, ":", t.col, " ", e.msg);
+    return out;
+}
+
+fn expect_text(what: u8[:], got: u8[:], want: u8[:]) {
+    if got != want {
+        failures++;
+        print("FAIL ", what, "\n--- got:\n", got, "\n--- want:\n", want);
+    }
+}
+
+fn test_study_cases() {
+    expect_text("grid", cases("study s: grid {\n    a: [1, 2] m\n    b: [3, 4, 5]\n}\n"),
+                "1 m; 3\n1 m; 4\n1 m; 5\n2 m; 3\n2 m; 4\n2 m; 5\n");
+    expect_text("zip", cases("study s: zip {\n    a: [1 m, 2*a]\n    b: [3, 4]\n}\n"), "1 m; 3\n2*a; 4\n");
+    expect_text("zip lengths", cases("study s: zip {\n    a: [1, 2] m\n    b: [3]\n}\n"),
+                "error procedure_args 14:5 the lists of a zip have one length: 'b' has 1 values, not 2");
+    expect_text("a grid range", cases("study s: grid {\n    a: 1 m..2 m\n}\n"),
+                "error unsupported 13:11 a grid or a zip takes a list of values, not a range");
+    expect_text("minimize", cases("study s: minimize(objective: r, method: nelder_mead, max_cases: 9) {\n    a: 1 m..2 m\n}\n"),
+                "error unsupported 12:10 the study procedure minimize is not in this build");
+    expect_text("a sample list", cases("study s: sample(n: 2, method: lhs, seed: 1) {\n    a: [1, 2] m\n}\n"),
+                "error unsupported 13:5 a sample takes a range for each param");
+    expect_text("a sample method", cases("study s: sample(n: 2, method: grid, seed: 1) {\n    a: 1 m..2 m\n}\n"),
+                "error procedure_args 12:10 sample needs n, method and seed");
+    expect_text("a sample n", cases("study s: sample(n: 0, method: lhs, seed: 1) {\n    a: 1 m..2 m\n}\n"),
+                "error procedure_args 12:20 n of sample is a whole number of 1 or more");
+    // A case of a sample is lo + t*(hi - lo), with t in [0, 1).
+    let lhs = cases("study s: sample(n: 4, method: lhs, seed: 7) {\n    a: 1 m..2 m\n}\n");
+    expect_text("a sample case", split(lhs, "\n")[0][..8], "1 m + 0.");
+    // lhs and sobol: one t in each quarter.
+    for method in ["lhs", "sobol"] {
+        var seen = [false, false, false, false];
+        for c in 0..4 {
+            let t = codegen::sample_points(4, 2, method == "sobol", 7)[c * 2 + 1];
+            if t >= 0.0 && t < 1.0 { seen[(t * 4.0) as! i64] = true; }
+        }
+        if !(seen[0] && seen[1] && seen[2] && seen[3]) {
+            failures++;
+            print("FAIL ", method, ": the 4 points do not fill the 4 strata");
+        }
+    }
+    // The text of a case: each varied default in parentheses.
+    let text = str(STUDY_MODEL, "\nstudy s: grid {\n    b: [3]\n    a: [2] m\n}\n");
+    let prog = syntax::parse_model("t.skn", text);
+    codegen::study_cases(prog, codegen::find_study(prog, "s"));
+    let case_text = codegen::case_source(text, 0);
+    expect_text("the case text", case_text[..find(case_text, "let c")], "model t: 3d, SI\n\nparam a: Length = (2 m) in 0.5 m..4 m\nparam b: Real = (3)\n");
+}
+
+// The table of a study: a case that ran, a case whose expect fails and a
+// case that did not build.
+fn test_study_table() {
+    let text = str(STUDY_MODEL, "\nstudy s: grid {\n    a: [1, 2, 3] m\n}\n");
+    let prog = syntax::parse_model("t.skn", text);
+    codegen::study_cases(prog, codegen::find_study(prog, "s"));
+    let ran = """
+        report[1]{step,expr,value}:
+          s,r = reaction(c),"(1.0, 0.0, 0.0) N"
+        verify[2]{stage,id,result,value,limit}:
+          post,equilibrium,pass,0 N,1e-6 N
+          post,expect,pass,"e: 1.0 m","1 m within 1%"
+        """;
+    codegen::outs.clear();
+    codegen::outs.append(ran);
+    codegen::outs.append(replace(ran, "post,expect,pass", "post,expect,fail"));
+    var ends: codegen::CaseEnd[>..] = [];
+    for c in 0..3 {
+        var e = codegen::CaseEnd { ended: true, built: c < 2, status: 0, seconds: 1.234, err: [], out_lo: 0, out_hi: 0 };
+        if c < 2 {
+            e.out_lo = c * ran.len;
+            e.out_hi = (c + 1) * ran.len;
+        } else {
+            e.err.append("main.goose:3: error\n");
+        }
+        ends.push(e);
+    }
+    var out: u8[>..] = [];
+    var toon: u8[>..] = [];
+    let status = codegen::study_table("s", codegen::tok(codegen::find_study(prog, "s")), 2, prog, ends, false, out, toon);
+    expect_text("the study table", out, str("""
+        study: s
+        jobs: 2
+        cases[3]{case,a,status,verify,r,e,time_s}:
+          1,1 m,ok,pass,"(1.0, 0.0, 0.0) N",pass,1.23
+          2,2 m,ok,fail,"(1.0, 0.0, 0.0) N",fail,1.23
+          3,3 m,failed,fail,"","",1.23
+        diagnostics[1]{class,id,file,line,col,msg,fix}:
+          error,case_failed,t.skn,12,7,"case 3 of the study s stopped","goose cannot build the program of the case: main.goose:3: error"
+        summary: errors=1 lints=0
+        """, "\n"));
+    if status != 1 {
+        failures++;
+        print("FAIL the study table: exit status ", status, ", not 1");
+    }
+}
+
+// `skein run --study` of an example, and the command line errors. `./build.sh
+// test` builds build/skein first. The runs write .skein under build/.
+fn test_study_run() {
+    let runs = [
+        ["--study lengths --jobs 2", "0"],
+        ["--study nothing", "2"],
+        ["--jobs 2", "2"],
+        ["--study lengths --jobs 0", "2"],
+    ];
+    for r in runs {
+        var c: u8[>..] = [];
+        format(c, "cd build && ./skein run ../examples/elements/heated_bar_study_tet.skn ", r[0], " >/dev/null 2>&1; test $? = ", r[1]);
+        c.push(0);
+        if system(c[0]) != 0 {
+            failures++;
+            print("FAIL skein run --study: '", r[0], "' does not exit with ", r[1]);
+        }
+    }
+    var table: u8[>..] = [];
+    read_file("build/.skein/studies/heated_bar_study_tet/lengths.toon", table);
+    for want in ["jobs: 2\n", "cases[3]{case,lx,status,verify,heat_out,centre,time_s}:\n", "  1,0.005 m,ok,pass,-20.0", "  3,0.01 m,ok,pass,-40.0"] {
+        if find(table, want) < 0 {
+            failures++;
+            print("FAIL skein run --study: no '", want, "' in:\n", table);
+        }
+    }
+}
+
 fn main() {
     test_grid_cantilever();
     test_closed_cylinder();
@@ -351,6 +513,9 @@ fn main() {
     test_reaction();
     test_dispatch();
     test_unsupported();
+    test_study_cases();
+    test_study_table();
+    test_study_run();
     if failures > 0 {
         print(failures, " codegen tests failed");
         exit(1);

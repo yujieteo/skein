@@ -222,6 +222,7 @@ report[1]{step,expr,value}:
 
 ```toon
 study: re_sweep
+jobs: 3
 cases[3]{case,Re,status,verify,cd,time_s}:
   1,10,ok,pass,2.81,4.2
   2,20,ok,pass,2.05,4.6

@@ -31,6 +31,12 @@ fn name(n: i64) -> const u8[:] { syntax::text(syntax::nodes[n].tok) }
 
 // The source text of node `n` and its children.
 fn source_of(n: i64) -> const u8[:] {
+    let lo, hi = source_span(n);
+    return syntax::source[lo..hi];
+}
+
+// The offsets in `syntax::source` of the text of `source_of(n)`.
+fn source_span(n: i64) -> i64, i64 {
     var lo = syntax::tokens[tok(n)].start;
     var hi = lo;
     span(n, lo, hi);
@@ -59,7 +65,7 @@ fn source_of(n: i64) -> const u8[:] {
         hi = e + 1;
         opens--;
     }
-    return syntax::source[lo..hi];
+    return lo, hi;
 }
 
 recursive fn span(n: i64, lo: i64&, hi: i64&) {
@@ -1140,7 +1146,7 @@ fn read(prog: i64) -> bool {
             step(c);
         } else if k == syntax::N_EXPECT {
             expect(c);
-        } else if k != syntax::N_SCALES && k != syntax::N_USE {
+        } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this slice"),
                         "remove it: this slice runs one linear static box");
         }
