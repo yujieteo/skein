@@ -23,7 +23,8 @@ let PATTERN = 11;
 let PATTERN_POLAR = 12;
 
 // `a` and `b` are child nodes, the first point and the point count of a
-// polygon, or the child node and the copy count of a pattern. `p` holds the numbers of the primitive.
+// polygon, or the child node and the copy count of a pattern. `p` holds the
+// numbers of the primitive.
 struct Shape {
     kind: i64,
     a: i64,

@@ -5,8 +5,9 @@
 // The reader evaluates the geometry of the model: numbers with a length
 // or an angle unit, vectors, + - * / and the names of `let` items, the
 // shapes box, cylinder, rect, circle, polygon, extrude, revolve, loft,
-// pattern and pattern_polar, and the operators |, & and -. Each length is in the length unit of the
-// header (m for SI, mm for the mm systems), and each angle is in radians.
+// pattern and pattern_polar, and the operators |, & and -. Each length is
+// in the length unit of the header (m for SI, mm for the mm systems), and
+// each angle is in radians.
 import std;
 import os;
 import math;
