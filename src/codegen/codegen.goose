@@ -1614,7 +1614,6 @@ fn emit_solve(out: u8[>..]&, si: i64, share: Share) {
     if share.stages >= 2 { emit_share(out, "runtime::write_solution", share, s.name); }
 }
 
-
 fn emit_point(out: u8[>..]&, at: f64[3]) {
     out.append("    let ux, uy, uz = runtime::displacement_at(");
     lits(out, at);

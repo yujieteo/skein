@@ -346,7 +346,6 @@ struct CaseEnd {
 
 var outs: u8[>..];
 
-
 // The fields of the TOON row `line`, after its indent, with the quotes
 // and escapes taken off.
 fn toon_fields(line: u8[:]) -> u8[..512][>..] {
