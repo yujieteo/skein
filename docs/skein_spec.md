@@ -317,7 +317,9 @@ Notes on the grammar:
 
 The header comes first. `use` lines come next. The items
 after them may come in any order, but a name must be declared before its first
-use [`use_before_decl`]. Steps run in the order of the file.
+use [`use_before_decl`]. One exception: a material property may name an
+unknown of a later physics that assigns the material (§10.2). Steps run in
+the order of the file.
 
 Reason: declaration before use lets the checker resolve names in one pass,
 and it puts each error at the line of the use.
@@ -1034,7 +1036,23 @@ material steel {
 
 A material is a record of typed properties. A property may use the
 properties above it in the same material. A property may be varying (§7.6),
-for example a function of a temperature field.
+for example a function of a temperature field. A property may name an
+unknown of each physics that assigns the material, also when the physics
+comes after the material (§3.1):
+
+```skein
+material steel {
+    k: Conductivity = interp(k_steel.temp, k_steel.k_val, T)
+}
+
+physics thermal on fin solves T: Temperature = 300 K {
+    material steel
+    eq div(-k*grad(T)) = 0
+}
+```
+
+Reason: a material comes before the physics that assigns it, and a
+conductivity of `T` is a property of the material, not of the physics.
 
 ### 10.3 `physics`
 

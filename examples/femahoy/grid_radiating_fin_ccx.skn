@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-radiating-fin-ccx/fin/grid.toml
-// blocked-by: G28
 // A square steel pin fin in vacuum: 600 K at the base, and a radiation to
 // surroundings at 300 K on all other faces. The conductivity changes with
 // the temperature. Steady nonlinear heat conduction, 3D, linear hexahedra.
@@ -26,6 +25,7 @@ let radiating: Surface = boundary(fin) - base
 
 material steel {
     eps: Real = 0.9
+    k: Conductivity = interp(k_steel.temp, k_steel.k_val, T)
 }
 
 mesh m on fin {
@@ -35,9 +35,7 @@ mesh m on fin {
 
 physics thermal on fin solves T: Temperature = 300 K {
     material steel
-    // gap G28: a material property cannot use T, because T is declared later.
-    let k_T: Conductivity = interp(k_steel.temp, k_steel.k_val, T)
-    let q: Vector<HeatFlux> = -k_T*grad(T)
+    let q: Vector<HeatFlux> = -k*grad(T)
     eq div(q) = 0
 }
 

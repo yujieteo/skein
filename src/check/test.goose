@@ -258,6 +258,11 @@ fn test_physics() {
     expect_id("material_prop_missing", str(elastic, "material soft {\n    E: Pressure = 1 GPa\n    nu: Real = 0.3\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material soft\n    let w: Density = rho\n}\n"));
     expect_id("unknown_name", str(elastic, "let w: Density = rho\n"));
     expect_id("material_prop_type", str(elastic, "material soft {\n    E: Pressure = 1 GPa\n    nu: Length = 1 m\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel on f, soft on b - f\n}\n"));
+    let cond = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmesh m1 on b { size: 0.1 m }\nmaterial cu {\n    k0: Conductivity = 400 W/(m*K)\n    k: Conductivity = ");
+    let heat_of = "physics h on b solves T: Temperature = 300 K {\n    material cu\n    eq div(-k*grad(T)) = 0\n}\n";
+    expect_clean("G28 a property of a later unknown", str(cond, "k0*(1 + 0.001 K^-1*T)\n}\n", heat_of, "bc f: T = 400 K\n"));
+    expect_ids("G28 the property gives the dimension of the unknown", str(cond, "k0*T\n}\n", heat_of), "unit_mismatch\n");
+    expect_ids("G28 an unknown of a physics with another material", str(cond, "k0*(1 + 0.001 K^-1*T)\n}\nmaterial al {\n    k: Conductivity = 200 W/(m*K)\n}\nphysics h on b solves T: Temperature {\n    material al\n    eq div(-k*grad(T)) = 0\n}\n"), "use_before_decl\n");
     expect_id("assumption_unknown", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plain_stress\n}\n"));
     expect_id("assumption_conflict", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume finite_strain\n}\n"));
     expect_id("assumption_space", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_stress(1 mm)\n}\n"));

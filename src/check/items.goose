@@ -316,16 +316,55 @@ fn check_table(n: i64) {
     declare(S_TABLE, k.tok, n, kind_ty(K_DECL));
 }
 
+// The unknowns of each later physics that assigns material `mat`, as locals:
+// a property may name them (spec §3.1, §10.2). The physics reports a wrong type.
+fn later_unknowns(mat: u8[:]) {
+    var item = syntax::nodes[model_prog].first;
+    while item >= 0 {
+        if syntax::nodes[item].kind == syntax::N_PHYSICS && assigns(item, mat) {
+            var c = syntax::nodes[item].first;
+            while c >= 0 {
+                let u = syntax::nodes[c];
+                if u.kind == syntax::N_UNKNOWN && !visible.contains(key(tok_text(u.tok))) {
+                    var t = type_of(u.first, false);
+                    t.varying = true;
+                    locals.push(Local { name: key(tok_text(u.tok)), ty: t });
+                }
+                c = u.next;
+            }
+        }
+        item = syntax::nodes[item].next;
+    }
+}
+
+// True when physics node `p` assigns material `mat`.
+fn assigns(p: i64, mat: u8[:]) -> bool {
+    var c = syntax::nodes[p].first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_MATASSIGN {
+            var m = syntax::nodes[c].first;
+            while m >= 0 {
+                if tok_text(syntax::nodes[m].tok) == mat { return true; }
+                m = syntax::nodes[m].next;
+            }
+        }
+        c = syntax::nodes[c].next;
+    }
+    return false;
+}
+
 fn check_material(n: i64) {
     let k = syntax::nodes[n];
     let m = declare(S_MATERIAL, k.tok, n, kind_ty(K_DECL));
     let mark = locals.len;
+    later_unknowns(tok_text(k.tok));
+    let props_mark = locals.len;
     var c = k.first;
     while c >= 0 {
         let p = syntax::nodes[c];
         if p.kind == syntax::N_PROP {
             let name = tok_text(p.tok);
-            for l in locals[mark..] {
+            for l in locals[props_mark..] {
                 if l.name == name {
                     error(p.tok, "duplicate_name", str("the material gives '", name, "' twice"), "remove one of the two");
                 }
