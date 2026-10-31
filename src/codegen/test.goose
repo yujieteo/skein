@@ -5,6 +5,7 @@ import os;
 import syntax from "../syntax";
 import .codegen;
 import .study;
+import .split;
 import check from "../check";   // study.goose writes TOON with it
 
 extern "libc.so.6" {
@@ -586,6 +587,83 @@ fn test_study_run() {
     }
 }
 
+// The number of lines of the longest function of `program`, from its `fn`
+// line to its closing brace.
+fn longest_fn(program: u8[:]) -> i64 {
+    var longest = 0;
+    var start = -1;
+    for line, i in split(program, '\n') {
+        if starts_with(line, "fn ") { start = i; }
+        if line == "}" && start >= 0 {
+            longest = max(longest, i - start + 1);
+            start = -1;
+        }
+    }
+    return longest;
+}
+
+// `fn step_s() {` with the body lines `body`, after the splitter.
+fn split_step(body: u8[:]) -> u8[>..] {
+    var program = str("import std;\nfn step_s() {\n", body, "}\n");
+    codegen::split_long_functions(program);
+    return program;
+}
+
+// `count` statements `    call_<i>();`.
+fn calls(from: i64, count: i64) -> u8[>..] {
+    var out: u8[>..] = [];
+    for i in from..from + count { format(out, "    call_", i, "();\n"); }
+    return out;
+}
+
+fn expect_split(what: u8[:], got: u8[:], wants: const u8[:][:]) {
+    if longest_fn(got) > 60 {
+        failures++;
+        print("FAIL split ", what, ": a function has ", longest_fn(got), " lines:\n", got);
+    }
+    for w in wants {
+        if find(got, w) < 0 {
+            failures++;
+            print("FAIL split ", what, ": no '", w, "' in:\n", got);
+            return;
+        }
+    }
+}
+
+fn expect_unsplit(what: u8[:], body: u8[:]) {
+    let got = split_step(body);
+    if find(got, "part1_") >= 0 {
+        failures++;
+        print("FAIL split ", what, ": it splits:\n", got);
+    }
+}
+
+fn test_split() {
+    let short = calls(0, 58);
+    if split_step(short) != str("import std;\nfn step_s() {\n", short, "}\n") {
+        failures++;
+        print("FAIL split: a function of 60 lines changes");
+    }
+    // 130 statements: parts of 58, 58 and 14, called in order.
+    expect_split("130 calls", split_step(calls(0, 130)), [
+        "fn part1_step_s() {\n    call_0();\n",
+        "    call_57();\n}\nfn part2_step_s() {\n    call_58();\n",
+        "    call_115();\n}\nfn part3_step_s() {\n    call_116();\n",
+        "    call_129();\n}\nfn step_s() {\n    part1_step_s();\n    part2_step_s();\n    part3_step_s();\n}\n",
+    ]);
+    // No cut between a local and its last use. A comment stays with the
+    // statement below it, and a block is one statement.
+    let locals = str(calls(0, 50), "    let rx, ry = reaction();\n", calls(50, 10),
+                     "    // the check\n    {\n        check(rx);\n    }\n", calls(60, 40));
+    expect_split("a local", split_step(locals), [
+        "    call_49();\n}\nfn part2_step_s() {\n    let rx, ry = reaction();\n",
+        "    // the check\n    {\n        check(rx);\n    }\n",
+    ]);
+    expect_unsplit("a local used at the end", str("    var a = 0;\n", calls(0, 70), "    use(a);\n"));
+    expect_unsplit("a statement of 60 lines", str(calls(0, 10), "    {\n", calls(10, 58), "    }\n", calls(68, 10)));
+    expect_unsplit("a return",str(calls(0, 40), "    if done { return; }\n", calls(40, 40)));
+}
+
 fn main() {
     test_grid_cantilever();
     test_closed_cylinder();
@@ -599,6 +677,7 @@ fn main() {
     test_study_table();
     test_study_workers();
     test_study_run();
+    test_split();
     if failures > 0 {
         print(failures, " codegen tests failed");
         exit(1);

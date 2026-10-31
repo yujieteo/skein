@@ -7,7 +7,8 @@
 #
 # For each model, skein run writes .skein/build/<model>/main.goose, and builds
 # and runs it. It must pass. Then `goose -o` writes the C of that program,
-# which is the same C that the build of skein run compiles.
+# which is the same C that the build of skein run compiles. Then
+# scripts/power_of_ten.sh checks each program and the runtime that it imports.
 #
 # Goose writes the absolute path of each imported file into the C. This
 # script removes the repository directory from these paths. That is the only
@@ -31,6 +32,7 @@ examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/scordelis_lo_roof.skn
+examples/lame_profile.skn
 examples/shells/thin_cylinder_shell.skn
 "
 
@@ -55,6 +57,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 status=0
+programs=""
 for model in $models; do
     # skein run names the build directory after the `model <name>:` line.
     name=$(sed -n 's/^model \([A-Za-z0-9_]*\):.*/\1/p' "$root/$model" | head -n 1)
@@ -65,6 +68,7 @@ for model in $models; do
         status=1
         continue
     fi
+    programs="$programs $work/.skein/build/$name/main.goose"
     (cd "$work" && "$goose" -q -o "$work/$name.c" ".skein/build/$name/main.goose")
     sed "s|\"$root/|\"|" "$work/$name.c" > "$work/$name.normal.c"
     if [ "$mode" = write ]; then
@@ -76,4 +80,7 @@ for model in $models; do
         status=1
     fi
 done
+if ! "$root/scripts/power_of_ten.sh" $programs; then
+    status=1
+fi
 exit $status

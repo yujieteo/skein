@@ -75,7 +75,6 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
             }
         }
     }
-    let names = if annulus { ANNULUS_FACE_NAMES } else { FACE_NAMES };
     var nodes: i64[27] = [0; 27];
     for cz in nz {
         for cy in ny {
@@ -92,6 +91,15 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
             }
         }
     }
+    add_lattice_face_sets(annulus);
+    young = 0.0;
+    poisson = 0.0;
+    clear_dofs();
+}
+
+// The node set and the face set of each of the 6 faces of the lattice.
+fn add_lattice_face_sets(annulus: bool) {
+    let names = if annulus { ANNULUS_FACE_NAMES } else { FACE_NAMES };
     var members: i64[>..] = [];
     for axis in 3 {
         let a, b = other_axes(axis);
@@ -116,9 +124,6 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
             add_face_set(names[2 * axis + side], members);
         }
     }
-    young = 0.0;
-    poisson = 0.0;
-    clear_dofs();
 }
 
 // The node at position (s, t) of the lattice of the face that is normal to

@@ -1,0 +1,94 @@
+// The Lame solution through the wall of the cylinder of
+// closed_cylinder.skn, here 20 mm long: the hoop stress A (1 + b^2/r^2) and the
+// radial stress A (1 - b^2/r^2), with A = p a^2/(b^2 - a^2), at 9 radii
+// from a + 0.5 mm to b - 0.5 mm. The checks read the stress at the middle
+// of the length, on y = 0, where yy is the hoop and xx the radial
+// component.
+//
+// The 18 expect items make the generated main longer than 60 lines, so
+// skein run splits it (spec §18.3), and scripts/generated_c.sh runs the
+// split program.
+
+model lame_profile: 3d, mm_N_MPa_s
+
+let a: Length = 100 mm
+let t_w: Length = 5 mm
+let b: Length = a + t_w
+let L: Length = 20 mm
+let p: Pressure = 1 MPa
+let A: Pressure = p*a^2/(b^2 - a^2)
+
+scales t_w, p
+
+let barrel: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), b, L)
+let bore: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), a, L)
+let quarter: Solid = box((0, 0, 0) mm, (b, b, L))
+let wall: Solid = (barrel - bore) & quarter
+let inner: Surface = boundary(wall, bore)
+let sym_x: Surface = boundary(wall, x == 0 mm)
+let sym_y: Surface = boundary(wall, y == 0 mm)
+let bottom: Surface = boundary(wall, z == 0 mm)
+let cap: Surface = boundary(wall, z == L)
+
+material steel {
+    E: Pressure = 210 GPa
+    nu: Real = 0.3
+}
+
+mesh m on wall {
+    size: 2.5 mm
+    cell: hex
+}
+
+physics solid on wall: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+step press: static {
+    bc sym_x: u.x = 0
+    bc sym_y: u.y = 0
+    bc bottom: u.z = 0
+    bc inner: sigma*n = -p*n
+    // The cap load p pi a^2 on the wall area pi (b^2 - a^2).
+    bc cap: sigma*n = (0, 0, p*a^2/(b^2 - a^2))
+    output u, sigma
+}
+
+// The error of the mesh is less than 0.1% on the hoop stress. The radial
+// stress is small, so its limit is absolute: 1% of p. Its largest error,
+// 0.5% of p, is on the cell faces at r = a + 2.5 mm.
+expect hoop_1: sigma.yy at (a + 0.5 mm, 0 mm, L/2) == A*(1 + b^2/(a + 0.5 mm)^2) within 0.1%
+
+expect radial_1: sigma.xx at (a + 0.5 mm, 0 mm, L/2) == A*(1 - b^2/(a + 0.5 mm)^2) within 0.01 MPa
+
+expect hoop_2: sigma.yy at (a + 1.0 mm, 0 mm, L/2) == A*(1 + b^2/(a + 1.0 mm)^2) within 0.1%
+
+expect radial_2: sigma.xx at (a + 1.0 mm, 0 mm, L/2) == A*(1 - b^2/(a + 1.0 mm)^2) within 0.01 MPa
+
+expect hoop_3: sigma.yy at (a + 1.5 mm, 0 mm, L/2) == A*(1 + b^2/(a + 1.5 mm)^2) within 0.1%
+
+expect radial_3: sigma.xx at (a + 1.5 mm, 0 mm, L/2) == A*(1 - b^2/(a + 1.5 mm)^2) within 0.01 MPa
+
+expect hoop_4: sigma.yy at (a + 2.0 mm, 0 mm, L/2) == A*(1 + b^2/(a + 2.0 mm)^2) within 0.1%
+
+expect radial_4: sigma.xx at (a + 2.0 mm, 0 mm, L/2) == A*(1 - b^2/(a + 2.0 mm)^2) within 0.01 MPa
+
+expect hoop_5: sigma.yy at (a + 2.5 mm, 0 mm, L/2) == A*(1 + b^2/(a + 2.5 mm)^2) within 0.1%
+
+expect radial_5: sigma.xx at (a + 2.5 mm, 0 mm, L/2) == A*(1 - b^2/(a + 2.5 mm)^2) within 0.01 MPa
+
+expect hoop_6: sigma.yy at (a + 3.0 mm, 0 mm, L/2) == A*(1 + b^2/(a + 3.0 mm)^2) within 0.1%
+
+expect radial_6: sigma.xx at (a + 3.0 mm, 0 mm, L/2) == A*(1 - b^2/(a + 3.0 mm)^2) within 0.01 MPa
+
+expect hoop_7: sigma.yy at (a + 3.5 mm, 0 mm, L/2) == A*(1 + b^2/(a + 3.5 mm)^2) within 0.1%
+
+expect radial_7: sigma.xx at (a + 3.5 mm, 0 mm, L/2) == A*(1 - b^2/(a + 3.5 mm)^2) within 0.01 MPa
+
+expect hoop_8: sigma.yy at (a + 4.0 mm, 0 mm, L/2) == A*(1 + b^2/(a + 4.0 mm)^2) within 0.1%
+
+expect radial_8: sigma.xx at (a + 4.0 mm, 0 mm, L/2) == A*(1 - b^2/(a + 4.0 mm)^2) within 0.01 MPa
+
+expect hoop_9: sigma.yy at (a + 4.5 mm, 0 mm, L/2) == A*(1 + b^2/(a + 4.5 mm)^2) within 0.1%
+
+expect radial_9: sigma.xx at (a + 4.5 mm, 0 mm, L/2) == A*(1 - b^2/(a + 4.5 mm)^2) within 0.01 MPa

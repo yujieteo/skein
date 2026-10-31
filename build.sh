@@ -3,7 +3,8 @@
 #
 #   ./build.sh          build build/skein
 #   ./build.sh test     build, then run each src/<part>/test.goose and
-#                       check the generated C (scripts/generated_c.sh)
+#                       check the generated C (scripts/generated_c.sh) and
+#                       the Power of Ten rules 1 and 4 (scripts/power_of_ten.sh)
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.

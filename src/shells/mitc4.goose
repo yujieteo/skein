@@ -163,7 +163,12 @@ fn local_rows(c: i64, xi: f64, eta: f64) {
         rows[144 + i] = c00 * g1[i] + c10 * g2[i];
         rows[168 + i] = c01 * g1[i] + c11 * g2[i];
     }
-    // The drilling rotation: θ · e3 - ½ (∂u/∂x1 · e2 - ∂u/∂x2 · e1).
+    drilling_rows(xi, eta, c00, c01, c10, c11);
+}
+
+// The drilling row at (xi, eta): θ · e3 - ½ (∂u/∂x1 · e2 - ∂u/∂x2 · e1),
+// with c[2 a + k] = g^a · e_k (local_rows).
+fn drilling_rows(xi: f64, eta: f64, c00: f64, c01: f64, c10: f64, c11: f64) {
     for l in 4 {
         let d1 = 0.25 * NODE_XI[l] * (1.0 + eta * NODE_ETA[l]);
         let d2 = 0.25 * NODE_ETA[l] * (1.0 + xi * NODE_XI[l]);

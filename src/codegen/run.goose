@@ -16,6 +16,7 @@ import elements.gen;   // skein-elements: the simplex models
 import shells.gen;     // skein-shells: the shell models
 import check from "../check";
 import .study;
+import .split;
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -93,6 +94,7 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     } else {
         generate(runtime_path, results_dir, share, program);
     }
+    split_long_functions(program);
 }
 
 // `skein run`. `args` are the words after `run`. It gives the exit status
