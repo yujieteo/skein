@@ -1,6 +1,6 @@
 // `skein check` and `skein lint` (docs/command_line.md §2, §4, §6): parses
 // a model, applies the rules of spec §19 and prints the diagnostics and the
-// free boundary report in TOON or JSON.
+// free boundary report and the default methods in TOON or JSON.
 import std;
 import os;
 import dictionary;
@@ -196,6 +196,18 @@ fn write_toon(out: u8[>..]&) {
         quoted(out, f.condition);
         out.push('\n');
     }
+    format(out, "method[", chosen.len, "]{physics,kind,mesh,order,stabilize}:\n");
+    for c in chosen {
+        out.append("  ");
+        toon_value(out, c.physics);
+        out.append(",cg,");
+        toon_value(out, c.mesh);
+        out.push(',');
+        toon_value(out, c.order);
+        out.push(',');
+        out.append(c.stabilize);
+        out.push('\n');
+    }
 }
 
 fn write_json(out: u8[>..]&) {
@@ -228,6 +240,19 @@ fn write_json(out: u8[>..]&) {
             quoted(out, f.region);
             out.append(",\"condition\":");
             quoted(out, f.condition);
+            out.push('}');
+        }
+        out.append("],\"method\":[");
+        for c, i in chosen {
+            if i > 0 { out.push(','); }
+            out.append("{\"physics\":");
+            quoted(out, c.physics);
+            out.append(",\"kind\":\"cg\",\"mesh\":");
+            quoted(out, c.mesh);
+            out.append(",\"order\":");
+            quoted(out, c.order);
+            out.append(",\"stabilize\":");
+            quoted(out, c.stabilize);
             out.push('}');
         }
         out.push(']');

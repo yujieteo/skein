@@ -322,7 +322,15 @@ free_boundary[3]{physics,field,region,condition}:
 
 With no `method` item, a physics gets continuous Galerkin of order 2 on its
 mesh, Taylor-Hood cells for incompressible flow, and SUPG when the
-equations have convection. A `method` item chooses another method:
+equations have convection. `check` lists the method that it chose for each
+physics with no `method` item:
+
+```toon
+method[1]{physics,kind,mesh,order,stabilize}:
+  flow,cg,m,"{ v: 2, p: 1 }",supg
+```
+
+A `method` item chooses another method:
 
 ```skein
 method solid: cg {

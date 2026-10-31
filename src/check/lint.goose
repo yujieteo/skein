@@ -249,7 +249,7 @@ fn displacement_of(p: i64) -> i64 {
 
 // The cell order of unknown `u` in the method `m` (spec §13: default 2).
 fn order_of(m: i64, u: i64) -> f64 {
-    if m < 0 { return 2.0; }
+    if m < 0 { return default_order(u); }
     let order = setting(syntax::nodes[m].first, "order");
     if order < 0 { return 2.0; }
     if syntax::nodes[order].kind == syntax::N_RECORD {
