@@ -76,6 +76,10 @@ The options below are planned:
 | `--study <name>` | check each case of the study, and print the stages that each parameter reaches (spec §20.4). No solve. |
 | `--set name=value` | give a `param` a value for this command (spec §20.1). The value has a unit and must be in the range of the `param`. |
 
+`check` needs no mesh. Its target is under 50 ms for each of the samples.
+No measured run confirms this target yet.
+Reason: an LLM runs `check` after each edit.
+
 ---
 
 ## 3. Formatting
