@@ -83,6 +83,14 @@ gives the roadmap phase that closes the gap:
   [grid_heated_block_stress_ccx.skn](../examples/femahoy/grid_heated_block_stress_ccx.skn),
   use it. A grid on a region that is not a union of axis-aligned boxes or
   rects is the open gap G36.
+- Phase 2 closes G28. Spec [§3.1](skein_spec.md#31-order-of-items) and
+  [§10.2](skein_spec.md#102-material) let a material property name an
+  unknown of a physics that assigns the material. The conductivity of `T`
+  of
+  [grid_radiating_fin_ccx.skn](../examples/femahoy/grid_radiating_fin_ccx.skn)
+  and
+  [grid_conductivity_slab.skn](../examples/femahoy/grid_conductivity_slab.skn)
+  is a material property.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -148,7 +156,7 @@ result, or the mesh or the solve is less efficient.
 | G25 | The stop rule and the first simplex of Nelder-Mead. The case tolerance comes from the stop rule. | `validation/cases/shape-hole-biaxial/derivation.md:50` | `minimize` has only `objective`, `method` and `max_cases` (§20.2). | `minimize` arguments `xtol` and `step`. | 2 |
 | G26 | An open boundary: a PML, or a map of a shell to infinity. | `validation/cases/team7-eddy-current/50hz/case.pro:50`, `validation/cases/dipole-king-middleton/omega12.5/openems.py:39`, `validation/cases/optics-mie-cylinder/res40/meep_case.py:38` | §8 and §13 have no absorbing layer and no infinite map. The models put a first-order absorbing `bc`, or a zero field, on a far boundary. | A method setting `pml: { region, thickness }`. | 4 |
 | G27 | A tree gauge for edge elements in a region with no conductor. | `validation/cases/team7-eddy-current/50hz/case.pro:36` | `family: nedelec` has no gauge setting (§13). | A method setting `gauge: tree`. | 5 |
-| G28 | A material property that is a function of the unknown of the physics that uses it: a conductivity of T. | `validation/cases/grid-radiating-fin-ccx/fin/grid.toml:9` | §10.2 allows a property of a temperature field, but §3.1 needs each name before its use, and the `material` comes before the `physics` that declares `T`. The model puts the property in a physics `let`. | In §3.1, let a material property name an unknown of a physics that assigns the material. | 2 |
+| G28 | A material property that is a function of the unknown of the physics that uses it: a conductivity of T. | `validation/cases/grid-radiating-fin-ccx/fin/grid.toml:9` | §10.2 allows a property of a temperature field, but §3.1 needs each name before its use, and the `material` comes before the `physics` that declares `T`. The model puts the property in a physics `let`. | In §3.1, let a material property name an unknown of a physics that assigns the material. | 2, closed by [§3.1](skein_spec.md#31-order-of-items) |
 | G29 | A temperature below 0 °C, for example a sink at -5 °C. | `validation/cases/grid-layered-wall/wall/grid.toml:49` | `-` is a unary operator (§2.4) and `5 degC` is 278.15 K (§6.3), so `-5 degC` is -278.15 K. The model gives the values in K. | A `-` directly before a literal with `degC` is part of the literal. | 1 |
 
 ### Gaps of the 787 study
@@ -259,7 +267,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | `*HYPERELASTIC` (Ogden) | hyperelastic-tube | a strain energy `W` and `S = 2*diff(W, C)` | [§10.6](skein_spec.md#106-inelastic-materials), gap [G30](#gaps-that-make-a-model-fail-check) |
 | St. Venant-Kirchhoff under `NLGEOM` | turek-hron-fsi1, buckling-column | `assume finite_strain` and `hooke` of the Green-Lagrange strain | [§11.1](skein_spec.md#111-assumption-table) |
 | `*CONDUCTIVITY`, `*SPECIFIC HEAT`, grid heat materials | heat-fin, grid-cooling-slab and the other heat cases | `k: Conductivity`, `cp: SpecificHeat`, `q = fourier(k, T)` | [§6.2](skein_spec.md#62-named-dimension-types), [§10.2](skein_spec.md#102-material) |
-| A conductivity table of the temperature | grid-radiating-fin-ccx, grid-conductivity-slab | `table` and `interp(..., T)` in a physics `let` | [§5.6](skein_spec.md#56-tables), Appendix [A](skein_spec.md#appendix-a-built-in-names), gap [G28](#gaps-that-change-the-discretization-or-the-physics) |
+| A conductivity table of the temperature | grid-radiating-fin-ccx, grid-conductivity-slab | `table` and `interp(..., T)` in a material property | [§5.6](skein_spec.md#56-tables), [§10.2](skein_spec.md#102-material), Appendix [A](skein_spec.md#appendix-a-built-in-names) |
 | Electric conductivity, permittivity, permeability, loss | grid-resistor-bar, grid-coax-capacitor, grid-waveguide-dielectric, line-*, team7-eddy-current | properties with dimension expressions, for example `A/(V*m)` | [§6.2](skein_spec.md#62-named-dimension-types), [§6.3](skein_spec.md#63-units), [§10.2](skein_spec.md#102-material) |
 | Viscosity, density, Prandtl number of a fluid | cavity-devahldavis, cht-heated-channel, naca0012-ladson, turek-hron-fsi1 | `mu: DynViscosity`, `rho: Density`, `k`, `cp` | [§10.2](skein_spec.md#102-material) |
 | Boussinesq buoyancy | cavity-devahldavis | the body force `rho*(1 - beta*(T - T0))*g` in the momentum equation | [§10.3](skein_spec.md#103-physics), [§11.1](skein_spec.md#111-assumption-table) |

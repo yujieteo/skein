@@ -16,6 +16,7 @@ let cold: Surface = boundary(slab, z == Ls)
 material solid {
     k0: Conductivity = 2 W/(m*K)
     beta: Expansion = 0.002 K^-1
+    k: Conductivity = k0*(1 + beta*T)
 }
 
 mesh m on slab {
@@ -25,7 +26,6 @@ mesh m on slab {
 
 physics thermal on slab solves T: Temperature = 400 K {
     material solid
-    let k: Conductivity = k0*(1 + beta*T)
     let q: Vector<HeatFlux> = -k*grad(T)
     eq div(q) = 0
 }

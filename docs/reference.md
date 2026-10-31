@@ -260,6 +260,9 @@ material water {
 }
 ```
 
+A property may name an unknown of a physics that assigns the material,
+for example `k: Conductivity = k0*(1 + beta*T)`.
+
 A physics block assigns materials to regions:
 
 ```skein

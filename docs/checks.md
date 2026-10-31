@@ -60,7 +60,7 @@ in the file stays in the review.
 |---|---|---|---|---|
 | `syntax` | §3 | the text does not match the grammar | `let E Pressure = 1 Pa` | the expected token, for example "insert `:`" |
 | `unknown_name` | §4 | a name is not declared | `hooke(E, nu, strain(v))` with no `v` | the nearest declared name |
-| `use_before_decl` | §3.1 | a name is used above its declaration | `bc tip: …` above `let tip` | move the declaration up |
+| `use_before_decl` | §3.1 | a name is used above its declaration, other than an unknown in a material property (§10.2) | `bc tip: …` above `let tip` | move the declaration up |
 | `duplicate_name` | §4 | two declarations have one name, also a name from the standard library, a `use` file or Appendix A | two `let sigma`, or `let t` (time) | rename one |
 | `use_item` | §4.1 | a `use` file does not exist, or holds a header, a `use` line or an item other than `material`, `param`, `let` or `fn` | a `physics` in a library file | move the item to the model |
 | `unknown_unit` | §6.3 | a unit name does not exist | `5 mms` | the nearest unit name |
