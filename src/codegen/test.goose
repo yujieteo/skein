@@ -549,6 +549,36 @@ fn test_study_workers() {
     }
 }
 
+// The work-stealing pool (spec §20.5): 10 tasks on 3 workers start as the
+// blocks 0-2, 3-5 and 6-9. Worker 1 ends its block first and takes the
+// tail of the longest other queue. Each task runs once.
+fn test_pool() {
+    var p = codegen::new_pool(10, 3);
+    var got: i64[>..] = [];
+    for w in [1, 1, 1, 1, 0, 1] { got.push(codegen::take_task(p, w)); }
+    var text: u8[>..] = [];
+    for t in got { format(text, t, " "); }
+    expect_text("the tasks of the pool", text, "3 4 5 9 0 8 ");
+    var seen: bool[>..] = [];
+    for t in 10 { seen.push(false); }
+    for t in got { seen[t] = true; }
+    loop {
+        let t = codegen::take_task(p, 2);
+        guard t >= 0 else { break; };
+        if seen[t] {
+            failures++;
+            print("FAIL the pool gives task ", t, " twice");
+        }
+        seen[t] = true;
+    }
+    for t in 10 {
+        if !seen[t] {
+            failures++;
+            print("FAIL the pool does not give task ", t);
+        }
+    }
+}
+
 // `skein run --study` of an example, and the command line errors. `./build.sh
 // test` builds build/skein first. The runs write .skein under build/.
 fn test_study_run() {
@@ -741,6 +771,7 @@ fn main() {
     test_study_cases();
     test_study_table();
     test_study_workers();
+    test_pool();
     test_study_run();
     test_split();
     test_unchecked_status();

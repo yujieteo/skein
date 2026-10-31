@@ -472,3 +472,30 @@ recursive fn bounds(g: i64) -> f64[6] {
     }
     return u;
 }
+
+// The point x moved onto the boundary φ = 0 of g: Newton steps along the
+// gradient of φ, from central differences.
+fn project(g: i64, x0: f64[3]) -> f64[3] {
+    let b = bounds(g);
+    var d = 0.0;
+    for c in 3 { d = max(d, b[3 + c] - b[c]); }
+    let h = 1.0e-7 * d;
+    var x = x0;
+    for step in 8 {
+        let f = phi(g, x[0], x[1], x[2]);
+        guard abs(f) > 1.0e-12 * d else { break; };
+        var grad: f64[3] = [0.0, 0.0, 0.0];
+        var g2 = 0.0;
+        for c in 3 {
+            var lo = x;
+            var hi = x;
+            lo[c] -= h;
+            hi[c] += h;
+            grad[c] = (phi(g, hi[0], hi[1], hi[2]) - phi(g, lo[0], lo[1], lo[2])) / (2.0 * h);
+            g2 += grad[c] * grad[c];
+        }
+        guard g2 > 0.0 else { break; };
+        for c in 3 { x[c] -= f * grad[c] / g2; }
+    }
+    return x;
+}

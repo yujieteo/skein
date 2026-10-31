@@ -162,9 +162,10 @@ job, computes the cell matrices, and returns them in a flat result. The main
 program adds them into the matrix. This costs one copy for each cell
 matrix, and it needs no locks.
 
-In phase 3, one work-stealing task pool runs the cases of a study and the
-parallel parts of each case (spec §20.5). Each worker has a queue of
-tasks. An idle worker takes a task from the queue of another worker.
+In phase 3, one work-stealing task pool runs the cases of a study (spec
+§20.5). Each worker has a queue of cases. An idle worker takes a case from
+the queue of another worker. A case is a separate program, so the parallel
+parts of a case are not tasks of the pool.
 
 ---
 

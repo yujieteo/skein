@@ -1,5 +1,4 @@
 // femahoy: validation/cases/hyperelastic-tube/job.inp
-// blocked-by: G36
 // A quarter of a long rubber tube in plane strain (A = 10 mm, B = 20 mm), 3-term Ogden rubber
 // (Ogden 1972), nearly incompressible. The inner face moves out to 2.5 and then 4 times its
 // radius, past the pressure maximum. References (Haughton and Ogden 1979): F = 5.74269 N at
@@ -35,12 +34,10 @@ material rubber {
     Kb: Pressure = 4000 MPa
 }
 
-// gap G36: the mesher makes quad cells only on a union of rects, so the tube uses
-// triangles. ccx uses CPE8R: order: 2, family: serendipity and quadrature: reduced on
-// quad cells.
+// The CPE8R of ccx: a grid in r and θ of serendipity quads with reduced integration.
 mesh m on quarter {
     size: 1.25 mm
-    cell: tri
+    cell: quad
 }
 
 physics tube on quarter solves u: Vector<Length> {
@@ -53,6 +50,8 @@ physics tube on quarter solves u: Vector<Length> {
     let S: Tensor2<Pressure> = 2*diff(W, C)
     eq div(defgrad(u)*S) = 0
 }
+
+method tube: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }
 
 bc sx: u.x = 0
 bc sy: u.y = 0
