@@ -662,7 +662,7 @@ fn test_split() {
     ]);
     expect_unsplit("a local used at the end", str("    var a = 0;\n", calls(0, 70), "    use(a);\n"));
     expect_unsplit("a statement of 60 lines", str(calls(0, 10), "    {\n", calls(10, 58), "    }\n", calls(68, 10)));
-    expect_unsplit("a return",str(calls(0, 40), "    if done { return; }\n", calls(40, 40)));
+    expect_unsplit("a return", str(calls(0, 40), "    if done { return; }\n", calls(40, 40)));
 }
 
 fn test_unchecked_status() {
