@@ -1,6 +1,6 @@
 // The stages of the work of a case that a param reaches (spec §20.4). The
-// study runner reuses the stages that no varied param reaches, and
-// `skein check --study` reports the stages of each param.
+// study runner reuses the stages that no varied param reaches. A later
+// `skein check --study` can call it to report the stages of each param.
 import std;
 namespace check;
 import syntax from "../syntax";
