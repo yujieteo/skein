@@ -63,7 +63,7 @@ recursive fn type_of(n: i64, report: bool) -> Ty {
 
 fn unknown_type(tok: i64) {
     error(tok, "unknown_name", str("'", syntax::text(tok), "' is not a type"),
-          "use Real, Int, Angle, Bool, Str, a geometry type or a dimension of spec §6.2");
+          "use Real, Int, Angle, Bool, a geometry type or a dimension of spec §6.2");
 }
 
 fn nested_tensor(tok: i64) {

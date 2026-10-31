@@ -438,8 +438,8 @@ answer.
 | G4.3 | A. Limiters for `fv`, entropy viscosity for `dg`. | spec [§13](skein_spec.md#13-methods) |
 | G4.4 | A. Nédélec and Raviart-Thomas, phase 5. | spec [§13](skein_spec.md#13-methods) |
 | G4.5 | Complex numbers, in a design that generalizes (G4.5b). | spec [§5.1](skein_spec.md#51-scalar-types) |
-| G4.5b | A. The closed list `Real`, `Complex`, `Quaternion`, `Dual`. Symmetry groups too, also a closed list: cyclic, dihedral, Bloch and Floquet. | spec [§5.1](skein_spec.md#51-scalar-types), [§12.6](skein_spec.md#126-symmetry-groups) |
-| G4.6 | A. Adaptive time steps, variable-order BDF. | spec [§14.2](skein_spec.md#142-procedures) |
+| G4.5b | A. The closed list `Real`, `Complex`, `Quaternion`, `Dual`. Symmetry groups too, also a closed list: cyclic, dihedral, Bloch and Floquet. | spec [§5.1](skein_spec.md#51-scalar-types), [§12.6](skein_spec.md#126-symmetry-groups). `Quaternion`, `Dual`, cyclic and dihedral cut on 2026-10-31 ([tradeoffs §11](tradeoffs.md#11-summary-of-the-gaps)) |
+| G4.6 | A. Adaptive time steps, variable-order BDF. | cut on 2026-10-31 ([tradeoffs §11](tradeoffs.md#11-summary-of-the-gaps)) |
 | G4.7 | B. No `process` statement in v1. | [tradeoffs §2](tradeoffs.md#2-the-design-against-the-workloads) |
 | G5.1 | A. `shell`, `loft`, `pattern`. | spec [§8.1](skein_spec.md#81-distance-functions) |
 | G5.2 | B. No exact B-rep. STL and tessellated STEP only. | spec [§22](skein_spec.md#22-export) |

@@ -321,7 +321,7 @@ fn read_stl(what: u8[:], stl: u8[:]) -> i64, f64, f64[3] {
     return count, volume, area;
 }
 
-// `skein export` (spec §22.5): the surface of the tetrahedra of a Solid,
+// `skein export` (spec §22): the surface of the tetrahedra of a Solid,
 // closed and with its normals out, and the triangles of a 2D Surface.
 fn test_export() {
     fn solid(region: u8[:], mesh: u8[:]) -> u8[>..] {
