@@ -14,6 +14,21 @@ import .fem;
 var young = 0.0;
 var poisson = 0.0;
 
+// The material of each cell: E, nu and the isotropic thermal strain
+// alpha (T - T0). `material` sets them for all cells, and `material_box`
+// for the cells whose centre is in a box (api.goose).
+var cell_young: f64[>..] = [];
+var cell_poisson: f64[>..] = [];
+var cell_strain: f64[>..] = [];
+
+// The Lamé constants lambda and mu of the material of cell c.
+fn cell_lame(c: i64) -> f64, f64 {
+    guard c >= 0 && c < cell_young.len && cell_poisson.len == cell_young.len else { abort("cell_lame: a cell with a material"); }
+    let e = cell_young[c];
+    let nu = cell_poisson[c];
+    return e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu)), e / (2.0 * (1.0 + nu));
+}
+
 // The quadratic Lagrange function of node a (at -1, 0 and 1) at s.
 fn shape_1d(a: i64, s: f64) -> f64 {
     guard a >= 0 && a < 3 else { abort("shape_1d: 0 <= a < 3"); }
