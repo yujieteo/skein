@@ -1474,6 +1474,17 @@ Time schemes:
 An explicit scheme with a `dt` above the stable limit gives the lint
 [`dt_unstable`] (checks.md).
 
+`dt: stable` tells the solver to choose the stable increment of an
+explicit scheme. The solver estimates the limit from the highest frequency
+of the mesh, and takes a step a little below it.
+
+```skein
+step pull: transient(end: 80 us, dt: stable, scheme: central_difference) { … }
+```
+
+`dt: stable` needs `scheme: ssprk3` or `scheme: central_difference`, and no
+`adapt`. Otherwise the error is `procedure_args`.
+
 ### 14.3 Birth and death
 
 ```skein

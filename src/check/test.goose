@@ -353,6 +353,11 @@ fn test_steps() {
     expect_id("procedure_args", str(elastic, "step go: transient(end: 1 s) {\n    bc f: u = 0\n}\n"));
     expect_id("procedure_args", str(elastic, "step go: static(rate: 2) {\n    bc f: u = 0\n}\n"));
     expect_id("not_constant", str(elastic, "step go: transient(end: t, dt: 1 s) {\n    bc f: u = 0\n}\n"));
+    expect_clean("G21 dt: stable with central_difference", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: central_difference) {\n    bc f: u = 0\n}\n"));
+    expect_clean("G21 dt: stable with ssprk3", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: ssprk3) {\n    bc f: u = 0\n}\n"));
+    expect_ids("dt: stable with the default scheme", str(elastic, "step go: transient(end: 1 s, dt: stable) {\n    bc f: u = 0\n}\n"), "procedure_args\n");
+    expect_ids("dt: stable with an implicit scheme", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: bdf2) {\n    bc f: u = 0\n}\n"), "procedure_args\n");
+    expect_ids("dt: stable with adapt", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: ssprk3, adapt: { rtol: 1e-4, atol: 1e-8 }) {\n    bc f: u = 0\n}\n"), "procedure_args\n");
     expect_clean("G9 a list of frequencies", str(elastic, "step go: harmonic(freq: [10, 20] Hz) {\n    bc f: u = 0\n}\n"));
     expect_clean("G6 an eigenvalue", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 10 Hz within 1%\n"));
     expect_clean("an eigenvalue with no units", "model m: 3d, nondim\nlet b: Solid = box((0, 0, 0), (1, 1, 1))\nlet f: Surface = boundary(b, x == 0)\nmaterial steel {\n    E: Pressure = 1000\n    nu: Real = 0.3\n    rho: Density = 1\n}\nmesh m1 on b { size: 0.1 }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nstep go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 2.5 within 1%\n");
@@ -488,6 +493,7 @@ fn test_lint() {
     let impact = str(elastic, "bc f: u = 0\nstep go: transient(end: 1 s, dt: ");
     expect_lints("dt_unstable", str(impact, "1 ms, scheme: ssprk3) {\n    output u\n}\n"), "dt_unstable\n");
     expect_lints("a stable dt", str(impact, "1 us, scheme: ssprk3) {\n    output u\n}\n"), "");
+    expect_lints("dt: stable", str(impact, "stable, scheme: ssprk3) {\n    output u\n}\n"), "");
     expect_lints("an implicit scheme", str(impact, "1 ms, scheme: bdf2) {\n    output u\n}\n"), "");
     expect_lints("dt_unstable at a crack tip", str(H2, "let c: Surface = rect((0, 0) m, (1, 1) m)\nlet f: Curve = boundary(c, x == 0 m)\nlet tip: Point = point((0.5, 0) m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n    rho: Density = 7800 kg/m^3\n}\nmesh m1 on c {\n    size: 0.1 m\n    crack_tip tip: 1 mm\n}\nphysics s on c: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 m)\n}\nbc f: u = 0\nstep go: transient(end: 1 s, dt: 1 us, scheme: ssprk3) {\n    output u\n}\n"), "dt_unstable\n");
     expect_lints("a meshless method beside a crack tip mesh", str(H2, "let c: Surface = rect((0, 0) m, (1, 1) m)\nlet f: Curve = boundary(c, x == 0 m)\nlet tip: Point = point((0.5, 0) m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n    rho: Density = 7800 kg/m^3\n}\nmesh m1 on c {\n    size: 0.1 m\n    crack_tip tip: 1 mm\n}\npoints cloud on c { spacing: 0.1 m }\nphysics s on c: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 m)\n}\nbc f: u = 0\nstep go: transient(end: 1 s, dt: 1 us, scheme: ssprk3) {\n    output u\n}\nmethod s: rkpm { points: cloud }\n"), "");

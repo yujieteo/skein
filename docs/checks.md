@@ -131,7 +131,7 @@ in the file stays in the review.
 | `method_physics` | §13 | the method cannot discretize the physics | `gfd` with a `plastic` block | a method that can |
 | `inf_sup` | §13 | an unstable velocity-pressure pair with no stabilization | `order: { v: 1, p: 1 }`, `stabilize: none` | `stabilize: supg_pspg` or `order: { v: 2, p: 1 }` |
 | `order_too_low` | §13 | the cell order is too low for the derivatives | `order: 1` with `lap(lap(w))` | the minimum order |
-| `procedure_args` | §14.2 | a procedure argument is missing or not valid | `transient(end: 1 s)` with no `dt` | the argument list |
+| `procedure_args` | §14.2 | a procedure argument is missing or not valid, or `dt: stable` has an implicit scheme or `adapt` | `transient(end: 1 s)` with no `dt` | the argument list |
 | `birth_not_meshed` | §14.3 | a `birth` region is not a part of the mesh region | | the mesh region |
 | `allow_reason` | §19 | `allow` has an empty reason or an unknown id | | the list of ids |
 

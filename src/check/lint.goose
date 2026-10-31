@@ -17,8 +17,7 @@ import .types;
 import .state;
 import .expr;
 import .items;
-
-let EXPLICIT_SCHEMES = ["ssprk3", "central_difference"];
+import .steps;
 
 // The names that a part of the model uses.
 var used_names = dictionary<Name, i64> {};

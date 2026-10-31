@@ -17,6 +17,7 @@ import .physics;
 // The arguments of each procedure. The first one is also the positional one.
 let STATIC_ARGS = ["ramp"];
 let TRANSIENT_ARGS = ["end", "dt", "scheme", "adapt"];
+let EXPLICIT_SCHEMES = ["ssprk3", "central_difference"];
 let HARMONIC_ARGS = ["freq"];
 let MODAL_ARGS = ["count", "shift"];
 let BUCKLING_ARGS = ["count"];
@@ -34,6 +35,9 @@ fn check_procedure(pr: i64) {
     var have_end = false;
     var have_dt = false;
     var have_freq = false;
+    var stable = -1;
+    var explicit = false;
+    var have_adapt = false;
     var a = syntax::nodes[pr].first;
     var i = 0;
     while a >= 0 {
@@ -48,6 +52,10 @@ fn check_procedure(pr: i64) {
         }
         if arg == "end" { have_end = true; }
         if arg == "dt" { have_dt = true; }
+        if arg == "dt" && is_stable(k.first) { stable = k.first; }
+        if arg == "scheme" && syntax::nodes[k.first].kind == syntax::N_NAME
+           && contains_name(EXPLICIT_SCHEMES, tok_text(syntax::nodes[k.first].tok)) { explicit = true; }
+        if arg == "adapt" { have_adapt = true; }
         if arg == "freq" { have_freq = true; }
         i++;
         a = k.next;
@@ -56,12 +64,24 @@ fn check_procedure(pr: i64) {
         error(syntax::nodes[pr].tok, "procedure_args", str("transient needs ", if have_end { "dt" } else { "end" }),
               "write transient(end: <time>, dt: <time>)");
     }
+    if stable >= 0 && (!explicit || have_adapt) {
+        error(first_tok(stable), "procedure_args",
+              if have_adapt { "dt: stable cannot go with adapt" } else { "dt: stable needs an explicit scheme" },
+              if have_adapt { "remove adapt, or give dt a time" } else { "scheme: central_difference or ssprk3, or give dt a time" });
+    }
     if name == "harmonic" && !have_freq {
         error(syntax::nodes[pr].tok, "procedure_args", "harmonic needs freq", "write harmonic(freq: [<frequency>])");
     }
 }
 
+// `dt: stable`: the solver chooses the stable increment of an explicit
+// scheme (§14.2).
+fn is_stable(v: i64) -> bool {
+    return syntax::nodes[v].kind == syntax::N_NAME && tok_text(syntax::nodes[v].tok) == "stable";
+}
+
 fn proc_arg(name: u8[:], arg: u8[:], v: i64) {
+    if arg == "dt" && is_stable(v) { return; }
     if arg == "freq" {
         guard syntax::nodes[v].kind == syntax::N_LIST else {
             error(first_tok(v), "procedure_args", "freq is a list of frequencies", str("write freq: [", node_text(v), "]"));
