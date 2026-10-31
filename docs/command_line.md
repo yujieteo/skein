@@ -282,7 +282,7 @@ error.
 |---|---|
 | `--geometry <name>` | the geometry to write. Required. |
 | `--format stl\|step` | STL is a triangle mesh (phase 2). STEP is tessellated in phase 4 and exact in phase 5. |
-| `--size length` | the size of the triangles, for example `--size 2 mm`. Default: the `size` of the first `mesh` block on the geometry, else of the first `mesh` block. |
+| `--size length` | the size of the triangles, for example `--size 2mm`. Default: the `size` of the first `mesh` block on the geometry, else of the first `mesh` block. |
 
 `export` writes geometry only. Skein does not import a mesh or a CAD file
 (decision 8).

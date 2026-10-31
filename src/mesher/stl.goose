@@ -155,8 +155,8 @@ fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
     }
     let size = if sized >= 0 { length_option(args[sized]) } else { model_size(check::model_prog, name) };
     guard size > 0.0 else {
-        let msg: u8[>..] = if sized >= 0 { str("skein export: the size '", args[sized], "' is not a length > 0, such as 2 mm\n") }
-                           else { "skein export: the model has no mesh block: give --size, such as --size 2 mm\n" };
+        let msg: u8[>..] = if sized >= 0 { str("skein export: the size '", args[sized], "' is not a length > 0, such as 2mm\n") }
+                           else { "skein export: the model has no mesh block: give --size, such as --size 2mm\n" };
         write_stderr(msg);
         return 2;
     }
