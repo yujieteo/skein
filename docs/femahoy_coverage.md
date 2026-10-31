@@ -50,6 +50,10 @@ gives the roadmap phase that closes the gap:
   exponents in halves, and the expectation of
   [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)
   compares `K_I` in `MPa*mm^0.5`.
+- Phase 2 closes G17. Spec [§12.1](skein_spec.md#121-form) states
+  `rigid(p)` and `moment`, and the top of
+  [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn) uses
+  them.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -95,7 +99,7 @@ comment.
 | G14 | A stress intensity factor in MPa·mm^0.5. | `validation/cases/fracture-centre-crack/check.toml:7` | A dimension has integer exponents, and `sqrt` needs even exponents (§6.1). The model checks the shape factor `K_I/(S*sqrt(pi*a))`, with the same tolerance. | Allow exponents in halves (§6.1). | 2, closed by [§6.1](skein_spec.md#61-dimensions) |
 | G15 | The effective Young's modulus of a periodic cell under a mean stress. | `validation/cases/grid-fibre-composite-cell/check.toml:31` | The mean strain must be a global unknown that a mean stress fixes, but `mean` is valid only in `output`, `report` and `expect` (§14.5). | Allow `mean(f, r)` and `integral(f, r)` in the `eq` of a global unknown (§10.5). | 2 |
 | G16 | A concentrated force on a node (`*CLOAD`). | `validation/cases/topology-mbb-beam/60x20/job.inp:2517`, `fixtures/results/cantilever-2step/cantilever-2step.inp` | §8.3 says that a `Point` can be the region of a point load, but §12.1 gives no left side for a force at a point: `n` has no value there. `cantilever_2step.skn` uses a traction with the same resultant. | On a `Point` region, read a natural condition `F*n = P` as the force `P`, with the dimension of `F` times area. | 1 |
-| G17 | A rigid constraint of a boundary (`*EQUATION`): the face stays straight and can turn. | `validation/cases/contact-cattaneo/mesh.inp:13915` | §12 has only essential and natural conditions. The model puts tractions with the same force and moment on the face. | A built-in `rigid(p)` for the right side of an essential `bc`. A `bc` on the `Point` `p` takes the force and the moment. | 2 |
+| G17 | A rigid constraint of a boundary (`*EQUATION`): the face stays straight and can turn. | `validation/cases/contact-cattaneo/mesh.inp:13915` | §12 has only essential and natural conditions. The model puts tractions with the same force and moment on the face. | A built-in `rigid(p)` for the right side of an essential `bc`. A `bc` on the `Point` `p` takes the force and the moment. | 2, closed by [§12.1](skein_spec.md#121-form) |
 
 ### Gaps that change the discretization or the physics
 
@@ -309,7 +313,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A condition at the model level and in a step | frequency-cantilever, birth-death-column | a top-level `bc`, or a `bc` in a step | [§12.2](skein_spec.md#122-where-bc-may-stand) |
 | A fixed temperature | heat-fin and the grid heat cases | `bc r: T = 100 degC` | [§6.3](skein_spec.md#63-units), [§12.1](skein_spec.md#121-form) |
 | An adiabatic face, a free face, a magnetic wall | each case | no `bc`: the natural condition with zero right side | [§12.3](skein_spec.md#123-completeness) |
-| `*EQUATION`: a face stays straight and can turn | contact-cattaneo | tractions with the same force and moment | gap [G17](#gaps-that-remove-a-check) |
+| `*EQUATION`: a face stays straight and can turn | contact-cattaneo | `bc top: u = rigid(c)`, and the force and the `moment` on `c` | [§12.1](skein_spec.md#121-form) |
 | `*CONTACT PAIR`, `*SURFACE INTERACTION`, `*FRICTION` | contact-hertz, contact-cattaneo | `contact c: master, slave { friction, enforce: penalty, stiffness }` | [§12.4](skein_spec.md#124-contact), gap [G23](#gaps-that-change-the-discretization-or-the-physics) |
 | A periodic cell | grid-laminate-cell, grid-fibre-composite-cell | `symmetry s: bloch { low, high, period, k: 0 }` | [§12.6](skein_spec.md#126-symmetry-groups) |
 | A free body with no support | grid-free-block-modes-ccx | no `bc`, `allow rigid_body: "reason"` | [checks.md](checks.md) |

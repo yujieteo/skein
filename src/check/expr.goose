@@ -23,8 +23,8 @@ let BUILTIN_FNS = [
     "box", "cylinder", "sphere", "cone", "torus", "rect", "circle", "polygon", "extrude",
     "revolve", "sweep", "line", "arc", "spline", "point", "shell", "loft", "pattern",
     "pattern_polar", "fillet", "chamfer", "move", "rotate", "scale",
-    // Shells and beams (spec §4.3), argmax and when (§14.5).
-    "tangent", "ply_stiffness", "laminate", "along", "argmax", "when",
+    // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
+    "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
 ];
 let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "dual_eps"];
 
@@ -693,13 +693,15 @@ recursive fn expr_ty(n: i64) -> Ty {
             let callee = k.first;
             var a = Args { count: 0, ty: [any_ty(); 8], node: [-1; 8], name: [-1; 8] };
             let saved = setting_mode;
-            // The profile of extrude, revolve, sweep and loft is a 2D Surface (spec §8).
+            // The profile of extrude, revolve, sweep and loft is a 2D Surface
+            // (spec §8), and loft has 2.
             let cn = call_name(callee);
             let profile = space == 3 && (cn == "extrude" || cn == "revolve" || cn == "sweep" || cn == "loft");
+            let profiles = if cn == "loft" { 2 } else { 1 };
             var c = syntax::nodes[callee].next;
             while c >= 0 {
                 let v = syntax::nodes[c].first;
-                if profile && a.count == 0 { space = 2; }
+                if profile && a.count < profiles { space = 2; }
                 let t = expr_ty(v);
                 if profile { space = 3; }
                 if a.count < MAX_ARGS {

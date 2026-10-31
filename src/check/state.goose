@@ -149,6 +149,8 @@ struct Bc {
 }
 
 var bcs: Bc[>..];
+// The points `p` of each `rigid(p)` so far, by their text (gap G17).
+var rigid_points: u8[..64][>..];
 
 // The facts about the model.
 var space = 3;            // the space dimension: 1, 2 or 3. `axi` gives 2.
@@ -208,6 +210,7 @@ fn reset_state() {
     result_fields.clear();
     results_count = 0;
     bcs.clear();
+    rigid_points.clear();
     space = 3;
     axi = false;
     nondim = false;

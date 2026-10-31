@@ -1214,6 +1214,32 @@ condition `F*n = P` as the force `P` at the point. `P` has the dimension of
 `F` times area in a `3d` model, and of `F` times length in a `2d` or `axi`
 model.
 
+The right side `rigid(p)` of an essential condition on a whole displacement
+`u: Vector<Length>` makes the region a **rigid face**: the face stays
+straight and can turn. Its displacement is the displacement of the `Point`
+`p` plus a small rotation about `p`. Other uses of `rigid` are errors
+[`rigid_form`].
+
+```skein
+let c: Point = point((0 mm, hp))
+bc top: u = rigid(c)
+bc c: u.x = 0
+bc c: sigma*n = (Q, -P)
+bc c: moment(sigma*n) = hp*Q
+```
+
+A `bc` on `p` gives the force and the moment on the face. An essential
+condition on `u` fixes the displacement of `p`, and `F*n = P` is the force
+`P` at `p`, as on each `Point`. `moment(F*n) = M` is the moment `M` about
+`p`: a scalar about z in a `2d` model, and a vector in a `3d` model. `M`
+has the dimension of the force times length. A `moment` on a region that
+is not the point of an earlier `rigid` is an error [`rigid_form`]. With no
+`moment`, the face turns freely about `p`.
+
+Reason: a test puts its load on a face through a rigid plate, and the
+force and the moment of the plate are in the test (femahoy gap G17,
+CalculiX `*EQUATION`).
+
 ### 12.2 Where `bc` may stand
 
 A `bc` at the top level applies in all steps. A `bc` in a step applies from
@@ -1233,7 +1259,8 @@ These cases are errors:
 - two essential conditions on one region and one component, with different
   right sides, in one step [`bc_conflict`];
 - an essential and a natural condition on one region and one component
-  [`bc_conflict`];
+  [`bc_conflict`]. On the `Point` `p` of a `rigid(p)` only, a force with 0
+  in the component of an essential condition does not fight it;
 - a `bc` on a region that is not on the boundary of the region of the
   unknown, and is not a `Point` or a lower-dimension entity inside it
   [`bc_off_boundary`].
@@ -2228,6 +2255,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
 | `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)` | reports (§14.5) |
+| `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 

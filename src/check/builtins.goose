@@ -392,6 +392,12 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(LENGTH, 1);
     }
+    if name == "rigid" || name == "moment" {
+        // check_bc reads both forms. Other places cannot use them (spec §12.1, gap G17).
+        error(tok, "rigid_form", str(name, " stands only in a bc"),
+              "write bc face: u = rigid(p), and bc p: moment(sigma*n) = M");
+        return any_ty();
+    }
     if name == "when" {
         // when(f, value): the first time at which the scalar `f`, reduced over a region, gets to `value` (spec §14.5).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) else { return any_ty(); }
@@ -496,7 +502,9 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     }
     if name == "extrude" || name == "revolve" || name == "sweep" || name == "loft" {
         space_3d(tok, name);
-        guard arity(tok, name, a, 2, 3) else { return any_ty(); }
+        let lo = if name == "loft" { 3 } else { 2 };
+        guard arity(tok, name, a, lo, 3) else { return any_ty(); }
+        if name == "loft" && !(want_geom(tok, name, a, 0) && want_geom(tok, name, a, 1)) { return any_ty(); }
         return geom_ty(3);
     }
     if name == "line" || name == "arc" || name == "spline" {
@@ -513,7 +521,8 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     }
     if name == "shell" || name == "pattern" || name == "pattern_polar" || name == "fillet" ||
        name == "chamfer" || name == "move" || name == "rotate" || name == "scale" {
-        guard arity(tok, name, a, 2, 3) && want_geom(tok, name, a, 0) else { return any_ty(); }
+        let lo = if name == "pattern" || name == "pattern_polar" { 3 } else { 2 };
+        guard arity(tok, name, a, lo, 3) && want_geom(tok, name, a, 0) else { return any_ty(); }
         // A pattern keeps its copies: max(f, r) on it gives one value for
         // each copy (spec §14.5).
         var r = t0;

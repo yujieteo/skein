@@ -74,29 +74,41 @@ var fan: i64[>..] = [];         // scratch of insert, by point
 
 // --- the boundary ----------------------------------------------------------------
 
-recursive fn collect_curves(g: i64) -> bool {
+// The boundary curves of g, each moved by (tx, ty): the sum of the moves
+// of the patterns above g. The reader has no pattern_polar of a 2D shape
+// (verify.goose).
+recursive fn collect_curves(g: i64, tx: f64, ty: f64) -> bool {
     let s = shapes[g];
     let p = s.p;
+    fn line(x0: f64, y0: f64, x1: f64, y1: f64) {
+        curves.push(Curve { kind: LINE, p: [x0 + tx, y0 + ty, x1 + tx, y1 + ty] });
+    }
     if s.kind == RECT {
         let xs: f64[5] = [p[0], p[2], p[2], p[0], p[0]];
         let ys: f64[5] = [p[1], p[1], p[3], p[3], p[1]];
-        for i in 4 { curves.push(Curve { kind: LINE, p: [xs[i], ys[i], xs[i + 1], ys[i + 1]] }); }
+        for i in 4 { line(xs[i], ys[i], xs[i + 1], ys[i + 1]); }
         return true;
     }
     if s.kind == CIRCLE {
-        curves.push(Curve { kind: ARC, p: [p[0], p[1], p[2], 0.0] });
+        curves.push(Curve { kind: ARC, p: [p[0] + tx, p[1] + ty, p[2], 0.0] });
         return true;
     }
     if s.kind == POLYGON {
         for i in s.b {
             let j = (i + 1) % s.b;
-            curves.push(Curve { kind: LINE, p: [polygon_points[2 * (s.a + i)], polygon_points[2 * (s.a + i) + 1],
-                                                polygon_points[2 * (s.a + j)], polygon_points[2 * (s.a + j) + 1]] });
+            line(polygon_points[2 * (s.a + i)], polygon_points[2 * (s.a + i) + 1],
+                 polygon_points[2 * (s.a + j)], polygon_points[2 * (s.a + j) + 1]);
         }
         return true;
     }
     if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT {
-        return collect_curves(s.a) && collect_curves(s.b);
+        return collect_curves(s.a, tx, ty) && collect_curves(s.b, tx, ty);
+    }
+    if s.kind == PATTERN {
+        for k in s.b {
+            guard collect_curves(s.a, tx + k * p[0], ty + k * p[1]) else { return false; }
+        }
+        return true;
     }
     return false;
 }
@@ -685,7 +697,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     tin.clear();
     segments.clear();
     fan.clear();
-    guard collect_curves(g) else { return false; }
+    guard collect_curves(g, 0.0, 0.0) else { return false; }
     let b = bounds(g);
     let w = b[3] - b[0];
     let h = b[4] - b[1];
