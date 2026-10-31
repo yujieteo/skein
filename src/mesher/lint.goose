@@ -61,7 +61,8 @@ recursive fn smallest_feature(g: i64) -> f64 {
 // `mesh_feature_small`: the smallest feature of the region is under the
 // mesh size.
 //
-// `bending_lock`: an order-1 displacement on the mesh, whose region is thin:
+// `bending_lock`: an order-1 displacement on triangles or tetrahedra, whose
+// region is thin:
 // the shortest side of its bounding box is under 4 cells, and the longest
 // side is at least 4 times the shortest, so a load bends it.
 fn mesh_rules(n: i64, r: MeshRecord, dim: i64) {
@@ -80,6 +81,7 @@ fn mesh_rules(n: i64, r: MeshRecord, dim: i64) {
         thickness = min(thickness, b[3 + c] - b[c]);
         length = max(length, b[3 + c] - b[c]);
     }
+    guard r.cell == "tri" || r.cell == "tet" else { return; };
     guard thickness < 4.0 * r.size && length >= 4.0 * thickness else { return; };
     for p, i in check::physics {
         let u = check::displacement_of(i);

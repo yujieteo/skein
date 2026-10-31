@@ -206,6 +206,19 @@ fn test_lint() {
     if mesher::cell_count() != 80 { fail(str("lint --mesh cell: hex on a box: ", mesher::cell_count(), " cells, not 80")); }
     expect_mesh_lints("cell: hex on a cylinder", grid_model("cylinder((0, 0, 0) m, (0, 0, 1), 1 m, 1 m)", "hex"), "unused_let\nverify_unsupported\n");
     expect_mesh_lints("cell: quad in 3D", grid_model("box((0, 0, 0) m, (1, 1, 1) m)", "quad"), "unused_let\nverify_unsupported\n");
+    // bending_lock is for triangles and tetrahedra only: an order-1 hex
+    // grid on a thin bar does not lock.
+    fn bar(cell: u8[:]) -> u8[>..] {
+        return str("model t: 3d, SI\nscales 1 m, 1 MPa\nlet bar: Solid = box((0, 0, 0) m, (1, 0.05, 0.05) m)\n",
+                   "let root: Surface = boundary(bar, x == 0 m)\nlet tip: Surface = boundary(bar, x == 1 m)\n",
+                   "material steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n}\n",
+                   "mesh m on bar {\n    size: 0.02 m\n    cell: ", cell, "\n}\n",
+                   "physics s on bar: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n",
+                   "method s: cg { mesh: m, order: 1 }\n",
+                   "step go: static {\n    bc root: u = 0\n    bc tip: sigma*n = (0, -1, 0) MPa\n    output u\n}\n");
+    }
+    expect_mesh_lints("bending_lock on a thin tet bar", bar("tet"), "bending_lock\n");
+    expect_mesh_lints("no bending_lock on a thin hex grid", bar("hex"), "");
     // `skein lint` applies the rules that need the mesh only with --mesh.
     let path = "build/mesh_lint_strip.skn";
     guard write_file(path, strip("", "1")) else {
