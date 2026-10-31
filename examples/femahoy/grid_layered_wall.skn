@@ -59,8 +59,11 @@ step steady: static {
 }
 
 expect surface_in: T at (0, 0.1, 0.1) m == 18.938879457 degC within 1e-6 K
+
 expect plaster_insulation: T at (0.015, 0.1, 0.1) m == 18.684210526 degC within 1e-6 K
+
 // -2.538200340 degC
 expect insulation_brick: T at (0.115, 0.1, 0.1) m == 270.611799660 K within 1e-6 K
+
 // -4.660441426 degC
 expect surface_out: T at (0.315, 0.1, 0.1) m == 268.489558574 K within 1e-6 K

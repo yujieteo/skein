@@ -78,4 +78,5 @@ step slide: static(ramp: 20) {
 
 // On the block face, -sigma.yy is the contact pressure and sigma.xy is the shear traction.
 expect p0: max(-sigma.yy, block_face) == p_h within 2%
+
 expect q_centre: sigma.xy at (0 mm, -0.02 mm) == 431.203 MPa within 2%
