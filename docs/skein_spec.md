@@ -2084,9 +2084,9 @@ run.
 
 A machine has `H` hardware threads. A study runs at most `k` cases at a
 time. The default `k` is `min(H, number of cases)`, and `--jobs k` sets
-it. Each case has 1 thread when the budget (below) admits more than one
-case at a time, and `H` threads otherwise. Reason: on sample 01, 16 threads took 25% more memory than 1 thread and
-the same time, so parallel cases scale better than parallel assembly in
+it. Each case has 1 thread when the budget (below) admits two of the
+largest case at a time, and `H` threads otherwise. Reason: on sample
+01, 16 threads took 25% more memory than 1 thread and the same time, so parallel cases scale better than parallel assembly in
 one case.
 
 **Memory.** Each solve checks its memory after the sparsity pattern of
@@ -2119,8 +2119,9 @@ than one step, a later step can take more memory than the first solve:
 then one case runs at a time until a case gives its measured peak. Each case writes its measured peak (`peak_mb`, from VmHWM,
 the `getrusage` peak of Linux) in its records, and the largest measured
 peak for each dof then takes the place of the probe. When case 1 writes the stages that
-the other cases read, it runs first and alone, and its peak is the
-first estimate.
+the other cases read, it runs first and alone on `H` threads, and its
+peak is the first estimate. The runner then sets the threads of the
+other cases with the rule above.
 
 **The task pool.** The thread of the runner starts the cases in case
 order, each when the ledger admits it, and starts the next case when a

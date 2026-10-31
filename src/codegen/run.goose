@@ -309,7 +309,8 @@ fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[
             l.used += n;
             running++;
             l.most = max(l.most, running);
-            write_stderr(str("skein run: case ", c + 1, " starts: about ", mb(n), " MB, ", mb(l.used), " of ", mb(l.budget), " MB of the budget in use\n"));
+            write_stderr(str("skein run: case ", c + 1, " starts (threads: ", jobs[next].threads, "): about ", mb(n), " MB, ", mb(l.used), " of ", mb(l.budget),
+                             " MB of the budget in use\n"));
             ids.push(thread_spawn(task_worker, jobs[next]));
             next++;
         }
@@ -432,8 +433,8 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     }
     // At most min(H, number of cases) cases at a time, or --jobs, and each
     // when the ledger admits it (spec §20.5). Each case has 1 thread when
-    // the budget admits more than one case at a time, and H threads
-    // otherwise. Reason: on sample 01, 16 threads took 25% more memory
+    // the budget admits two of the largest case at a time, and H threads
+    // otherwise. A case that runs alone first has H threads. Reason: on sample 01, 16 threads took 25% more memory
     // than 1 thread, and the same time.
     let h = max(1, hardware_threads());
     let limit = min(if jobs > 0 { jobs } else { h }, case_count);
@@ -459,14 +460,20 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
             l.source = big;
         }
     }
-    for &job in case_jobs { job.threads = threads; }
+    for &job in case_jobs[first..] { job.threads = threads; }
     if l.budget > 0.0 {
         write_stderr(str("skein run: memory budget ", mb(l.budget), " MB (", solvers::BUDGET_SHARE, " of ", mb(free),
                          " MB free: MemAvailable and the cgroup limit)"));
         if l.source >= 0 { write_stderr(str(", case ", l.source + 1, " estimates ", mb(l.per_dof * dofs[l.source]), " MB for ", dofs[l.source], " dofs")); }
-        write_stderr(str(", threads for each case: ", threads, "\n"));
+        write_stderr("\n");
     }
     var ends = run_cases(case_jobs[..first], dofs, 1, l);
+    if first == 1 && l.budget > 0.0 && limit > 1 {
+        var big = 1;
+        for c in 1..case_count { if dofs[c] > dofs[big] { big = c; } }
+        threads = if l.budget >= 2.0 * case_need(l, dofs[big]) { 1 } else { h };
+        for &job in case_jobs[1..] { job.threads = threads; }
+    }
     ends.append(run_cases(case_jobs[first..], dofs, limit, l));
     // The tokens of the cases replaced those of the model: read it again
     // for the columns and the place of the study.
