@@ -1346,6 +1346,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     out.append("import std;\nimport os;\nimport elements from ");
     quoted(out, elements_path);
     out.append(";\n");
+    // The package elements imports the package solvers (the pool of the
+    // threads, src/solvers/pool.goose).
+    out.append("import solvers from ");
+    quoted(out, str(elements_path, "/../solvers"));
+    out.append(";\n");
     out.append(PRELUDE);
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
