@@ -306,8 +306,9 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
                 cell.clear();
                 cell.append(grid);
             } else if c != cell {
-                reader_fault(syntax::nodes[value].tok, str("the mesher makes ", cell, " or ", grid, " cells in a ", dim, "d model"),
-                             str("write cell: ", cell));
+                let simplex = if dim == 2 { "tri" } else { "tet" };
+                reader_fault(syntax::nodes[value].tok, str("the mesher makes ", simplex, " or ", grid, " cells in a ", dim, "d model"),
+                             str("write cell: ", simplex));
             }
         } else {
             reader_fault(syntax::nodes[s].tok, str("the mesh setting '", node_text(s), "' is not in the mesher yet"),

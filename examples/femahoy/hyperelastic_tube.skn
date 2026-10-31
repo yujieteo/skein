@@ -1,5 +1,5 @@
 // femahoy: validation/cases/hyperelastic-tube/job.inp
-// blocked-by: G10 G19
+// blocked-by: G10 G36
 // A quarter of a long rubber tube in plane strain (A = 10 mm, B = 20 mm), 3-term Ogden rubber
 // (Ogden 1972), nearly incompressible. The inner face moves out to 2.5 and then 4 times its
 // radius, past the pressure maximum. References (Haughton and Ogden 1979): F = 5.74269 N at
@@ -36,7 +36,7 @@ material rubber {
     Kb: Pressure = 4000 MPa
 }
 
-// gap G19: quad cells need a rect region, so the tube uses triangles. ccx uses CPE8R:
+// gap G36: quad cells need a union of rects, so the tube uses triangles. ccx uses CPE8R:
 // order: 2, family: serendipity and quadrature: reduced on quad cells.
 mesh m on quarter {
     size: 1.25 mm

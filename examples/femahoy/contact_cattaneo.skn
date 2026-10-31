@@ -1,5 +1,5 @@
 // femahoy: validation/cases/contact-cattaneo/job.inp
-// blocked-by: G19 G23
+// blocked-by: G23 G36
 // A cylindrical steel pad (R = 20 mm) on a steel block, plane strain, 1 mm thick, friction
 // 0.3. The pad gets P = 4500 N, then Q = 0.75*mu*P. The centre of the contact sticks and its
 // edges slip (Cattaneo 1938). References: p0 = 2874.69 MPa, q(0) = 431.203 MPa.
@@ -32,7 +32,7 @@ material steel {
     nu: Real = 0.3
 }
 
-// gap G19: quad cells need a rect region, so the parts use triangles. ccx uses CPE4: order: 1
+// gap G36: quad cells need a union of rects, so the parts use triangles. ccx uses CPE4: order: 1
 // on quad cells.
 mesh m on parts {
     size: 2 mm
