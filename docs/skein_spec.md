@@ -1254,8 +1254,8 @@ These cases are errors:
 - two essential conditions on one region and one component, with different
   right sides, in one step [`bc_conflict`];
 - an essential and a natural condition on one region and one component
-  [`bc_conflict`]. On a `Point`, a force with 0 in the component of an
-  essential condition does not fight it;
+  [`bc_conflict`]. On the `Point` `p` of a `rigid(p)` only, a force with 0
+  in the component of an essential condition does not fight it;
 - a `bc` on a region that is not on the boundary of the region of the
   unknown, and is not a `Point` or a lower-dimension entity inside it
   [`bc_off_boundary`].

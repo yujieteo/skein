@@ -558,8 +558,8 @@ fn check_bc(n: i64) {
         if (b.comp == "moment") != (comp == "moment") { continue; }
         let other = syntax::nodes[b.node];
         let orhs = syntax::nodes[syntax::nodes[other.first].next].next;
-        // On a Point, a force with 0 in the component of an essential condition does not fight it.
-        if point && b.natural != natural {
+        // On the point of a rigid(p), a force with 0 in the component of an essential condition does not fight it.
+        if point && is_rigid_point(region) && b.natural != natural {
             let ec = if natural { b.comp } else { comp };
             let v, ok = rhs_value(if natural { rhs } else { orhs }, ec);
             if ec.len > 0 && ok && v == 0.0 { continue; }

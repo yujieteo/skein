@@ -269,6 +269,7 @@ fn test_conditions() {
     expect_clean("G17 a fixed component and a force with 0 in it", str(elastic, tip, "bc c: u.x = 0\nbc c: sigma*n = (0, 0, -1) kN\n"));
     expect_clean("G17 a fixed point with a moment", str(elastic, tip, "bc c: u = 0\nbc c: moment(sigma*n) = (0, 1, 0) kN*m\n"));
     expect_id("bc_conflict", str(elastic, tip, "bc c: u.x = 0\nbc c: sigma*n = (1, 0, -1) kN\n"));
+    expect_id("bc_conflict", str(elastic, "let c: Point = point((1, 1, 1) m)\nbc c: u.x = 0\nbc c: sigma*n = (0, 0, -1) kN\n"));
     expect_id("unit_mismatch", str(elastic, tip, "bc c: moment(sigma*n) = (0, 1, 0) kN\n"));
     expect_id("rigid_form", str(elastic, "let c: Point = point((1, 1, 1) m)\nbc f: u.x = rigid(c)\n"));
     expect_id("rigid_form", str(elastic, "bc f: u = rigid(f)\n"));
