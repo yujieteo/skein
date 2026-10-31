@@ -1463,8 +1463,8 @@ use in another place, or with no such step, is an error
 [`eigenvalue_step`]. A `k` outside `1..count` of the step is also an error
 [`eigenvalue_step`].
 
-`when(f, value)` is the first time at which the scalar `f` gets to
-`value`, a `Time` [`rank_mismatch`]. `value` has the dimension of `f`
+`when(f, value)` is the first time at which `f`, a scalar reduced over a
+region, gets to `value`, a `Time` [`rank_mismatch`]. `value` has the dimension of `f`
 [`unit_mismatch`], and it must be a constant [`not_constant`]. The run
 finds the first time step at which `f` crosses `value`, and interpolates
 linearly in that time step. If `f` never gets to `value`, an `expect` of it

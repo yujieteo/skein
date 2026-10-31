@@ -303,6 +303,8 @@ fn test_steps() {
     expect_id("when_step", str(elastic, shake, "let t2: Time = when(max(norm(u), b), 1 mm)\n"));
     expect_id("unit_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(norm(u), b), 1 s)\n}\n"));
     expect_id("rank_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(u, b), 1 mm)\n}\n"));
+    expect_id("rank_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(norm(u), 1 mm)\n}\n"));
+    expect_clean("when of a scalar reduced over a region", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(min(norm(u), b), 1 mm)\n}\n"));
     expect_id("not_constant", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(norm(u), b), x)\n}\n"));
     expect_id("allow_reason", str(H, "allow rigid_body: \"\"\n"));
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));

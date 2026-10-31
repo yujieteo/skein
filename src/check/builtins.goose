@@ -394,10 +394,11 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return num_ty(LENGTH, 1);
     }
     if name == "when" {
-        // when(f, value): the first time at which the scalar `f` gets to `value` (spec §14.5).
+        // when(f, value): the first time at which the scalar `f`, reduced over a region, gets to `value` (spec §14.5).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) else { return any_ty(); }
-        if is_num(t0) && t0.rank != 0 {
-            error(tok, "rank_mismatch", str("when takes a scalar, not ", ty_str(t0)), "take when of a scalar, for example norm(u)");
+        if is_num(t0) && (t0.rank != 0 || t0.varying) {
+            error(tok, "rank_mismatch", str("when takes a scalar reduced over a region, not ", ty_str(t0)),
+                  "reduce f over a region first, for example max(norm(u), region)");
             return any_ty();
         }
         sum_ty(first_tok(a.node[1]), t0, t1, ",");
