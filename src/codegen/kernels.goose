@@ -188,7 +188,8 @@ fn solid_gradients(out: u8[>..]&, nodes: i64) {
     out.append("            }\n        }\n");
 }
 
-let LAME = "    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));\n    let mu = young / (2.0 * (1.0 + poisson));\n";
+// The Lamé constants of the material of cell c (solid.goose).
+let LAME = "    let lambda, mu = cell_lame(c);\n";
 
 let ELASTIC_PARAMS = "grad: f64[:], lambda: f64, mu: f64, dv: f64, ke: f64[>..]&";
 

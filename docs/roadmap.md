@@ -67,6 +67,8 @@ Each phase 4 lane changes only the rows of its own items.
 | Item | Status |
 |---|---|
 | the browser target: Goose to C, then `emcc` | done for the simplex models: `skein build --target wasm` writes a page that meshes and solves in the browser, on the CPU with the implicit solvers (`src/codegen/build.goose`, `src/codegen/web.goose`). Sample 01 in the page gives the records and the VTU file of `skein run --set`, bit for bit. The GPU and the explicit solver are phase 4.5. |
+| the WebGL viewer | done as `skein report` ([command_line.md §12](command_line.md#12-the-html-report)): one offline HTML file with the source, the solver tables and the results of each study case, `src/report/`. The page of `skein build --target wasm` solves in the browser. |
+| the interposer warpage of Hisada et al. 2012 | the model is in [interposer_warpage.skn](../examples/package/interposer_warpage.skn), with the unknown RDL thickness, bump layer and chip offset as params. Its study `sweep` of 72 cases keeps the order of Figure 7, but at the best set only 3 of 9 cases are within 25 % (ratios 0.54 to 0.98), so its `expect` fails. |
 
 ## Risks
 

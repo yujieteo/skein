@@ -294,6 +294,44 @@ fn test_registry() {
     }
 }
 
+// A free thermal expansion of 2 boxes of 2 materials on a grid that is not
+// uniform: 2 x 1 x 0.5 mm of E = 210000 MPa under 2 x 1 x 0.1 mm of
+// E = 70000 MPa, with the same thermal strain s. Rollers on x = 0, y = 0
+// and z = 0. The exact solution is u = s x and sigma = 0, which the
+// 27-node hexahedra hold.
+fn test_thermal_grid() {
+    let s = 1.0e-3;
+    runtime::mesh_grid([0.0, 1.0, 2.0], [0.0, 1.0], [0.0, 0.5, 0.6], [0.0, 0.0, 0.0, 2.0, 1.0, 0.5, 0.0, 0.0, 0.5, 2.0, 1.0, 0.6]);
+    runtime::material(E, NU);
+    let bottom = runtime::material_box(E, NU, s, 0.0, 0.0, 0.0, 2.0, 1.0, 0.5);
+    let top = runtime::material_box(E / 3.0, 0.25, s, 0.0, 0.0, 0.5, 2.0, 1.0, 0.6);
+    assert(runtime::fix_component("x0", runtime::X));
+    assert(runtime::fix_component("y0", runtime::Y));
+    assert(runtime::fix_component("z0", runtime::Z));
+    if runtime::cell_count() != 4 || bottom != 2 || top != 2 || !runtime::point_set("corner", 2.0, 1.0, 0.6) ||
+       runtime::point_set("off", 0.3, 0.0, 0.0) {
+        failures++;
+        print("FAIL thermal grid: want 4 cells, 2 in each box, and a node at the corner only");
+    }
+    runtime::thermal_load();
+    if !runtime::solve_static() {
+        failures++;
+        print("FAIL thermal grid: CG does not converge");
+    }
+    let ux, uy, uz = runtime::displacement_at(2.0, 1.0, 0.6);
+    let sxx, syy, szz, syz, sxz, sxy = runtime::stress_at(1.5, 0.5, 0.55);
+    let rx, ry, rz = runtime::total_reaction();
+    print("thermal grid: u at the corner ", ux, " ", uy, " ", uz, " mm, sxx in the top ", sxx, " MPa");
+    expect_near("thermal grid ux", ux, 2.0 * s, 1.0e-8);
+    expect_near("thermal grid uy", uy, s, 1.0e-8);
+    expect_near("thermal grid uz", uz, 0.6 * s, 1.0e-8);
+    let scale = E * s;
+    if abs(sxx) + abs(syy) + abs(szz) > 1.0e-6 * scale || abs(rx) + abs(ry) + abs(rz) > 1.0e-6 * runtime::load_spread() {
+        failures++;
+        print("FAIL thermal grid: want sigma = 0 and no reaction, got sxx ", sxx, " syy ", syy, " szz ", szz, " reaction ", rx, " ", ry, " ", rz);
+    }
+}
+
 fn main() {
     test_cantilever();
     test_second_step();
@@ -304,6 +342,7 @@ fn main() {
     test_patch_incompatible();
     test_scalar_field();
     test_registry();
+    test_thermal_grid();
     if failures > 0 { exit(1); }
     print("runtime: all tests pass");
 }

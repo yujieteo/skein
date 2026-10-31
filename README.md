@@ -45,7 +45,9 @@ that need a mesh. `skein verify` creates the mesh and checks its quality.
 `skein md` writes a model as a Markdown document. `skein fmt` rewrites a
 file in the standard layout. `skein export --format stl` writes the surface of a shape as STL.
 `skein run --study` runs each case of a `grid`, `zip` or `sample`
-study on parallel workers, and prints the table of the cases.
+study on parallel workers, and prints the table of the cases. `skein
+report` writes one HTML file with the source, the solver tables and a
+WebGL viewer of the results of each case.
 `skein build --target wasm` writes one HTML page with a control for each
 `param` with a range: the page meshes and solves the model again in the
 browser for each value. The
