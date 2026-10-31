@@ -1,7 +1,9 @@
 // The code generator of the grid models: a Skein syntax tree to a Goose
 // program that calls src/grid/grid.goose.
 //
-// It takes the models with a `method` of the kind `fv` or `dg`. The model
+// It takes the models with a `method` of the kind `fv` or `dg`, and the
+// scalar models of `rkpm` and `gfd`, which call src/meshless/ on the points
+// of a `points` item with a `spacing` (a static step only). The model
 // is 2d. It has one physics with one scalar unknown u, and the physics
 // block has one equation of the form of src/grid/grid.goose:
 //
@@ -44,18 +46,32 @@ fn binary(n: i64, op: u8[:]) -> bool { kind(n) == syntax::N_BINARY && syntax::te
 
 // Whether this generator takes the model: a method of the kind fv or dg.
 fn claims(prog: i64) -> bool {
+    var elastic = false;
+    var meshless = false;
     var c = first(prog);
     while c >= 0 {
-        if kind(c) == syntax::N_METHOD && (syntax::text(syntax::nodes[c].aux) == "fv" || syntax::text(syntax::nodes[c].aux) == "dg") { return true; }
+        let word = if kind(c) == syntax::N_METHOD { syntax::text(syntax::nodes[c].aux) } else { "" };
+        if kind(c) == syntax::N_METHOD && (word == "fv" || word == "dg") { return true; }
+        if kind(c) == syntax::N_METHOD && (word == "rkpm" || word == "gfd") { meshless = true; }
+        if kind(c) == syntax::N_PHYSICS {
+            var u = first(c);
+            while u >= 0 {
+                if kind(u) == syntax::N_USES { elastic = true; }
+                u = next(u);
+            }
+        }
         c = next(c);
     }
-    return false;
+    // The elastic rkpm models are of src/elements/gen.goose.
+    return meshless && !elastic;
 }
 
 // --- the model ----------------------------------------------------------------
 
 let FV = 0;
 let DG = 1;
+let RKPM = 2;
+let GFD = 3;
 let FLUX_NAMES = ["upwind", "linear_upwind", "central", "lax_friedrichs"];
 let FLUX_CONSTANTS = ["grid::UPWIND", "grid::LINEAR_UPWIND", "grid::CENTRAL", "grid::LAX_FRIEDRICHS"];
 let GRADIENT_NAMES = ["green_gauss", "least_squares"];
@@ -119,6 +135,8 @@ var gradient = 0;                 // green_gauss
 var limiter = 0;                  // none
 var order = 2;
 var penalty = 2.0;
+var support = 2.5;                // of rkpm, times the spacing
+var stencil = 12;                 // the points of each stencil of gfd
 
 fn reset() {
     syntax::errors.clear();
@@ -151,6 +169,8 @@ fn reset() {
     limiter = 0;
     order = 2;
     penalty = 2.0;
+    support = 2.5;
+    stencil = 12;
 }
 
 // --- values ---------------------------------------------------------------------
@@ -405,13 +425,17 @@ fn mesh(n: i64) {
     let b = value(arg(shape, 1));
     lo = [min(a.v[0], b.v[0]), min(a.v[1], b.v[1])];
     hi = [max(a.v[0], b.v[0]), max(a.v[1], b.v[1])];
+    let points = kind(n) == syntax::N_POINTS;
+    if points != (method == RKPM || method == GFD) {
+        unsupported(tok(n), "fv and dg need a mesh, and rkpm and gfd need points", "write mesh m on plate { size: 0.05 m, cell: quad }, or points c on plate { spacing: 0.05 m }");
+    }
     var size = 0.0;
-    var quad = false;
+    var quad = points;
     var s = first(child(n, 1));
     while s >= 0 {
-        if kind(s) == syntax::N_SETTING && name(s) == "size" {
+        if kind(s) == syntax::N_SETTING && name(s) == (if points { "spacing" } else { "size" }) {
             size = scalar_value(first(s));
-        } else if kind(s) == syntax::N_SETTING && name(s) == "cell" && source_of(first(s)) == "quad" {
+        } else if kind(s) == syntax::N_SETTING && name(s) == "cell" && source_of(first(s)) == "quad" && !points {
             quad = true;
         } else {
             unsupported(tok(s), "the mesh setting is not in the fv and dg generator", "write mesh m on plate { size: 0.05 m, cell: quad }");
@@ -419,12 +443,16 @@ fn mesh(n: i64) {
         s = next(s);
     }
     if !quad { unsupported(tok(n), "the fv and dg generator meshes with cell: quad", "add cell: quad"); }
-    if size <= 0.0 { unsupported(tok(n), "the mesh needs a size", "add size: 0.05 m"); }
+    if size <= 0.0 { unsupported(tok(n), "the mesh needs a size, and the points a spacing", if points { "add spacing: 0.05 m" } else { "add size: 0.05 m" }); }
     for j in 2 { cells[j] = max(1, round((hi[j] - lo[j]) / max(size, 1.0e-300)) as! i64) << level; }
 }
 
 fn method_item(n: i64) {
     let word = syntax::text(syntax::nodes[n].aux);
+    if name(n) == physics_name && (word == "rkpm" || word == "gfd") {
+        meshless_item(n, word == "rkpm");
+        return;
+    }
     if name(n) != physics_name || word != "fv" && word != "dg" {
         unsupported(tok(n), "the fv and dg generator has one method, fv or dg, of the physics", "write method heat: fv { mesh: m }");
         return;
@@ -456,6 +484,29 @@ fn method_item(n: i64) {
         } else if name(s) != "mesh" {
             unsupported(tok(s), "the method setting is not in the fv and dg generator",
                         "use mesh, flux, gradient and limiter of fv, or mesh, order, flux and penalty of dg");
+        }
+        s = next(s);
+    }
+}
+
+// method heat: rkpm { points: c, basis: linear, support: 2.5, integrate:
+// scni, bc: nitsche }, or method heat: gfd { points: c, stencil: 12 }.
+fn meshless_item(n: i64, rkpm: bool) {
+    method = if rkpm { RKPM } else { GFD };
+    let fix = if rkpm { "use points, basis: linear, support, integrate: scni and bc: nitsche" } else { "use points and stencil" };
+    var s = first(child(n, 0));
+    while s >= 0 {
+        let v = first(s);
+        let w = if kind(v) == syntax::N_NAME { name(v) } else { "" };
+        if name(s) == "support" && rkpm {
+            support = scalar_value(v);
+            if support <= 1.0 { unsupported(tok(v), "the support must be > 1", "write support: 2.5"); }
+        } else if name(s) == "stencil" && !rkpm {
+            stencil = scalar_value(v) as! i64;
+            if stencil < 6 { unsupported(tok(v), "a stencil of gfd fits 5 derivatives, so it needs 6 points or more", "write stencil: 12"); }
+        } else if !(name(s) == "points" || (rkpm && ((name(s) == "basis" && w == "linear") || (name(s) == "integrate" && w == "scni") ||
+                                                    (name(s) == "bc" && w == "nitsche")))) {
+            unsupported(tok(s), "the method setting is not in the generator", fix);
         }
         s = next(s);
     }
@@ -603,7 +654,7 @@ fn read(prog: i64) -> bool {
             material_items.push(c);
         } else if k == syntax::N_PHYSICS && physics_node < 0 {
             physics_node = c;
-        } else if k == syntax::N_MESH && mesh_node < 0 {
+        } else if (k == syntax::N_MESH || k == syntax::N_POINTS) && mesh_node < 0 {
             mesh_node = c;
         } else if k == syntax::N_METHOD && method_node < 0 {
             method_node = c;
@@ -637,16 +688,27 @@ fn read(prog: i64) -> bool {
     }
     if steps.len == 0 { unsupported(at, "the model has no step", STEP_FIX); }
     for s in steps { if s.transient && ct <= 0.0 { unsupported(at, "a transient step needs ddt(u) in the equation", PHYSICS_FIX); } }
+    if (method == RKPM || method == GFD) && (ct != 0.0 || initial_node >= 0) {
+        unsupported(at, "rkpm and gfd have static steps only", "remove ddt(u) and the transient steps");
+    }
+    if (method == RKPM || method == GFD) && lap == 0.0 {
+        unsupported(at, "rkpm and gfd need a div(grad(u)) term", PHYSICS_FIX);
+    }
     return ok();
 }
 
 // The dofs of the mesh.
-fn dof_estimate() -> i64 { return cells[0] * cells[1] * (if method == DG { (order + 1) * (order + 1) } else { 1 }); }
+fn dof_estimate() -> i64 {
+    if method == RKPM || method == GFD { return (cells[0] + 1) * (cells[1] + 1); }
+    return cells[0] * cells[1] * (if method == DG { (order + 1) * (order + 1) } else { 1 });
+}
 
 // The order of the L2 error of the method for a smooth solution
 // (docs/checks.md §4.3), and its reason.
 fn expected_order() -> f64, u8[>..] {
     if method == DG { return order + 1.0, str("dg, order ", order); }
+    if method == RKPM { return 2.0, str("rkpm, basis linear"); }
+    if method == GFD { return 2.0, str("gfd, a fit of order 2"); }
     if (adv[0] != 0.0 || adv[1] != 0.0) && flux == 0 { return 1.0, str("fv, flux upwind"); }
     return 2.0, str("fv, flux ", FLUX_NAMES[flux]);
 }
@@ -848,6 +910,23 @@ let PRELUDE = """
     }
 """;
 
+// The package of the program: grid, or meshless for rkpm and gfd.
+fn pkg() -> const u8[:] { if method == RKPM || method == GFD { "meshless::" } else { "grid::" } }
+
+// PRELUDE for the package: meshless has a component in value_at, and no
+// linear iterations (its solve is direct).
+fn emit_prelude(out: u8[>..]&) {
+    if pkg() == "grid::" {
+        out.append(PRELUDE);
+        return;
+    }
+    var a: u8[>..] = [];
+    format_replaced(a, PRELUDE, "grid::value_at(x, y)", "meshless::value_at(0, x, y)");
+    var b: u8[>..] = [];
+    format_replaced(b, a, "grid::linear_iterations", "0");
+    format_replaced(out, b, "grid::", "meshless::");
+}
+
 // The unit of u in the reports.
 fn unit() -> const u8[:] {
     if unknown_type == "Temperature" { return "K"; }
@@ -882,7 +961,7 @@ fn emit_fields(out: u8[>..]&) {
         out.append(";\n}\n\n");
     }
     for c, i in curve_names {
-        format(out, "fn select_", c, "() -> bool {\n    return grid::select_faces() { x, y => ");
+        format(out, "fn select_", c, "() -> bool {\n    return ", pkg(), "select_faces() { x, y => ");
         if syntax::child_count(curve_nodes[i]) <= 2 { out.append("true"); } else { emit_cond(out, arg(curve_nodes[i], 1)); }
         out.append(" };\n}\n\n");
     }
@@ -906,7 +985,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     quoted(out, name(n));
     out.append(";\n");
     if kind(child(n, 0)) == syntax::N_NAME {
-        format(out, "        let error, norm = grid::l2_error(exact_", name(n), ");\n        l2(name, error, norm, ");
+        format(out, "        let error, norm = ", pkg(), "l2_error(exact_", name(n), ");\n        l2(name, error, norm, ");
     } else {
         out.append("        expect(name, ");
         emit_point(out, child(n, 0));
@@ -922,10 +1001,10 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
-    format(out, "// step ", s.name, "\nfn step_", s.name, "() {\n    grid::clear_bcs();\n");
+    format(out, "// step ", s.name, "\nfn step_", s.name, "() {\n    ", pkg(), "clear_bcs();\n");
     for b in active[s.first_bc..s.first_bc + s.bc_count] {
         let c = curve_names[bcs[b].region];
-        format(out, "    region(select_", c, "(), \"", c, "\");\n    grid::fix_selected(", b, ");\n");
+        format(out, "    region(select_", c, "(), \"", c, "\");\n    ", pkg(), "fix_selected(", b, ");\n");
     }
     if s.transient {
         out.append("    solved(");
@@ -938,7 +1017,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     } else {
         out.append("    solved(");
         quoted(out, s.name);
-        out.append(", grid::solve_static(1.0e-10, source, boundary), 1.0e-10);\n");
+        format(out, ", ", pkg(), "solve_static(", if pkg() == "grid::" { "1.0e-10, " } else { "" }, "source, boundary), 1.0e-10);\n");
     }
     for r in reports[s.first_report..s.first_report + s.report_count] {
         format(out, "    {\n        let name = ");
@@ -965,16 +1044,23 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
 // `results_dir`.
 fn generate(grid_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
-    out.append("// The values are in the unit system of the model header.\nimport std;\nimport os;\nimport math;\nimport grid from ");
-    quoted(out, grid_path);
-    // The grid package imports the package solvers, beside it.
+    let src = grid_path[..grid_path.len - 4];
+    out.append("// The values are in the unit system of the model header.\nimport std;\nimport os;\nimport math;\nimport ");
+    out.append(pkg()[..pkg().len - 2]);
+    out.append(" from ");
+    quoted(out, str(src, pkg()[..pkg().len - 2]));
+    // The package imports the package solvers, beside it.
     out.append(";\nimport solvers from ");
-    quoted(out, str(grid_path[..grid_path.len - 4], "solvers"));
+    quoted(out, str(src, "solvers"));
     out.append(";\n");
-    out.append(PRELUDE);
+    emit_prelude(out);
     out.push('\n');
     emit_fields(out);
     for si in 0..steps.len { emit_step(out, si, results_dir); }
+    if method == RKPM || method == GFD {
+        emit_meshless_main(out);
+        return;
+    }
     format(out, "fn main() {\n    // mesh: ", cells[0], " x ", cells[1], " rectangles\n    grid::mesh_rect(");
     lit(out, lo[0]);
     out.append(", ");
@@ -1001,6 +1087,37 @@ fn generate(grid_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         out.append(");\n");
     }
     out.append("    grid::start(initial);\n");
+    for s in steps { format(out, "    step_", s.name, "();\n"); }
+    for x in expects { if x.step < 0 { emit_expect(out, x); } }
+    out.append("    print_records();\n    if failed { exit(1); }\n}\n");
+}
+
+// The main of rkpm and gfd: the jittered lattice of points on the rect
+// (meshless::points_rect), the equation, the method and the steps.
+fn emit_meshless_main(out: u8[>..]&) {
+    format(out, "fn main() {\n    // points: a lattice of ", cells[0] + 1, " x ", cells[1] + 1, ", each point inside moved\n    meshless::points_rect(");
+    lit(out, lo[0]);
+    out.append(", ");
+    lit(out, lo[1]);
+    out.append(", ");
+    lit(out, hi[0]);
+    out.append(", ");
+    lit(out, hi[1]);
+    format(out, ", ", cells[0], ", ", cells[1], ");\n    tol = meshless::tolerance();\n");
+    format(out, "    // physics ", physics_name, ": div(a u) - d div(grad(u)) = f\n    meshless::equation(");
+    lit(out, adv[0]);
+    out.append(", ");
+    lit(out, adv[1]);
+    out.append(", ");
+    lit(out, -lap);
+    out.append(");\n    if !meshless::");
+    if method == RKPM {
+        out.append("rkpm(");
+        lit(out, support);
+    } else {
+        format(out, "gfd(", stencil);
+    }
+    out.append(") {\n        write_stderr(\"skein run: the method has no shape function or stencil at a point: give a larger support or stencil\\n\");\n        exit(1);\n    }\n");
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
     out.append("    print_records();\n    if failed { exit(1); }\n}\n");

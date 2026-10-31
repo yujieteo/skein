@@ -6,9 +6,10 @@
 //     .skein/build/<model>/convergence/<level>/main.goose    the program of a level
 //     .skein/results/<model>/convergence/<level>/            its results
 //
-// The fv and dg models of src/grid/gen.goose run. The order of an expect
-// is log2 of the ratio of its errors on the two finest meshes. It fails
-// when it is lower than the expected order of the method by more than 0.3.
+// The fv, dg, rkpm and gfd models of src/grid/gen.goose run. The order of
+// an expect is log2 of the ratio of its errors on the two finest meshes.
+// It fails when it is lower than the expected order of the method by more
+// than 0.3.
 // The id is `convergence`.
 import std;
 import os;
@@ -66,7 +67,7 @@ fn run_level(path: u8[:], text: u8[:], level: i64, errors: Errors[>..]&) -> bool
         return false;
     };
     guard lane == LANE_GRID else {
-        write_stderr("skein verify convergence: the model has no method fv or dg. Only these run yet.\n");
+        write_stderr("skein verify convergence: the model has no method fv or dg, and no scalar rkpm or gfd. Only these run yet.\n");
         return false;
     };
     let build_dir = str(".skein/build/", model_name, "/convergence/", level);

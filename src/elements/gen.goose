@@ -13,8 +13,10 @@
 // plate with a hole), get the structured meshes of src/elements/mesh.goose.
 // Each other shape of the mesher reader (src/mesher/verify.goose) gets the
 // mesh of src/mesher/, with its refine lines: the generated program builds
-// the shapes of the reader again and meshes them. Each other construct
-// gives an error `unsupported` at its token, with a fix.
+// the shapes of the reader again and meshes them. A 2d elastic model with
+// `points` and `method rkpm` solves with src/meshless/ on the nodes of P1
+// triangles of the same mesh (RKPM_PRELUDE). Each other construct gives an
+// error `unsupported` at its token, with a fix.
 //
 // The dispatch tables of src/codegen/dispatch.goose add a template or a
 // procedure to the box model of src/codegen/codegen.goose. A model of this
@@ -369,6 +371,7 @@ var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_tok = -1;
 var order = 2;
+var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
 var physics = -1;
 var plane = SOLID_3D;
 var thickness = 1.0;
@@ -434,6 +437,7 @@ fn reset() {
     mesh_fine = 0.0;
     mesh_tok = -1;
     order = 2;
+    rkpm_support = 0.0;
     physics = -1;
     plane = SOLID_3D;
     thickness = 1.0;
@@ -867,6 +871,7 @@ fn mesh(n: i64) {
         unsupported(tok(region), "the mesh is not on the body of the physics", str("write mesh ", name(n), " on ", body_name));
     }
     let cell = if dim == 3 { "tet" } else { "tri" };
+    let size_name = if kind(n) == syntax::N_POINTS { "spacing" } else { "size" };
     var s = first(child(n, 1));
     while s >= 0 {
         let v = first(s);
@@ -884,20 +889,20 @@ fn mesh(n: i64) {
             }
         } else if kind(s) != syntax::N_SETTING {
             unsupported(tok(s), "layers and crack_tip are not in this generator", "remove the line");
-        } else if name(s) == "size" {
+        } else if name(s) == size_name {
             mesh_size = scalar_value(v);
-        } else if name(s) == "cell" {
+        } else if name(s) == "cell" && kind(n) == syntax::N_MESH {
             if kind(v) != syntax::N_NAME || name(v) != cell {
                 unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, " cells"),
                             str("write cell: ", cell));
             }
         } else {
-            unsupported(tok(s), str("the mesh setting '", name(s), "' is not in this generator"),
-                        "use only size, cell and refine");
+            unsupported(tok(s), str("the setting '", name(s), "' is not in this generator"),
+                        if kind(n) == syntax::N_MESH { "use only size, cell and refine" } else { "use only spacing and refine" });
         }
         s = next(s);
     }
-    if mesh_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 5 mm"); }
+    if mesh_size <= 0.0 { unsupported(tok(n), str("the ", size_name, " must be > 0"), str("add ", size_name, ": 5 mm")); }
     if mesh_fine <= 0.0 { mesh_fine = mesh_size; }
 }
 
@@ -1085,6 +1090,10 @@ fn body_force_arg() {
 }
 
 fn method(n: i64) {
+    if name(n) == physics_name && syntax::text(syntax::nodes[n].aux) == "rkpm" {
+        rkpm_method(n);
+        return;
+    }
     if name(n) != physics_name || syntax::text(syntax::nodes[n].aux) != "cg" {
         unsupported(tok(n), "this generator has only the cg method of the physics", "write method solid: cg { order: 2 }");
         return;
@@ -1100,6 +1109,50 @@ fn method(n: i64) {
             unsupported(tok(s), "the method setting is not in this generator", "use only mesh, order and the pml of a wave physics");
         }
         s = next(s);
+    }
+}
+
+// method solid: rkpm { points: c, basis: linear, support: 2.5,
+// integrate: scni, bc: nitsche } of a 2D elastic physics: the meshless
+// package on the nodes of P1 triangles of the points item (spec §17.5).
+fn rkpm_method(n: i64) {
+    order = 1;
+    rkpm_support = 2.5;
+    var s = first(child(n, 0));
+    while s >= 0 {
+        let v = first(s);
+        let word = if kind(s) == syntax::N_SETTING && kind(v) == syntax::N_NAME { name(v) } else { "" };
+        if kind(s) == syntax::N_SETTING && name(s) == "support" {
+            rkpm_support = scalar_value(v);
+            if rkpm_support <= 1.0 { unsupported(tok(v), "the support must be > 1", "write support: 2.5"); }
+        } else if !(kind(s) == syntax::N_SETTING && (name(s) == "points" || (name(s) == "basis" && word == "linear") ||
+                    (name(s) == "integrate" && word == "scni") || (name(s) == "bc" && word == "nitsche"))) {
+            unsupported(tok(s), "this generator has rkpm with the linear basis, scni and nitsche", "write method solid: rkpm { points: c, basis: linear, support: 2.5, integrate: scni, bc: nitsche }");
+        }
+        s = next(s);
+    }
+    if dim != 2 || physics != ELASTIC {
+        unsupported(tok(n), "this generator has rkpm on a 2d linear_elastic physics", "use method solid: cg");
+    }
+}
+
+// The parts of a model that the rkpm lane does not have: it solves static
+// steps of one material with loads on the boundary.
+fn rkpm_limits(prog: i64) {
+    let fix = "use method solid: cg for this model";
+    var c = first(prog);
+    while c >= 0 {
+        if kind(c) == syntax::N_STUDY { unsupported(tok(c), "a study of an rkpm model is not in this generator", fix); }
+        c = next(c);
+    }
+    for st in steps {
+        if st.procedure != STATIC || st.change_count > 0 { unsupported(mesh_tok, "rkpm has only static steps with no birth or death", fix); }
+        for r in reports[st.first_report..st.first_report + st.report_count] {
+            if max_von_mises(r.expr) { unsupported(tok(r.expr), "rkpm has no max(von_mises(sigma), region)", "report sigma at a point"); }
+        }
+    }
+    if region_laws.len > 0 || body_node >= 0 || cut_source >= 0 {
+        unsupported(mesh_tok, "rkpm has one material, no body force and no results of another model", fix);
     }
 }
 
@@ -1497,7 +1550,7 @@ fn read(prog: i64) -> bool {
         } else if k == syntax::N_PHYSICS {
             if physics_node >= 0 { unsupported(tok(c), "a second physics: this generator has one", "remove the second physics"); }
             physics_node = c;
-        } else if k == syntax::N_MESH {
+        } else if k == syntax::N_MESH || k == syntax::N_POINTS {
             if mesh_node >= 0 { unsupported(tok(c), "a second mesh: this generator has one", "remove the second mesh"); }
             mesh_node = c;
         } else if k == syntax::N_METHOD {
@@ -1524,6 +1577,10 @@ fn read(prog: i64) -> bool {
     if mesh_node < 0 { unsupported(at, "the model has no mesh", "add mesh m on plate { size: 5 mm }"); } else { mesh(mesh_node); }
     for m in methods { method(m); }
     for y in symmetries { symmetry(y); }
+    if mesh_node >= 0 && (kind(mesh_node) == syntax::N_POINTS) != (rkpm_support > 0.0) {
+        unsupported(tok(mesh_node), "points need the rkpm method, and the rkpm method needs points",
+                    "write points c on plate { spacing: 2 mm } with method solid: rkpm { points: c }");
+    }
     if !ok() { return false; }
     c = first(prog);
     while c >= 0 {
@@ -1539,6 +1596,7 @@ fn read(prog: i64) -> bool {
         c = next(c);
     }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
+    if rkpm_support > 0.0 { rkpm_limits(prog); }
     if ok() { step_bcs(); }
     if ok() { harmonic_values(); }
     if ok() { supports(); }
@@ -1641,6 +1699,10 @@ let AXES = ["elements::X", "elements::Y", "elements::Z"];
 let AXIS_NAMES = ["x", "y", "z"];
 
 fn lit(out: u8[>..]&, x: f64) { codegen::lit(out, x); }
+
+// The prefix of the calls of a condition, a solve or a sample: the
+// elements, or the rk_ functions of RKPM_PRELUDE.
+fn api() -> const u8[:] { if rkpm_support > 0.0 { "rk_" } else { "elements::" } }
 
 fn lits(out: u8[>..]&, v: f64[3]) {
     lit(out, v[0]);
@@ -1834,6 +1896,86 @@ let PRELUDE = """
 
     """;
 
+// The part of the program of the rkpm method: the meshless package on the
+// nodes of the P1 mesh, with the regions of the elements. A condition on a
+// region holds the boundary edges of the cloud with both points in it.
+let RKPM_PRELUDE = """
+    var fixed_values: f64[>..] = [];   // the value of each condition k of the step
+
+    fn rk_value(k: i64, x: f64, y: f64, t: f64) -> f64 { return fixed_values[k]; }
+    fn rk_no_source(x: f64, y: f64, t: f64) -> f64 { return 0.0; }
+
+    fn rk_start(support: f64, E: f64, nu: f64, stress: bool, t: f64) {
+        var points: f64[>..] = [];
+        for n in elements::node_count() { points.append([elements::coords[3 * n], elements::coords[3 * n + 1]]); }
+        meshless::set_cloud(points, elements::conn);
+        meshless::elastic(E, nu, stress, t);
+        if !meshless::rkpm(support) {
+            write_stderr("skein run: an rkpm shape function is singular: give a larger support\n");
+            exit(1);
+        }
+    }
+
+    // The boundary edges of the region of the last region call.
+    fn rk_select() {
+        var mask: u8[>..] = [];
+        for n in elements::node_count() { mask.push(if elements::on_region(n) { 1 } else { 0 }); }
+        region(meshless::select_points(mask), "the region");
+    }
+
+    fn rk_clear_bcs() {
+        meshless::clear_bcs();
+        fixed_values.clear();
+    }
+
+    fn rk_fix(comp: i64, v: f64) {
+        rk_select();
+        fixed_values.push(v);
+        meshless::fix_component(comp, fixed_values.len - 1);
+    }
+
+    fn rk_traction(tx: f64, ty: f64, tz: f64) {
+        rk_select();
+        meshless::load_selected(0, tx);
+        meshless::load_selected(1, ty);
+    }
+
+    fn rk_reaction() -> f64, f64, f64 {
+        rk_select();
+        let r = meshless::reaction();
+        return r[0], r[1], 0.0;
+    }
+
+    fn rk_solve() -> bool { return meshless::solve_static(rk_no_source, rk_value); }
+    fn rk_element_count() -> i64 { return meshless::cell_count(); }
+    fn rk_dof_count() -> i64 { return meshless::dof_count(); }
+    fn rk_cg_iterations() -> i64 { return 0; }
+    fn rk_solve_seconds() -> f64 { return meshless::last_seconds; }
+    fn rk_value_at(c: i64, x: f64, y: f64, z: f64) -> f64, bool { return meshless::value_at(c, x, y); }
+    fn rk_stress_at(i: i64, j: i64, x: f64, y: f64, z: f64) -> f64, bool { return meshless::stress_at(i, j, x, y); }
+    fn rk_write_vtu(path: const u8[:], field: const u8[:]) -> bool { return meshless::write_vtu(path, field); }
+
+    fn rk_total_reaction() -> f64, f64, f64 {
+        let r, size, f = meshless::balance();
+        return r[0], r[1], 0.0;
+    }
+
+    fn rk_applied_load() -> f64, f64, f64 {
+        let r, size, f = meshless::balance();
+        return f[0], f[1], 0.0;
+    }
+
+    fn rk_load_scale() -> f64 {
+        let r, size, f = meshless::balance();
+        return size;
+    }
+
+    """;
+
+// The calls of PRELUDE that RKPM_PRELUDE takes.
+let RKPM_CALLS = ["solve()", "element_count()", "dof_count()", "cg_iterations()", "solve_seconds()", "total_reaction()",
+                  "applied_load()", "load_scale()", "write_vtu("];
+
 // The part of the program of a wave physics.
 let WAVE_PRELUDE = """
     // Part `part` of the Complex unknown at a point: re, imag, abs or arg.
@@ -1965,7 +2107,7 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         lit(out, b.v[0]);
         out.append(");\n");
     } else if b.kind == BC_LOAD {
-        out.append("    elements::traction(");
+        format(out, "    ", api(), "traction(");
         lits(out, b.v);
         out.append(");\n");
     } else if physics == HEAT {
@@ -1973,12 +2115,12 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         lit(out, b.v[0]);
         out.append(");\n");
     } else if b.comp >= 0 {
-        format(out, "    elements::fix(", AXES[b.comp], ", ");
+        format(out, "    ", api(), "fix(", AXES[b.comp], ", ");
         lit(out, b.v[0]);
         out.append(");\n");
     } else {
         for j in dim {
-            format(out, "    elements::fix(", AXES[j], ", ");
+            format(out, "    ", api(), "fix(", AXES[j], ", ");
             lit(out, b.v[j]);
             out.append(");\n");
         }
@@ -2027,7 +2169,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     format(out, "fn step_", s.name, "() {\n");
     // After the clear: clear_bcs keeps the solution of the last step,
     // which a birth reads.
-    out.append("    elements::clear_bcs();\n");
+    format(out, "    ", api(), "clear_bcs();\n");
     for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
     if share.stages >= 2 && share.reads {
         codegen::emit_share(out, "", "elements::read_solution", share, s.name);
@@ -2041,11 +2183,13 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         out.append(");\n");
         if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, s.name); }
         // The state of the step, for a `results` of another model.
-        out.append("    state(");
-        quoted(out, results_dir);
-        out.append(", ");
-        quoted(out, s.name);
-        out.append(");\n");
+        if rkpm_support <= 0.0 {
+            out.append("    state(");
+            quoted(out, results_dir);
+            out.append(", ");
+            quoted(out, s.name);
+            out.append(");\n");
+        }
     }
     format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
     if physics == ELASTIC {
@@ -2162,7 +2306,7 @@ fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3])
         out.append(");\n");
         return;
     }
-    format(out, "        let ", var_name, ", found_", var_name, " = elements::");
+    format(out, "        let ", var_name, ", found_", var_name, " = ", api());
     if what == FIELD_VALUE { format(out, "value_at(", comp, ", "); }
     if what == FIELD_FLUX { format(out, "flux_at(", AXES[comp], ", "); }
     if what == FIELD_STRESS { format(out, "stress_at(", AXES[comp / 3], ", ", AXES[comp % 3], ", "); }
@@ -2189,7 +2333,7 @@ fn emit_report(out: u8[>..]&, step: Step, r: Report) {
     } else if kind(e) == syntax::N_CALL {
         out.append("    ");
         emit_region(out, find_surf(name(arg(e, 0))));
-        out.append("        let x, y, z = elements::reaction();\n");
+        format(out, "        let x, y, z = ", api(), "reaction();\n");
         if physics == HEAT {
             format(v, "quantity(x, \"", reaction_unit(), "\")");
         } else {
@@ -2316,7 +2460,23 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     out.append(";   // the mesher imports it\nimport solvers from ");
     quoted(out, str(src, "solvers"));
     out.append(";   // the runtime imports it\n");
-    out.append(PRELUDE);
+    if rkpm_support > 0.0 {
+        out.append("import meshless from ");
+        quoted(out, str(src, "meshless"));
+        out.append(";\n");
+        var prelude: u8[>..] = [];
+        prelude.append(PRELUDE);
+        for c in RKPM_CALLS {
+            var next: u8[>..] = [];
+            format_replaced(next, prelude, str("elements::", c), str("rk_", c));
+            prelude.clear();
+            prelude.append(next);
+        }
+        out.append(prelude);
+        out.append(RKPM_PRELUDE);
+    } else {
+        out.append(PRELUDE);
+    }
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
@@ -2385,6 +2545,17 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             lit(out, thickness);
         }
         out.append(");\n");
+        if rkpm_support > 0.0 {
+            format(out, "    // method rkpm: support ", rkpm_support, " times the spacing, on the nodes of the mesh\n    rk_start(");
+            lit(out, rkpm_support);
+            out.append(", ");
+            lit(out, young);
+            out.append(", ");
+            lit(out, poisson);
+            format(out, ", ", if plane == PLANE_STRESS { "true" } else { "false" }, ", ");
+            lit(out, thickness);
+            out.append(");\n");
+        }
         if body_node >= 0 {
             out.append("    elements::body_force(");
             lits(out, body_force);

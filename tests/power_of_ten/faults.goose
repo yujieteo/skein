@@ -8,6 +8,7 @@ import elements from "../../src/elements";
 import shells from "../../src/shells";
 import flow from "../../src/flow";
 import grid from "../../src/grid";
+import meshless from "../../src/meshless";
 import solvers from "../../src/solvers";
 import mesher from "../../src/mesher";
 
@@ -69,6 +70,19 @@ fn main() {
         grid::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
         grid::fv(grid::UPWIND, grid::GREEN_GAUSS, grid::NONE);
         grid::fix_selected(-1);
+    } else if call == "meshless_points" {
+        meshless::points_rect(0.0, 0.0, 1.0, 0.0, 2, 2);
+    } else if call == "meshless_equation" {
+        meshless::points_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        meshless::equation(1.0, 0.0, 0.0);
+    } else if call == "meshless_gfd" {
+        meshless::points_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        meshless::elastic(1000.0, 0.3, true, 1.0);
+        meshless::gfd(12);
+    } else if call == "meshless_fix" {
+        meshless::points_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        meshless::equation(1.0, 0.0, 1.0);
+        meshless::fix_selected(0);
     } else if call == "flow_value" {
         flow::value_at(flow::VALUE_P, 0.0, 0.0);
     } else if call == "solvers_multiply" {

@@ -49,8 +49,11 @@ examples/grid/mms_dg_static.skn
 examples/grid/mms_fv_static.skn
 examples/grid/mms_fv_transient.skn
 examples/lame_profile.skn
+examples/meshless/mms_gfd.skn
+examples/meshless/mms_rkpm.skn
 examples/shells/thin_cylinder_shell.skn
 samples/02_cavity.skn
+samples/05_meshless_plate.skn
 samples/06_cylinder_sweep.skn
 "
 
