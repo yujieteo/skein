@@ -127,4 +127,3 @@ var quad_w: f64[>..] = [];
 var shape_n: f64[>..] = [];
 var shape_dn: f64[>..] = [];
 var grad: f64[>..] = [];      // the gradient of each shape function at a quadrature point
-
