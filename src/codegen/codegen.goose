@@ -467,6 +467,33 @@ fn reset() {
     system = SYSTEMS[0];
 }
 
+// `s` in single quotes for the shell.
+fn shell_quoted(s: u8[:]) -> u8[>..] {
+    var out: u8[>..] = [];
+    out.push('\'');
+    for c in s {
+        if c == '\'' { out.append("'\\''"); } else { out.push(c); }
+    }
+    out.push('\'');
+    return out;
+}
+
+// The directory of the results of model `model`, run with the --set words
+// `sets`: .skein/results/<model>, and with --set, set/<words> in it. The
+// words are joined by ',', with no spaces and with '_' for '/'. So a run
+// with other values does not write over the results of the model, and a
+// submodel finds the state of the case that it needs (spec §15.1).
+fn results_path(model: u8[:], sets: const u8[:][:]) -> u8[>..] {
+    var p = str(".skein/results/", model);
+    for w, i in sets {
+        p.append(if i == 0 { "/set/" } else { "," });
+        for c in w {
+            if c == '/' { p.push('_'); } else if c != ' ' { p.push(c); }
+        }
+    }
+    return p;
+}
+
 fn set64(into: u8[..64]&, s: u8[:]) {
     into = [];
     into.append(s[..min(s.len, 64)]);

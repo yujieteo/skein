@@ -394,6 +394,12 @@ fn test_steps() {
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"no_such_file.skn\", step: \"load\")\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"samples/01_cantilever.skn\", step: \"unload\")\n"));
+    // G34: a submodel for each case of a study.
+    let global = "let g: Results = results(\"samples/01_cantilever.skn\", step: \"load\", case: ";
+    expect_clean("G34 the case of results", str(H, "param L: Length = 150 mm\n", global, "L)\n"));
+    expect_id("results_case", str(H, "let L: Length = 150 mm\n", global, "L)\n"));
+    expect_id("results_case", str(H, "param W: Length = 20 mm\n", global, "W)\n"));
+    expect_id("unit_mismatch", str(H, "param P: Length = 1 mm\n", global, "P)\n"));
     expect_id("expect_form", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nexpect e: b == 1 m within 1%\n"));
     expect_id("unit_mismatch", str(H, "let a: Length = 1 m\nexpect e: a == 1 m within 1 s\n"));
     // G10: an expect of a step, checked at the end of the step.

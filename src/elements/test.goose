@@ -449,12 +449,70 @@ fn test_runs() {
     }
 }
 
+// --- the submodel cut ------------------------------------------------------------
+
+// A box with the linear field of the patch test is the source of a smaller
+// box with other cells. The smaller box takes the field on its faces, so it
+// has the same field inside, and the stress resultants on its faces match.
+fn test_submodel() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 4, 4, 4);
+    elements::elastic(1000.0, 0.3);
+    for n in elements::node_count() {
+        if !on_boundary(n) { continue; }
+        for a in 3 {
+            elements::fixed[3 * n + a] = 1;
+            elements::prescribed[3 * n + a] = exact(n, a);
+        }
+    }
+    if !elements::solve() || !elements::write_state("build", "submodel_test") {
+        failures++;
+        print("FAIL submodel: the source does not solve or save");
+        return;
+    }
+    let lo: f64[3] = [0.2, 0.1, 0.3];
+    let hi: f64[3] = [0.7, 0.8, 0.9];
+    elements::mesh_box(3, 2, lo[0], lo[1], lo[2], hi[0], hi[1], hi[2], 3, 3, 3);
+    elements::elastic(1000.0, 0.3);
+    guard elements::read_state("build", "submodel_test", 1.0, 1.0, 1.0) else {
+        failures++;
+        print("FAIL submodel: read_state");
+        return;
+    };
+    elements::plane(elements::X, lo[0]);
+    for t in 3 {
+        if t > 0 { elements::also_plane(t, lo[t]); }
+        elements::also_plane(t, hi[t]);
+    }
+    let outside = elements::fix_state();
+    if outside != 0 || !elements::solve() {
+        failures++;
+        print("FAIL submodel: ", outside, " cut nodes outside the source, or no solve");
+        return;
+    }
+    var err = 0.0;
+    for n in elements::node_count() {
+        for a in 3 { err = max(err, abs(elements::sol[3 * n + a] - exact(n, a))); }
+    }
+    let d, scale = elements::cut_difference();
+    print("submodel tet10: ", elements::dof_count(), " dofs, error of the nodal values ", err,
+          ", of the cut resultants ", d, " of ", scale);
+    if !(err <= 1.0e-10) || !(scale > 0.0) || !(d <= 1.0e-9 * scale) {
+        failures++;
+        print("FAIL submodel: the field or the cut resultants differ");
+    }
+    if elements::read_state("build", "no_such_step", 1.0, 1.0, 1.0) {
+        failures++;
+        print("FAIL submodel: read_state of a step with no state");
+    }
+}
+
 fn main() {
     test_patches();
     test_kirsch();
     test_heated_bar();
     test_body_force();
     test_equilibrium_scale();
+    test_submodel();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");

@@ -422,6 +422,46 @@ fn test_export() {
     export_case("a model with an error", str(holed, "let bad: Length = 2 s\n"), ["--geometry", "s"], 1);
 }
 
+// The interfaces of mesh_2d: a ground under a trapezoid lift, with the
+// line y = 0 between them inside the body. No triangle crosses the line or
+// the slopes of the lift, and the areas of the two parts are exact.
+fn test_interfaces() {
+    mesher::clear_shapes();
+    let ground = mesher::rect(-6.0, -3.0, 6.0, 0.0);
+    let lift = mesher::polygon([-4.0, 0.0, 4.0, 0.0, 3.0, 1.0, -3.0, 1.0]);
+    let body = mesher::union(ground, lift);
+    mesher::clear_interfaces();
+    mesher::add_interface(lift);
+    let done = mesher::mesh_2d(body, 0.7);
+    mesher::clear_interfaces();
+    if !done { fail("interfaces: the mesher did not finish"); }
+    var area_lift = 0.0;
+    var area = 0.0;
+    var crossed = 0;
+    for c in mesher::cell_count() {
+        var inside = 0;
+        var outside = 0;
+        var centre: f64[3] = [0.0; 3];
+        let a = mesher::vertex(mesher::cell_node(c, 0));
+        let b = mesher::vertex(mesher::cell_node(c, 1));
+        let d = mesher::vertex(mesher::cell_node(c, 2));
+        let size = 0.5 * abs((b[0] - a[0]) * (d[1] - a[1]) - (b[1] - a[1]) * (d[0] - a[0]));
+        for i in 3 {
+            let p = mesher::vertex(mesher::cell_node(c, i));
+            let f = mesher::phi(lift, p[0], p[1], 0.0);
+            if f < -1.0e-9 { inside++; }
+            if f > 1.0e-9 { outside++; }
+            for t in 3 { centre[t] += p[t] / 3.0; }
+        }
+        if inside > 0 && outside > 0 { crossed++; }
+        if mesher::phi(lift, centre[0], centre[1], 0.0) < 0.0 { area_lift += size; }
+        area += size;
+    }
+    print("interfaces: ", mesher::cell_count(), " triangles, ", crossed, " cross the lift, area of the lift ", area_lift);
+    if crossed > 0 { fail(str("interfaces: ", crossed, " triangles cross the boundary of the lift")); }
+    if abs(area_lift - 7.0) > 1.0e-9 || abs(area - 43.0) > 1.0e-9 { fail(str("interfaces: the areas ", area_lift, " and ", area, " are not 7 and 43")); }
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -572,6 +612,7 @@ fn main() {
               (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
 
     test_fill();
+    test_interfaces();
 
     test_grid();
     test_lint();

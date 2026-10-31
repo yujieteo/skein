@@ -113,6 +113,26 @@ fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     return cell_field(best, [l[1], l[2], l[3]], what, comp), best_l >= -0.1;
 }
 
+// The largest von Mises stress at the nodes of the region, from the
+// stress of each cell at the node. 0 if the region holds no node.
+fn region_max_von_mises() -> f64 {
+    guard physics == ELASTIC && sol.len == dof_total() else { abort("region_max_von_mises: an elastic model and a solution"); }
+    var most = 0.0;
+    for c in cell_count() {
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if !on_region(n) { continue; }
+            let b = barycentric(c, [node_x(n, 0), node_x(n, 1), node_x(n, 2)]);
+            var s: f64[9] = [0.0; 9];
+            for k in 9 { s[k] = cell_field(c, [b[1], b[2], b[3]], FIELD_STRESS, k); }
+            let d = (s[0] - s[4]) * (s[0] - s[4]) + (s[4] - s[8]) * (s[4] - s[8]) + (s[8] - s[0]) * (s[8] - s[0]);
+            let t = s[1] * s[1] + s[5] * s[5] + s[2] * s[2];
+            most = max(most, sqrt(0.5 * d + 3.0 * t));
+        }
+    }
+    return most;
+}
+
 // --- VTU -----------------------------------------------------------------------
 
 // VTK cell types: the triangle, the quadratic triangle, the tetrahedron and

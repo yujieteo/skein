@@ -170,9 +170,11 @@ let PLANE_STRESS = 1;
 let PLANE_STRAIN = 2;
 
 // The bc kinds: a fixed value of the unknown or a component of it, a
-// traction `sigma*n` or a heat flux `dot(q, n)`.
+// traction `sigma*n` or a heat flux `dot(q, n)`, or the unknown of another
+// model on the cut of a submodel.
 let BC_FIX = 0;
 let BC_LOAD = 1;
+let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
 
 // A region of the boundary: the union of planes `axis == value` and of
 // the surfaces of the shapes `shapes` of the mesher, or the surface of the
@@ -196,9 +198,20 @@ struct Refine {
 struct Bc {
     surf: i64,      // index in `surfs`
     kind: i64,
-    comp: i64,      // -1 for all components
+    comp: i64,      // -1 for all components, or the index in `sources` of BC_SOURCE
     v: f64[3],
     tok: i64,
+}
+
+// A `results` of another model (spec §15.1): the let, the file, its model
+// and unit system, the step, and the --set word of `case:`, or "".
+struct Source {
+    name: u8[..64],
+    path: u8[..256],
+    model: u8[..64],
+    system: i64,
+    step: u8[..64],
+    set: u8[..256],
 }
 
 struct Report {
@@ -253,6 +266,8 @@ var reports: Report[>..];
 var steps: Step[>..];
 var expects: Expect[>..];
 var skipped: u8[..256][>..];
+var sources: Source[>..];
+var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_tok = -1;
@@ -294,6 +309,8 @@ fn reset() {
     steps.clear();
     expects.clear();
     skipped.clear();
+    sources.clear();
+    cut_source = -1;
     mesh_size = 0.0;
     mesh_fine = 0.0;
     mesh_tok = -1;
@@ -391,10 +408,71 @@ fn value_item(n: i64) {
         geometry_nodes.push(v);
     } else if is_call(v, "boundary") {
         surface_lets.push(n);
+    } else if is_call(v, "results") {
+        results_item(n, v);
     } else {
         codegen::value_names.push(w);
         codegen::value_nodes.push(v);
     }
+}
+
+// `let global: Results = results(file, step: s, case: p)`. The file is
+// relative to the model file.
+fn results_item(n: i64, v: i64) {
+    var src = Source { name: [], path: [], model: [], system: -1, step: [], set: [] };
+    set64(src.name, name(n));
+    let file = arg(v, 0);
+    guard kind(file) == syntax::N_STRING else { return; };
+    let model_path = syntax::files[syntax::tokens[tok(file)].file].path;
+    var cut = 0;
+    for c, i in model_path { if c == '/' { cut = i + 1; } }
+    let quoted_file = name(file);
+    codegen::set256(src.path, str(model_path[..cut], quoted_file[1..quoted_file.len - 1]));
+    for i in 1..syntax::child_count(v) - 1 {
+        let a = child(v, i + 1);
+        let named = syntax::nodes[a].aux;
+        let x = first(a);
+        if named >= 0 && syntax::text(named) == "case" {
+            let p = if kind(x) == syntax::N_NAME { codegen::find_value(name(x)) } else { -1 };
+            guard p >= 0 else {
+                unsupported(tok(x), "the case of results is not a param", "write case: p, with p a param of this model");
+                return;
+            };
+            var word: u8[>..] = [];
+            format(word, name(x), "=", source_of(p));
+            codegen::set256(src.set, word);
+        } else if kind(x) == syntax::N_STRING {
+            let t = name(x);
+            set64(src.step, t[1..t.len - 1]);
+        }
+    }
+    var text: u8[>..] = [];
+    guard read_file(src.path, text) else {
+        unsupported(tok(file), str("cannot read '", src.path, "'"), "give the path of a model, relative to this file");
+        return;
+    };
+    let f = syntax::add_file(src.path, text);
+    syntax::lex(f);
+    let prog = syntax::parse(f);
+    var c = first(prog);
+    while c >= 0 {
+        if kind(c) == syntax::N_HEADER {
+            set64(src.model, name(c));
+            for sys, i in codegen::SYSTEM_NAMES { if sys == syntax::text(tok(child(c, 1))) { src.system = i; } }
+        }
+        c = next(c);
+    }
+    if src.model.len == 0 || src.system < 0 || src.step.len == 0 {
+        unsupported(tok(v), str("the model, the unit system or the step of '", src.path, "' is not in this generator"),
+                    "give a model file with a header such as model beam: 3d, SI, and a step");
+        return;
+    }
+    sources.push(src);
+}
+
+fn find_source(word: u8[:]) -> i64 {
+    for s, i in sources { if s.name == word { return i; } }
+    return -1;
 }
 
 let BODY_FIX = "write the body as a shape of box, cylinder, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -";
@@ -819,7 +897,18 @@ fn bc(n: i64) -> i64 {
     let t = source_of(target);
     let member = kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
         name(first(target)) == unknown_name;
-    if t == unknown_name {
+    let from = if kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME { find_source(name(first(v))) } else { -1 };
+    if t == unknown_name && from >= 0 {
+        if name(v) != unknown_name {
+            unsupported(tok(v), str("the cut takes '", name(v), "' of the other model"), str("write ", unknown_name, " = ", name(first(v)), ".", unknown_name));
+        }
+        if cut_source >= 0 && cut_source != from {
+            unsupported(tok(v), "a second results on a cut: this generator has one", "take the cut values from one results");
+        }
+        cut_source = from;
+        b.kind = BC_SOURCE;
+        b.comp = from;
+    } else if t == unknown_name {
         let x = value(v);
         if physics == ELASTIC && x.n == 1 && x.v[0] != 0.0 {
             unsupported(tok(v), "u is a vector", "write u = 0, or a vector");
@@ -883,7 +972,17 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-let REPORT_FIX = "write report reaction(root), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
+let REPORT_FIX = "write report reaction(root), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
+
+// `max(von_mises(sigma), r)` of an elastic model, with r a boundary that a
+// let names.
+fn max_von_mises(e: i64) -> bool {
+    guard is_call(e, "max") && syntax::child_count(e) == 3 && physics == ELASTIC else { return false; }
+    let f = arg(e, 0);
+    let r = arg(e, 1);
+    return is_call(f, "von_mises") && syntax::child_count(f) == 2 && source_of(arg(f, 0)) == flux_name &&
+           kind(r) == syntax::N_NAME && find_surf(name(r)) >= 0;
+}
 
 fn report(item: i64) {
     let e = first(item);
@@ -896,7 +995,7 @@ fn report(item: i64) {
     } else if kind(e) == syntax::N_AT {
         let what, comp = point_field(e, true);
         if what < 0 { return; }
-    } else {
+    } else if !max_von_mises(e) {
         unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"), REPORT_FIX);
         return;
     }
@@ -1067,17 +1166,17 @@ fn step_bcs() {
 fn supports() {
     for s in steps {
         var fixes = 0;
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX { fixes++; } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { fixes++; } }
         if fixes == 0 {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
         }
         for r in reports[s.first_report..s.first_report + s.report_count] {
-            if kind(r.expr) != syntax::N_CALL { continue; }
+            if !is_call(r.expr, "reaction") { continue; }
             let arg0 = arg(r.expr, 0);
             let si = find_surf(name(arg0));
             var on = false;
-            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX && b.surf == si { on = true; } }
+            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD && b.surf == si { on = true; } }
             if !on {
                 unsupported(tok(arg0), str("the boundary ", name(arg0), " is not fixed in step ", s.name, ", so it has no reaction"),
                             "report the reaction of a boundary with a fixed value");
@@ -1236,6 +1335,14 @@ let PRELUDE = """
         result_count++;
     }
 
+    // The state of a converged step, for a `results` of another model.
+    fn state(dir: u8[:], step: u8[:]) {
+        if converged && !elements::write_state(dir, step) {
+            write_stderr(str("skein run: cannot write the state of step '", step, "' in '", dir, "'\n"));
+            failed = true;
+        }
+    }
+
     fn print_records() {
         var s: u8[>..] = [];
         format(s, "report[", report_count, "]{step,expr,value}:\n", reports);
@@ -1246,6 +1353,80 @@ let PRELUDE = """
     }
 
     """;
+
+// The part of the program of a submodel (spec §15.2).
+let SUBMODEL_PRELUDE = """
+    extern "libc.so.6" {
+        fn system(command: const u8&) -> i32;
+    }
+
+    // Reads the state of step `step` of the other model in `dir`. If it is
+    // not there, `command` runs the other model first.
+    fn results(dir: u8[:], step: u8[:], file: u8[:], command: u8[:], scales: f64[3]) {
+        if elements::read_state(dir, step, scales[0], scales[1], scales[2]) { return; }
+        var c: u8[>..] = [];
+        c.append(command);
+        c.push(0);
+        if system(c[0]) != 0 { write_stderr(str("skein run: the run of '", file, "' for its results failed\n")); }
+        if !elements::read_state(dir, step, scales[0], scales[1], scales[2]) {
+            write_stderr(str("skein run: no state of step '", step, "' of '", file, "' in '", dir, "'\n"));
+            exit(1);
+        }
+    }
+
+    // Each node of the cut is in the mesh of the other model (checks.md,
+    // `submodel_outside`).
+    fn cut_outside(outside: i64, name: u8[:]) {
+        check("submodel_outside", outside == 0, str(outside, " nodes of ", name), "0 nodes");
+    }
+
+    // On each part of the cut, the resultant force of the submodel is the
+    // one of the other model, to 2 % of the largest (checks.md,
+    // `submodel_cut`).
+    fn cut_check(unit: u8[:]) {
+        let d, scale = elements::cut_difference();
+        check("submodel_cut", d <= 0.02 * scale, quantity(d, unit), quantity(0.02 * scale, unit));
+    }
+
+    """;
+
+// The size of the unit of pressure of unit system `sys` in SI.
+fn pressure_si(sys: codegen::System) -> f64 { return sys.m / (sys.l * sys.t * sys.t); }
+
+// Reads the state of the cut source, and runs its model first if the state
+// is not there. The run of the other model is locked, so the cases of a
+// study that need the same state run it once.
+fn emit_source(out: u8[>..]&) {
+    let src = sources[cut_source];
+    var sets: const u8[:][>..] = [];
+    if src.set.len > 0 { sets.push(src.set); }
+    let dir = codegen::results_path(src.model, sets);
+    var inner: u8[>..] = [];
+    format(inner, "test -e ", codegen::shell_quoted(str(dir, "/", src.step, ".state_sol")), " || exec ",
+           codegen::shell_quoted(str(resource_dir(), "skein")), " run ", codegen::shell_quoted(src.path));
+    if src.set.len > 0 { format(inner, " --set ", codegen::shell_quoted(src.set)); }
+    inner.append(" 1>&2");
+    var command: u8[>..] = [];
+    format(command, "mkdir -p ", codegen::shell_quoted(dir), " && flock ", codegen::shell_quoted(str(dir, "/.lock")), " sh -c ",
+           codegen::shell_quoted(inner));
+    let other = codegen::SYSTEMS[src.system];
+    let length = other.l / codegen::system.l;
+    format(out, "    // ", src.name, ": the state of step ", src.step, " of ", src.path, "\n    results(");
+    quoted(out, dir);
+    out.append(", ");
+    quoted(out, src.step);
+    out.append(", ");
+    quoted(out, src.path);
+    out.append(", ");
+    quoted(out, command);
+    out.append(", [");
+    lit(out, length);
+    out.append(", ");
+    lit(out, if physics == HEAT { 1.0 } else { length });
+    out.append(", ");
+    lit(out, pressure_si(other) / pressure_si(codegen::system));
+    out.append("]);\n");
+}
 
 // Selects the region of boundary `si`.
 fn emit_region(out: u8[>..]&, si: i64) {
@@ -1275,7 +1456,9 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     let s = surfs[b.surf];
     format(out, "    // bc ", s.name, "\n");
     emit_region(out, b.surf);
-    if b.kind == BC_LOAD && physics == HEAT {
+    if b.kind == BC_SOURCE {
+        format(out, "    cut_outside(elements::fix_state(), \"", s.name, "\");\n");
+    } else if b.kind == BC_LOAD && physics == HEAT {
         out.append("    elements::flux(");
         lit(out, b.v[0]);
         out.append(");\n");
@@ -1310,14 +1493,27 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         out.append("    elements::clear_bcs();\n");
         // The fixed values first: a load on a node that a later fix holds
         // still counts in the reaction.
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX { emit_bc(out, b); } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_bc(out, b); } }
         out.append("    solve(");
         quoted(out, s.name);
         out.append(");\n");
         if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, s.name); }
+        // The state of the step, for a `results` of another model.
+        out.append("    state(");
+        quoted(out, results_dir);
+        out.append(", ");
+        quoted(out, s.name);
+        out.append(");\n");
     }
     format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
+    if physics == ELASTIC {
+        for b in active[s.first_bc..s.first_bc + s.bc_count] {
+            if b.kind != BC_SOURCE { continue; }
+            emit_region(out, b.surf);
+            format(out, "    cut_check(\"", reaction_unit(), "\");\n");
+        }
+    }
     for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }
     for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
@@ -1346,7 +1542,12 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
     format(out, "    // report ", r.label, "\n    {\n");
     let e = r.expr;
     var v: u8[>..] = [];
-    if kind(e) == syntax::N_CALL {
+    if max_von_mises(e) {
+        out.append("    ");
+        emit_region(out, find_surf(name(arg(e, 1))));
+        out.append("        let x = elements::max_von_mises();\n");
+        format(v, "quantity(x, \"", codegen::system.pressure, "\")");
+    } else if kind(e) == syntax::N_CALL {
         out.append("    ");
         emit_region(out, find_surf(name(arg(e, 0))));
         out.append("        let x, y, z = elements::reaction();\n");
@@ -1470,6 +1671,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     quoted(out, str(src, "solvers"));
     out.append(";   // the runtime imports it\n");
     out.append(PRELUDE);
+    if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
@@ -1537,6 +1739,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             out.append(");\n");
         }
     }
+    if cut_source >= 0 { emit_source(out); }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for s in skipped {

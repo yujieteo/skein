@@ -6,14 +6,16 @@
 //    when φ changes sign across the curve there. The ends of each piece on
 //    the boundary are found by bisection, then moved to the nearest true
 //    intersection with another curve; they are the corners and stay
-//    fixed. Each piece is cut into segments no longer than `size`.
+//    fixed. Each piece is cut into segments no longer than `size`. The
+//    boundary of each interface shape inside the shape is sampled the same
+//    way, as inner segments, so the triangles do not cross it.
 // 2. The Bowyer-Watson algorithm inserts the points into a Delaunay
 //    triangulation inside a large triangle.
 // 3. A segment is encroached if a point lies inside its diametral circle.
 //    Each encroached segment is split at the midpoint of its parameter on
 //    the true curve, or on a concentric shell next to a corner below
 //    60 degrees, until all segments are edges of the triangulation.
-// 4. Each triangle inside the polygon of the segments with an angle below
+// 4. Each triangle inside the polygon of the outer segments with an angle below
 //    MIN_ANGLE, or a circumradius above size / sqrt(3), gets a point at
 //    its circumcentre. With the targets of refine.goose, the wanted size
 //    at the circumcentre takes the place of size.
@@ -71,9 +73,11 @@ struct Segment {
     t0: f64,
     t1: f64,
     alive: bool,
+    inner: bool,    // on the boundary of an interface, inside the shape
 }
 
 var segments: Segment[>..] = [];
+var interfaces: i64[>..] = [];  // the shapes of add_interface
 var fan: i64[>..] = [];         // scratch of insert, by point
 
 // --- the boundary ----------------------------------------------------------------
@@ -185,10 +189,33 @@ fn covered(c: i64, t: f64, eps: f64) -> bool {
     return false;
 }
 
-// True if curve c has the boundary of shape g at t: φ has a different
-// sign on the two sides of the curve, and no earlier curve holds the point.
-fn on_boundary(g: i64, c: i64, t: f64, eps: f64) -> bool {
+fn clear_interfaces() { interfaces.clear(); }
+
+// Keeps the boundary of shape h inside the shape of mesh_2d as edges of
+// the triangles: a boundary between two materials, or of a region that a
+// step kills or gives birth to (spec §14.3).
+fn add_interface(h: i64) {
+    guard h >= 0 && h < shapes.len else { abort("add_interface: a shape"); }
+    interfaces.push(h);
+}
+
+// True if curve c has the boundary of shape g at t, and no earlier curve
+// holds the point. With `inner`, true if c has the boundary of an
+// interface there, and g is on both sides.
+fn on_boundary(g: i64, c: i64, t: f64, eps: f64, inner: bool) -> bool {
     if covered(c, t, eps) { return false; }
+    let a, b = sides(g, c, t, eps);
+    guard inner else { return a != b; }
+    guard a && b else { return false; }
+    for h in interfaces {
+        let p, q = sides(h, c, t, eps);
+        if p != q { return true; }
+    }
+    return false;
+}
+
+// Whether the points at eps on the two sides of curve c at t are in g.
+fn sides(g: i64, c: i64, t: f64, eps: f64) -> bool, bool {
     let x, y = curve_point(c, t);
     let p = curves[c].p;
     var nx = 0.0;
@@ -208,7 +235,7 @@ fn on_boundary(g: i64, c: i64, t: f64, eps: f64) -> bool {
         nx = cos(TAU * t);
         ny = sin(TAU * t);
     }
-    return (phi(g, x + eps * nx, y + eps * ny, 0.0) < 0.0) != (phi(g, x - eps * nx, y - eps * ny, 0.0) < 0.0);
+    return phi(g, x + eps * nx, y + eps * ny, 0.0) < 0.0, phi(g, x - eps * nx, y - eps * ny, 0.0) < 0.0;
 }
 
 // The points where the line through (x0, y0) along the unit vector
@@ -292,7 +319,7 @@ fn boundary_point(x: f64, y: f64, tol: f64) -> i64 {
 }
 
 // Cuts curve c from ta to tb into segments no longer than `size`.
-fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64) {
+fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64, inner: bool) {
     let n = max(ceil(curve_length(c) * (tb - ta) / size - 1.0e-9) as i64, if curves[c].kind == ARC { 3 } else { 1 });
     var prev = -1;
     var tprev = ta;
@@ -301,22 +328,23 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64) {
         let x, y = curve_point(c, t);
         let v = boundary_point(x, y, tol);
         if i > 0 && v != prev {
-            segments.push(Segment { a: prev, b: v, curve: c, t0: tprev, t1: t, alive: true });
+            segments.push(Segment { a: prev, b: v, curve: c, t0: tprev, t1: t, alive: true, inner: inner });
         }
         prev = v;
         tprev = t;
     }
 }
 
-// The pieces of each curve that are on the boundary of g.
-fn sample_boundary(g: i64, size: f64, diameter: f64) {
+// The pieces of each curve that are on the boundary of g, or with `inner`
+// on the boundary of an interface inside g.
+fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
     let eps = 1.0e-7 * diameter;
     let tol = 100.0 * eps;
     let reach = 10.0 * sqrt(eps * diameter);
     for c in curves.len {
         let m = max(512, ceil(16.0 * curve_length(c) / size) as i64);
         var on: bool[>..] = [];
-        for i in m { on.push(on_boundary(g, c, (i + 0.5) / m, eps)); }
+        for i in m { on.push(on_boundary(g, c, (i + 0.5) / m, eps, inner)); }
         // The parameter between sample i and sample i + 1 where `on` changes.
         fn change(i: i64) -> f64 {
             var lo = (i + 0.5) / m;
@@ -324,7 +352,7 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
             let state = on[i];
             for k in 60 {
                 let mid = 0.5 * (lo + hi);
-                if on_boundary(g, c, mid, eps) == state { lo = mid; } else { hi = mid; }
+                if on_boundary(g, c, mid, eps, inner) == state { lo = mid; } else { hi = mid; }
             }
             return snap_end(c, 0.5 * (lo + hi), eps, reach);
         }
@@ -336,7 +364,7 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
                 while j + 1 < m && on[j + 1] { j++; }
                 let ta = if i == 0 { 0.0 } else { change(i - 1) };
                 let tb = if j == m - 1 { 1.0 } else { change(j) };
-                add_piece(c, ta, tb, size, tol);
+                add_piece(c, ta, tb, size, tol, inner);
                 i = j + 1;
             }
             continue;
@@ -347,7 +375,7 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
             if on[i] != on[(i + 1) % m] { start = i; break; }
         }
         if start < 0 {
-            if on[0] { add_piece(c, 0.0, 1.0, size, tol); }
+            if on[0] { add_piece(c, 0.0, 1.0, size, tol, inner); }
             continue;
         }
         var i = start + 1;
@@ -357,7 +385,7 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
             while j + 1 < start + 1 + m && on[(j + 1) % m] { j++; }
             let ta = change((i - 1) % m) + ((i - 1) / m);
             let tb = change(j % m) + (j / m);
-            add_piece(c, ta, tb, size, tol);
+            add_piece(c, ta, tb, size, tol, inner);
             i = j + 1;
         }
     }
@@ -633,8 +661,8 @@ fn split_segment(s: i64) {
     let x, y = curve_point(seg.curve, tm);
     let v = insert_point(x, y);
     segments[s].alive = false;
-    segments.push(Segment { a: seg.a, b: v, curve: seg.curve, t0: seg.t0, t1: tm, alive: true });
-    segments.push(Segment { a: v, b: seg.b, curve: seg.curve, t0: tm, t1: seg.t1, alive: true });
+    segments.push(Segment { a: seg.a, b: v, curve: seg.curve, t0: seg.t0, t1: tm, alive: true, inner: seg.inner });
+    segments.push(Segment { a: v, b: seg.b, curve: seg.curve, t0: tm, t1: seg.t1, alive: true, inner: seg.inner });
 }
 
 // Splits encroached segments until there are none. False if the point
@@ -658,7 +686,7 @@ fn recover_segments(budget: i64) -> bool {
 // Sets tin of each live triangle from the polygon of the segments, not
 // from φ: between a chord and its arc, φ has the wrong sign. A flood fill
 // starts at the triangles on the corners of the large triangle, which are
-// outside, and flips the side across each segment. The segments must be
+// outside, and flips the side across each outer segment. The segments must be
 // edges of the triangulation.
 fn classify() {
     var seg: bool[>..] = [];
@@ -669,7 +697,7 @@ fn classify() {
         seen.push(false);
     }
     for s in segments.len {
-        guard segments[s].alive else { continue; }
+        guard segments[s].alive && !segments[s].inner else { continue; }
         let t, k = find_edge(segments[s].a, segments[s].b);
         if t < 0 { continue; }
         seg[3 * t + k] = true;
@@ -743,6 +771,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     segments.clear();
     fan.clear();
     guard collect_curves(g, 0.0, 0.0) else { return false; }
+    for h in interfaces { guard collect_curves(h, 0.0, 0.0) else { return false; }; }
     let b = bounds(g);
     let w = b[3] - b[0];
     let h = b[4] - b[1];
@@ -758,7 +787,8 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     py.push(cy + far);
     for i in 3 { vtri.push(-1); }
     new_triangle(0, 1, 2);
-    sample_boundary(g, size, diameter);
+    sample_boundary(g, size, diameter, false);
+    if interfaces.len > 0 { sample_boundary(g, size, diameter, true); }
     find_corners();
     for v in 3..px.len { insert_existing(v, locate(px[v], py[v])); }
     // A budget of points: 20 times the points of a uniform mesh of the box.

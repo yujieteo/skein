@@ -28,6 +28,7 @@ import .assemble;
 import .solve;
 import .post;
 import .csg;
+import .source;
 
 let X = 0;
 let Y = 1;
@@ -102,6 +103,19 @@ fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
            load_array(dir, str(step, ".val"), val) && load_array(dir, str(step, ".source"), assembled_source);
 }
 
+// Writes the mesh, the material and the solution of step `step` in the
+// directory `dir`, for a `results` of another model (spec §15.1). False if
+// it cannot write a file.
+fn write_state(dir: const u8[:], step: const u8[:]) -> bool { return save_state(dir, step); }
+
+// Reads the state that `write_state` wrote for step `step` in `dir` as the
+// field of a submodel cut. The scales convert a length, a value of the
+// unknown and a modulus of the other model into the units of this model.
+// False if it cannot read it.
+fn read_state(dir: const u8[:], step: const u8[:], length_scale: f64, value_scale: f64, modulus_scale: f64) -> bool {
+    return load_source(dir, step, length_scale, value_scale, modulus_scale);
+}
+
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
     guard length > 0.0 && size > 0.0 else { abort("cells_for: length > 0 and size > 0"); }
@@ -171,6 +185,11 @@ fn also_surface(g: i64) -> bool {
 // the region.
 fn fix(comp: i64, v: f64) { fix_region(comp, v); }
 
+// Holds the unknown on the region at the field of the last `read_state`,
+// interpolated at each node with the shape functions of the other mesh. It
+// gives the number of nodes of the region outside the other mesh.
+fn fix_state() -> i64 { return fix_region_source(); }
+
 // Adds a uniform traction (force per area) on the region.
 fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
 
@@ -206,6 +225,30 @@ fn reaction() -> f64, f64, f64 {
     let r = region_reaction();
     return r[0], r[1], r[2];
 }
+
+// The check `submodel_cut`: on each part of the region, the resultant force
+// of the stress of this model and of the field of the last `read_state`.
+// It gives the largest difference of the two, and the largest resultant of
+// the other model.
+fn cut_difference() -> f64, f64 {
+    var most = 0.0;
+    var scale = 0.0;
+    for k in region.len {
+        let own, other = part_resultants(k);
+        var d = 0.0;
+        var s = 0.0;
+        for t in 3 {
+            d += (own[t] - other[t]) * (own[t] - other[t]);
+            s += other[t] * other[t];
+        }
+        most = max(most, sqrt(d));
+        scale = max(scale, sqrt(s));
+    }
+    return most, scale;
+}
+
+// The largest von Mises stress at the nodes of the region.
+fn max_von_mises() -> f64 { return region_max_von_mises(); }
 
 // The sum of the reactions on all fixed dofs, for the check `equilibrium`.
 fn total_reaction() -> f64, f64, f64 {

@@ -6,6 +6,7 @@
 //     .skein/build/<model>/main.goose    the generated program
 //     .skein/build/<model>/<model>       the executable
 //     .skein/results/<model>/<step>.vtu  the results of each step
+//     .skein/results/<model>/set/<words>/ the results of a run with --set
 import std;
 import os;
 namespace codegen;
@@ -38,17 +39,6 @@ fn shell(command: u8[:]) -> i64 {
     let status = system(c[0]);
     if status < 0 || (status & 0x7f) != 0 { return 3; }
     return (status >> 8) & 0xff;
-}
-
-// `s` in single quotes for the shell.
-fn shell_quoted(s: u8[:]) -> u8[>..] {
-    var out: u8[>..] = [];
-    out.push('\'');
-    for c in s {
-        if c == '\'' { out.append("'\\''"); } else { out.push(c); }
-    }
-    out.push('\'');
-    return out;
 }
 
 fn make_dirs(path: u8[:]) -> bool {
@@ -165,7 +155,7 @@ fn run(args: const u8[:][:]) -> i64 {
         return 1;
     }
     let build_dir = str(".skein/build/", model_name);
-    let results_dir = str(".skein/results/", model_name);
+    let results_dir = results_path(model_name, sets);
     if !make_dirs(build_dir) || !make_dirs(results_dir) {
         write_stderr("skein run: cannot make the directory .skein\n");
         return 1;

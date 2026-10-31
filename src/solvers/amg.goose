@@ -6,8 +6,12 @@
 //
 // 1. The dofs are in blocks of `bs` dofs, one block for each node
 //    (bs = 3 for a 3D displacement). Node j is strong for node i if the
-//    sum of the squares of the block A_ij is more than THETA² times
-//    sqrt(|A_ii|² |A_jj|²), with the same sums.
+//    sum of the squares of the block A_ij is more than θ² times
+//    sqrt(|A_ii|² |A_jj|²), with the same sums, or at least RELATIVE²
+//    times the largest sum of a block of row i. θ is THETA on the fine
+//    level and halves on each coarser level. The relative test keeps the
+//    coarse levels of P2 cells coarsening: their rows couple many nodes,
+//    each by a small part of the diagonal.
 // 2. The aggregates, in three passes: a node whose strong neighbours are
 //    all free makes an aggregate with them; a free node joins the
 //    aggregate of a strong neighbour; a node still free makes an aggregate
@@ -36,6 +40,7 @@ import .sparse;
 let AMG_MAX_LEVELS = 12;
 let AMG_COARSE = 600;
 let THETA = 0.08;
+let RELATIVE = 0.5;
 let POWER_STEPS = 15;
 
 var amg_levels = 0;
@@ -123,13 +128,17 @@ fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
         }
         strong_start.push(strong.len);
     }
-    // Keep the strong pairs.
+    // Keep the strong pairs. The limit halves at each level, as in Vaněk,
+    // Mandel and Brezina: the coarse levels couple more nodes, each less.
+    let theta = THETA * pow(0.5, l as f64);
     var adj_start: i64[>..] = [0];
     var adj: i64[>..] = [];
     for i in nodes {
+        var most = 0.0;
+        for k in strong_start[i]..strong_start[i + 1] { most = max(most, strong_sum[k]); }
         for k in strong_start[i]..strong_start[i + 1] {
             let j = strong[k];
-            if strong_sum[k] > THETA * THETA * sqrt(self_sum[i] * self_sum[j]) { adj.push(j); }
+            if strong_sum[k] > theta * theta * sqrt(self_sum[i] * self_sum[j]) || strong_sum[k] >= RELATIVE * RELATIVE * most { adj.push(j); }
         }
         adj_start.push(adj.len);
     }
