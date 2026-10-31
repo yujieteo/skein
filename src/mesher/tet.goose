@@ -32,6 +32,7 @@ namespace mesher;
 import .geometry;
 import .mesh;
 import .quality;
+import .refine;
 
 let ALPHA_LONG = 0.24999;
 let ALPHA_SHORT = 0.41189;
@@ -74,27 +75,6 @@ fn half_position(p: i64) -> i64, i64, i64 {
            2 * (q / (lattice_cubes[0] * lattice_cubes[1])) + 1;
 }
 
-// The lattice point at half-step position (i, j, k), or -1.
-fn point_at_half(i: i64, j: i64, k: i64) -> i64 {
-    let ci = i % 2;
-    guard ci == j % 2 && ci == k % 2 else { return -1; }
-    guard i >= 0 && j >= 0 && k >= 0 else { return -1; }
-    if ci == 0 {
-        guard i / 2 <= lattice_cubes[0] && j / 2 <= lattice_cubes[1] && k / 2 <= lattice_cubes[2] else { return -1; }
-        return corner_id(i / 2, j / 2, k / 2);
-    }
-    guard i / 2 < lattice_cubes[0] && j / 2 < lattice_cubes[1] && k / 2 < lattice_cubes[2] else { return -1; }
-    return centre_id(i / 2, j / 2, k / 2);
-}
-
-// The 14 lattice neighbours, in half steps: 6 along the axes (2 half
-// steps, the long edges) and 8 along the diagonals (the short edges).
-let NEIGHBOURS: i64[3][14] = [
-    [2, 0, 0], [-2, 0, 0], [0, 2, 0], [0, -2, 0], [0, 0, 2], [0, 0, -2],
-    [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
-    [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1],
-];
-
 fn sign_of(v: f64) -> i64 {
     if v < 0.0 { return -1; }
     if v > 0.0 { return 1; }
@@ -125,8 +105,7 @@ fn lattice_node(p: i64) -> i64 {
 // The mesh node at the cut point of the edge from inside point a to
 // outside point b.
 fn cut_node(g: i64, a: i64, b: i64) -> i64 {
-    let n = lattice_point_count();
-    let key = min(a, b) * n + max(a, b);
+    let key = edge_key(a, b);
     let have = cuts.get(key);
     if have { return have; }
     let t = cut_fraction(g, a, b);
@@ -230,51 +209,75 @@ fn stuff(g: i64, p: i64[4]) {
     }
 }
 
-// Meshes the solid g with tetrahedra of edge length about `size`.
-fn mesh_3d(g: i64, size: f64) -> bool {
-    clear_mesh(3);
-    let b = bounds(g);
-    for a in 3 {
-        let side = b[3 + a] - b[a];
-        guard side > 0.0 else { return false; }
-        let n = max(ceil(side / size - 1.0e-9) as i64, 1);
-        lattice_step[a] = side / n;
-        lattice_cubes[a] = n + 2;
-        lattice_origin[a] = b[a] - lattice_step[a];
+// The background tetrahedra, 4 lattice points each: the lattice cells,
+// after refine_cells.
+var btets: i64[>..] = [];
+
+// The edges of the background tetrahedra (ends ea and eb), whether each is
+// the longest edge of a tetrahedron (a long edge of the paper), and the
+// edges at each point: edges_at[edge_start[p]..edge_start[p + 1]].
+var edge_index = dictionary<i64, i64> {};
+var ea: i64[>..] = [];
+var eb: i64[>..] = [];
+var elong: bool[>..] = [];
+var edge_start: i64[>..] = [];
+var edges_at: i64[>..] = [];
+
+fn find_edges() {
+    edge_index.clear();
+    ea.clear();
+    eb.clear();
+    elong.clear();
+    for t in btets.len / 4 {
+        let v = btets[4 * t..4 * t + 4];
+        let a, b, longest = longest_edge(lx, v);
+        for i in 4 {
+            for j in i + 1..4 {
+                let e = edge_index.get_or_insert(edge_key(v[i], v[j]), ea.len);
+                if e == ea.len {
+                    ea.push(v[i]);
+                    eb.push(v[j]);
+                    elong.push(false);
+                }
+                if gap(lx, v[i], v[j]) >= longest * (1.0 - 1.0e-9) { elong[e] = true; }
+            }
+        }
     }
-    let points = lattice_point_count();
-    lx.clear();
-    lphi.clear();
-    lnode.clear();
-    cuts.clear();
-    let h = min(min(lattice_step[0], lattice_step[1]), lattice_step[2]);
-    for p in points {
-        let i, j, k = half_position(p);
-        let x = lattice_origin[0] + 0.5 * i * lattice_step[0];
-        let y = lattice_origin[1] + 0.5 * j * lattice_step[1];
-        let z = lattice_origin[2] + 0.5 * k * lattice_step[2];
-        lx.push(x);
-        lx.push(y);
-        lx.push(z);
-        let f = phi(g, x, y, z);
-        lphi.push(if abs(f) <= 1.0e-9 * h { 0.0 } else { f });
-        lnode.push(-1);
+    let points = lx.len / 3;
+    edge_start.clear();
+    for p in points + 1 { edge_start.push(0); }
+    for e in ea.len {
+        edge_start[ea[e] + 1]++;
+        edge_start[eb[e] + 1]++;
     }
-    // Warping: move each lattice point that a cut point violates onto the
-    // nearest such cut point.
-    for p in points {
+    for p in points { edge_start[p + 1] += edge_start[p]; }
+    edges_at.clear();
+    for e in 2 * ea.len { edges_at.push(0); }
+    var fill: i64[>..] = [];
+    fill.append(edge_start[..points]);
+    for e in ea.len {
+        edges_at[fill[ea[e]]] = e;
+        fill[ea[e]]++;
+        edges_at[fill[eb[e]]] = e;
+        fill[eb[e]]++;
+    }
+}
+
+// Warping: moves each lattice point that a cut point violates onto the
+// nearest such cut point.
+fn warp(g: i64) {
+    for p in lx.len / 3 {
         guard lphi[p] != 0.0 else { continue; }
-        let i, j, k = half_position(p);
         var best = 2.0;
         var best_x: f64[3] = [0.0, 0.0, 0.0];
-        for d, e in NEIGHBOURS {
-            let q = point_at_half(i + d[0], j + d[1], k + d[2]);
-            guard q >= 0 && lphi[q] != 0.0 && (lphi[q] < 0.0) != (lphi[p] < 0.0) else { continue; }
+        for e in edges_at[edge_start[p]..edge_start[p + 1]] {
+            let q = if ea[e] == p { eb[e] } else { ea[e] };
+            guard lphi[q] != 0.0 && (lphi[q] < 0.0) != (lphi[p] < 0.0) else { continue; }
             let inside = if lphi[p] < 0.0 { p } else { q };
             let outside = if lphi[p] < 0.0 { q } else { p };
             let t = cut_fraction(g, inside, outside);
             let from_p = if inside == p { t } else { 1.0 - t };
-            let alpha = if e < 6 { ALPHA_LONG } else { ALPHA_SHORT };
+            let alpha = if elong[e] { ALPHA_LONG } else { ALPHA_SHORT };
             if from_p < alpha && from_p < best {
                 best = from_p;
                 for c in 3 { best_x[c] = lx[3 * p + c] + from_p * (lx[3 * q + c] - lx[3 * p + c]); }
@@ -285,8 +288,12 @@ fn mesh_3d(g: i64, size: f64) -> bool {
             lphi[p] = 0.0;
         }
     }
-    // The lattice tetrahedra: for each pair of cubes with a common face,
-    // the 2 centres and each edge of the face.
+}
+
+// The lattice tetrahedra: for each pair of cubes with a common face, the 2
+// centres and each edge of the face.
+fn lattice_tets() {
+    btets.clear();
     let n = lattice_cubes;
     for k in n[2] {
         for j in n[1] {
@@ -309,10 +316,48 @@ fn mesh_3d(g: i64, size: f64) -> bool {
                         at[v] += dv[q];
                         f[q] = corner_id(at[0], at[1], at[2]);
                     }
-                    for q in 4 { stuff(g, [c, c2, f[q], f[(q + 1) % 4]]); }
+                    for q in 4 { btets.append([c, c2, f[q], f[(q + 1) % 4]]); }
                 }
             }
         }
     }
+}
+
+// Meshes the solid g with tetrahedra of edge length about `size`, and
+// smaller at the targets of refine.goose. False if the refinement does not
+// finish.
+fn mesh_3d(g: i64, size: f64) -> bool {
+    clear_mesh(3);
+    let b = bounds(g);
+    for a in 3 {
+        let side = b[3 + a] - b[a];
+        guard side > 0.0 else { return false; }
+        let n = max(ceil(side / size - 1.0e-9) as i64, 1);
+        lattice_step[a] = side / n;
+        lattice_cubes[a] = n + 2;
+        lattice_origin[a] = b[a] - lattice_step[a];
+    }
+    lx.clear();
+    lphi.clear();
+    lnode.clear();
+    cuts.clear();
+    for p in lattice_point_count() {
+        let i, j, k = half_position(p);
+        lx.push(lattice_origin[0] + 0.5 * i * lattice_step[0]);
+        lx.push(lattice_origin[1] + 0.5 * j * lattice_step[1]);
+        lx.push(lattice_origin[2] + 0.5 * k * lattice_step[2]);
+    }
+    lattice_tets();
+    guard refine_cells(lx, btets, 4, size) else { return false; }
+    var h = min(min(lattice_step[0], lattice_step[1]), lattice_step[2]);
+    for t in targets { h = min(h, t.size); }
+    for p in lx.len / 3 {
+        let f = phi(g, lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]);
+        lphi.push(if abs(f) <= 1.0e-9 * h { 0.0 } else { f });
+        lnode.push(-1);
+    }
+    find_edges();
+    warp(g);
+    for t in btets.len / 4 { stuff(g, [btets[4 * t], btets[4 * t + 1], btets[4 * t + 2], btets[4 * t + 3]]); }
     return true;
 }

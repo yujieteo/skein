@@ -1,0 +1,440 @@
+// Smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996), the
+// preconditioner of CG for a symmetric positive definite matrix (spec
+// §18.4, docs/implementation.md §6).
+//
+// amg_setup builds the levels. On each level:
+//
+// 1. The dofs are in blocks of `bs` dofs, one block for each node
+//    (bs = 3 for a 3D displacement). Node j is strong for node i if the
+//    sum of the squares of the block A_ij is more than THETA² times
+//    sqrt(|A_ii|² |A_jj|²), with the same sums.
+// 2. The aggregates, in three passes: a node whose strong neighbours are
+//    all free makes an aggregate with them; a free node joins the
+//    aggregate of a strong neighbour; a node still free makes an aggregate
+//    with its free strong neighbours.
+// 3. The tentative prolongator P0 takes component c of the aggregate to
+//    component c of each node of it: the near null space is the constant
+//    of each component.
+// 4. P = (I - ω D⁻¹ A) P0, with ω = 4 / (3 ρ) and ρ the largest eigenvalue
+//    of D⁻¹ A, from power steps. The next level is Pᵀ A P.
+//
+// The levels stop at COARSE dofs or fewer, or when the aggregates do not
+// make the level smaller. A dense Cholesky factor solves the last level.
+// amg_apply is one V-cycle: a forward Gauss-Seidel sweep before the coarse
+// correction and a backward sweep after it, so the preconditioner is
+// symmetric. The levels are loops with a fixed maximum, not recursion
+// (docs/tradeoffs.md §6).
+//
+// The levels are the state of the package between amg_setup and the
+// calls of amg_apply. Each level l is in the flat arrays below, from the
+// offsets of level l.
+import std;
+import math;
+namespace solvers;
+import .sparse;
+
+let AMG_MAX_LEVELS = 12;
+let AMG_COARSE = 600;
+let THETA = 0.08;
+let POWER_STEPS = 15;
+
+var amg_levels = 0;
+var amg_n: i64[>..] = [];       // the dofs of each level
+var amg_rs: i64[>..] = [];      // the row starts of level l from amg_rs_at[l]
+var amg_rs_at: i64[>..] = [];
+var amg_col: i32[>..] = [];     // the entries of level l from amg_e_at[l] to amg_e_at[l + 1]
+var amg_val: f64[>..] = [];
+var amg_e_at: i64[>..] = [];
+var amg_prs: i64[>..] = [];     // the prolongator from level l + 1 to level l, the same way
+var amg_prs_at: i64[>..] = [];
+var amg_pcol: i32[>..] = [];
+var amg_pval: f64[>..] = [];
+var amg_pe_at: i64[>..] = [];
+var amg_x: f64[>..] = [];       // the vectors of level l from amg_v_at[l]
+var amg_b: f64[>..] = [];
+var amg_res: f64[>..] = [];
+var amg_diag: f64[>..] = [];
+var amg_v_at: i64[>..] = [];
+var amg_chol: f64[>..] = [];    // the dense Cholesky factor of the last level, by rows
+
+fn level_rs(l: i64) -> const i64[:] { return amg_rs[amg_rs_at[l]..amg_rs_at[l] + amg_n[l] + 1]; }
+fn level_col(l: i64) -> const i32[:] { return amg_col[amg_e_at[l]..amg_e_at[l + 1]]; }
+fn level_val(l: i64) -> const f64[:] { return amg_val[amg_e_at[l]..amg_e_at[l + 1]]; }
+
+// Appends a level of n dofs with the matrix (rs, col, val).
+fn push_level(n: i64, rs: i64[:], col: i32[:], val: f64[:]) {
+    guard rs.len == n + 1 && col.len == val.len && rs[n] == col.len else { abort("push_level: n + 1 row starts that end at col.len"); }
+    amg_n.push(n);
+    amg_rs_at.push(amg_rs.len);
+    amg_rs.append(rs);
+    if amg_e_at.len == 0 { amg_e_at.push(0); }
+    amg_col.append(col);
+    amg_val.append(val);
+    amg_e_at.push(amg_col.len);
+    amg_v_at.push(amg_x.len);
+    for r in n {
+        amg_x.push(0.0);
+        amg_b.push(0.0);
+        amg_res.push(0.0);
+        var d = 0.0;
+        for e in rs[r]..rs[r + 1] { if col[e] == r { d = val[e]; } }
+        amg_diag.push(if d > 0.0 { d } else { 1.0 });
+    }
+    amg_levels = amg_n.len;
+}
+
+// The aggregate of each node of level l, and the count of aggregates.
+fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
+    let rs = level_rs(l);
+    let col = level_col(l);
+    let val = level_val(l);
+    let nodes = amg_n[l] / bs;
+    // The sum of squares of each block A_ij of node row i, in `sum`.
+    var sum: f64[>..] = [];
+    var seen: i64[>..] = [];
+    for j in nodes {
+        sum.push(0.0);
+        seen.push(-1);
+    }
+    var self_sum: f64[>..] = [];
+    var strong_start: i64[>..] = [0];
+    var strong: i64[>..] = [];
+    var strong_sum: f64[>..] = [];
+    var touched: i64[>..] = [];
+    for i in nodes {
+        touched.clear();
+        for r in i * bs..(i + 1) * bs {
+            for e in rs[r]..rs[r + 1] {
+                let j = col[e] / bs;
+                if seen[j] != i {
+                    seen[j] = i;
+                    sum[j] = 0.0;
+                    touched.push(j);
+                }
+                sum[j] += val[e] * val[e];
+            }
+        }
+        self_sum.push(if seen[i] == i { sum[i] } else { 0.0 });
+        for j in touched {
+            if j != i {
+                strong.push(j);
+                strong_sum.push(sum[j]);
+            }
+        }
+        strong_start.push(strong.len);
+    }
+    // Keep the strong pairs.
+    var adj_start: i64[>..] = [0];
+    var adj: i64[>..] = [];
+    for i in nodes {
+        for k in strong_start[i]..strong_start[i + 1] {
+            let j = strong[k];
+            if strong_sum[k] > THETA * THETA * sqrt(self_sum[i] * self_sum[j]) { adj.push(j); }
+        }
+        adj_start.push(adj.len);
+    }
+    var agg: i64[>..] = [];
+    for i in nodes { agg.push(-1); }
+    var count = 0;
+    for i in nodes {
+        guard agg[i] < 0 && adj_start[i + 1] > adj_start[i] else { continue; }
+        var free = true;
+        for j in adj[adj_start[i]..adj_start[i + 1]] { if agg[j] >= 0 { free = false; } }
+        guard free else { continue; }
+        agg[i] = count;
+        for j in adj[adj_start[i]..adj_start[i + 1]] { agg[j] = count; }
+        count++;
+    }
+    var joined: i64[>..] = [];
+    joined.append(agg);
+    for i in nodes {
+        guard agg[i] < 0 else { continue; }
+        for j in adj[adj_start[i]..adj_start[i + 1]] {
+            if agg[j] >= 0 {
+                joined[i] = agg[j];
+                break;
+            }
+        }
+    }
+    agg.clear();
+    agg.append(joined);
+    for i in nodes {
+        guard agg[i] < 0 else { continue; }
+        agg[i] = count;
+        for j in adj[adj_start[i]..adj_start[i + 1]] { if agg[j] < 0 { agg[j] = count; } }
+        count++;
+    }
+    return agg, count;
+}
+
+// The largest eigenvalue of D⁻¹ A of level l, from power steps.
+fn spectral_radius(l: i64) -> f64 {
+    let n = amg_n[l];
+    let d = amg_diag[amg_v_at[l]..amg_v_at[l] + n];
+    var x: f64[>..] = [];
+    var y: f64[>..] = [];
+    for i in n {
+        x.push(1.0 + ((i * 7919) % 13) / 13.0);
+        y.push(0.0);
+    }
+    var rho = 1.0;
+    for k in POWER_STEPS {
+        let s = norm(x);
+        guard s > 0.0 else { return rho; }
+        for &v in x { v /= s; }
+        multiply(level_rs(l), level_col(l), level_val(l), x, y);
+        for i in n { y[i] /= d[i]; }
+        rho = dot(x, y);
+        for i in n { x[i] = y[i]; }
+    }
+    return max(rho, norm(x));
+}
+
+// C = A B for CSR A (rows of A) and B (nb columns).
+fn spmm(ars: i64[:], acol: i32[:], aval: f64[:], brs: i64[:], bcol: i32[:], bval: f64[:], nb: i64,
+        crs: i64[>..]&, ccol: i32[>..]&, cval: f64[>..]&) {
+    guard ars.len >= 1 && brs.len >= 1 && nb >= 0 else { abort("spmm: two CSR matrices"); }
+    crs.clear();
+    ccol.clear();
+    cval.clear();
+    crs.push(0);
+    var at: i64[>..] = [];
+    for c in nb { at.push(-1); }
+    for r in ars.len - 1 {
+        let row = ccol.len;
+        for e in ars[r]..ars[r + 1] {
+            let k = acol[e] as i64;
+            for f in brs[k]..brs[k + 1] {
+                let c = bcol[f] as i64;
+                if at[c] < row {
+                    at[c] = ccol.len;
+                    ccol.push(c as i32);
+                    cval.push(aval[e] * bval[f]);
+                } else {
+                    cval[at[c]] += aval[e] * bval[f];
+                }
+            }
+        }
+        crs.push(ccol.len);
+    }
+}
+
+// The transpose of the CSR matrix (rs, col, val) with nc columns.
+fn transpose(rs: i64[:], col: i32[:], val: f64[:], nc: i64, trs: i64[>..]&, tcol: i32[>..]&, tval: f64[>..]&) {
+    guard rs.len >= 1 && col.len == val.len else { abort("transpose: a CSR matrix"); }
+    trs.clear();
+    for c in nc + 1 { trs.push(0); }
+    for c in col { trs[c + 1]++; }
+    for c in nc { trs[c + 1] += trs[c]; }
+    tcol.clear();
+    tval.clear();
+    for e in col.len {
+        tcol.push(0);
+        tval.push(0.0);
+    }
+    var fill: i64[>..] = [];
+    fill.append(trs[..nc]);
+    for r in rs.len - 1 {
+        for e in rs[r]..rs[r + 1] {
+            let c = col[e] as i64;
+            tcol[fill[c]] = r as i32;
+            tval[fill[c]] = val[e];
+            fill[c]++;
+        }
+    }
+}
+
+// The dense Cholesky factor of the last level into amg_chol. False if the
+// level is not positive definite.
+fn factor_last() -> bool {
+    let l = amg_levels - 1;
+    let n = amg_n[l];
+    let rs = level_rs(l);
+    let col = level_col(l);
+    let val = level_val(l);
+    amg_chol.clear();
+    for i in n * n { amg_chol.push(0.0); }
+    for r in n {
+        for e in rs[r]..rs[r + 1] { amg_chol[n * r + col[e]] += val[e]; }
+    }
+    for j in n {
+        var d = amg_chol[n * j + j];
+        for k in j { d -= amg_chol[n * j + k] * amg_chol[n * j + k]; }
+        guard d > 0.0 else { return false; }
+        let s = sqrt(d);
+        amg_chol[n * j + j] = s;
+        for i in j + 1..n {
+            var v = amg_chol[n * i + j];
+            for k in j { v -= amg_chol[n * i + k] * amg_chol[n * j + k]; }
+            amg_chol[n * i + j] = v / s;
+        }
+    }
+    return true;
+}
+
+// Builds the levels for the matrix (row_start, col, val) with dofs in
+// blocks of `bs`. False if the last level is not positive definite.
+fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
+    guard bs >= 1 && row_start.len >= 2 && (row_start.len - 1) % bs == 0 && col.len == val.len else { abort("amg_setup: a CSR matrix with the dofs in blocks"); }
+    amg_levels = 0;
+    amg_n.clear();
+    amg_rs.clear();
+    amg_rs_at.clear();
+    amg_col.clear();
+    amg_val.clear();
+    amg_e_at.clear();
+    amg_prs.clear();
+    amg_prs_at.clear();
+    amg_pcol.clear();
+    amg_pval.clear();
+    amg_pe_at.clear();
+    amg_x.clear();
+    amg_b.clear();
+    amg_res.clear();
+    amg_diag.clear();
+    amg_v_at.clear();
+    push_level(row_start.len - 1, row_start, col, val);
+    var p0rs: i64[>..] = [];
+    var p0col: i32[>..] = [];
+    var p0val: f64[>..] = [];
+    var prs: i64[>..] = [];
+    var pcol: i32[>..] = [];
+    var pval: f64[>..] = [];
+    var trs: i64[>..] = [];
+    var tcol: i32[>..] = [];
+    var tval: f64[>..] = [];
+    var aprs: i64[>..] = [];
+    var apcol: i32[>..] = [];
+    var apval: f64[>..] = [];
+    var crs: i64[>..] = [];
+    var ccol: i32[>..] = [];
+    var cval: f64[>..] = [];
+    for l in AMG_MAX_LEVELS - 1 {
+        let n = amg_n[l];
+        guard n > AMG_COARSE else { break; }
+        let agg, count = aggregates(l, bs);
+        let nc = count * bs;
+        guard nc < n else { break; }
+        // P0, then P = P0 - ω D⁻¹ A P0.
+        p0rs.clear();
+        p0col.clear();
+        p0val.clear();
+        p0rs.push(0);
+        for r in n {
+            p0col.push((agg[r / bs] * bs + r % bs) as i32);
+            p0val.push(1.0);
+            p0rs.push(p0col.len);
+        }
+        let omega = 4.0 / (3.0 * spectral_radius(l));
+        spmm(level_rs(l), level_col(l), level_val(l), p0rs, p0col, p0val, nc, prs, pcol, pval);
+        let d = amg_diag[amg_v_at[l]..amg_v_at[l] + n];
+        for r in n {
+            for e in prs[r]..prs[r + 1] {
+                pval[e] *= -omega / d[r];
+                if pcol[e] == p0col[r] { pval[e] += 1.0; }
+            }
+        }
+        // The next level: Pᵀ (A P).
+        spmm(level_rs(l), level_col(l), level_val(l), prs, pcol, pval, nc, aprs, apcol, apval);
+        transpose(prs, pcol, pval, nc, trs, tcol, tval);
+        spmm(trs, tcol, tval, aprs, apcol, apval, nc, crs, ccol, cval);
+        if amg_pe_at.len == 0 { amg_pe_at.push(0); }
+        amg_prs_at.push(amg_prs.len);
+        amg_prs.append(prs);
+        amg_pcol.append(pcol);
+        amg_pval.append(pval);
+        amg_pe_at.push(amg_pcol.len);
+        push_level(nc, crs, ccol, cval);
+    }
+    return amg_n[amg_levels - 1] > 3000 || factor_last();
+}
+
+// One Gauss-Seidel sweep on level l, forward or backward.
+fn sweep(l: i64, forward: bool) {
+    let n = amg_n[l];
+    let rs = level_rs(l);
+    let col = level_col(l);
+    let val = level_val(l);
+    let at = amg_v_at[l];
+    for k in n {
+        let r = if forward { k } else { n - 1 - k };
+        var s = amg_b[at + r];
+        var d = 0.0;
+        for e in rs[r]..rs[r + 1] {
+            let c = col[e] as i64;
+            if c == r { d = val[e]; } else { s -= val[e] * amg_x[at + c]; }
+        }
+        amg_x[at + r] = if d > 0.0 { s / d } else { 0.0 };
+    }
+}
+
+// The solve of the last level: the Cholesky factor, or sweeps if the level
+// is too large to factor.
+fn solve_last() {
+    let l = amg_levels - 1;
+    let n = amg_n[l];
+    let at = amg_v_at[l];
+    guard amg_chol.len == n * n else {
+        for k in 10 {
+            sweep(l, true);
+            sweep(l, false);
+        }
+        return;
+    }
+    for i in n {
+        var s = amg_b[at + i];
+        for k in i { s -= amg_chol[n * i + k] * amg_x[at + k]; }
+        amg_x[at + i] = s / amg_chol[n * i + i];
+    }
+    for k in n {
+        let i = n - 1 - k;
+        var s = amg_x[at + i];
+        for j in i + 1..n { s -= amg_chol[n * j + i] * amg_x[at + j]; }
+        amg_x[at + i] = s / amg_chol[n * i + i];
+    }
+}
+
+// z = M⁻¹ r: one V-cycle from z = 0.
+fn amg_apply(r: f64[:], z: f64[:]) {
+    guard amg_levels > 0 && r.len == amg_n[0] && z.len == r.len else { abort("amg_apply: amg_setup, and r and z of the size of its matrix"); }
+    for i in r.len {
+        amg_b[i] = r[i];
+        amg_x[i] = 0.0;
+    }
+    for l in amg_levels - 1 {
+        let n = amg_n[l];
+        let at = amg_v_at[l];
+        let next = amg_v_at[l + 1];
+        sweep(l, true);
+        multiply(level_rs(l), level_col(l), level_val(l), amg_x[at..at + n], amg_res[at..at + n]);
+        for i in n { amg_res[at + i] = amg_b[at + i] - amg_res[at + i]; }
+        // b of level l + 1 = Pᵀ res.
+        for i in amg_n[l + 1] {
+            amg_b[next + i] = 0.0;
+            amg_x[next + i] = 0.0;
+        }
+        let prs = amg_prs[amg_prs_at[l]..amg_prs_at[l] + n + 1];
+        let pcol = amg_pcol[amg_pe_at[l]..amg_pe_at[l + 1]];
+        let pval = amg_pval[amg_pe_at[l]..amg_pe_at[l + 1]];
+        for i in n {
+            for e in prs[i]..prs[i + 1] { amg_b[next + pcol[e]] += pval[e] * amg_res[at + i]; }
+        }
+    }
+    solve_last();
+    for k in amg_levels - 1 {
+        let l = amg_levels - 2 - k;
+        let n = amg_n[l];
+        let at = amg_v_at[l];
+        let next = amg_v_at[l + 1];
+        let prs = amg_prs[amg_prs_at[l]..amg_prs_at[l] + n + 1];
+        let pcol = amg_pcol[amg_pe_at[l]..amg_pe_at[l + 1]];
+        let pval = amg_pval[amg_pe_at[l]..amg_pe_at[l + 1]];
+        for i in n {
+            var s = 0.0;
+            for e in prs[i]..prs[i + 1] { s += pval[e] * amg_x[next + pcol[e]]; }
+            amg_x[at + i] += s;
+        }
+        sweep(l, false);
+    }
+    for i in r.len { z[i] = amg_x[i]; }
+}

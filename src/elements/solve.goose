@@ -1,16 +1,19 @@
-// CG with a Jacobi preconditioner on the free dofs of the mesh of this
-// package. The solver interface of src/runtime/solve.goose and the
+// CG with a smoothed aggregation AMG preconditioner (src/solvers/amg.goose)
+// on the free dofs of the mesh of this package. The solver interface of src/runtime/solve.goose and the
 // solvers of src/solvers/ work on the mesh of src/runtime/fem.goose.
 //
 // The fixed dofs take their prescribed values first. CG then solves
 // K du = f - K u0 on the free dofs: it holds the residual and the search
-// direction at 0 on the fixed dofs.
+// direction at 0 on the fixed dofs. The AMG levels are built from K with
+// the rows and the columns of the fixed dofs cut off, and the nodes of the
+// mesh as their blocks.
 import std;
 import math;
 import os;
 namespace elements;
 import .mesh;
 import .assemble;
+import solvers from "../solvers";
 
 var last_iterations = 0;
 var last_seconds = 0.0;
@@ -41,6 +44,12 @@ fn zeros(n: i64) -> f64[>..] {
     return v;
 }
 
+// z = M⁻¹ r, held at 0 on the fixed dofs.
+fn precondition(r: f64[:], z: f64[:]) {
+    solvers::amg_apply(r, z);
+    for d in z.len { if fixed[d] != 0 { z[d] = 0.0; } }
+}
+
 fn solve_system() -> bool {
     guard physics >= 0 && dofs_sized() else { abort("solve_system: a physics and the arrays of the dofs"); }
     let start = clock();
@@ -50,7 +59,6 @@ fn solve_system() -> bool {
     var z = zeros(n);
     var p = zeros(n);
     var q = zeros(n);
-    var inv_diag = zeros(n);
     let sizes = state_sizes();
     for d in n { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
     multiply(sol, q);
@@ -60,13 +68,24 @@ fn solve_system() -> bool {
         let f = load[d] + assembled_source[d];
         f2 += f * f;
         r[d] = f - q[d];
-        inv_diag[d] = 1.0 / val[entry(d, d)];
+    }
+    var free_val: f64[>..] = [];
+    free_val.append(val);
+    for d in n {
+        for e in row_start[d]..row_start[d + 1] {
+            if col[e] != d && (fixed[d] != 0 || fixed[col[e]] != 0) { free_val[e] = 0.0; }
+        }
+    }
+    let factored = solvers::amg_setup(row_start, col, free_val, ncomp);
+    free_val.clear();
+    guard factored else {
+        last_iterations = 0;
+        last_seconds = clock() - start;
+        return false;
     }
     let target = CG_TOLERANCE * sqrt(max(f2, dot(r, r)));
-    for d in n {
-        z[d] = inv_diag[d] * r[d];
-        p[d] = z[d];
-    }
+    precondition(r, z);
+    for d in n { p[d] = z[d]; }
     var rz = dot(r, z);
     var converged = sqrt(dot(r, r)) <= target;
     var it = 0;
@@ -83,7 +102,7 @@ fn solve_system() -> bool {
             converged = true;
             break;
         }
-        for d in n { z[d] = inv_diag[d] * r[d]; }
+        precondition(r, z);
         let rz_new = dot(r, z);
         let beta = rz_new / rz;
         rz = rz_new;

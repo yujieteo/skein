@@ -11,3 +11,4 @@ import .sparse;
 import .ilu;
 import .krylov;
 import .newton;
+import .amg;

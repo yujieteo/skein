@@ -17,7 +17,8 @@
 //
 // The state is global: one mesh, one physics, one set of fixed dofs and one
 // set of loads. A boundary call (`fix`, `traction`, `flux`, `reaction`)
-// acts on the region of the last `plane`, `also_plane` or `hole` call.
+// acts on the region of the last `plane`, `also_plane`, `hole`, `surface`
+// or `also_surface` call.
 // These give false when the region holds no node.
 import std;
 namespace elements;
@@ -26,6 +27,7 @@ import .mesh;
 import .assemble;
 import .solve;
 import .post;
+import .csg;
 
 let X = 0;
 let Y = 1;
@@ -48,6 +50,15 @@ fn mesh_hole(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: 
              r: f64, size: f64, fine: f64) {
     build_hole(d, ord, [x0, y0, z0], [x1, y1, z1], r, size, fine);
     physics = -1;
+}
+
+// Meshes the shape g of src/mesher/ (built with its functions, for
+// example mesher::subtract(mesher::box(...), mesher::cylinder(...))) with
+// cells of order `ord` and size `size` in dimension d, and smaller at the
+// targets of mesher::add_refine. False if the mesher does not finish.
+fn mesh_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
+    physics = -1;
+    return build_shape(d, ord, g, size);
 }
 
 // Meshes with the cells `vertices` of dimension `d` (d + 1 nodes each, in
@@ -124,7 +135,7 @@ fn plane(axis: i64, value: f64) -> bool {
 // region is their union. It gives false when the plane holds no node.
 fn also_plane(axis: i64, value: f64) -> bool {
     guard axis >= 0 && axis < 3 && region.len < 8 else { abort("also_plane: 0 <= axis < 3 and at most 8 parts"); }
-    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0 });
+    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
@@ -135,8 +146,25 @@ fn also_plane(axis: i64, value: f64) -> bool {
 fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
-    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r });
+    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1 });
     return region_node_count() > 0;
+}
+
+// Selects the surface of the shape g of src/mesher/: the nodes where φ of
+// g is 0.
+fn surface(g: i64) -> bool {
+    region.clear();
+    return also_surface(g);
+}
+
+// Adds the surface of the shape g to the region of the last call that
+// selects a region. It gives false when the surface holds no node.
+fn also_surface(g: i64) -> bool {
+    guard g >= 0 && region.len < 8 else { abort("also_surface: a shape and at most 8 parts"); }
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    let k = region.len - 1;
+    for n in node_count() { if on_part(n, k) { return true; } }
+    return false;
 }
 
 // Holds component `comp` (X, Y, Z, or ALL) of u, or T (comp 0), at `v` on
@@ -153,7 +181,7 @@ fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 // step. The mesh and the physics stay.
 fn clear_bcs() { clear_conditions(); }
 
-// Assembles and solves by CG with a Jacobi preconditioner. Returns false
+// Assembles and solves by CG with an AMG preconditioner. Returns false
 // if CG does not converge.
 fn solve() -> bool { return solve_system(); }
 

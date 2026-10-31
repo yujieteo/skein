@@ -15,7 +15,8 @@
 //    60 degrees, until all segments are edges of the triangulation.
 // 4. Each triangle inside the polygon of the segments with an angle below
 //    MIN_ANGLE, or a circumradius above size / sqrt(3), gets a point at
-//    its circumcentre.
+//    its circumcentre. With the targets of refine.goose, the wanted size
+//    at the circumcentre takes the place of size.
 //    If that point encroaches a segment, the segment is split instead. A
 //    triangle whose smallest angle is at a corner of 2 segments below
 //    MIN_ANGLE cannot reach it, so only its circumradius counts.
@@ -25,6 +26,7 @@ import dictionary;
 namespace mesher;
 import .geometry;
 import .mesh;
+import .refine;
 
 let MIN_ANGLE = 25.0;     // degrees; Ruppert's proof needs at most 20.7
 
@@ -770,7 +772,8 @@ fn mesh_2d(g: i64, size: f64) -> bool {
         for t in talive.len {
             if !talive[t] || !tin[t] { continue; }
             let x, y, r, q, apex = circumcentre(t);
-            if (q <= ratio || sharp(apex, MIN_ANGLE)) && r <= largest { continue; }
+            let limit = if targets.len > 0 { largest * wanted_size(x, y, 0.0, r, size) / size } else { largest };
+            if (q <= ratio || sharp(apex, MIN_ANGLE)) && r <= limit { continue; }
             if px.len >= budget { done = false; break; }
             var split = false;
             for s in segments.len {

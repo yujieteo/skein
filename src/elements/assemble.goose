@@ -11,6 +11,7 @@ namespace elements;
 import .shape;
 import .mesh;
 import .kernels;   // cell_matrix
+import .csg;
 
 let ELASTIC = 0;
 let HEAT = 1;
@@ -233,14 +234,17 @@ fn assemble() {
 // --- boundary regions --------------------------------------------------------
 
 // A region of the boundary: a union of parts. A part is the plane where
-// coordinate `axis` is `value`, or the surface of the hole at distance
-// `radius` from the z axis through (cx, cy).
+// coordinate `axis` is `value`, the surface of the hole at distance
+// `radius` from the z axis through (cx, cy), or the surface of the shape
+// `shape` of src/mesher/. On the mesh of a shape (csg.goose), a plane
+// holds only the nodes on the surface of that shape.
 struct Part {
     hole: bool,
     axis: i64,
     value: f64,
     c: f64[2],
     r: f64,
+    shape: i64,
 }
 
 var region: Part[..8] = [];
@@ -249,7 +253,8 @@ fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
     let tol = geometry_tolerance();
     let p = region[k];
-    if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol; }
+    if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
+    if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
     let dy = node_x(n, 1) - p.c[1];
     return abs(sqrt(dx * dx + dy * dy) - p.r) <= tol;

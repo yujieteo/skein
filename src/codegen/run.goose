@@ -28,7 +28,7 @@ extern "libc.so.6" {
 // _SC_PAGESIZE (30) of Linux.
 fn memory_bytes() -> f64 { return sysconf(85) * sysconf(30); }
 
-let USAGE = "usage: skein run <file.skn> [--study <name> [--jobs k] [--format toon|json]]\n";
+let USAGE = "usage: skein run <file.skn> [--set name=value]... [--study <name> [--jobs k] [--format toon|json]]\n";
 
 // Runs `command` in the shell, and gives its exit status.
 fn shell(command: u8[:]) -> i64 {
@@ -111,12 +111,15 @@ fn run(args: const u8[:][:]) -> i64 {
     var study_at = -1;
     var jobs = 0;
     var json = false;
+    var sets: const u8[:][>..] = [];
     var i = 0;
     while i < args.len {
         let a = args[i];
         let more = i + 1 < args.len;
         if a == "--study" && more {
             study_at = i + 1;
+        } else if a == "--set" && more {
+            sets.push(args[i + 1]);
         } else if a == "--jobs" && more {
             let k, good = parse_int(args[i + 1]);
             guard good && k >= 1 else {
@@ -145,6 +148,14 @@ fn run(args: const u8[:][:]) -> i64 {
     if !read_file(path, text) {
         write_stderr(str("skein run: cannot read '", path, "'\n"));
         return 1;
+    }
+    if sets.len > 0 {
+        var set_text: u8[>..] = [];
+        guard set_source(path, text, sets, set_text) else { return 2; };
+        text.clear();
+        text.append(set_text);
+        check::check_text(path, text);
+        if check::error_count() > 0 { return check::finish(false); }
     }
     if study_at >= 0 { return run_study(path, text, args[study_at], jobs, json); }
     let prog = syntax::parse_model(path, text);

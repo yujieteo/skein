@@ -6,10 +6,13 @@
 // unknown. The physics block decides the equations: the template
 // `linear_elastic(b)` or `heat(q_v)`, or the same statements written out
 // (`hooke(E, nu, strain(u))` with `div(sigma) = 0`, `-k*grad(T)` or
-// `fourier(k, T)` with `div(q) = q_v`). The geometry is a box or a rect,
-// less a cylinder or a circle on its corner (lo.x, lo.y): the quarter
-// model of a plate with a hole. Each other construct gives an error
-// `unsupported` at its token, with a fix.
+// `fourier(k, T)` with `div(q) = q_v`). A box or a rect, and one less a
+// cylinder or a circle on its corner (lo.x, lo.y) (the quarter model of a
+// plate with a hole), get the structured meshes of src/elements/mesh.goose.
+// Each other shape of the mesher reader (src/mesher/verify.goose) gets the
+// mesh of src/mesher/, with its refine lines: the generated program builds
+// the shapes of the reader again and meshes them. Each other construct
+// gives an error `unsupported` at its token, with a fix.
 //
 // The dispatch tables of src/codegen/dispatch.goose add a template or a
 // procedure to the box model of src/codegen/codegen.goose. A model of this
@@ -21,6 +24,7 @@ import math;
 namespace elements_gen;
 import syntax from "../syntax";
 import codegen.codegen;
+import mesher.verify;   // the reader of the geometry, and its shapes
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }
@@ -156,6 +160,7 @@ fn scalar_value(n: i64) -> f64 {
 
 let GEO_BOX = 0;
 let GEO_HOLE = 1;
+let GEO_SHAPE = 2;
 
 let ELASTIC = 0;
 let HEAT = 1;
@@ -169,13 +174,23 @@ let PLANE_STRAIN = 2;
 let BC_FIX = 0;
 let BC_LOAD = 1;
 
-// A region of the boundary: the union of planes `axis == value`, or the
-// surface of the hole.
+// A region of the boundary: the union of planes `axis == value` and of
+// the surfaces of the shapes `shapes` of the mesher, or the surface of the
+// hole.
 struct Surf {
     name: u8[..64],
     hole: bool,
     axes: i64[..6],
     values: f64[..6],
+    shapes: i64[..6],
+}
+
+// A refine line of the mesh of a shape: the shape, the size, and whether
+// the target is the surface of the shape (src/mesher/refine.goose).
+struct Refine {
+    g: i64,
+    size: f64,
+    surface: bool,
 }
 
 struct Bc {
@@ -227,6 +242,8 @@ var lo: f64[3];
 var hi: f64[3];
 var hole_r = 0.0;
 var hole_name: u8[..64];
+var body_shape = -1;            // the shape of the mesher of GEO_SHAPE
+var refines: Refine[>..];
 var body_name: u8[..64];
 var surfs: Surf[>..];
 var bcs: Bc[>..];
@@ -266,6 +283,8 @@ fn reset() {
     geo = GEO_BOX;
     hole_r = 0.0;
     hole_name = [];
+    body_shape = -1;
+    refines.clear();
     body_name = [];
     surfs.clear();
     bcs.clear();
@@ -326,9 +345,23 @@ fn geometry_call(n: i64) -> i64 {
     return n;
 }
 
+let SHAPE_NAMES = ["box", "rect", "cylinder", "circle", "polygon", "fill", "extrude", "revolve", "loft", "pattern", "pattern_polar"];
+
 fn is_shape(n: i64) -> bool {
-    return n >= 0 &&
-        (is_call(n, "box") || is_call(n, "rect") || is_call(n, "cylinder") || is_call(n, "circle"));
+    guard n >= 0 && kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME else { return false; }
+    for s in SHAPE_NAMES { if name(child(n, 0)) == s { return true; } }
+    return false;
+}
+
+// Whether `n` is a shape: a shape call, the name of one, or |, & and - of
+// shapes.
+recursive fn geometric(n: i64) -> bool {
+    if kind(n) == syntax::N_NAME { return find_geometry(name(n)) >= 0; }
+    if kind(n) == syntax::N_BINARY {
+        let op = syntax::text(tok(n));
+        return (op == "|" || op == "&" || op == "-") && geometric(child(n, 0)) && geometric(child(n, 1));
+    }
+    return is_shape(n);
 }
 
 fn header(n: i64) {
@@ -351,11 +384,9 @@ fn header(n: i64) {
 // `let` and `param`: a geometry value, a boundary, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
-    let geometric = is_shape(v) ||
-        kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-" && is_shape(geometry_call(child(v, 0)));
     var w: u8[..64] = [];
     set64(w, name(n));
-    if geometric {
+    if geometric(v) {
         geometry_names.push(w);
         geometry_nodes.push(v);
     } else if is_call(v, "boundary") {
@@ -366,14 +397,41 @@ fn value_item(n: i64) {
     }
 }
 
-let BODY_FIX = "write the body as box(p0, p1), or box(p0, p1) - cylinder(p0, (0, 0, 1), r, h) with the axis of the hole on the corner p0 (in 2d: rect and circle)";
+let BODY_FIX = "write the body as a shape of box, cylinder, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -";
 
 fn corner(n: i64, i: i64) -> f64[3] {
     let v = value(arg(n, i));
     return v.v;
 }
 
-// The body of the physics: a box, or a box less a hole on its corner.
+// Whether shape `n` is a box (a rect in 2d), or one less a hole along z
+// with its axis on the corner (lo.x, lo.y): the structured meshes of
+// mesh_box and mesh_hole.
+fn structured(n: i64) -> bool {
+    let shape = if dim == 3 { "box" } else { "rect" };
+    let round = if dim == 3 { "cylinder" } else { "circle" };
+    let cut = kind(n) == syntax::N_BINARY;
+    let outer = if cut { geometry_call(child(n, 0)) } else { n };
+    guard outer >= 0 && is_call(outer, shape) && syntax::child_count(outer) == 3 else { return false; }
+    guard cut else { return true; }
+    let c = geometry_call(child(n, 1));
+    guard syntax::text(tok(n)) == "-" && c >= 0 && is_call(c, round) else { return false; }
+    let a = corner(outer, 0);
+    let b = corner(outer, 1);
+    let centre = corner(c, 0);
+    let tol = 1.0e-6 * max(abs(b[0] - a[0]), abs(b[1] - a[1]));
+    guard abs(centre[0] - min(a[0], b[0])) <= tol && abs(centre[1] - min(a[1], b[1])) <= tol else { return false; }
+    let r = scalar_value(arg(c, if dim == 3 { 2 } else { 1 }));
+    guard r > 0.0 && r < min(abs(b[0] - a[0]), abs(b[1] - a[1])) else { return false; }
+    guard dim == 3 else { return true; }
+    let axis = corner(c, 1);
+    let h = scalar_value(arg(c, 3));
+    return axis[0] == 0.0 && axis[1] == 0.0 && axis[2] > 0.0 && centre[2] <= min(a[2], b[2]) + tol &&
+        centre[2] + h >= max(a[2], b[2]) - tol;
+}
+
+// The body of the physics: a box, or a box less a hole on its corner, for
+// the structured meshes, else a shape of the mesher.
 fn body(region: i64) {
     let n = if kind(region) == syntax::N_NAME { find_geometry(name(region)) } else { -1 };
     if n < 0 {
@@ -381,59 +439,49 @@ fn body(region: i64) {
         return;
     }
     set64(body_name, name(region));
-    let shape = if dim == 3 { "box" } else { "rect" };
-    var outer = n;
-    var cut = -1;
-    if kind(n) == syntax::N_BINARY {
-        outer = geometry_call(child(n, 0));
-        cut = child(n, 1);
-    }
-    if outer < 0 || !is_call(outer, shape) || syntax::child_count(outer) != 3 {
-        unsupported(tok(n), str("the body is not one ", shape, ", or one ", shape, " less a hole"), BODY_FIX);
+    if !structured(n) {
+        shape_body(region);
         return;
     }
+    let outer = if kind(n) == syntax::N_BINARY { geometry_call(child(n, 0)) } else { n };
     let a = corner(outer, 0);
     let b = corner(outer, 1);
     for j in 3 {
         lo[j] = min(a[j], b[j]);
         hi[j] = max(a[j], b[j]);
-        if j < dim && lo[j] == hi[j] { unsupported(tok(outer), str("the ", shape, " has no size"), BODY_FIX); }
+        if j < dim && lo[j] == hi[j] { unsupported(tok(outer), "the body has no size", BODY_FIX); }
     }
-    guard cut >= 0 else { return; }
+    guard kind(n) == syntax::N_BINARY else { return; }
+    let cut = child(n, 1);
     let c = geometry_call(cut);
-    let round = if dim == 3 { "cylinder" } else { "circle" };
-    if c < 0 || !is_call(c, round) {
-        unsupported(tok(cut), str("the hole is not a ", round), BODY_FIX);
-        return;
-    }
     if kind(cut) == syntax::N_NAME { set64(hole_name, name(cut)); }
-    let centre = corner(c, 0);
-    let tol = 1.0e-6 * max(hi[0] - lo[0], hi[1] - lo[1]);
-    if abs(centre[0] - lo[0]) > tol || abs(centre[1] - lo[1]) > tol {
-        unsupported(tok(c), "the axis of the hole is not on the corner (lo.x, lo.y) of the body", BODY_FIX);
-        return;
-    }
-    if dim == 3 {
-        let axis = corner(c, 1);
-        let r = scalar_value(arg(c, 2));
-        let h = scalar_value(arg(c, 3));
-        if abs(axis[0]) > 0.0 || abs(axis[1]) > 0.0 || axis[2] <= 0.0 || centre[2] > lo[2] + tol ||
-           centre[2] + h < hi[2] - tol {
-            unsupported(tok(c), "the hole does not go along z through the body", BODY_FIX);
-            return;
-        }
-        hole_r = r;
-    } else {
-        hole_r = scalar_value(arg(c, 1));
-    }
-    if hole_r <= 0.0 || hole_r >= min(hi[0] - lo[0], hi[1] - lo[1]) {
-        unsupported(tok(c), "the radius of the hole is not between 0 and the size of the body", BODY_FIX);
-        return;
-    }
+    hole_r = scalar_value(arg(c, if dim == 3 { 2 } else { 1 }));
     geo = GEO_HOLE;
 }
 
-let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, an || of these, or boundary(plate, bore) for the hole";
+// The body as a shape of the mesher reader: its bounds give lo and hi.
+fn shape_body(region: i64) {
+    let v = mesher::eval_value(region);
+    guard ok() else { return; }
+    guard v.n == 0 else {
+        unsupported(tok(region), "the region of the physics is not a shape", BODY_FIX);
+        return;
+    }
+    let b = mesher::bounds(v.g);
+    let three = b[5] > b[2];
+    guard three == (dim == 3) else {
+        unsupported(tok(region), str("the body is not a ", dim, "d shape"), BODY_FIX);
+        return;
+    }
+    for j in 3 {
+        lo[j] = b[j];
+        hi[j] = b[3 + j];
+    }
+    body_shape = v.g;
+    geo = GEO_SHAPE;
+}
+
+let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
 // Adds the planes of condition `cond` to `s`.
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
@@ -444,6 +492,23 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         s.hole = true;
         return true;
     }
+    if geo == GEO_SHAPE && geometric(cond) && s.shapes.len < s.shapes.cap {
+        let v = mesher::eval_value(cond);
+        guard v.n == 0 else { return false; }
+        s.shapes.push(v.g);
+        return true;
+    }
+    // abs(x - c) == d: the planes x == c - d and x == c + d.
+    let is_abs = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" && is_call(child(cond, 0), "abs") &&
+        syntax::child_count(child(cond, 0)) == 2;
+    let inner = if is_abs { arg(child(cond, 0), 0) } else { -1 };
+    if inner >= 0 && kind(inner) == syntax::N_BINARY && syntax::text(tok(inner)) == "-" && kind(child(inner, 0)) == syntax::N_NAME &&
+       axis_of(name(child(inner, 0))) >= 0 && s.axes.len + 2 <= s.axes.cap {
+        let axis = axis_of(name(child(inner, 0)));
+        let c = scalar_value(child(inner, 1));
+        let d = scalar_value(child(cond, 1));
+        return face_plane(cond, axis, c - d, s) && face_plane(cond, axis, c + d, s);
+    }
     let is_plane = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" &&
         kind(child(cond, 0)) == syntax::N_NAME;
     let axis = if is_plane { axis_of(name(child(cond, 0))) } else { -1 };
@@ -451,9 +516,16 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         unsupported(tok(cond), "the boundary is not a face of the body", SURF_FIX);
         return false;
     }
-    let v = scalar_value(child(cond, 1));
+    return face_plane(cond, axis, scalar_value(child(cond, 1)), s);
+}
+
+// Adds the plane `axis == v` of condition `cond` to `s`. On a box, it is a
+// face. On a shape, it holds a part of the surface, so it is in the bounds.
+fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
     let tol = 1.0e-6 * (hi[axis] - lo[axis]);
-    if abs(v - lo[axis]) > tol && abs(v - hi[axis]) > tol {
+    let face = abs(v - lo[axis]) <= tol || abs(v - hi[axis]) <= tol;
+    let inside = v >= lo[axis] - tol && v <= hi[axis] + tol;
+    if !face && (geo != GEO_SHAPE || !inside) {
         unsupported(tok(cond), "the plane is not a face of the body", SURF_FIX);
         return false;
     }
@@ -469,11 +541,11 @@ fn surface(n: i64) {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [] };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [] };
     set64(s.name, name(n));
     if !surf_parts(arg(v, 1), s) { return; }
-    if s.hole && s.axes.len > 0 {
-        unsupported(tok(v), "a boundary is the hole or planes, not both", "make two boundaries");
+    if s.hole && s.axes.len > 0 || s.shapes.len > 0 && s.axes.len > 0 {
+        unsupported(tok(v), "a boundary is a surface or planes, not both", "make two boundaries");
         return;
     }
     surfs.push(s);
@@ -543,7 +615,11 @@ fn mesh(n: i64) {
     var s = first(child(n, 1));
     while s >= 0 {
         let v = first(s);
-        if kind(s) == syntax::N_REFINE {
+        if kind(s) == syntax::N_REFINE && geo == GEO_SHAPE {
+            let g, surface = mesher::refine_target(first(s));
+            let size = scalar_value(child(s, 1));
+            if g >= 0 && size > 0.0 { refines.push(Refine { g: g, size: size, surface: surface }); }
+        } else if kind(s) == syntax::N_REFINE {
             let r = first(s);
             let si = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
             if si < 0 || !surfs[si].hole {
@@ -933,6 +1009,7 @@ fn read(prog: i64) -> bool {
     let at = if first(prog) >= 0 { tok(first(prog)) } else { tok(prog) };
     if physics_node < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if !ok() { return false; }
+    mesher::read_geometry(prog);
     physics_item(physics_node);
     if !ok() { return false; }
     for s in surface_lets { surface(s); }
@@ -1188,6 +1265,7 @@ fn emit_region(out: u8[>..]&, si: i64) {
         lit(out, s.values[i]);
         out.append(")");
     }
+    for g, i in s.shapes { format(out, if i == 0 { "elements::surface(" } else { " && elements::also_surface(" }, g, ")"); }
     out.append(", ");
     quoted(out, s.name);
     out.append(");\n");
@@ -1319,7 +1397,17 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 
 // The dofs of the mesh of the model that `read` read: for the hole, the
 // rows of cells that grow from `mesh_fine` by 1.25 (elements::grade_rows).
+// A shape is meshed: a P2 node is at each point and at each edge, and a
+// mesh has about 7 edges for each point in 3d, 3 in 2d.
 fn dof_estimate() -> i64 {
+    if geo == GEO_SHAPE {
+        mesher::clear_refine();
+        for r in refines { mesher::add_refine(r.g, r.size, r.surface); }
+        let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
+        let points = if done { mesher::point_count() } else { 0 };
+        let nodes = if order == 2 { points * (if dim == 3 { 8 } else { 4 }) } else { points };
+        return if physics == HEAT { nodes } else { dim * nodes };
+    }
     var cells: i64[3] = [1, 1, 1];
     if geo == GEO_HOLE {
         let w = hi[0] - lo[0];
@@ -1335,6 +1423,34 @@ fn dof_estimate() -> i64 {
     return if physics == HEAT { nodes } else { dim * nodes };
 }
 
+// The shapes of the mesher reader and the refine lines, again in the
+// program: mesh_shape meshes them, and a boundary can be the surface of one.
+fn emit_shapes(out: u8[>..]&) {
+    out.append("    // the shapes of the geometry, in the sequence of the mesher reader\n");
+    out.append("    mesher::clear_shapes();\n    mesher::clear_refine();\n");
+    if mesher::polygon_points.len > 0 {
+        out.append("    mesher::polygon_points.append([");
+        for v, i in mesher::polygon_points {
+            if i > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        out.append("]);\n");
+    }
+    for g in mesher::shapes {
+        format(out, "    mesher::add_shape(", g.kind, ", ", g.a, ", ", g.b, ", [");
+        for v, i in g.p {
+            if i > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        out.append("]);\n");
+    }
+    for r in refines {
+        format(out, "    mesher::add_refine(", r.g, ", ");
+        lit(out, r.size);
+        format(out, ", ", if r.surface { "true" } else { "false" }, ");\n");
+    }
+}
+
 // Writes the Goose program of the model that `read` read. The program
 // imports the elements from `elements_path` and writes its VTU files under
 // `results_dir`. In a study, it writes or reads the stages of `share`.
@@ -1343,18 +1459,31 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     format(out, "// All values are in the units of the model: length in ", sys.length, ", force in ", sys.force,
            ", temperature in K.\n");
+    let src = elements_path[..elements_path.len - "elements".len];
     out.append("import std;\nimport os;\nimport elements from ");
     quoted(out, elements_path);
-    out.append(";\n");
+    out.append(";\nimport mesher from ");
+    quoted(out, str(src, "mesher"));
+    out.append(";   // the elements import it\nimport runtime from ");
+    quoted(out, str(src, "runtime"));
+    out.append(";   // the mesher imports it\nimport solvers from ");
+    quoted(out, str(src, "solvers"));
+    out.append(";   // the runtime imports it\n");
     out.append(PRELUDE);
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
+    if geo == GEO_SHAPE { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
     } else {
         format(out, "    // mesh on ", body_name, ": P", order, " ", cell, " of at most ", mesh_size, " ", sys.length);
-        if geo == GEO_HOLE {
+        if geo == GEO_SHAPE {
+            format(out, ", by the mesher\n    if !elements::mesh_shape(", dim, ", ", order, ", ", body_shape, ", ");
+            lit(out, mesh_size);
+            out.append(") {\n        write_stderr(\"skein run: the mesher did not finish in its budget of points: give a larger size\\n\");\n");
+            out.append("        exit(1);\n    }\n");
+        } else if geo == GEO_HOLE {
             format(out, ", ", mesh_fine, " ", sys.length, " at the hole\n    elements::mesh_hole(", dim, ", ", order, ", ");
             lits(out, lo);
             out.append(", ");
