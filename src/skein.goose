@@ -9,6 +9,7 @@ import cli.card;
 import codegen.run;
 import check from "./check";
 import md from "./md";
+import report from "./report";   // skein report
 import mesher.verify;   // mesher lane: skein verify
 import mesher.lint;     // skein lint, with the rules that need the mesh
 import mesher.stl;      // skein export
@@ -27,6 +28,7 @@ let USAGE = """
       lint    check a model, then give the lint warnings
       run     build and run a model (linear static or steady heat: a box, a quarter of a tube, a plate with a hole or a cylindrical shell; --study: each case of a study)
       md      write a model as a Markdown document
+      report  run a model, then write one HTML file with its source, the solver tables and a viewer of the results
       verify  check a model, mesh it and report mesh_quality
     """;
 
@@ -67,6 +69,11 @@ fn main() {
         var rest: const u8[:][>..] = [];
         for a in args[2..] { rest.push(a); }
         exit(md::run(rest));
+    }
+    if command == "report" {
+        var rest: const u8[:][>..] = [];
+        for a in args[2..] { rest.push(a); }
+        exit(report::run(rest));
     }
     write_stderr(str("skein: unknown command '", command, "'\n", USAGE, "\n"));
     exit(2);
