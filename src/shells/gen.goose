@@ -1429,6 +1429,9 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 { return max(ceil(length / size - 1.0e-9) as! i64, 1); }
 
+// The dofs of the mesh of the model that `read` read: 6 at each node.
+fn dof_estimate() -> i64 { return 6 * (cells_for(x1 - x0, mesh_size) + 1) * (cells_for(radius * (t1 - t0), mesh_size) + 1); }
+
 // Writes the Goose program of the model that `read` read. The program
 // imports the shells from `shells_path` and writes its VTU files under
 // `results_dir`.

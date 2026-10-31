@@ -7,6 +7,7 @@
 // build_simplices takes the vertices and cells of another mesher, for
 // example the tri3 and tet4 mesh of src/mesher/.
 import std;
+import os;
 import math;
 import dictionary;
 namespace elements;
@@ -270,4 +271,43 @@ fn build_simplices(d: i64, ord: i64, xyz: f64[:], vertices: i64[:]) {
             conn.push(m);
         }
     }
+}
+
+// --- the shared mesh of a study (spec §20.4) ---------------------------------
+
+fn save_array<T>(dir: const u8[:], name: u8[:], a: const T[:]) -> bool { return write_file(str(dir, "/", name), to_bytes(a)); }
+
+fn load_array<T>(dir: const u8[:], name: u8[:], into: T[>..]&) -> bool {
+    var b: u8[>..] = [];
+    guard read_file(str(dir, "/", name), b) else { return false; };
+    let a, ok = from_bytes<T[>..]>(b);
+    into.clear();
+    into.append(a);
+    return ok;
+}
+
+// Writes the mesh in the files of the directory `dir`.
+fn save_mesh(dir: const u8[:]) -> bool {
+    let sizes: i64[>..] = [dim, order, per_cell];
+    var bbox: f64[>..] = [];
+    bbox.append(bbox_lo);
+    bbox.append(bbox_hi);
+    return save_array(dir, "sizes", sizes) && save_array(dir, "bbox", bbox) && save_array(dir, "coords", coords) &&
+           save_array(dir, "conn", conn);
+}
+
+// Reads the mesh that save_mesh wrote in the directory `dir`.
+fn load_mesh(dir: const u8[:]) -> bool {
+    var sizes: i64[>..] = [];
+    var bbox: f64[>..] = [];
+    guard load_array(dir, "sizes", sizes) && sizes.len == 3 && load_array(dir, "bbox", bbox) && bbox.len == 6 &&
+          load_array(dir, "coords", coords) && load_array(dir, "conn", conn) else { return false; };
+    dim = sizes[0];
+    order = sizes[1];
+    per_cell = sizes[2];
+    for t in 3 {
+        bbox_lo[t] = bbox[t];
+        bbox_hi[t] = bbox[3 + t];
+    }
+    return true;
 }

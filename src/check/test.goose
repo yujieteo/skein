@@ -395,6 +395,51 @@ fn test_studies() {
     expect_id("process_setting", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nmanufacture b: cnc_mill {\n    draft: 1 deg\n}\n"));
 }
 
+// The stage of the work of a case that each param reaches (spec §20.4),
+// also through a let.
+fn test_param_stages() {
+    let text = str(H, """
+        param w: Length = 1 m
+        param size: Length = 0.1 m
+        param E0: Pressure = 200 GPa
+        param load: Pressure = 1 MPa
+        param limit: Real = 0.01
+        param unused: Real = 1
+        let h: Length = 2*size
+        let b: Solid = box((0, 0, 0) m, (w, 1 m, 1 m))
+        let f: Surface = boundary(b, x == 0 m)
+        let t: Surface = boundary(b, x == w)
+        material steel {
+            E: Pressure = E0
+            nu: Real = 0.3
+        }
+        mesh m1 on b { size: h }
+        physics solid on b: linear_elastic solves u: Vector<Length> {
+            material steel
+        }
+        step s: static {
+            bc f: u = (0, 0, 0) m
+            bc t: sigma*n = (load, 0 MPa, 0 MPa)
+            report tip = u.x at (w, 0.5 m, 0.5 m)
+        }
+        expect e: u.x at (1, 0.5, 0.5) m == 0 m within limit
+        """);
+    let prog = syntax::parse_model("m.skn", text);
+    guard prog >= 0 else {
+        failures++;
+        print("FAIL the stages: the model does not parse: ", syntax::errors[0].msg);
+        return;
+    };
+    let want = [["w", "2"], ["size", "2"], ["E0", "1"], ["load", "1"], ["limit", "0"], ["unused", "-1"]];
+    for p in want {
+        let got = check::param_stage(prog, p[0]);
+        if str(got) != p[1] {
+            failures++;
+            print("FAIL the stage of ", p[0], ": ", got, ", not ", p[1]);
+        }
+    }
+}
+
 // The JSON report holds no raw control byte, also for a tab in the model.
 fn test_output() {
     check::check_text("t.skn", str(H, SOLID, "\nbc f: sigma *\t2 = 0\n"));
@@ -568,6 +613,7 @@ fn main() {
     test_steps();
     test_shells();
     test_studies();
+    test_param_stages();
     test_output();
     test_lint();
     test_lint_output();

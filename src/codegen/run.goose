@@ -19,7 +19,12 @@ import .study;
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
+    fn sysconf(name: i32) -> i64;
 }
+
+// The bytes of memory of this machine: _SC_PHYS_PAGES (85) times
+// _SC_PAGESIZE (30) of Linux.
+fn memory_bytes() -> f64 { return sysconf(85) * sysconf(30); }
 
 let USAGE = "usage: skein run <file.skn> [--study <name> [--jobs k] [--format toon|json]]\n";
 
@@ -66,18 +71,28 @@ fn read_model(prog: i64) -> i64 {
     return if read(prog) { LANE_BOX } else { -1 };
 }
 
+// The dofs of the mesh of the model that `read_model` read with generator
+// `lane`.
+fn dof_estimate(lane: i64) -> i64 {
+    if lane == LANE_SHELL { return shells_gen::dof_estimate(); }
+    if lane == LANE_SIMPLEX { return elements_gen::dof_estimate(); }
+    return codegen::dof_estimate();
+}
+
 // Writes the program of the model that `read_model` read with generator
-// `lane`. The program puts its results in `results_dir`.
-fn write_program(lane: i64, results_dir: u8[:], program: u8[>..]&) {
+// `lane`. The program puts its results in `results_dir`. With a
+// `mesh_dir`, it writes its mesh there, or with `mesh_read` it reads its
+// mesh from there. The shell generator meshes each time.
+fn write_program(lane: i64, results_dir: u8[:], mesh_dir: u8[:], mesh_read: bool, program: u8[>..]&) {
     // The skein executable is build/skein in the repository, so the runtime
     // is in src/runtime beside it.
     let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" } else { "../src/runtime" });
     if lane == LANE_SHELL {
         shells_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_SIMPLEX {
-        elements_gen::generate(runtime_path, results_dir, program);
+        elements_gen::generate(runtime_path, results_dir, mesh_dir, mesh_read, program);
     } else {
-        generate(runtime_path, results_dir, program);
+        generate(runtime_path, results_dir, mesh_dir, mesh_read, program);
     }
 }
 
@@ -138,7 +153,7 @@ fn run(args: const u8[:][:]) -> i64 {
         return 1;
     }
     var program: u8[>..] = [];
-    write_program(lane, results_dir, program);
+    write_program(lane, results_dir, "", false, program);
     let source = str(build_dir, "/main.goose");
     let exe = str(build_dir, "/", model_name);
     if !write_file(source, program) {
@@ -164,14 +179,24 @@ fn run(args: const u8[:][:]) -> i64 {
 //
 //     .skein/build/<model>/<study>/<case>/main.goose    the program of a case
 //     .skein/studies/<model>/<study>/<case>/             the results of a case
+//     .skein/studies/<model>/<study>/mesh/               the shared mesh
 //     .skein/studies/<model>/<study>.toon                the table
 //
-// Phase 2 meshes and assembles each case again (spec §20.4 gives the reuse).
+// When no varied param reaches the mesh (spec §20.4), case 1 runs first and
+// writes its mesh, and each other case reads that mesh. Each case assembles
+// and solves again. The shell generator meshes each case again, because
+// its mesh holds the section of each cell.
+
+// The bytes of memory of a case for each dof of its mesh. Reason: a row of
+// the matrix of a 27-node hexahedron mesh holds up to 375 entries of 12
+// bytes, and a case holds about 10 vectors of 8 bytes for each dof.
+let BYTES_PER_DOF = 4600;
 
 // A case record. The scheduler gives it to the worker as its argument, so
 // that the abort of a worker names its case.
 struct CaseJob {
     case: i64,
+    threads: i64,        // the threads of the case (spec §20.5)
     build: u8[..4096],   // the shell command that builds the program
     run: u8[..4096],     // the shell command that runs it
     out: u8[..1024],     // the file of its standard output
@@ -192,7 +217,7 @@ thread_fn case_worker(job: CaseJob) {
     var r = CaseResult { case: job.case, built: shell(job.build) == 0, status: 0, seconds: 0.0, out: [], err: [] };
     if r.built {
         let start = clock();
-        r.status = shell(job.run);
+        r.status = shell(str("SKEIN_THREADS=", job.threads, " ", job.run));
         r.seconds = clock() - start;
         read_file(job.out, r.out);
     }
@@ -203,9 +228,8 @@ thread_fn case_worker(job: CaseJob) {
 }
 
 // Runs `jobs` with `k` contained workers at a time, and gives the end of
-// each case, in case order.
+// each case, in case order. It appends the outputs to `outs`.
 fn run_cases(jobs: CaseJob[:], k: i64) -> CaseEnd[>..] {
-    outs.clear();
     var ends: CaseEnd[>..] = [];
     var ids: i64[>..] = [];
     var next = 0;
@@ -230,7 +254,7 @@ fn run_cases(jobs: CaseJob[:], k: i64) -> CaseEnd[>..] {
         var e = CaseEnd { ended: true, built: r.built, status: r.status, seconds: r.seconds, err: r.err, out_lo: outs.len, out_hi: 0 };
         outs.append(r.out);
         e.out_hi = outs.len;
-        ends[r.case] = e;
+        ends[r.case - jobs[0].case] = e;
     }
     return ends;
 }
@@ -254,11 +278,15 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         fmt::write_errors();
         return 1;
     }
+    var stage = -1;
+    for p in varied { stage = max(stage, check::param_stage(prog, p.name)); }
     // The program of each case.
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
     var case_jobs: CaseJob[>..] = [];
     var model: u8[>..] = [];
+    var mesh_dir: u8[>..] = [];
+    var dofs = 0;
     for c in 0..case_count {
         let cp = syntax::parse_model(path, case_source(text, c));
         let lane = if cp >= 0 { read_model(cp) } else { -1 };
@@ -268,6 +296,15 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         };
         model.clear();
         model.append(model_name);
+        if c == 0 && stage < check::STAGE_MESH && lane != LANE_SHELL {
+            format(mesh_dir, ".skein/studies/", model, "/", study, "/mesh");
+            shell(str("rm -rf ", shell_quoted(mesh_dir)));
+            if !make_dirs(mesh_dir) {
+                write_stderr("skein run: cannot make the directory .skein\n");
+                return 1;
+            }
+        }
+        dofs = max(dofs, dof_estimate(lane));
         let build_dir = str(".skein/build/", model, "/", study, "/", c + 1);
         let case_dir = str(".skein/studies/", model, "/", study, "/", c + 1);
         if !make_dirs(build_dir) || !make_dirs(case_dir) {
@@ -275,7 +312,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
             return 1;
         }
         var program: u8[>..] = [];
-        write_program(lane, case_dir, program);
+        write_program(lane, case_dir, mesh_dir, mesh_dir.len > 0 && c > 0, program);
         let source = str(build_dir, "/main.goose");
         let exe = str(build_dir, "/", model);
         if !write_file(source, program) {
@@ -284,16 +321,27 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         }
         let out = str(case_dir, "/run.toon");
         let err = str(case_dir, "/run.err");
-        var job = CaseJob { case: c, build: [], run: [], out: [], err: [] };
+        var job = CaseJob { case: c, threads: 1, build: [], run: [], out: [], err: [] };
         format(job.build, shell_quoted(goose), " build -q ", shell_quoted(source), " -o ", shell_quoted(exe), " >", shell_quoted(err), " 2>&1");
         format(job.run, shell_quoted(str("./", exe)), " >", shell_quoted(out), " 2>", shell_quoted(err));
         set1024(job.out, out);
         set1024(job.err, err);
         case_jobs.push(job);
     }
-    // The default `k` is min(H, number of cases) (spec §20.5).
-    let k = min(if jobs > 0 { jobs } else { max(1, hardware_threads()) }, case_count);
-    let ends = run_cases(case_jobs, k);
+    // The default `k` is min(H, number of cases), and k cases must fit in
+    // the memory (spec §20.5).
+    let h = max(1, hardware_threads());
+    let want = min(if jobs > 0 { jobs } else { h }, case_count);
+    let case_bytes: f64 = dofs * BYTES_PER_DOF;
+    let k, threads = study_workers(want, h, case_bytes, memory_bytes());
+    if k < want {
+        write_stderr(str("skein run: ", k, " cases at a time, not ", want, ": a case needs about ", round(case_bytes / 1.0e6),
+                         " MB of the ", round(memory_bytes() / 1.0e6), " MB of memory\n"));
+    }
+    for &job in case_jobs { job.threads = threads; }
+    outs.clear();
+    var ends = run_cases(case_jobs[..if mesh_dir.len > 0 { 1 } else { 0 }], 1);
+    ends.append(run_cases(case_jobs[ends.len..], k));
     // The tokens of the cases replaced those of the model: read it again
     // for the columns and the place of the study.
     let p = syntax::parse_model(path, text);

@@ -70,8 +70,7 @@ fn list_texts(v: i64, out: u8[..256][>..]&) {
     while c >= 0 {
         if kind(c) != syntax::N_UNIT {
             var t: u8[..256] = [];
-            let bare = kind(c) == syntax::N_NUMBER && syntax::nodes[c].first < 0;
-            if bare && unit >= 0 { set256(t, str(source_of(c), " ", source_of(unit))); } else { set256(t, source_of(c)); }
+            if unit >= 0 && check::is_bare(c) { set256(t, str(source_of(c), " ", source_of(unit))); } else { set256(t, source_of(c)); }
             out.push(t);
         }
         c = syntax::nodes[c].next;
@@ -98,6 +97,12 @@ fn study_cases(prog: i64, s: i64) -> bool {
         return false;
     };
     for e in entries {
+        for w in varied {
+            guard w.name != name(e) else {
+                syntax::error_at(tok(e), "study_param", str("the study varies '", name(e), "' twice"), "give each param one entry");
+                return false;
+            };
+        }
         let p = find_param(prog, name(e));
         guard p >= 0 else {
             unsupported(tok(e), str("the param '", name(e), "' is not in the model file"), "declare the param in the model file, not in a use file");
@@ -219,8 +224,21 @@ fn sample_points(n: i64, dims: i64, sobol: bool, seed: i64) -> f64[>..] {
     return t;
 }
 
+// The value and the unit text of the literal `n`: a number, or `-` and a
+// number, with an optional unit. False for another expression.
+recursive fn literal(n: i64) -> f64, const u8[:], bool {
+    if kind(n) == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
+        let v, unit, ok = literal(syntax::nodes[n].first);
+        return -v, unit, ok;
+    }
+    guard kind(n) == syntax::N_NUMBER else { return 0.0, "", false; };
+    let v = if syntax::nodes[n].aux >= 0 { -number(tok(n)) } else { number(tok(n)) };
+    let u = syntax::child_of_kind(n, syntax::N_UNIT);
+    return v, if u >= 0 { source_of(u) } else { "" }, true;
+}
+
 // The cases of `sample(n: Int, method: lhs | sobol, seed: Int)`: each value
-// is `lo + t*(hi - lo)` for a point t in [0, 1).
+// is `lo + t*(hi - lo)` for a point t in [0, 1), in the unit of the range.
 fn sample_cases(pr: i64, entries: i64[:]) -> bool {
     let fix = "write sample(n: 8, method: lhs, seed: 1), with method lhs or sobol";
     let n_arg = proc_arg(pr, "n");
@@ -241,21 +259,34 @@ fn sample_cases(pr: i64, entries: i64[:]) -> bool {
         syntax::error_at(tok(method), "procedure_args", str("sobol takes at most ", SOBOL_S.len + 1, " params"), "use method: lhs");
         return false;
     };
+    // The range of entry d is lows[d] to highs[d], in the unit units[d].
+    var lows: f64[>..] = [];
+    var highs: f64[>..] = [];
+    var units: u8[..64][>..] = [];
     for e in entries {
-        guard kind(syntax::nodes[e].first) == syntax::N_RANGE else {
+        let range = syntax::nodes[e].first;
+        guard kind(range) == syntax::N_RANGE else {
             unsupported(tok(e), "a sample takes a range for each param", "write a range, for example Re: 10..40");
             return false;
         };
+        let lo, lo_unit, lo_ok = literal(syntax::nodes[range].first);
+        let hi, hi_unit, hi_ok = literal(syntax::nodes[syntax::nodes[range].first].next);
+        guard lo_ok && hi_ok && lo_unit == hi_unit else {
+            unsupported(tok(e), "a sample takes a range of two numbers in one unit", "write a range, for example D: 0.1 m..0.2 m");
+            return false;
+        };
+        lows.push(lo);
+        highs.push(hi);
+        var w: u8[..64] = [];
+        set64(w, lo_unit);
+        units.push(w);
     }
     let t = sample_points(n, entries.len, sobol, number(tok(seed_arg)) as! i64);
     case_count = n;
     for c in 0..n {
-        for e, d in entries {
-            let range = syntax::nodes[e].first;
-            let lo = source_of(syntax::nodes[range].first);
-            let hi = source_of(syntax::nodes[syntax::nodes[range].first].next);
+        for d in 0..entries.len {
             var v: u8[..256] = [];
-            set256(v, str(lo, " + ", t[c * entries.len + d], "*(", hi, " - (", lo, "))"));
+            set256(v, str(lows[d] + t[c * entries.len + d] * (highs[d] - lows[d]), if units[d].len > 0 { " " } else { "" }, units[d]));
             case_values.push(v);
         }
     }
@@ -276,6 +307,18 @@ fn case_source(text: u8[:], c: i64) -> u8[>..] {
     }
     out.append(text[at..]);
     return out;
+}
+
+// --- the workers (spec §20.5) --------------------------------------------------
+
+// The number k of cases that run at the same time, and the threads of each
+// case: k is `want`, but at most the cases of `case_bytes` each that fit
+// in `memory` bytes, and each case gets max(1, h / k) of the `h` hardware
+// threads.
+fn study_workers(want: i64, h: i64, case_bytes: f64, memory: f64) -> i64, i64 {
+    var k = want;
+    if case_bytes > 0.0 && memory > 0.0 { k = min(k, max(1, (memory / case_bytes) as! i64)); }
+    return k, max(1, h / k);
 }
 
 // --- the table (spec §20.6) ----------------------------------------------------
@@ -400,6 +443,9 @@ fn read_case(e: CaseEnd) -> u8[>..], bool {
         }
         if section == "verify" && f.len == 5 && f[2] == "fail" { pass = false; }
     }
+    // A program that printed its records stops with a non-zero status when
+    // a solve does not converge or a result file cannot be written.
+    if e.ended && e.built && e.status != 0 { pass = false; }
     var msg: u8[>..] = [];
     if !e.ended {
         msg.append(e.err);

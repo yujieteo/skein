@@ -15,6 +15,7 @@ import .physics;
 import .steps;
 import .templates;
 import .lint;
+import .stages;
 
 // Checks the model `text` from the file `path`. The result is in `diags`
 // and `free`.

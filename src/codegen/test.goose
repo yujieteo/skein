@@ -26,7 +26,7 @@ fn generate(text: u8[:]) -> u8[>..] {
         format(out, "error ", e.id, " ", t.line, ":", t.col, " ", e.msg);
         return out;
     }
-    codegen::generate("RUNTIME", "RESULTS", out);
+    codegen::generate("RUNTIME", "RESULTS", "", false, out);
     return out;
 }
 
@@ -390,6 +390,9 @@ fn expect_text(what: u8[:], got: u8[:], want: u8[:]) {
     }
 }
 
+let SAMPLE_RANGES = ["1 m..2 m", "-2 m..-1 m"];
+let SAMPLE_LOWS = [1.0, -2.0];
+
 fn test_study_cases() {
     expect_text("grid", cases("study s: grid {\n    a: [1, 2] m\n    b: [3, 4, 5]\n}\n"),
                 "1 m; 3\n1 m; 4\n1 m; 5\n2 m; 3\n2 m; 4\n2 m; 5\n");
@@ -406,9 +409,28 @@ fn test_study_cases() {
                 "error procedure_args 12:10 sample needs n, method and seed");
     expect_text("a sample n", cases("study s: sample(n: 0, method: lhs, seed: 1) {\n    a: 1 m..2 m\n}\n"),
                 "error procedure_args 12:20 n of sample is a whole number of 1 or more");
-    // A case of a sample is lo + t*(hi - lo), with t in [0, 1).
-    let lhs = cases("study s: sample(n: 4, method: lhs, seed: 7) {\n    a: 1 m..2 m\n}\n");
-    expect_text("a sample case", split(lhs, "\n")[0][..8], "1 m + 0.");
+    expect_text("a sample unit", cases("study s: sample(n: 2, method: lhs, seed: 1) {\n    a: 500 mm..2 m\n}\n"),
+                "error unsupported 13:5 a sample takes a range of two numbers in one unit");
+    expect_text("a param twice", cases("study s: grid {\n    a: [1] m\n    a: [2] m\n}\n"),
+                "error study_param 14:5 the study varies 'a' twice");
+    // A bare number in a list takes the unit of the list, also after a `-`.
+    expect_text("a negative value", cases("study s: grid {\n    a: [-1, 2] m\n}\n"), "-1 m\n2 m\n");
+    expect_text("a unit with a power", cases("study s: grid {\n    a: [1, 2] m^-1*m^2\n}\n"), "1 m^-1*m^2\n2 m^-1*m^2\n");
+    // A case of a sample is the value lo + t*(hi - lo), with t in [0, 1), in
+    // the unit of the range.
+    for i in 0..SAMPLE_RANGES.len {
+        let lo = SAMPLE_LOWS[i];
+        let item = str("study s: sample(n: 4, method: lhs, seed: 7) {\n    a: ", SAMPLE_RANGES[i], "\n}\n");
+        let got = cases(item);
+        for line in split(got, "\n") {
+            if line.len == 0 { continue; }
+            let v, good = parse_flt(line[..max(line.len - 2, 0)]);
+            if !(good && v >= lo && v < lo + 1.0 && ends_with(line, " m")) {
+                failures++;
+                print("FAIL a sample case of ", item, ": '", line, "'");
+            }
+        }
+    }
     // lhs and sobol: one t in each quarter.
     for method in ["lhs", "sobol"] {
         var seen = [false, false, false, false];
@@ -429,10 +451,11 @@ fn test_study_cases() {
     expect_text("the case text", case_text[..find(case_text, "let c")], "model t: 3d, SI\n\nparam a: Length = (2 m) in 0.5 m..4 m\nparam b: Real = (3)\n");
 }
 
-// The table of a study: a case that ran, a case whose expect fails and a
-// case that did not build.
+// The table of a study: a case that ran, a case whose expect fails, a case
+// that did not build, and a case that printed its records and stopped with
+// the exit status 1, for example when a solve does not converge.
 fn test_study_table() {
-    let text = str(STUDY_MODEL, "\nstudy s: grid {\n    a: [1, 2, 3] m\n}\n");
+    let text = str(STUDY_MODEL, "\nstudy s: grid {\n    a: [1, 2, 3, 4] m\n}\n");
     let prog = syntax::parse_model("t.skn", text);
     codegen::study_cases(prog, codegen::find_study(prog, "s"));
     let ran = """
@@ -446,11 +469,12 @@ fn test_study_table() {
     codegen::outs.append(ran);
     codegen::outs.append(replace(ran, "post,expect,pass", "post,expect,fail"));
     var ends: codegen::CaseEnd[>..] = [];
-    for c in 0..3 {
-        var e = codegen::CaseEnd { ended: true, built: c < 2, status: 0, seconds: 1.234, err: [], out_lo: 0, out_hi: 0 };
-        if c < 2 {
-            e.out_lo = c * ran.len;
-            e.out_hi = (c + 1) * ran.len;
+    for c in 0..4 {
+        var e = codegen::CaseEnd { ended: true, built: c != 2, status: if c == 3 { 1 } else { 0 }, seconds: 1.234, err: [], out_lo: 0, out_hi: 0 };
+        let o = if c == 1 { 1 } else { 0 };
+        if c != 2 {
+            e.out_lo = o * ran.len;
+            e.out_hi = (o + 1) * ran.len;
         } else {
             e.err.append("main.goose:3: error\n");
         }
@@ -462,10 +486,11 @@ fn test_study_table() {
     expect_text("the study table", out, str("""
         study: s
         jobs: 2
-        cases[3]{case,a,status,verify,r,e,time_s}:
+        cases[4]{case,a,status,verify,r,e,time_s}:
           1,1 m,ok,pass,"(1.0, 0.0, 0.0) N",pass,1.23
           2,2 m,ok,fail,"(1.0, 0.0, 0.0) N",fail,1.23
           3,3 m,failed,fail,"","",1.23
+          4,4 m,ok,fail,"(1.0, 0.0, 0.0) N",pass,1.23
         diagnostics[1]{class,id,file,line,col,msg,fix}:
           error,case_failed,t.skn,12,7,"case 3 of the study s stopped","goose cannot build the program of the case: main.goose:3: error"
         summary: errors=1 lints=0
@@ -473,6 +498,24 @@ fn test_study_table() {
     if status != 1 {
         failures++;
         print("FAIL the study table: exit status ", status, ", not 1");
+    }
+}
+
+// The workers of a study (spec §20.5): k cases that fit in the memory, and
+// max(1, H / k) threads for each.
+fn test_study_workers() {
+    let runs = [
+        [4.0, 16.0, 1.0e6, 1.0e9, 4.0, 4.0],    // the memory holds 1000 cases
+        [4.0, 16.0, 3.0e8, 1.0e9, 3.0, 5.0],    // the memory holds 3 cases
+        [4.0, 16.0, 2.0e9, 1.0e9, 1.0, 16.0],   // one case is larger than the memory
+        [8.0, 4.0, 0.0, 1.0e9, 8.0, 1.0],       // --jobs 8 on 4 threads
+    ];
+    for r in runs {
+        let k, threads = codegen::study_workers(r[0] as! i64, r[1] as! i64, r[2], r[3]);
+        if k != r[4] as! i64 || threads != r[5] as! i64 {
+            failures++;
+            print("FAIL study_workers(", r[0], ", ", r[1], ", ", r[2], ", ", r[3], "): ", k, " and ", threads, ", not ", r[4], " and ", r[5]);
+        }
     }
 }
 
@@ -484,6 +527,7 @@ fn test_study_run() {
         ["--study nothing", "2"],
         ["--jobs 2", "2"],
         ["--study lengths --jobs 0", "2"],
+        ["--study sources --jobs 2", "1"],
     ];
     for r in runs {
         var c: u8[>..] = [];
@@ -502,6 +546,21 @@ fn test_study_run() {
             print("FAIL skein run --study: no '", want, "' in:\n", table);
         }
     }
+    // lx reaches the mesh, so each case meshes. qv reaches only the physics:
+    // case 2 reads the mesh of case 1, and gives twice its heat.
+    let studies = "build/.skein/studies/heated_bar_study_tet";
+    if is_dir(str(studies, "/lengths/mesh")) || !is_dir(str(studies, "/sources/mesh")) {
+        failures++;
+        print("FAIL skein run --study: the study lengths has a shared mesh, or the study sources has none");
+    }
+    table.clear();
+    read_file(str(studies, "/sources.toon"), table);
+    for want in ["  1,1e7 W/m^3,ok,pass,-20.0", "  2,2e7 W/m^3,ok,fail,-40.0"] {
+        if find(table, want) < 0 {
+            failures++;
+            print("FAIL skein run --study sources: no '", want, "' in:\n", table);
+        }
+    }
 }
 
 fn main() {
@@ -515,6 +574,7 @@ fn main() {
     test_unsupported();
     test_study_cases();
     test_study_table();
+    test_study_workers();
     test_study_run();
     if failures > 0 {
         print(failures, " codegen tests failed");

@@ -148,7 +148,7 @@ skein verify samples/01_cantilever.skn --dfm
 | `--dfm` | `verify` | run the DFM checks of the `manufacture` items ([checks.md §4.2a](checks.md#42a-design-for-manufacture)) |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
 | `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
-| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads (spec §20.5). |
+| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in the memory, and the table gives the `k` that it used (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 `run` writes the results to `.skein/results/<model>/<step>.vtu` (one file
@@ -156,6 +156,9 @@ per output time) and the state to `.skein/state/<model>/<step>.sks`.
 `run --study` writes the results of each case under
 `.skein/studies/<model>/<study>/<case>/`, and the table of all cases to
 `.skein/studies/<model>/<study>.toon` (§6.5).
+When no varied parameter reaches the mesh (spec §20.4), case 1 writes its
+mesh to `.skein/studies/<model>/<study>/mesh/`, and the other cases read it.
+Each case gets its threads in the environment variable `SKEIN_THREADS`.
 
 ---
 
