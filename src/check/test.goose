@@ -293,6 +293,19 @@ fn test_steps() {
     expect_clean("G6 an eigenvalue", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 10 Hz within 1%\n"));
     expect_clean("an eigenvalue with no units", "model m: 3d, nondim\nlet b: Solid = box((0, 0, 0), (1, 1, 1))\nlet f: Surface = boundary(b, x == 0)\nmaterial steel {\n    E: Pressure = 1000\n    nu: Real = 0.3\n    rho: Density = 1\n}\nmesh m1 on b { size: 0.1 }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nstep go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 2.5 within 1%\n");
     expect_id("type_mismatch", str(elastic, "step go: static {\n    bc f: u = 0\n    report eigenvalue(1)\n}\n"));
+    // when: the first time at which a value gets to a level (spec §14.5).
+    let shake = "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report t1 = when(max(norm(u), b), 1 mm)\n}\n";
+    expect_clean("when in a report of a transient step", str(elastic, shake));
+    expect_clean("when in an expect after a transient step", str(elastic, shake, "expect t1: when(max(norm(u), b), 2 mm) - when(max(norm(u), b), 1 mm) == 0.1 s within 5%\n"));
+    expect_clean("when at each row of a table", str(elastic, "table lv{d: Length in mm, t: Time in s}:\n    1, 0.1\n    2, 0.2\n", shake, "expect t2: when(max(norm(u), b), lv.d) == lv.t within 5%\n"));
+    expect_id("when_step", str(elastic, "step go: static {\n    bc f: u = 0\n    report when(max(norm(u), b), 1 mm)\n}\n"));
+    expect_id("when_step", str(elastic, "step go: static {\n    bc f: u = 0\n}\nexpect t1: when(max(norm(u), b), 1 mm) == 0.1 s within 5%\n"));
+    expect_id("when_step", str(elastic, shake, "let t2: Time = when(max(norm(u), b), 1 mm)\n"));
+    expect_id("unit_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(norm(u), b), 1 s)\n}\n"));
+    expect_id("rank_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(u, b), 1 mm)\n}\n"));
+    expect_id("rank_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(norm(u), 1 mm)\n}\n"));
+    expect_clean("when of a scalar reduced over a region", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(min(norm(u), b), 1 mm)\n}\n"));
+    expect_id("not_constant", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(norm(u), b), x)\n}\n"));
     expect_id("allow_reason", str(H, "allow rigid_body: \"\"\n"));
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"no_such_file.skn\", step: \"load\")\n"));

@@ -41,6 +41,11 @@ gives the roadmap phase that closes the gap:
 - Phase 2 closes G5. Spec [§5.6](skein_spec.md#56-tables) states `sum`,
   and the new model
   [fit_nist_pontius.skn](../examples/femahoy/fit_nist_pontius.skn) uses it.
+- Phase 2 closes G11. Spec [§14.5](skein_spec.md#145-output-and-report)
+  states `when`, and the expectations of
+  [dam_break_vof.skn](../examples/femahoy/dam_break_vof.skn) and
+  [dam_break_martin_moyce.skn](../examples/femahoy/dam_break_martin_moyce.skn)
+  use it.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -80,7 +85,7 @@ comment.
 | G7 | The real part, the imaginary part, the magnitude and the phase of a complex result (S-parameters, impedance, R and L of a line). | `validation/cases/grid-waveguide-te10/check.toml:10`, `validation/cases/line-bars-getdp/check.toml:11`, `validation/cases/acoustics-pulsating-sphere/check.toml:17`, `validation/cases/team7-eddy-current/50hz/case.pro:89` | §5.1 defines `Complex<D>` and `im`, but Appendix A has no function that takes a part of a complex value. | Add `re`, `imag`, `arg` and `conj` to Appendix A, and accept `Complex` in `abs`. | 1 |
 | G8 | The angular frequency of the step in a load or a wall impedance: a base acceleration, a surface impedance of copper. | `validation/cases/random-vibration-cantilever/job.inp:27`, `validation/cases/grid-cavity-te101/cavity/grid.toml:20` | No built-in name gives the frequency of a `harmonic` or `modal` step (§14.2, Appendix A). | A built-in constant `omega`, the angular frequency of the current `harmonic` frequency or `modal` eigenvalue. | 4 |
 | G10 | A check after an earlier step, a check for each case of a parameter sweep, and a check of the optimum of a shape loop. | `validation/cases/hyperelastic-tube/check.toml:18`, `validation/cases/cavity-devahldavis/check.toml:40`, `validation/cases/naca0012-ladson/check.toml:19`, `validation/cases/shape-hole-biaxial/check.toml:23` | §15.3 runs each `expect` once, after the last step, with the default `param` values. | Let `expect` stand in a `step` (checked at the end of the step) and in a `study` block (checked for each case, and for the best case of `minimize`). | 2 |
-| G11 | The time at which a value gets to a level: the front of a dam break. | `validation/cases/dam-break-vof/check.toml:19`, `validation/cases/dam-break-martin-moyce/check.toml:17` | Reports give values at the end of a step only (§14.5, §15.3). | A report function `when(expr, value)`: the first time at which `expr` gets to `value`. | 2 |
+| G11 | The time at which a value gets to a level: the front of a dam break. | `validation/cases/dam-break-vof/check.toml:19`, `validation/cases/dam-break-martin-moyce/check.toml:17` | Reports give values at the end of a step only (§14.5, §15.3). | A report function `when(expr, value)`: the first time at which `expr` gets to `value`. | 2, closed by [§14.5](skein_spec.md#145-output-and-report) |
 | G12 | An angle from a ratio: the shock angle. | `validation/cases/wedge-oblique-shock/check.toml:19` | Appendix A has `tan` but no inverse. The model checks `tan(beta)`. | Add `atan` and `atan2` to Appendix A. | 1 |
 | G13 | The directivity and the efficiency of an antenna from a near-to-far-field transform. | `validation/cases/dipole-king-middleton/omega12.5/openems.py:65` | Report functions act on regions of the mesh only (§14.5). | A report function `far_field(E, H, surface, direction)`. | 5 |
 | G14 | A stress intensity factor in MPa·mm^0.5. | `validation/cases/fracture-centre-crack/check.toml:7` | A dimension has integer exponents, and `sqrt` needs even exponents (§6.1). The model checks the shape factor `K_I/(S*sqrt(pi*a))`, with the same tolerance. | Allow exponents in halves (§6.1). | 2 |
@@ -333,7 +338,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Nusselt number, peak velocities, mean temperatures | cavity-devahldavis, cht-heated-channel | `report` with `mean`, `max`, `integral` | [§14.5](skein_spec.md#145-output-and-report) |
 | A curvature from a fit of the top face | grid-bimetal-strip | `integral` moments of `u.z` | [§14.5](skein_spec.md#145-output-and-report) |
 | A stress intensity factor | fracture-centre-crack | a dimensionless shape factor | gap [G14](#gaps-that-remove-a-check) |
-| The time at which a front gets to a position | dam-break-vof, dam-break-martin-moyce | `report` of the front position | gap [G11](#gaps-that-remove-a-check) |
+| The time at which a front gets to a position | dam-break-vof, dam-break-martin-moyce | `when(front, value)` in an `expect` | [§14.5](skein_spec.md#145-output-and-report) |
 | A shock angle | wedge-oblique-shock | `tan` of the angle | gap [G12](#gaps-that-remove-a-check) |
 | Directivity and efficiency of an antenna | dipole-king-middleton | none | gap [G13](#gaps-that-remove-a-check) |
 | A check after an earlier step | hyperelastic-tube | `report` in the step | gap [G10](#gaps-that-remove-a-check) |

@@ -139,6 +139,7 @@ in the file stays in the review.
 | `submodel_outside` | §15.2 | the cut region is not inside the global field region | | the bounding box of the global region |
 | `expect_form` | §15.3 | the two sides of an `expect` are not comparable | a field and a point value | `at` |
 | `eigenvalue_step` | §14.5 | `eigenvalue(k)` is not in a `report` or an `expect`, has no `modal` or `buckling` step, or `k` is outside `1..count` of the step | `report eigenvalue(1)` in a `static` step, `report eigenvalue(13)` in `modal(count: 12)` | a `modal` or `buckling` step, or a `k` in `1..count` |
+| `when_step` | §14.5 | `when(f, value)` is not in a `report` of a `transient` step, or in an `expect` whose last step is `transient` | `report when(front, 1 m)` in a `static` step | a `transient` step |
 
 ### 2.9 Parameters, scales, studies and manufacture
 

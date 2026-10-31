@@ -135,7 +135,9 @@ fn check_step(n: i64) {
             syntax::N_REPORT => {
                 var r = s.first;
                 while r >= 0 {
+                    in_report = true;
                     let t = expr_ty(syntax::nodes[r].first);
+                    in_report = false;
                     if syntax::nodes[r].aux >= 0 && is_scalar(t) {
                         var nm: u8[..64] = [];
                         let rn = tok_text(syntax::nodes[r].aux);
