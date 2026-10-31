@@ -74,6 +74,15 @@ fn dof_estimate(lane: i64) -> i64 {
     return codegen::dof_estimate();
 }
 
+// The steps of the model that `read_model` read with generator `lane`.
+// Each step solves.
+fn step_count(lane: i64) -> i64 {
+    if lane == LANE_SHELL { return shells_gen::steps.len; }
+    if lane == LANE_FLOW { return flow_gen::steps.len; }
+    if lane == LANE_SIMPLEX { return elements_gen::steps.len; }
+    return steps.len;
+}
+
 // Writes the program of the model that `read_model` read with generator
 // `lane`. The program puts its results in `results_dir`. In a study, it
 // writes or reads the stages of `share`. The shell and flow generators
@@ -331,15 +340,16 @@ fn mb(bytes: f64) -> i64 { return round(bytes / 1.0e6) as! i64; }
 
 // Builds the program of `job` and runs it with SKEIN_MEMORY_PROBE, so that
 // it prints the estimate of its first solve and stops. It gives the
-// estimate in bytes, or 0. The job then needs no build.
-fn probe_case(job: CaseJob&) -> f64 {
-    guard shell(job.build) == 0 else { return 0.0; };
+// estimates in bytes on 1 thread and on the threads of `job`, or 0. The
+// job then needs no build.
+fn probe_case(job: CaseJob&) -> f64, f64 {
+    guard shell(job.build) == 0 else { return 0.0, 0.0; };
     set4096(job.build, "true");
     let probe = str(job.out, ".probe");
-    guard shell(case_command(job, "SKEIN_MEMORY_PROBE=1 ", probe)) == 0 else { return 0.0; };
+    guard shell(case_command(job, "SKEIN_MEMORY_PROBE=1 ", probe)) == 0 else { return 0.0, 0.0; };
     var out: u8[>..] = [];
     read_file(probe, out);
-    return max(0.0, toon_number(out, "estimate_bytes:"));
+    return max(0.0, toon_number(out, "one_thread_bytes:")), max(0.0, toon_number(out, "estimate_bytes:"));
 }
 
 fn set4096(into: u8[..4096]&, s: u8[:]) {
@@ -375,6 +385,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     var model: u8[>..] = [];
     var share = no_share();
     var dofs: i64[>..] = [];
+    var most_steps = 0;
     for c in 0..case_count {
         let cp = syntax::parse_model(path, case_source(text, c));
         let lane = if cp >= 0 { read_model(cp) } else { -1 };
@@ -395,6 +406,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         }
         share.reads = c > 0;
         dofs.push(dof_estimate(lane));
+        most_steps = max(most_steps, step_count(lane));
         let build_dir = str(".skein/build/", model, "/", study, "/", c + 1);
         let case_dir = str(".skein/studies/", model, "/", study, "/", c + 1);
         if !make_dirs(build_dir) || !make_dirs(case_dir) {
@@ -420,14 +432,17 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     }
     // At most min(H, number of cases) cases at a time, or --jobs, and each
     // when the ledger admits it (spec §20.5). Each case has 1 thread when
-    // more than one case can run. Reason: on sample 01, 16 threads took
-    // 25% more memory than 1 thread, and the same time.
+    // the budget admits more than one case at a time, and H threads
+    // otherwise. Reason: on sample 01, 16 threads took 25% more memory
+    // than 1 thread, and the same time.
     let h = max(1, hardware_threads());
     let limit = min(if jobs > 0 { jobs } else { h }, case_count);
     let free = solvers::free_bytes();
     var l = new_ledger(solvers::BUDGET_SHARE * free);
+    l.partial = most_steps > 1;
+    var threads = if limit > 1 { 1 } else { h };
     for &job in case_jobs {
-        job.threads = if limit > 1 { 1 } else { h };
+        job.threads = h;
         job.budget = l.budget as! i64;
     }
     outs.clear();
@@ -436,17 +451,20 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         // The case with the most dofs, which reads no stage of case 1.
         var big = 0;
         for d, c in dofs { if d > dofs[big] { big = c; } }
-        let estimate = probe_case(case_jobs[big]);
+        let one, many = probe_case(case_jobs[big]);
+        threads = if one > 0.0 && l.budget >= 2.0 * one { 1 } else { h };
+        let estimate = if threads > 1 { many } else { one };
         if estimate > 0.0 {
             l.per_dof = estimate / dofs[big];
             l.source = big;
         }
     }
+    for &job in case_jobs { job.threads = threads; }
     if l.budget > 0.0 {
         write_stderr(str("skein run: memory budget ", mb(l.budget), " MB (", solvers::BUDGET_SHARE, " of ", mb(free),
                          " MB free: MemAvailable and the cgroup limit)"));
         if l.source >= 0 { write_stderr(str(", case ", l.source + 1, " estimates ", mb(l.per_dof * dofs[l.source]), " MB for ", dofs[l.source], " dofs")); }
-        write_stderr("\n");
+        write_stderr(str(", threads for each case: ", threads, "\n"));
     }
     var ends = run_cases(case_jobs[..first], dofs, 1, l);
     ends.append(run_cases(case_jobs[first..], dofs, limit, l));

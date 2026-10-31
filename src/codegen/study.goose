@@ -417,18 +417,22 @@ fn set_source(path: u8[:], text: u8[:], sets: const u8[:][:], out: u8[>..]&) -> 
 // then the case checks itself before its assembly, and stops with a
 // message if it does not fit (solvers::memory_check). Reason: a case
 // reaches its peak late, at the setup of its solver, so the free memory at
-// its start does not show what the running cases take later.
+// its start does not show what the running cases take later. When the
+// program has more than one solve step, the estimate is that of its first
+// solve, and a later step can take more: then one case runs at a time
+// until a case gives its measured peak.
 struct Ledger {
     budget: f64,    // the bytes for all cases, or 0 if they are not known
     per_dof: f64,   // the bytes of a case for each dof of its mesh, or 0 if they are not known
     source: i64,    // the case of per_dof, or -1
     measured: bool, // per_dof is a measured peak, not an estimate
+    partial: bool,  // the estimate is that of the first of more than one solve step
     used: f64,      // the sum of the estimates of the cases that run
     most: i64,      // the most cases that ran at a time
 }
 
 fn new_ledger(budget: f64) -> Ledger {
-    return Ledger { budget: budget, per_dof: 0.0, source: -1, measured: false, used: 0.0, most: 0 };
+    return Ledger { budget: budget, per_dof: 0.0, source: -1, measured: false, partial: false, used: 0.0, most: 0 };
 }
 
 // The estimate in bytes of a case with `dofs` dofs: the whole budget while
@@ -439,7 +443,7 @@ fn case_need(l: Ledger, dofs: i64) -> f64 {
 
 // Whether a case of `need` bytes may start while `running` cases run.
 fn admits(l: Ledger, need: f64, running: i64) -> bool {
-    return running == 0 || l.budget <= 0.0 || l.used + need <= l.budget;
+    return running == 0 || l.budget <= 0.0 || (l.measured || !l.partial) && l.used + need <= l.budget;
 }
 
 // Learns from case c of `dofs` dofs, which ended with the measured peak

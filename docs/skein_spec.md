@@ -2084,8 +2084,8 @@ run.
 
 A machine has `H` hardware threads. A study runs at most `k` cases at a
 time. The default `k` is `min(H, number of cases)`, and `--jobs k` sets
-it. Each case has 1 thread when `k > 1`, and `H` threads otherwise.
-Reason: on sample 01, 16 threads took 25% more memory than 1 thread and
+it. Each case has 1 thread when the budget (below) admits more than one
+case at a time, and `H` threads otherwise. Reason: on sample 01, 16 threads took 25% more memory than 1 thread and
 the same time, so parallel cases scale better than parallel assembly in
 one case.
 
@@ -2109,9 +2109,14 @@ in the budget less the estimates of the running cases, or if no case
 runs. Reason: a case reaches its peak late, at the setup of its solver,
 so the free memory at its start does not show what the running cases
 take later. Before the first case, the runner probes the case with the
-most dofs: its program prints the estimate of its first solve and stops.
-The estimate of each case is the bytes for each dof of the probe times
-its dofs. Each case writes its measured peak (`peak_mb`, from VmHWM,
+most dofs: its program prints the estimate of its first solve, on 1
+thread and on `H` threads, and stops. If the budget holds two cases of
+the 1-thread estimate, each case has 1 thread, and the estimate is the
+1-thread estimate. If not, each case has `H` threads, and the estimate
+includes the memory of the threads. The estimate of each case is the
+bytes for each dof of the probe times its dofs. When the model has more
+than one step, a later step can take more memory than the first solve:
+then one case runs at a time until a case gives its measured peak. Each case writes its measured peak (`peak_mb`, from VmHWM,
 the `getrusage` peak of Linux) in its records, and the largest measured
 peak for each dof then takes the place of the probe. When case 1 writes the stages that
 the other cases read, it runs first and alone, and its peak is the

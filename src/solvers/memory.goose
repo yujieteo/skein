@@ -19,7 +19,8 @@
 // the runner reads it once for all cases and gives it in
 // SKEIN_MEMORY_BUDGET. Linux only: on another OS the budget is 0, and the
 // check passes. With SKEIN_MEMORY_PROBE, the program prints the estimate
-// of its first check and stops: the study runner probes one case so.
+// of its first check, on its threads and on 1 thread, and stops: the
+// study runner probes one case so.
 import std;
 import os;
 namespace solvers;
@@ -193,7 +194,8 @@ fn memory_check(name: u8[:], entries: i64, dofs: i64, vectors: i64, fix: u8[:]) 
     memory_checks++;
     var probe: u8[>..] = [];
     if env("SKEIN_MEMORY_PROBE", probe) {
-        write_stdout(str("estimate_bytes: ", need as! i64, "\n"));
+        let one = resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, 1);
+        write_stdout(str("estimate_bytes: ", need as! i64, "\none_thread_bytes: ", one as! i64, "\n"));
         exit(0);
     }
     write_file("/proc/self/oom_score_adj", "1000");

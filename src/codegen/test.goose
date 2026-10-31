@@ -550,8 +550,15 @@ fn test_ledger() {
     codegen::learn(l, 5, 1000, 4.0e7);   // a smaller peak does not
     format(got, l.per_dof, " ", l.source, " ");
     l.budget = 0.0;   // no budget: --jobs only
-    format(got, codegen::admits(l, 1.0e12, 7));
-    expect_text("the ledger", got, "true false true false true 50000.0 4 true");
+    format(got, codegen::admits(l, 1.0e12, 7), " ");
+    // more than one solve step: one case at a time until a measured peak
+    var m = codegen::new_ledger(1.0e9);
+    m.partial = true;
+    m.per_dof = 1.0e3;
+    format(got, codegen::admits(m, codegen::case_need(m, 1000), 1), " ", codegen::admits(m, codegen::case_need(m, 1000), 0), " ");
+    codegen::learn(m, 0, 1000, 2.0e6);
+    format(got, codegen::admits(m, codegen::case_need(m, 1000), 1));
+    expect_text("the ledger", got, "true false true false true 50000.0 4 true false true true");
     let toon = "solve[0]:\nestimate_mb: 12\npeak_mb: 34.5\n";
     expect_text("peak_mb", str(codegen::toon_number(toon, "peak_mb:"), " ", codegen::toon_number(toon, "none:")), "34.5 -1.0");
 }
@@ -625,6 +632,23 @@ fn test_study_run() {
             failures++;
             print("FAIL skein run --study bands: case ", c, " has no '", want[1..], "' in:\n", record);
         }
+    }
+}
+
+// A study of a model with a static step and a buckling step (spec §20.5):
+// the probe gives the estimate of the static step only, so the second case
+// starts only after a case ends. The length reaches the mesh, so the cases
+// share no stage.
+fn test_two_step_study() {
+    var c: u8[>..] = [];
+    format(c, "cd build && sed 's/^let L: Length/param L: Length/' ../examples/elements/buckling_column_tet.skn > two_steps.skn && ",
+           "printf '\nstudy lengths: grid {\n    L: [200, 190] mm\n}\n' >> two_steps.skn && ",
+           "./skein run two_steps.skn --study lengths --jobs 2 >/dev/null 2>two_steps.err; ",
+           "grep -q 'case 2 starts' two_steps.err && grep -E 'starts|ended' two_steps.err | sed -n 2p | grep -q ended");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL a study of a static and a buckling step starts its second case before a case ends");
     }
 }
 
@@ -861,6 +885,7 @@ fn main() {
     test_study_table();
     test_ledger();
     test_memory_stop();
+    test_two_step_study();
     test_study_run();
     test_case_threads();
     test_split();

@@ -155,7 +155,7 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 | Option | Commands | Meaning |
 |---|---|---|
 | `--target wasm` | `build` | the page that solves in the browser (§7) |
-| `--threads n` | `run` | worker threads for assembly and matrix products. Default: all hardware threads. With `--study`, each case has 1 thread when more than one case can run, and all threads otherwise (spec §20.5). |
+| `--threads n` | `run` | worker threads for assembly and matrix products. Default: all hardware threads. With `--study`, each case has 1 thread when the memory budget admits more than one case at a time, and all threads otherwise (spec §20.5). |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
