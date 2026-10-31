@@ -126,9 +126,9 @@ fn builtin_ty(tok: i64, name: u8[:], a: Args) -> Ty {
     var table = -1;
     for i in min(a.count, MAX_ARGS) { listed = listed || a.ty[i].list; table = rows(table, a.ty[i].table); }
     var r = builtin_ty_inner(tok, name, a, t0, t1, v);
-    // laminate sums over the plies of its layup column (spec §4.3), and sum
-    // over the rows of a table (§5.6).
-    if is_num(r) && name != "laminate" && name != "sum" {
+    // laminate sums over the plies of its layup column (spec §4.3), sum
+    // over the rows of a table (§5.6), and interp reads its columns at x.
+    if is_num(r) && name != "laminate" && name != "sum" && name != "interp" {
         r.list = r.list || listed;
         r.table = rows(r.table, table);
     }
@@ -219,8 +219,8 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     if name == "interp" {
         guard arity(tok, name, a, 3, 3) && !is_any(t1) else { return any_ty(); }
         var r = same(t1, v);
-        r.list = false;
-        r.table = -1;
+        r.list = a.ty[2].list;
+        r.table = a.ty[2].table;
         r.varying = a.ty[2].varying;
         let x = a.ty[0];
         if is_num(x) && is_num(a.ty[2]) && !a.ty[2].zero && x.dim != a.ty[2].dim {

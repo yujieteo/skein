@@ -217,6 +217,8 @@ fn test_types() {
     let tc = "table tc{c: Real}:\n    1\n";
     expect_id("sum_mixed_tables", str(H, tb, tc, "let s: Length = sum(tb.a*tc.c)\n"));
     expect_id("sum_mixed_tables", str(H, tb, tc, "let l: Length = tb.a\nlet s: Length = sum(l*tc.c)\n"));
+    expect_clean("sum of interp at the rows of another table", str(H, tb, tc, "let s: Length = sum(tc.c*interp(tb.b, tb.a, tc.c))\n"));
+    expect_id("sum_no_column", str(H, tb, "let s: Length = sum(interp(tb.b, tb.a, 2))\n"));
     expect_clean("sum of one table through a let", str(H, tb, "let l: Length = tb.a\nlet s: Area = sum(l*tb.a)\n"));
     expect_id("geometry_dim", str(H2, "let s: Solid = rect((0, 0) m, (1, 1) m)\n"));
     expect_id("geometry_space", str(H, "let s: Surface = circle((0, 0) m, 1 m)\n"));
