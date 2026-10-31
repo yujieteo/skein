@@ -61,4 +61,5 @@ step proximity: harmonic(freq: [f0]) {
 
 // The loop impedance per length is Z = 2*E0/integral(J, bar_a), with R = re(Z) and L = imag(Z)/omega.
 expect r: re(2*E0/integral(J, bar_a)) == 4.865727173e-2 V/(A*m) within 0.5%
+
 expect l: imag(2*E0/integral(J, bar_a))/(2*pi*f0) == 4.870218310e-7 V*s/(A*m) within 0.5%

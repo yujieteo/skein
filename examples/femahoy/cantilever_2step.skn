@@ -14,7 +14,11 @@ scales W, P/(W*W)
 let beam: Solid = box((0, 0, 0) mm, (L, W, W))
 let fixed: Surface = boundary(beam, x == 0 mm)
 // The 9 nodes of the tip face of femahoy: the corners, the mid-sides and the centre.
-let tip: Point = pattern(pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3), (0 mm, 0 mm, W/2), 3)
+let tip: Point = pattern(
+    pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3),
+    (0 mm, 0 mm, W/2),
+    3,
+)
 
 material steel {
     E: Pressure = 210000 MPa
