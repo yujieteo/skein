@@ -7,6 +7,7 @@ import .codegen;
 import .study;
 import .split;
 import .status;
+import .kernels;
 import check from "../check";   // study.goose writes TOON with it
 
 extern "libc.so.6" {
@@ -680,7 +681,29 @@ fn test_unchecked_status() {
     }
 }
 
+// Each kernels.goose file holds what the emitter of the cell kernels writes.
+// With the argument `write`, it writes the files.
+fn test_kernels(write: bool) {
+    for f in codegen::KERNEL_FILES.len {
+        let want = codegen::kernel_file(f);
+        let path = codegen::KERNEL_FILES[f];
+        if write {
+            if !write_file(path, want) {
+                failures++;
+                print("FAIL kernels: cannot write ", path);
+            }
+            continue;
+        }
+        var got: u8[>..] = [];
+        if !read_file(path, got) || got != want {
+            failures++;
+            print("FAIL kernels: ", path, " differs from what src/codegen/kernels.goose writes. Run build/test_codegen write.");
+        }
+    }
+}
+
 fn main() {
+    test_kernels(args().len > 1 && args()[1] == "write");
     test_grid_cantilever();
     test_closed_cylinder();
     test_units();

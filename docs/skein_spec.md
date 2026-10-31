@@ -1850,8 +1850,8 @@ target does not depend on a WebAssembly back end in Goose.
 
 | File | Contents |
 |---|---|
-| `model.goose` | the kernels and the plan of the model |
-| `runtime` (package) | the runtime: mesher, sparse matrices, solvers, output writers. The same for each model. |
+| `model.goose` | the plan of the model |
+| `runtime` (package) | the runtime: mesher, sparse matrices, solvers, output writers, and the cell kernels that the emitter writes (§18.3). The same for each model. |
 
 ### 18.3 The shape of the generated code
 
@@ -1865,6 +1865,12 @@ functions by blocks of the cell matrix, one block for each pair of
 unknowns or of node groups, and one function calls them in order. Reason:
 a person can review a function of 60 lines, and a test checks the length
 of each generated function.
+
+A cell kernel depends only on the cell type and the physics. So the
+emitter (`src/codegen/kernels.goose`) writes the kernels into the runtime
+packages once, as `src/runtime/kernels.goose`, `src/elements/kernels.goose`
+and `src/shells/kernels.goose`, and not into each `model.goose`. A test
+fails while one of these files differs from what the emitter writes.
 
 This is the kernel that the compiler writes for the linear elastic
 tetrahedron of order 1. It is illustrative: the generated names and the

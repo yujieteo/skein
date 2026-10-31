@@ -16,6 +16,7 @@ import os;
 namespace runtime;
 import .solid;
 import .hex8i;
+import .kernels;
 import .lane_elements;
 import .lane_shells;
 
@@ -217,7 +218,7 @@ fn cell_quadrature(t: i64, xi: f64[>..]&, w: f64[>..]&) -> bool {
 fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
     guard c >= 0 && c < cell_count() && cell_start[c + 1] - cell_start[c] == CELL_NODES[cell_type[c]] else { abort("cell_matrix: a cell with the nodes of its type"); }
     let t = cell_type[c] as i64;
-    if t == HEX27 { return solid_stiffness(c, ke); }
+    if t == HEX27 { return hex27_stiffness(c, ke); }
     if t == HEX8I { return hex8i_matrix(c, ke); }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_matrix(c, ke); }
     return elements_matrix(c, ke);

@@ -1,9 +1,8 @@
 // The registration point of the elements lane (src/elements/): the
 // registry entries of tri3, tri6, tet4, tet10 and hex8 (fem.goose). Each
-// function gives false for a cell type that has no entry yet. A 3D cell
-// with shape functions and a quadrature here can use solid_stiffness
-// (solid.goose) as its element routine. The node order of each cell type
-// is its VTK node order, because vtu.goose writes the nodes in that order.
+// function gives false for a cell type that has no entry yet. The node
+// order of each cell type is its VTK node order, because vtu.goose writes
+// the nodes in that order.
 import std;
 namespace runtime;
 import .fem;

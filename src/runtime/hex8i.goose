@@ -74,35 +74,10 @@ fn mode_gradient(c: i64, xi: f64[3], det: f64, g: f64[>..]&, at: i64) {
 var full: f64[>..] = [];       // the 33 × 33 matrix of the nodes and the modes of a cell
 var condensed: f64[>..] = [];  // X = Kaa⁻¹ Kau: 9 rows (the mode dofs), 24 columns (the node dofs)
 
-// Fills `full` for cell c, then `condensed`.
+// Fills `full` for cell c (hex8i_full in kernels.goose), then `condensed`.
 fn hex8i_condense(c: i64) {
     guard c >= 0 && c < cell_count() && cell_type[c] as i64 == HEX8I && cell_start[c + 1] - cell_start[c] == 8 else { abort("hex8i_condense: a hex8i cell with 8 nodes"); }
-    quad_xi.clear();
-    quad_w.clear();
-    gauss_hex2(quad_xi, quad_w);
-    full.clear();
-    for i in ALL_DOFS * ALL_DOFS { full.push(0.0); }
-    grad.clear();
-    for i in ALL_DOFS { grad.push(0.0); }
-    for w, g in quad_w {
-        let xi: f64[3] = [quad_xi[3 * g], quad_xi[3 * g + 1], quad_xi[3 * g + 2]];
-        shape_n.clear();
-        shape_dn.clear();
-        hex8_shape(xi, shape_n, shape_dn);
-        var jac: f64[9] = [0.0; 9];
-        cell_jacobian(c, shape_dn, jac);
-        var inv: f64[9] = [0.0; 9];
-        let det = inverse3(jac, inv);
-        assert(det > 0.0);
-        for l in 8 {
-            for s in 3 {
-                grad[3 * l + s] = inv[3 * s] * shape_dn[3 * l] + inv[3 * s + 1] * shape_dn[3 * l + 1]
-                    + inv[3 * s + 2] * shape_dn[3 * l + 2];
-            }
-        }
-        mode_gradient(c, xi, det, grad, NODE_DOFS);
-        add_elastic(grad, 11, w * det, full);
-    }
+    hex8i_full(c);
     // Gauss elimination of Kaa X = Kau. Kaa is symmetric positive definite,
     // so it needs no pivots.
     var a: f64[81] = [0.0; 81];
