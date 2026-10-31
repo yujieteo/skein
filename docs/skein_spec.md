@@ -933,7 +933,7 @@ mesh m on beam {
 | Setting | Type | Default | Meaning |
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
-| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `hex` needs a union of `box` regions, or a quarter of a tube. `quad` on a union of `rect` regions is a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. |
+| `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` on a union of `rect` or `box` regions, or on a quarter of a ring or a tube, are a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. `hex` on another `Solid` is a swept or a mapped grid (§9.2). |
 | `grade` | `Real` | 1.3 | largest ratio of the size of two neighbour cells |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
@@ -967,8 +967,10 @@ licences are not compatible with Apache 2.0.
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
-| `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ and z on a quarter of a tube: `(cylinder - cylinder) & box`, with the box corner on the axis |
-| `quad` on another `Surface` | the triangles of the 2D case, then the merge of each pair of triangles into a quad (Blossom-Quad, Remacle et al. 2012). A triangle stays where no pair has an acceptable quality. |
+| `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ (and z) on a quarter of a ring or a tube: `(circle - circle) & rect` or `(cylinder - cylinder) & box`, with the corner of the rect or the box on the axis |
+| `quad` on another `Surface` | the triangles of the 2D case, then the merge of pairs of neighbour triangles into quads (Blossom-Quad, Remacle et al. 2012): a matching of the largest size (Edmonds 1965) on the pairs whose quad has an acceptable quality. A triangle stays where it has no such pair. |
+| `hex` on a prism along z | a `Solid` of `box`, `cylinder` along z and `extrude` regions that each hold its z range: the quads of Blossom-Quad on its section at twice the size, each cut into 4 quads and each remaining triangle into 3, swept through layers of equal height |
+| `hex` on another `Solid` | the grid of the planes of the `box` regions in the bounds of the region, with the cells whose centre is in the region. Each node on the boundary of the cells moves to the nearest point of the boundary of the region (Schneiders 1996). |
 | boundary layers | prisms or quads extruded along the normal of the surface, then the core mesh |
 
 On a union of boxes or rects, each face of each `box` or `rect` of the
@@ -982,6 +984,10 @@ cell through it.
 The sharp edges come from the CSG tree: each intersection of the surfaces
 of two primitives with a dihedral angle that `feature_angle` marks is a
 feature curve.
+
+Reason for the `quad` and `hex` cells on a region that is not a union of
+boxes: femahoy gap G36. Femahoy meshes a ring about a hole, a tube, a rod
+and a sloped fillet with quad or hex cells.
 
 Isosurface stuffing alone guarantees dihedral angles between 10.7° and
 164.8°. The feature protection and the boundary layers remove this
@@ -1929,7 +1935,6 @@ gives the phase of each part.
 | multigrid | smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996) |
 | mesher | §9.2 |
 | output | VTU writer, TOON reports, state files |
-| tasks | the work-stealing task pool of §20.5 |
 
 ### 18.5 The compiler in Goose
 
@@ -2073,15 +2078,22 @@ The memory of one case times `k` must fit the target. The runner estimates
 the memory of a case from the mesh size before it starts the workers, and
 lowers `k` if necessary. It reports the value that it chose.
 
-**Phase 3: one work-stealing task pool.** Phase 2 runs cases first, as
-above. Phase 3 replaces the two levels of threads with one pool in the style
-of the Go scheduler. Each hardware thread is a worker with its own queue of
-tasks. A task is one case, or one part of the work in a case: a colour of
-the assembly, a block of a solver. A worker that has no task takes one
-from the queue of another worker. Thus a study with 3 large cases on 16
-threads keeps each thread busy, and the user sets no `--jobs`. Each queue
-uses atomic operations, or a lock if Goose has no atomics. Both give the
-same results.
+**The work-stealing task pool.** The runner runs the cases on one task
+pool in the style of the Go scheduler. Each of the `k` workers has its own
+queue of cases. At the start, the queue of a worker holds a block of the
+cases, in case order. A worker that ends a case starts the next case of
+its queue. A worker with an empty queue takes the last case of the longest
+other queue. Thus a slow case does not stop the start of the other cases.
+
+Goose threads share no memory, and Goose has no atomics or locks. Thus the
+thread of the runner owns all the queues, and a worker gets its case as the
+argument of its spawn. The table is in case order, so the order of the
+runs does not change the results.
+
+On the native target, a case is a separate program. Thus a task of the
+pool is one whole case. A part of the work in a case, for example a colour
+of the assembly or a block of a solver, is not a task of the pool. A
+later phase adds the threads in a case.
 
 ### 20.6 The results table
 
@@ -2276,6 +2288,7 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Chew, L. P. (1989). Guaranteed-quality triangular meshes. Cornell TR 89-983.
 - Chung, J., Hulbert, G. M. (1993). A time integration algorithm for structural dynamics with improved numerical dissipation: the generalized-α method. J. Appl. Mech. 60.
 - Dvorkin, E. N., Bathe, K. J. (1984). A continuum mechanics based four-node shell element for general non-linear analysis. Engineering Computations 1.
+- Edmonds, J. (1965). Paths, trees, and flowers. Canadian J. Math. 17.
 - Ghia, U., Ghia, K. N., Shin, C. T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. J. Comput. Phys. 48.
 - Hughes, T. J. R., Franca, L. P., Balestra, M. (1986). A new finite element formulation for computational fluid dynamics: V. CMAME 59.
 - Jones, R. M. (1999). Mechanics of Composite Materials, 2nd ed. Taylor & Francis.
@@ -2285,6 +2298,7 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Remacle, J.-F., Lambrechts, J., Seny, B., Marchandise, E., Johnen, A., Geuzaine, C. (2012). Blossom-Quad: a non-uniform quadrilateral mesh generator using a minimum-cost perfect-matching algorithm. IJNME 89(9).
 - Rhie, C. M., Chow, W. L. (1983). Numerical study of the turbulent flow past an airfoil with trailing edge separation. AIAA J. 21(11).
 - Ruppert, J. (1995). A Delaunay refinement algorithm for quality 2-dimensional mesh generation. J. Algorithms 18(3).
+- Schneiders, R. (1996). A grid-based algorithm for the generation of hexahedral element meshes. Engineering with Computers 12.
 - Shakib, F., Hughes, T. J. R., Johan, Z. (1991). A new finite element formulation for computational fluid dynamics: X. CMAME 89.
 - Shewchuk, J. R. (2002). Delaunay refinement algorithms for triangular mesh generation. Comput. Geom. 22.
 - Shih, C. F., de Lorenzi, H. G., German, M. D. (1976). Crack extension modeling with singular quadratic isoparametric elements. Int. J. Fract. 12(4).

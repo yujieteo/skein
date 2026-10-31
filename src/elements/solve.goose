@@ -51,6 +51,19 @@ fn precondition(r: f64[:], z: f64[:]) {
     for d in z.len { if fixed[d] != 0 { z[d] = 0.0; } }
 }
 
+// The AMG levels of K with the rows and the columns of the fixed dofs cut
+// off. False if the last level is not positive definite.
+fn setup_preconditioner() -> bool {
+    var free_val: f64[>..] = [];
+    free_val.append(val);
+    for d in sol.len {
+        for e in row_start[d]..row_start[d + 1] {
+            if col[e] != d && (fixed[d] != 0 || fixed[col[e]] != 0) { free_val[e] = 0.0; }
+        }
+    }
+    return solvers::amg_setup(row_start, col, free_val, ncomp);
+}
+
 fn solve_system() -> bool {
     guard physics >= 0 && dofs_sized() else { abort("solve_system: a physics and the arrays of the dofs"); }
     let start = clock();
@@ -71,16 +84,7 @@ fn solve_system() -> bool {
         f2 += f * f;
         r[d] = f - q[d];
     }
-    var free_val: f64[>..] = [];
-    free_val.append(val);
-    for d in n {
-        for e in row_start[d]..row_start[d + 1] {
-            if col[e] != d && (fixed[d] != 0 || fixed[col[e]] != 0) { free_val[e] = 0.0; }
-        }
-    }
-    let factored = solvers::amg_setup(row_start, col, free_val, ncomp);
-    free_val.clear();
-    guard factored else {
+    guard setup_preconditioner() else {
         last_iterations = 0;
         last_seconds = clock() - start;
         return false;

@@ -97,9 +97,7 @@ gives the roadmap phase that closes the gap:
   `full` and `reduced`. The grid models use `family: incompatible`, and
   `skein run` runs
   [grid_cantilever.skn](../examples/femahoy/grid_cantilever.skn) on 8-node
-  hexahedra with incompatible modes. G36 still keeps the quad and hex cells
-  from taylor_bar_impact, contact_cattaneo, turek_hron_fsi1 and
-  hyperelastic_tube.
+  hexahedra with incompatible modes.
 - Phase 2 closes G20. Spec [§9.1](skein_spec.md#91-mesh) states
   `crack_tip`, and the mesh of
   [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)
@@ -127,8 +125,7 @@ gives the roadmap phase that closes the gap:
   [grid_heated_block_ccx.skn](../examples/femahoy/grid_heated_block_ccx.skn)
   and
   [grid_heated_block_stress_ccx.skn](../examples/femahoy/grid_heated_block_stress_ccx.skn),
-  use it. A grid on a region that is not a union of axis-aligned boxes or
-  rects is the open gap G36.
+  use it.
 - Phase 2 closes G28. Spec [§3.1](skein_spec.md#31-order-of-items) and
   [§10.2](skein_spec.md#102-material) let a material property name an
   unknown of a physics that assigns the material. The conductivity of `T`
@@ -137,6 +134,21 @@ gives the roadmap phase that closes the gap:
   and
   [grid_conductivity_slab.skn](../examples/femahoy/grid_conductivity_slab.skn)
   is a material property.
+- Phase 3 closes G36. Spec [§9.1](skein_spec.md#91-mesh) and
+  [§9.2](skein_spec.md#92-mesh-generation) allow `quad` and `hex` on each
+  region: a grid in r and θ on a quarter of a ring or a tube, Blossom-Quad
+  on another `Surface`, a swept grid on a prism along z, and a mapped grid
+  on another `Solid`. The rings of
+  [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn) and
+  [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn),
+  the parts of
+  [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn), the
+  flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn),
+  the rod of
+  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) and
+  the package of
+  [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) use
+  the cells of femahoy.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -193,7 +205,7 @@ result, or the mesh or the solve is less efficient.
 |---|---|---|---|---|---|
 | G18 | Element families: reduced integration (`C3D20R`, `C3D8R`, `CPE8R`, `S8R`), serendipity cells (`C3D20`, `CPE8`) and incompatible modes (`C3D8I`, the hex8 of the grid solver). | `validation/cases/frequency-cantilever/mesh.inp:2120`, `validation/cases/dynamics-bar-step/mesh.inp:2028`, `validation/cases/grid-cantilever/derivation.md:3` | The setting `quadrature` has no values, and `family` is `lagrange`, `nedelec` or `raviart_thomas` (§13). The models use `lagrange` of order 2. | Give `quadrature` the values `full` and `reduced`, and add `serendipity` and `incompatible` to `family`. | 2, closed by [§13](skein_spec.md#13-methods) |
 | G19 | A structured hex grid through layers and blocks, with a grid plane on each material face. | `validation/cases/warpage-2p5d-frame/mesh.inp:5462`, `validation/cases/grid-heated-block-ccx/block/grid.toml:16`, `validation/cases/grid-layered-wall/wall/grid.toml:18` | `hex` and `quad` need one `box` or `rect` (or, for `hex`, a quarter of a tube) with one `size` (§9.1). §9.2 does not put a grid plane on an inner material face. The models use tetrahedra, or a size that puts the planes on the faces. | Allow `hex` and `quad` on a union of axis-aligned boxes or rects, with a grid plane on each face of each box. | 2, closed by [§9.2](skein_spec.md#92-mesh-generation) |
-| G36 | A structured hex or quad grid on a region that is not a union of axis-aligned boxes or rects: the sloped fillet of a package, a ring about a hole, a tube, a disk on a block. | `validation/cases/warpage-2p5d-frame/mesh.inp:5462`, `validation/cases/contact-cattaneo/mesh.inp:13915` | §9.1 and §9.2 allow `quad` on another `Surface` (Blossom-Quad) and `hex` on a quarter of a tube, but the mesher makes `quad` and `hex` only on a union of boxes or rects. The spec has no `hex` grid on another `Solid` (the fillet, the rod). The models submodel-kirsch-hole, hyperelastic-tube, contact-cattaneo, turek-hron-fsi1, taylor-bar-impact and warpage-2p5d-frame use triangles or tetrahedra. | In the mesher, Blossom-Quad and the quarter-tube grid of §9.2. In §9.2, a mapped or swept `hex` grid on a `Solid` that is not a union of boxes. | 3 |
+| G36 | A structured hex or quad grid on a region that is not a union of axis-aligned boxes or rects: the sloped fillet of a package, a ring about a hole, a tube, a disk on a block. | `validation/cases/warpage-2p5d-frame/mesh.inp:5462`, `validation/cases/contact-cattaneo/mesh.inp:13915` | §9.1 and §9.2 allow `quad` on another `Surface` (Blossom-Quad) and `hex` on a quarter of a tube, but the mesher makes `quad` and `hex` only on a union of boxes or rects. The spec has no `hex` grid on another `Solid` (the fillet, the rod). The models submodel-kirsch-hole, hyperelastic-tube, contact-cattaneo, turek-hron-fsi1, taylor-bar-impact and warpage-2p5d-frame use triangles or tetrahedra. | In the mesher, Blossom-Quad and the quarter-tube grid of §9.2. In §9.2, a mapped or swept `hex` grid on a `Solid` that is not a union of boxes. | 3, closed by [§9.2](skein_spec.md#92-mesh-generation) |
 | G20 | Quarter-point cells at a crack tip. | `validation/cases/fracture-centre-crack/derivation.md:38` | No mesh setting moves the mid-side nodes (§9.1). The model uses a fine mesh. | A mesh entry `crack_tip r: size`. | 2, closed by [§9.1](skein_spec.md#91-mesh) |
 | G21 | The stable increment of an explicit step, chosen by the solver. | `validation/cases/dynamics-bar-step/job.inp:14` | `transient` needs `dt` (§14.2). The model gives a `dt` below the stable limit. | Accept `dt: stable` with an explicit scheme. | 2, closed by [§14.2](skein_spec.md#142-procedures) |
 | G22 | Finite-strain J2 plasticity with a multiplicative split (plastic strain up to 3.24). | `validation/cases/taylor-bar-impact/job.inp:12` | §10.6 states `plastic` with an additive plastic strain. Under `finite_strain` this is a different law at large strain. | One rule in §10.6: under `finite_strain`, the `strain` state is `Fp`, the elastic part is `defgrad(u)*inv(Fp)`, and the return map is the exponential map. | 5 |
@@ -286,8 +298,8 @@ the feature. The model of a case has the same name, with `_` in place of
 | `C3D8I`, and the hex8 with incompatible modes of the grid solver | grid-cantilever, grid-bimetal-strip, grid-frequency-cantilever, grid-free-block-modes-ccx, turek-hron-fsi1 | `cell: hex`, `order: 1`, `family: incompatible` | [§13](skein_spec.md#13-methods) |
 | `C3D20`, `C3D20R`, `C3D8R`, `CPE8R`, `S8R` (serendipity, reduced integration) | frequency-cantilever, laminate-pagano, dynamics-bar-step, taylor-bar-impact, submodel-kirsch-hole, hyperelastic-tube | `family: serendipity` with `order: 2`, `quadrature: reduced`, or both | [§13](skein_spec.md#13-methods) |
 | A hex grid through layers or a union of blocks | warpage-thick-copper, grid-heated-block-ccx, grid-layered-wall, grid-laminate-cell | `cell: hex` on a union of `box` regions, with a grid plane on each face of each box | [§9.1](skein_spec.md#91-mesh), [§9.2](skein_spec.md#92-mesh-generation) |
-| A hex or quad grid on a region that is not a union of boxes or rects | warpage-2p5d-frame, submodel-kirsch-hole, hyperelastic-tube, contact-cattaneo, turek-hron-fsi1, taylor-bar-impact | `cell: tet` or `cell: tri` | gap [G36](#gaps-that-change-the-discretization-or-the-physics) |
-| Plane strain elements (`CPE4`, `CPE6`, `CPE8`, `CPE8R`) | submodel-kirsch-hole, fracture-centre-crack, contact-cattaneo, hyperelastic-tube, topology-mbb-beam | header `2d`, `cell: tri`, `assume plane_strain(th)` | [§3](skein_spec.md#3-grammar), [§9.1](skein_spec.md#91-mesh), [§11.1](skein_spec.md#111-assumption-table) |
+| A hex or quad grid on a region that is not a union of boxes or rects | warpage-2p5d-frame, submodel-kirsch-hole, hyperelastic-tube, contact-cattaneo, turek-hron-fsi1, taylor-bar-impact | `cell: hex` or `cell: quad`: a grid in r and θ, Blossom-Quad, or a swept or mapped hex grid | [§9.1](skein_spec.md#91-mesh), [§9.2](skein_spec.md#92-mesh-generation) |
+| Plane strain elements (`CPE4`, `CPE6`, `CPE8`, `CPE8R`) | submodel-kirsch-hole, fracture-centre-crack, contact-cattaneo, hyperelastic-tube, topology-mbb-beam | header `2d`, `cell: tri` or `cell: quad`, `assume plane_strain(th)` | [§3](skein_spec.md#3-grammar), [§9.1](skein_spec.md#91-mesh), [§11.1](skein_spec.md#111-assumption-table) |
 | Plane stress elements (`CPS6`) | shape-hole-biaxial | `assume plane_stress(th)` | [§11.1](skein_spec.md#111-assumption-table), [§11.2](skein_spec.md#112-how-plane_stress-reduces-a-3d-law) |
 | Quarter-point cells at a crack tip | fracture-centre-crack | `crack_tip tip: size` | [§9.1](skein_spec.md#91-mesh) |
 | Shell elements (`S8R`, `S6`), a composite shell section | scordelis-lo-roof, laminate-pagano | the `reissner_mindlin` template on a `Surface`, with a `layup` table for a composite section | [§4.3](skein_spec.md#43-shells-beams-and-laminates), [§8.3](skein_spec.md#83-lower-dimension-entities) |

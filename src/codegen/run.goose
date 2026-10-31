@@ -15,6 +15,7 @@ import fmt.fmt;
 import .codegen;
 import elements.gen;   // skein-elements: the simplex models
 import shells.gen;     // skein-shells: the shell models
+import flow.gen;       // skein-flow: the flow models
 import check from "../check";
 import .study;
 import .split;
@@ -52,13 +53,16 @@ fn make_dirs(path: u8[:]) -> bool {
 let LANE_BOX = 0;
 let LANE_SIMPLEX = 1;
 let LANE_SHELL = 2;
+let LANE_FLOW = 3;
 
 // Reads program `prog` with the generator that claims it. It gives that
 // generator, or -1 on an error, and `syntax::errors` holds the errors.
 // skein-elements: a simplex model goes to src/elements/gen.goose.
 // skein-shells: a shell model goes to src/shells/gen.goose.
+// skein-flow: a flow model goes to src/flow/gen.goose.
 fn read_model(prog: i64) -> i64 {
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
+    if flow_gen::claims(prog) { return if flow_gen::read(prog) { LANE_FLOW } else { -1 }; }
     if elements_gen::claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
     return if read(prog) { LANE_BOX } else { -1 };
 }
@@ -67,18 +71,26 @@ fn read_model(prog: i64) -> i64 {
 // `lane`.
 fn dof_estimate(lane: i64) -> i64 {
     if lane == LANE_SHELL { return shells_gen::dof_estimate(); }
+    if lane == LANE_FLOW { return flow_gen::dof_estimate(); }
     if lane == LANE_SIMPLEX { return elements_gen::dof_estimate(); }
     return codegen::dof_estimate();
 }
 
 // Writes the program of the model that `read_model` read with generator
 // `lane`. The program puts its results in `results_dir`. In a study, it
-// writes or reads the stages of `share`. The shell generator shares none.
-fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&) {
+// writes or reads the stages of `share`. The shell and flow generators
+// share none. For a flow model, it also meshes the domain and writes the
+// mesh in `results_dir` (src/flow/gen.goose). False, with an error on
+// stderr, if it cannot.
+fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&) -> bool {
     // The skein executable is build/skein in the repository, so the runtime
     // is in src/runtime beside it.
-    let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" } else { "../src/runtime" });
-    if lane == LANE_SHELL {
+    let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" }
+                                           else if lane == LANE_FLOW { "../src/flow" } else { "../src/runtime" });
+    if lane == LANE_FLOW {
+        guard flow_gen::write_mesh(results_dir) else { return false; }
+        flow_gen::generate(runtime_path, results_dir, program);
+    } else if lane == LANE_SHELL {
         shells_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_SIMPLEX {
         elements_gen::generate(runtime_path, results_dir, share, program);
@@ -91,6 +103,7 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
         write_stderr(str("skein run: internal fault: line ", at, " of the program drops the status of a solver call. Please report it.\n"));
         exit(3);
     }
+    return true;
 }
 
 // `skein run`. `args` are the words after `run`. It gives the exit status
@@ -161,7 +174,7 @@ fn run(args: const u8[:][:]) -> i64 {
         return 1;
     }
     var program: u8[>..] = [];
-    write_program(lane, results_dir, no_share(), program);
+    if !write_program(lane, results_dir, no_share(), program) { return 1; }
     let source = str(build_dir, "/main.goose");
     let exe = str(build_dir, "/", model_name);
     if !write_file(source, program) {
@@ -180,10 +193,10 @@ fn run(args: const u8[:][:]) -> i64 {
 }
 
 // `skein run --study` (spec §20, command_line.md §5, §6.5): the study
-// runner, with cases first (spec §20.5). The model is checked once. The
-// generator writes one program for each case (study.goose), and contained
-// Goose workers build and run the cases, `--jobs` at a time. The collector
-// writes one table of the cases, in case order:
+// runner (spec §20.5). The model is checked once. The generator writes
+// one program for each case (study.goose), and contained Goose workers
+// build and run the cases on the work-stealing pool of `--jobs` workers.
+// The collector writes one table of the cases, in case order:
 //
 //     .skein/build/<model>/<study>/<case>/main.goose    the program of a case
 //     .skein/studies/<model>/<study>/<case>/             the results of a case
@@ -238,28 +251,46 @@ thread_fn case_worker(job: CaseJob) {
     qput(r);
 }
 
-// Runs `jobs` with `k` contained workers at a time, and gives the end of
-// each case, in case order. It appends the outputs to `outs`.
+// The end of a task of the pool: its worker, its case, and the abort
+// message of a contained worker that aborted.
+struct TaskEnd {
+    worker: i64,
+    case: i64,
+    ended: bool,
+    why: u8[..1024],
+}
+
+// Runs case_worker on `job` as a contained worker, and gives its end as a
+// task of worker w of the pool.
+thread_fn pool_worker(w: i64, job: CaseJob) {
+    var why: u8[>..] = [];
+    var e = TaskEnd { worker: w, case: job.case, ended: thread_wait(thread_spawn_contained(case_worker, job), why), why: [] };
+    set1024(e.why, why);
+    qput(e);
+}
+
+// Runs `jobs` on the work-stealing pool of `k` workers (spec §20.5), and
+// gives the end of each case, in case order. A worker starts its next case
+// when its case ends. It appends the outputs to `outs`.
 fn run_cases(jobs: CaseJob[:], k: i64) -> CaseEnd[>..] {
     var ends: CaseEnd[>..] = [];
+    for i in jobs.len { ends.push(CaseEnd { ended: true, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 }); }
+    let workers = min(k, jobs.len);
+    var p = new_pool(jobs.len, workers);
     var ids: i64[>..] = [];
-    var next = 0;
-    while next < jobs.len && next < k {
-        ids.push(thread_spawn_contained(case_worker, jobs[next]));
-        next++;
-    }
+    for w in workers { ids.push(thread_spawn(pool_worker, w, jobs[take_task(p, w)])); }
     var ended = 0;
-    for i in 0..jobs.len {
-        var e = CaseEnd { ended: true, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 };
-        var why: u8[>..] = [];
-        e.ended = thread_wait(ids[i], why);
-        if e.ended { ended++; } else { set1024(e.err, str("the worker stopped: ", why)); }
-        ends.push(e);
-        if next < jobs.len {
-            ids.push(thread_spawn_contained(case_worker, jobs[next]));
-            next++;
+    for i in jobs.len {
+        let e = qget<TaskEnd>();
+        let c = e.case - jobs[0].case;
+        if e.ended { ended++; } else {
+            ends[c].ended = false;
+            set1024(ends[c].err, str("the worker stopped: ", e.why));
         }
+        let t = take_task(p, e.worker);
+        if t >= 0 { ids.push(thread_spawn(pool_worker, e.worker, jobs[t])); }
     }
+    for id in ids { thread_wait(id); }
     for i in 0..ended {
         let r = qget<CaseResult>();
         var e = CaseEnd { ended: true, built: r.built, status: r.status, seconds: r.seconds, err: r.err, out_lo: outs.len, out_hi: 0 };
@@ -307,7 +338,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         };
         model.clear();
         model.append(model_name);
-        if c == 0 && lane != LANE_SHELL {
+        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW {
             share.stages = check::STAGE_MESH - max(stage, check::STAGE_POST);
             format(share.dir, ".skein/studies/", model, "/", study, "/shared");
             shell(str("rm -rf ", shell_quoted(share.dir)));
@@ -325,7 +356,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
             return 1;
         }
         var program: u8[>..] = [];
-        write_program(lane, case_dir, share, program);
+        if !write_program(lane, case_dir, share, program) { return 1; }
         let source = str(build_dir, "/main.goose");
         let exe = str(build_dir, "/", model);
         if !write_file(source, program) {

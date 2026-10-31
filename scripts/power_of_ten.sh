@@ -93,6 +93,11 @@ shells_laminate_ply|laminate_ply: t, e1, e2, g12, g13 and g23 > 0
 shells_fix|fix: 0 <= n < node_count(), and 0 <= dof < 6
 shells_force|force: 0 <= n < node_count(), and 0 <= dof < 6
 shells_mesh_cylinder|mesh_cylinder: r > 0, x1 > x0, t1 > t0, nx, nt > 0, and 0 <= section < sections.len
+flow_mesh|mesh_from_arrays: each vertex of a triangle < xy.len / 2
+flow_fluid|fluid: density > 0, viscosity > 0 and a stabilize value
+flow_fix|fix_velocity: comp 0 or 1, and clear_bcs on a mesh
+flow_solve|solve_steady: clear_bcs, and rtol > 0
+flow_value|value_at: a value, and a solve
 solvers_multiply|multiply: row_start has y.len + 1 entries, col and val one size, x and y one size
 solvers_ilu0_apply|ilu0_apply: row_start has r.len + 1 entries, z and diag r.len, lu col.len
 CALLS

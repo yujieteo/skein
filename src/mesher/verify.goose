@@ -21,6 +21,7 @@ import .quality;
 import .tri;
 import .tet;
 import .grid;
+import .sweep;
 
 let VERIFY_USAGE = "usage: skein verify <file.skn>\n";
 
@@ -395,16 +396,11 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     if cell == grid {
         var planes: i64[>..] = [];
         for v in let_values { written_boxes(v, planes); }
-        done = mesh_grid(g.g, dim, size, planes[..]);
-        if !done {
-            reader_fault(syntax::nodes[region].tok,
-                         str("the mesher makes ", grid, " cells only on a union of ", if dim == 3 { "boxes" } else { "rects" }),
-                         str("write cell: ", if dim == 3 { "tet" } else { "tri" }));
-        }
+        done = mesh_cells(g.g, dim, size, planes[..]);
     } else {
         done = if dim == 3 { mesh_3d(g.g, size) } else { mesh_2d(g.g, size) };
-        if !done { reader_fault(syntax::nodes[n].tok, "the mesher did not finish in its budget of points", "give a larger size"); }
     }
+    if !done { reader_fault(syntax::nodes[n].tok, "the mesher did not finish in its budget of points", "give a larger size"); }
     var r = MeshRecord { name: [], cell: [], size: size, g: g.g, q: mesh_quality() };
     r.name.append(node_text(n));
     r.cell.append(cell);

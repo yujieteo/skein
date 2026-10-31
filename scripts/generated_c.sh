@@ -32,8 +32,12 @@ examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/scordelis_lo_roof.skn
+examples/flow/cavity_coarse.skn
+examples/flow/poiseuille_stokes.skn
 examples/lame_profile.skn
 examples/shells/thin_cylinder_shell.skn
+samples/02_cavity.skn
+samples/06_cylinder_sweep.skn
 "
 
 # The Goose that wrote the committed C.

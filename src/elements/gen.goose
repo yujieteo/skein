@@ -24,7 +24,7 @@ import math;
 namespace elements_gen;
 import syntax from "../syntax";
 import codegen.codegen;
-import mesher.verify;   // the reader of the geometry, and its shapes
+import mesher from "../mesher";   // the reader of the geometry, and its shapes
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }

@@ -14,21 +14,26 @@ import .mesh;
 // Appends the lo and hi corners of each box of shape g to `out`, 6 numbers
 // for each box (z = 0 for a rect). False if g is not a union of boxes or of
 // rects.
-recursive fn box_union(g: i64, out: f64[>..]&) -> bool {
-    let s = shapes[g];
-    if s.kind == UNION { return box_union(s.a, out) && box_union(s.b, out); }
-    if s.kind == BOX {
-        for i in 6 { out.push(s.p[i]); }
-        return true;
+fn box_union(g: i64, out: f64[>..]&) -> bool {
+    var todo: i64[>..] = [g];
+    while todo.len > 0 {
+        let s = shapes[todo[todo.len - 1]];
+        todo.pop();
+        if s.kind == UNION {
+            todo.push(s.b);
+            todo.push(s.a);
+        } else if s.kind == BOX {
+            for i in 6 { out.push(s.p[i]); }
+        } else if s.kind == RECT {
+            for i in [0, 1] { out.push(s.p[i]); }
+            out.push(0.0);
+            for i in [2, 3] { out.push(s.p[i]); }
+            out.push(0.0);
+        } else {
+            return false;
+        }
     }
-    if s.kind == RECT {
-        for i in [0, 1] { out.push(s.p[i]); }
-        out.push(0.0);
-        for i in [2, 3] { out.push(s.p[i]); }
-        out.push(0.0);
-        return true;
-    }
-    return false;
+    return true;
 }
 
 // The grid lines along axis a, from lo to hi: the planes of `boxes` in
@@ -65,13 +70,21 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
         var extra: f64[>..] = [];
         if box_union(s, extra) { for p in extra { boxes.push(p); } }
     }
+    fill_lattice(g, dim, size, boxes[..], region[..]);
+    return true;
+}
+
+// The grid lines of the planes of `boxes` in the bounds of g, and a cell
+// of the lattice where its centre is in a box of `region`, or where φ of g
+// is negative at its centre if `region` is empty.
+fn fill_lattice(g: i64, dim: i64, size: f64, boxes: f64[:], region: f64[:]) {
     let b = bounds(g);
     var lx: f64[>..] = [];
     var ly: f64[>..] = [];
     var lz: f64[>..] = [0.0];
-    grid_lines(boxes[..], 0, b[0], b[3], size, lx);
-    grid_lines(boxes[..], 1, b[1], b[4], size, ly);
-    if dim == 3 { grid_lines(boxes[..], 2, b[2], b[5], size, lz); }
+    grid_lines(boxes, 0, b[0], b[3], size, lx);
+    grid_lines(boxes, 1, b[1], b[4], size, ly);
+    if dim == 3 { grid_lines(boxes, 2, b[2], b[5], size, lz); }
     let nx = lx.len;
     let ny = ly.len;
     let nz = lz.len;
@@ -84,6 +97,7 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
         return ids[at];
     }
     fn inside(x: f64[3]) -> bool {
+        if region.len == 0 { return phi(g, x[0], x[1], x[2]) < 0.0; }
         for r in region.len / 6 {
             var all = true;
             for a in dim {
@@ -111,5 +125,4 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
             }
         }
     }
-    return true;
 }

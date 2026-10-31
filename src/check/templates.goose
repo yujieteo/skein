@@ -4,9 +4,9 @@
 //
 // `linear_elastic`, `reissner_mindlin` and `timoshenko` have their source in
 // the spec (§4.2, §4.3). `heat` is the steady conduction that src/elements
-// solves. `navier_stokes` is the source of this checker: the incompressible
-// Newtonian equations of sample 02. The other templates of spec §4.2 come
-// with their solvers.
+// solves. `navier_stokes` and `stokes` are the incompressible Newtonian
+// equations that src/flow solves. `stokes` has no convection term. The
+// other templates of spec §4.2 come with their solvers.
 import std;
 namespace check;
 
@@ -31,6 +31,13 @@ let STD_SOURCE = """
         assume incompressible, newtonian, laminar
         let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
         eq rho*(ddt(v) + grad(v)*v) - div(sigma) = f
+        eq div(v) = 0
+    }
+
+    template physics stokes(f: Vector<Force/Volume> = 0) solves v: Vector<Velocity>, p: Pressure {
+        assume incompressible, newtonian, laminar
+        let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+        eq rho*ddt(v) - div(sigma) = f
         eq div(v) = 0
     }
 

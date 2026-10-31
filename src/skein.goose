@@ -12,6 +12,7 @@ import md from "./md";
 import mesher.verify;   // mesher lane: skein verify
 import mesher.lint;     // skein lint, with the rules that need the mesh
 import mesher.stl;      // skein export
+import mesher from "./mesher";   // skein-flow: skein run meshes a flow model
 import runtime from "./runtime";   // mesher lane: the mesh type of the mesher
 import solvers from "./solvers";   // the runtime imports it
 

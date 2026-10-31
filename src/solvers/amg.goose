@@ -88,8 +88,8 @@ fn push_level(n: i64, rs: i64[:], col: i32[:], val: f64[:]) {
     amg_levels = amg_n.len;
 }
 
-// The aggregate of each node of level l, and the count of aggregates.
-fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
+// The strong neighbours of each node of level l: adj[adj_start[i]..adj_start[i + 1]].
+fn strong_graph(l: i64, bs: i64) -> i64[>..], i64[>..] {
     let rs = level_rs(l);
     let col = level_col(l);
     let val = level_val(l);
@@ -142,6 +142,13 @@ fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
         }
         adj_start.push(adj.len);
     }
+    return adj_start, adj;
+}
+
+// The aggregate of each node of level l, and the count of aggregates.
+fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
+    let nodes = amg_n[l] / bs;
+    let adj_start, adj = strong_graph(l, bs);
     var agg: i64[>..] = [];
     for i in nodes { agg.push(-1); }
     var count = 0;
@@ -281,10 +288,7 @@ fn factor_last() -> bool {
     return true;
 }
 
-// Builds the levels for the matrix (row_start, col, val) with dofs in
-// blocks of `bs`. False if the last level is not positive definite.
-fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
-    guard bs >= 1 && row_start.len >= 2 && (row_start.len - 1) % bs == 0 && col.len == val.len else { abort("amg_setup: a CSR matrix with the dofs in blocks"); }
+fn clear_levels() {
     amg_levels = 0;
     amg_n.clear();
     amg_rs.clear();
@@ -302,6 +306,13 @@ fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
     amg_res.clear();
     amg_diag.clear();
     amg_v_at.clear();
+}
+
+// Builds the levels for the matrix (row_start, col, val) with dofs in
+// blocks of `bs`. False if the last level is not positive definite.
+fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
+    guard bs >= 1 && row_start.len >= 2 && (row_start.len - 1) % bs == 0 && col.len == val.len else { abort("amg_setup: a CSR matrix with the dofs in blocks"); }
+    clear_levels();
     push_level(row_start.len - 1, row_start, col, val);
     var p0rs: i64[>..] = [];
     var p0col: i32[>..] = [];

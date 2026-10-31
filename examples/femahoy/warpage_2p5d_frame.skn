@@ -1,8 +1,7 @@
 // femahoy: validation/cases/warpage-2p5d-frame/job.inp
-// blocked-by: G36
 // 1/4 of a 2.5D package with a metal frame (Tsai, Wang and Liu 2021). It
 // cools from the stress-free 140 degC to 60 degC. Linear thermoelastic, 3D,
-// quadratic tetrahedra. The reference is the moire warpage of the substrate
+// serendipity hexahedra. The reference is the moire warpage of the substrate
 // corner: -0.162 mm, within 13 %.
 
 model warpage_2p5d_frame: 3d, mm_N_MPa_s
@@ -86,11 +85,11 @@ material glue {
     alpha: Expansion = 170e-6 K^-1
 }
 
-// gap G36: femahoy uses a C3D20R tensor grid through each layer. The sloped faces of
-// the UF2 fillet are not faces of a box, so the Skein grid cannot mesh the package.
+// The C3D20R of femahoy: a grid through each layer, of serendipity hexahedra with
+// reduced integration. The grid maps onto the sloped faces of the UF2 fillet.
 mesh m on package {
     size: 1 mm
-    cell: tet
+    cell: hex
     refine uf2 | interposer | uf1 | adh: 0.04 mm
 }
 
@@ -106,6 +105,8 @@ physics solid on package solves u: Vector<Length> {
     let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) - alpha*(T_use - T_free)*I)
     eq div(sigma) = 0
 }
+
+method solid: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }
 
 step cool: static {
     bc sym_x: u.x = 0

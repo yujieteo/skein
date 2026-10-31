@@ -1,5 +1,5 @@
 // femahoy: validation/cases/taylor-bar-impact/job.inp
-// blocked-by: G22 G36
+// blocked-by: G22
 // Taylor bar: a copper bar (radius 3.2 mm, length 32.4 mm) hits a rigid frictionless wall at
 // 227 m/s. Large strains, J2 plasticity with linear hardening, explicit time steps. A quarter
 // of the bar. References (DYNA3D) at 80 us: length 21.66 mm, mushroom radius 7.02 mm.
@@ -28,11 +28,10 @@ material copper {
     Hk: Pressure = 100 MPa
 }
 
-// gap G36: hex cells need a union of boxes, so the bar uses tetrahedra. ccx uses C3D8R:
-// order: 1 and quadrature: reduced on hex cells.
+// The C3D8R of ccx: order-1 hexahedra with reduced integration, swept along the bar.
 mesh m on rod {
     size: 0.8 mm
-    cell: tet
+    cell: hex
     refine wall: 0.33 mm
 }
 
@@ -52,6 +51,8 @@ physics impact on rod solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0
     eq ddt(u) - v = 0
     eq rho*ddt(v) - div(defgrad(u)*S) = 0
 }
+
+method impact: cg { mesh: m, order: 1, quadrature: reduced }
 
 // The wall holds v.z = 0 and lets the face slide in x and y.
 bc symx: v.x = 0
