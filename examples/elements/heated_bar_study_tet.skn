@@ -1,0 +1,57 @@
+// The heated bar of heated_bar_tet.skn, with the length of the bar and the
+// heat source as params. The study lengths varies the length. The ends are
+// adiabatic, so the centre temperature does not change with the length:
+// the expect holds in each case. The heat out of the sides grows with the
+// length. The study sources varies only the source, so its cases share
+// one mesh (spec §20.4). The expect holds only for the default source. The
+// study bands varies only the tolerance of the expect, so its cases share
+// the mesh and the solution, and the model solves once.
+
+model heated_bar_study_tet: 3d, SI
+
+param lx: Length = 0.005 m in 0.004 m..0.01 m
+let a: Length = 0.02 m
+param qv: Power/Volume = 1e7 W/m^3
+param band: Temperature = 0.0147 K
+
+scales a, 100 K, 20 W/(m*K)
+
+let bar: Solid = box((0, 0, 0) m, (lx, a, a))
+let sides: Surface = boundary(bar, y == 0 m || y == a || z == 0 m || z == a)
+
+material steel {
+    k: Conductivity = 20 W/(m*K)
+}
+
+mesh m on bar {
+    size: 0.00125 m
+    cell: tet
+}
+
+physics thermal on bar solves T: Temperature {
+    material steel
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = qv
+}
+
+method thermal: cg { mesh: m, order: 2 }
+
+step steady: static {
+    bc sides: T = 0 degC
+    output T
+    report heat_out = reaction(sides)
+}
+
+study lengths: grid {
+    lx: [0.005, 0.0075, 0.01] m
+}
+
+study sources: grid {
+    qv: [1e7, 2e7] W/m^3
+}
+
+study bands: grid {
+    band: [0.0147, 1e-12] K
+}
+
+expect centre: T at (0.0025, 0.01, 0.01) m == 14.734270656 degC within band

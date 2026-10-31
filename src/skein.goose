@@ -22,7 +22,7 @@ let USAGE = """
       fmt     rewrite files in the standard layout
       help    print this text (help std: the standard library, help --llm: the language card)
       lint    check a model, then give the lint warnings
-      run     build and run a model (linear static or steady heat: a box, a quarter of a tube, a plate with a hole or a cylindrical shell)
+      run     build and run a model (linear static or steady heat: a box, a quarter of a tube, a plate with a hole or a cylindrical shell; --study: each case of a study)
       md      write a model as a Markdown document
       verify  check a model, mesh it and report mesh_quality
     """;

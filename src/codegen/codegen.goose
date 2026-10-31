@@ -31,6 +31,12 @@ fn name(n: i64) -> const u8[:] { syntax::text(syntax::nodes[n].tok) }
 
 // The source text of node `n` and its children.
 fn source_of(n: i64) -> const u8[:] {
+    let lo, hi = source_span(n);
+    return syntax::source[lo..hi];
+}
+
+// The offsets in `syntax::source` of the text of `source_of(n)`.
+fn source_span(n: i64) -> i64, i64 {
     var lo = syntax::tokens[tok(n)].start;
     var hi = lo;
     span(n, lo, hi);
@@ -59,7 +65,7 @@ fn source_of(n: i64) -> const u8[:] {
         hi = e + 1;
         opens--;
     }
-    return syntax::source[lo..hi];
+    return lo, hi;
 }
 
 recursive fn span(n: i64, lo: i64&, hi: i64&) {
@@ -69,6 +75,12 @@ recursive fn span(n: i64, lo: i64&, hi: i64&) {
     if syntax::nodes[n].aux >= 0 && kind(n) != syntax::N_DIM_POW && kind(n) != syntax::N_UNIT_POW {
         let a = syntax::tokens[syntax::nodes[n].aux];
         if a.start + a.len > hi { hi = a.start + a.len; }
+    }
+    // The exponent of a power makes no node: a number, or `-` and one, after the `^`.
+    if kind(n) == syntax::N_DIM_POW || kind(n) == syntax::N_UNIT_POW {
+        let e = if syntax::tokens[tok(n) + 1].kind == syntax::TK_MINUS { tok(n) + 2 } else { tok(n) + 1 };
+        let x = syntax::tokens[e];
+        if x.start + x.len > hi { hi = x.start + x.len; }
     }
     var c = syntax::nodes[n].first;
     while c >= 0 {
@@ -1140,7 +1152,7 @@ fn read(prog: i64) -> bool {
             step(c);
         } else if k == syntax::N_EXPECT {
             expect(c);
-        } else if k != syntax::N_SCALES && k != syntax::N_USE {
+        } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this slice"),
                         "remove it: this slice runs one linear static box");
         }
@@ -1326,6 +1338,33 @@ fn quoted(out: u8[>..]&, s: u8[:]) {
     out.push('"');
 }
 
+// What a case of a study shares with case 1 (spec §20.4). Case 1 writes
+// its first `stages` stages in `dir`, and each other case (`reads`) reads
+// them in place of their work. Stage 1 is the mesh. Stage 2 is the solve of
+// each step, so a case that reads it runs only the post-processing.
+struct Share {
+    dir: u8[..1024],
+    stages: i64,
+    reads: bool,
+}
+
+fn no_share() -> Share { return Share { dir: [], stages: 0, reads: false }; }
+
+// The call `call(dir)`, or `call(dir, step)` when `step` is not empty, of a
+// case that shares stages, made only when the condition `when` holds. The
+// case stops when the call fails.
+fn emit_share(out: u8[>..]&, when: u8[:], call: u8[:], share: Share, step: u8[:]) {
+    format(out, "    if ", when, "!", call, "(");
+    quoted(out, share.dir);
+    if step.len > 0 {
+        out.append(", ");
+        quoted(out, step);
+    }
+    out.append(") {\n        write_stderr(");
+    quoted(out, str("skein run: cannot share the stages of case 1 in '", share.dir, "'"));
+    out.append(");\n        write_stderr(\"\\n\");\n        exit(1);\n    }\n");
+}
+
 // The part of the generated program that is the same for each model.
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
@@ -1338,6 +1377,7 @@ let PRELUDE = """
     var results: u8[>..] = [];
     var result_count = 0;
     var failed = false;
+    var converged = false;
 
     // Appends `s` as a TOON value, in quotes when it needs them.
     fn toon(into: u8[>..]&, s: u8[:]) {
@@ -1404,7 +1444,7 @@ let PRELUDE = """
 
     fn solve(step: u8[:], solver: u8[:], preconditioner: u8[:]) {
         runtime::linear_solver(solver, preconditioner);
-        let converged = runtime::solve_static();
+        converged = runtime::solve_static();
         format(solves, "  ", step, ",", runtime::dof_count(), ",", runtime::cg_iterations(), ",",
                runtime::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
@@ -1516,10 +1556,35 @@ fn reaction_parts(mask: i64) -> u8[>..] {
     return out;
 }
 
-fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
+fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: Share) {
     let s = steps[si];
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
+    if share.stages >= 2 && share.reads {
+        emit_share(out, "", "runtime::read_solution", share, s.name);
+    } else {
+        emit_solve(out, si, share);
+    }
+    // The reaction on all fixed dofs, each once, for the check `equilibrium`.
+    out.append("    let rx, ry, rz = runtime::total_reaction();\n");
+    emit_largest_load(out, si);
+    format(out, "    equilibrium(rx, ry, rz, largest, \"", system.force, "\");\n");
+    for r in reports[s.first_report..s.first_report + s.report_count] {
+        emit_report(out, si, r);
+    }
+    if s.output {
+        var path: u8[>..] = [];
+        format(path, results_dir, "/", s.name, ".vtu");
+        out.append("    output(");
+        quoted(out, path);
+        out.append(");\n");
+    }
+    out.append("}\n\n");
+}
+
+// The supports and the loads of step `si`, and its solve.
+fn emit_solve(out: u8[>..]&, si: i64, share: Share) {
+    let s = steps[si];
     if si > 0 {
         out.append("    // The supports of the first step stay.\n");
         out.append("    runtime::clear_loads();\n");
@@ -1548,21 +1613,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append(", ");
     quoted(out, s.preconditioner);
     out.append(");\n");
-    // The reaction on all fixed dofs, each once, for the check `equilibrium`.
-    out.append("    let rx, ry, rz = runtime::total_reaction();\n");
-    emit_largest_load(out, si);
-    format(out, "    equilibrium(rx, ry, rz, largest, \"", system.force, "\");\n");
-    for r in reports[s.first_report..s.first_report + s.report_count] {
-        emit_report(out, si, r);
-    }
-    if s.output {
-        var path: u8[>..] = [];
-        format(path, results_dir, "/", s.name, ".vtu");
-        out.append("    output(");
-        quoted(out, path);
-        out.append(");\n");
-    }
-    out.append("}\n\n");
+    if share.stages >= 2 { emit_share(out, "converged && ", "runtime::write_solution", share, s.name); }
 }
 
 fn emit_point(out: u8[>..]&, at: f64[3]) {
@@ -1657,8 +1708,8 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 
 // Writes the Goose program of the model that `read` read. The program
 // imports the runtime from `runtime_path` and writes its VTU files under
-// `results_dir`.
-fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
+// `results_dir`. In a study, it writes or reads the stages of `share`.
+fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", model_name, ". Do not edit it: edit the model.\n");
     format(out, "// All values are in the units of the model: length in ", system.length, ", force in ",
            system.force, ".\n");
@@ -1672,18 +1723,23 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append(PRELUDE);
     for si in 0..steps.len {
         if steps[si].procedure == CORE {
-            emit_step(out, si, results_dir);
+            emit_step(out, si, results_dir, share);
         } else {
             emit_procedure(out, steps[si].procedure, si, results_dir);
         }
     }
     out.append("fn main() {\n");
-    if mesh_lane == MESHER {
-        mesher_emit(out);
-    } else if mesh_lane == SHELLS {
-        shells_emit_mesh(out);
-    } else if !elements_emit_mesh(out) {
-        emit_core_mesh(out);
+    if share.stages >= 1 && share.reads {
+        emit_share(out, "", "runtime::read_mesh", share, "");
+    } else {
+        if mesh_lane == MESHER {
+            mesher_emit(out);
+        } else if mesh_lane == SHELLS {
+            shells_emit_mesh(out);
+        } else if !elements_emit_mesh(out) {
+            emit_core_mesh(out);
+        }
+        if share.stages >= 1 { emit_share(out, "", "runtime::write_mesh", share, ""); }
     }
     if template == CORE {
         format(out, "    // material ", material_name, "\n    runtime::material(");
@@ -1704,6 +1760,18 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append("    print_records();\n");
     out.append("    if failed { exit(1); }\n");
     out.append("}\n");
+}
+
+// The dofs of the mesh of the model that `read` read: 3 at each node of
+// the lattice of 27-node hexahedra (emit_core_mesh).
+fn dof_estimate() -> i64 {
+    var nodes = 1;
+    for j in 0..3 {
+        var length = domain.hi[j] - domain.lo[j];
+        if domain.kind == SECTOR && j == 1 { length *= domain.hi[0]; }
+        nodes *= 2 * max(ceil(length / mesh_size - 1.0e-9) as! i64, 1) + 1;
+    }
+    return 3 * nodes;
 }
 
 // The box or the sector of the domain, by the lattice mesher.

@@ -67,6 +67,40 @@ fn mesh_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, z
     build_annulus(cx, cy, r0, r1, t0, t1, z0, z1, nr, nt, nz);
 }
 
+// Writes the mesh and its named sets in the directory `dir`, for the
+// other cases of a study that share it (spec §20.4). False if it cannot
+// write a file.
+fn write_mesh(dir: const u8[:]) -> bool { return save_mesh(dir); }
+
+// Reads the mesh that `write_mesh` wrote in `dir`, in place of a mesh call.
+// Clears the state as `mesh_box` does. False if it cannot read it.
+fn read_mesh(dir: const u8[:]) -> bool {
+    guard load_mesh(dir) else { return false; };
+    young = 0.0;
+    poisson = 0.0;
+    clear_dofs();
+    return true;
+}
+
+// Writes the solved state of step `step` in the directory `dir`: the
+// supports, the loads, the matrix and the solution, for the other cases of
+// a study that run only the post-processing (spec §20.4). False if it
+// cannot write a file.
+fn write_solution(dir: const u8[:], step: const u8[:]) -> bool {
+    return save_array(dir, str(step, ".fixed"), fixed) && save_array(dir, str(step, ".load"), load) &&
+           save_array(dir, str(step, ".disp"), disp) && save_array(dir, str(step, ".row_start"), row_start) &&
+           save_array(dir, str(step, ".col"), col) && save_array(dir, str(step, ".val"), val);
+}
+
+// Reads the solved state that `write_solution` wrote for step `step`, in
+// place of the supports, the loads and the solve of the step. False if it
+// cannot read it.
+fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
+    return load_array(dir, str(step, ".fixed"), fixed) && load_array(dir, str(step, ".load"), load) &&
+           load_array(dir, str(step, ".disp"), disp) && load_array(dir, str(step, ".row_start"), row_start) &&
+           load_array(dir, str(step, ".col"), col) && load_array(dir, str(step, ".val"), val);
+}
+
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
     return max(ceil(length / size - 1.0e-9) as i64, 1);
