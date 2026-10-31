@@ -171,7 +171,7 @@ fn write_step(out: u8[>..]&, name: u8[:], tris: f64[3][:]) {
            "#34=SHAPE_DEFINITION_REPRESENTATION(#8,#33);\nENDSEC;\nEND-ISO-10303-21;\n");
 }
 
-// `skein export`, with the STL in `out`. The result is the exit status
+// `skein export`, with the STL or STEP file in `out`. The result is the exit status
 // (command_line.md §10). A fault of the model goes to standard error.
 fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
     // The index in args of the file, of the geometry and of the size.

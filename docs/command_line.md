@@ -323,7 +323,7 @@ skein export samples/01_cantilever.skn --geometry beam --format stl
 
 `export` writes one `let` shape as an STL file, or as a tessellated STEP AP242 file with `--format step` (spec §22). It needs
 no solve. It checks the model, meshes the `let` shape that `--geometry`
-names, and writes the STL to standard output:
+names, and writes the file to standard output:
 
 ```
 skein export samples/01_cantilever.skn --geometry beam > beam.stl
