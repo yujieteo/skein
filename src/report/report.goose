@@ -492,6 +492,40 @@ fn put(doc: u8[>..]&, mark: u8[:], with: u8[:]) {
     doc.append(out);
 }
 
+// The token classes of the source, as [line, column, length, class] for the
+// coloured source pane: k keyword, n number, s string, u unit, t type. A
+// unit is a unit name after a number. A type is a name that starts with a
+// capital letter after `:` or `<`.
+fn token_classes(out: u8[>..]&) {
+    out.append("[");
+    var first = true;
+    var prev = -1;
+    for i in 0..syntax::tokens.len {
+        let t = syntax::tokens[i];
+        let kind = t.kind;
+        var class = "";
+        if t.file == 0 {
+            if kind >= syntax::KW_ALLOW { class = "k"; }
+            else if kind == syntax::TK_NUMBER || kind == syntax::TK_PERCENT { class = "n"; }
+            else if kind == syntax::TK_STRING { class = "s"; }
+            else if kind == syntax::TK_IDENT {
+                let word = syntax::text(i);
+                if (prev == syntax::TK_NUMBER || prev == syntax::TK_PERCENT) && syntax::is_unit_name(word) { class = "u"; }
+                else if (prev == syntax::TK_COLON || prev == syntax::TK_LANGLE) && word[0] >= 'A' && word[0] <= 'Z' { class = "t"; }
+            }
+        }
+        if kind != syntax::TK_COMMENT && kind != syntax::TK_DOC_COMMENT { prev = kind; }
+        if class.len == 0 { continue; }
+        var chars = 0;
+        for k in 0..t.len {
+            if (syntax::source[t.start + k] & 0xC0) != 0x80 { chars++; }
+        }
+        format(out, if first { "" } else { "," }, "[", t.line, ",", t.col - 1, ",", chars, ",\"", class, "\"]");
+        first = false;
+    }
+    out.append("]");
+}
+
 // `skein report`. `args` are the words after `report`. It gives the exit
 // status (command_line.md §10).
 fn run(args: const u8[:][:]) -> i64 {
@@ -531,6 +565,8 @@ fn run(args: const u8[:][:]) -> i64 {
     check::check_text(path, text);
     if check::error_count() > 0 { return check::finish(false); }
     let model, first_study = names(syntax::parse_model(path, text));
+    var classes: u8[>..] = [];
+    token_classes(classes);
     if study.len == 0 { study.append(first_study); }
     if out_path.len == 0 { out_path.append(str(model, ".html")); }
     let work = str(".skein/report/", model);
@@ -542,6 +578,7 @@ fn run(args: const u8[:][:]) -> i64 {
     json_field(json, "model", model);
     json_field(json, "file", path);
     json_field(json, "source", text);
+    format(json, "\"tokens\":", classes, ",");
     let status = run_model(path, model, study, work, no_run);
     if status > 1 { return status; }
     let dir = str(resource_dir(), "../src/report/");
@@ -551,13 +588,15 @@ fn run(args: const u8[:][:]) -> i64 {
         return 3;
     };
     put(html, "<!--title-->", model);
-    var css = text_of(str(dir, "viewer.css"));
+    // kowalski.css is the file of the site as it is. Its two font urls become data URIs.
+    var css = text_of(str(dir, "kowalski.css"));
+    css.append(text_of(str(dir, "viewer.css")));
     var inter: u8[>..] = [];
     base64::encode(inter, text_of(str(dir, "fonts/inter.woff2")));
-    put(css, "/*inter*/", inter);
+    put(css, "/fonts/inter.woff2", str("data:font/woff2;base64,", inter));
     var plex: u8[>..] = [];
     base64::encode(plex, text_of(str(dir, "fonts/ibm-plex-mono.woff2")));
-    put(css, "/*plex*/", plex);
+    put(css, "/fonts/ibm-plex-mono.woff2", str("data:font/woff2;base64,", plex));
     put(html, "/*css*/", css);
     put(html, "/*js*/", text_of(str(dir, "viewer.js")));
     put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs));

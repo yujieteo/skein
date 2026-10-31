@@ -489,18 +489,48 @@ The exit status is that of `run` (§10).
 The page has the look of the site teoyujie.org (its rule 6, `REQUIREMENTS.md`
 in the repository yujieteo/site), light only: a near-white background,
 16 px Inter for the text, IBM Plex Mono for the source, the tables and the
-legend, quiet underlined links, and the buttons and the press, ease and
-focus rules of `public/shared/kowalski.css`. Hover styles apply only under
-`(hover: hover) and (pointer: fine)`. There are no themes and no dark mode.
+legend, quiet underlined links. There are no themes and no dark mode.
 Reason: the captain asked on 2026-10-31 that the HTML reports obey the same
 principles as his website.
+
+`src/report/kowalski.css` is the file `public/shared/kowalski.css` of the site
+as it is. `report` puts it before `viewer.css` in the page. It has the tokens,
+the `.button` look of Sonner, the press (`scale(0.97)`, 150 ms), the ease-out
+curve, the focus ring, the disabled look, the tap area of 44 px, the touch
+baseline and the reduced-motion rule. Each rule has its source link in that
+file (the skills repository of Emil Kowalski, Sonner, animations.dev,
+aiforui.dev). Hover styles apply only under `(hover: hover) and (pointer:
+fine)`. Reason: the captain asked on 2026-10-31 that the controls be exactly
+those of Emil Kowalski and of the site. Every button of the report (`auto`,
+`fit`, `Open VTU`, the chips of the source) is a `.button`. The file input is
+hidden and its label is a `.button`. The selects, the number input, the range
+slider and the checkboxes take the rules of the site tool
+`public/play/neurons/style.css`: the `--chip` fill, the `--line` border, the
+44 px height, 16 px text, `accent-color` and the outline of 2 px in `--accent`.
+
+The code colours are those of the code blocks of emilkowal.ski, which use the
+Shiki theme `github-light` (read from the computed styles of
+https://emilkowal.ski/ui/building-a-toast-component): keywords `#d73a49`,
+numbers `#005cc5`, strings `#032f62`, types `#6f42c1`, units `#e36209`,
+comments `#6a737d`. Pass is `#22863a` and fail is `#d73a49` of the same theme.
+`report` takes the token classes from the lexer of the compiler
+(`token_classes` in `report.goose`), not from a regex. Reason: the captain
+asked that the colour coding of Skein code match Kowalski's recommendations.
+He publishes no other recommendation: the colours above are those of his site.
+
+The terminal has no colour. Reason: Emil Kowalski publishes no guidance on
+terminal colours (checked on his site, his skills repository, aiforui.dev,
+Sonner), and the CLI prints only TOON, which stays plain for the tools that
+read it.
+
+The report is one template for every model: no model name is in `page.html`,
+`viewer.css`, `viewer.js` or `report.goose`.
 
 The two panes keep their layout, and the column of 692 px does not apply.
 Reason: the source and the viewer are side by side, and one column of 692 px
 has no room for both. The flash that marks the target of a jump lasts 1.6 s,
 not under 300 ms. Reason: the eye must find the line after the scroll.
-The colours of the contour bar and of pass and fail are data, so they
-stay.
+The colours of the contour bar are data, so they stay.
 
 The two fonts are in `src/report/fonts/` with their SIL OFL 1.1 licence
 files. `report` writes them into the file as woff2 in base64, so the file

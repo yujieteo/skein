@@ -1,29 +1,12 @@
-/* The look of the site teoyujie.org, light only (docs/command_line.md §12.1). The tokens and the
-   interaction rules are those of the site file public/shared/kowalski.css, cut to what the page uses.
-   The layout of two panes is the layout of the report and has no column of 692 px. */
-@font-face { font-family: "Inter"; src: url("data:font/woff2;base64,/*inter*/") format("woff2"); font-weight: 100 900; font-display: block; }
-@font-face { font-family: "IBM Plex Mono"; src: url("data:font/woff2;base64,/*plex*/") format("woff2"); font-weight: 400; font-display: block; }
-/* Arial with the metrics of Inter, so the text does not move if Inter fails to load. */
-@font-face { font-family: "Inter Fallback"; src: local("Arial"); size-adjust: 107.12%; ascent-override: 90.44%; descent-override: 22.52%; line-gap-override: 0%; }
-:root {
-  --bg: #fdfdfc; --fg: #21201c; --muted: #63635e; --line: #e9e9e7; --select: #e2e1de;
-  --underline: #bcbbb5; --underline-hover: #8d8d86;
-  --panel: #ffffff; --stage: #f9f9f8; --code: #f9f9f8;
-  --gray1: #fcfcfc; --gray2: #f8f8f8; --gray3: #f3f3f3; --gray4: #ededed; --gray7: #dbdbdb;
-  --accent: var(--muted); --mark: var(--fg); --flash: #ececea;
-  --pass: #187a3a; --fail: #b3261e;
-  --sans: "Inter", "Inter Fallback", Arial, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
-  --text: 1rem; --small: 0.875rem; --code-size: 0.8125rem; --leading: 1.5; --radius: 6px;
-  --press: 0.97; --press-duration: 150ms; --fade-duration: 150ms; --tap: 44px;
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --focus-ring: 0 0 0 1px rgba(0,0,0,.06), 0 1px 0 0 rgba(0,0,0,.08), 0 2px 2px 0 rgba(0,0,0,.04), 0 3px 3px 0 rgba(0,0,0,.02),
-    0 4px 4px 0 rgba(0,0,0,.01), 0 0 0 2px rgba(0,0,0,.15);
-}
-* { box-sizing: border-box; outline-color: var(--muted); }
-::selection { background: var(--select); }
-html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: var(--text)/var(--leading) var(--sans); font-feature-settings: "liga" 1, "calt" 1, "cv01", "ss03";
-  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+/* The layout of the report. The tokens, the fonts, the base, the .button and the interaction rules are in
+   kowalski.css, the file of the site as it is (docs/command_line.md §12.1). The controls that it has no rule for
+   take the rules of the site tool public/play/neurons/style.css. The layout of two panes is the layout of the
+   report and has no column of 692 px. */
+:root { --stage: #f9f9f8; --flash: #ececea;
+  /* The colours of the code blocks of emilkowal.ski (Shiki github-light), read from the computed styles of
+     https://emilkowal.ski/ui/building-a-toast-component. Pass and fail use the green and the red of the same theme. */
+  --tk-keyword: #d73a49; --tk-number: #005cc5; --tk-string: #032f62; --tk-unit: #e36209; --tk-type: #6f42c1; --tk-comment: #6a737d;
+  --pass: #22863a; --fail: #d73a49; }
 header { padding: 16px 24px; border-bottom: 1px solid var(--line); }
 h1 { margin: 0 0 4px; font-size: var(--text); font-weight: 500; }
 h2 { font-size: var(--text); font-weight: 500; margin: 16px 0 8px; }
@@ -33,7 +16,7 @@ h3 { font-size: var(--text); font-weight: 500; margin: 12px 0 4px; }
 main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0; }
 @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
 #source-pane { border-right: 1px solid var(--line); padding: 0 0 0 24px; max-height: calc(100vh - 20px); overflow: auto; position: sticky; top: 0; }
-#source { margin: 0; font: var(--code-size)/var(--leading) var(--mono); background: var(--code); padding: 8px 0; }
+#source { margin: 0; font: var(--code)/var(--leading) var(--mono); background: var(--card); padding: 8px 0; }
 .src-line { white-space: pre-wrap; padding: 0 8px 0 0; display: flex; gap: 8px; }
 .src-line .ln { color: var(--muted); min-width: 3.2em; text-align: right; user-select: none; flex: none; }
 .src-line .code { flex: 1; }
@@ -41,35 +24,18 @@ main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap:
 /* The flash after a jump is the one animation over 300 ms: the eye must find the line after the scroll. */
 .src-line.flash, tr.flash { animation: flash 1.6s ease-out; }
 @keyframes flash { from { background: var(--flash); } to { background: transparent; } }
-.comment { color: var(--muted); }
-.doc { color: var(--muted); font-style: italic; }
-a { color: inherit; text-decoration: underline 0.08em var(--underline); text-underline-position: from-font; }
-a.region { text-decoration-style: dotted; }
-a.param { text-decoration-style: dotted; }
-@media (hover: hover) and (pointer: fine) { a:hover { text-decoration-color: var(--underline-hover); } }
+.comment { color: var(--tk-comment); }
+.tk-k { color: var(--tk-keyword); } .tk-n { color: var(--tk-number); } .tk-s { color: var(--tk-string); }
+.tk-u { color: var(--tk-unit); } .tk-t { color: var(--tk-type); }
+.doc { color: var(--tk-comment); font-style: italic; }
 .actions { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-button, select, input { font: inherit; color: inherit; }
-a, button, [role="button"], select, input { touch-action: manipulation; }
-button { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-button, select { margin: 0; padding: 2px 8px; background: var(--gray1); border: 1px solid var(--gray3); border-radius: var(--radius);
-  font: 500 var(--code-size)/var(--leading) var(--sans); cursor: pointer;
-  transition: transform var(--press-duration) var(--ease-out), background-color var(--fade-duration), border-color var(--fade-duration); }
-button { position: relative; }
-/* The hit area of 44 px is a layer over the control, out of the flow. */
-button::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, var(--tap)); height: max(100%, var(--tap)); transform: translate(-50%, -50%); }
-button:enabled:active { transform: scale(var(--press)); }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
-@media (hover: hover) and (pointer: fine) { button:hover:enabled, select:hover { background: var(--gray2); border-color: var(--gray4); } }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
-input[type="number"], input[type="text"] { background: var(--gray1); border: 1px solid var(--gray3); border-radius: var(--radius); padding: 2px 6px; }
-.chip { font-size: var(--small); padding: 0 8px; border-radius: 9px; }
 #view-pane { padding: 8px 24px 24px; min-width: 0; }
 #controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
 #stage { position: relative; height: min(62vh, 620px); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--stage); }
 #canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 #legend { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.85); padding: 6px 8px; border-radius: 4px; min-width: 220px; }
 #legend .bar { height: 10px; border-radius: 2px; background: linear-gradient(90deg, #30123b, #4662d7, #36aaf9, #1ae4b6, #72fe5e, #c8ef34, #faba39, #f66b19, #ca2a04, #7a0403); }
-#legend .ticks { display: flex; justify-content: space-between; font: var(--code-size)/var(--leading) var(--mono); gap: 6px; }
+#legend .ticks { display: flex; justify-content: space-between; font: var(--code)/var(--leading) var(--mono); gap: 6px; }
 #legend .legend-name { font-weight: 600; font-size: var(--small); }
 #probe { position: absolute; right: 10px; top: 10px; background: rgba(255,255,255,.9); padding: 6px 8px; border-radius: 4px; max-width: 46%; font-size: var(--small); }
 #probe:empty { display: none; }
@@ -79,11 +45,24 @@ input[type="number"], input[type="text"] { background: var(--gray1); border: 1px
 .table { margin: 4px 0 12px; overflow-x: auto; }
 table { border-collapse: collapse; font-size: var(--small); }
 th { font-weight: 500; }
-td { font-family: var(--mono); font-size: var(--code-size); }
+td { font-family: var(--mono); font-size: var(--code); }
 th, td { border-bottom: 1px solid var(--line); padding: 2px 8px; text-align: left; white-space: nowrap; }
 tr.current td { background: var(--select); }
 tr[data-case] { cursor: pointer; }
 .pass { color: var(--pass); font-weight: 600; }
 .fail { color: var(--fail); font-weight: 600; }
 .line-link { font-size: var(--small); text-decoration: none; }
-@media (prefers-reduced-motion: reduce) { :root { --press: 1; } }
+a.region, a.param { text-decoration-style: dotted; }
+.chip { margin-left: 4px; }
+/* inputs, as in public/play/neurons/style.css */
+a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+input, select { font: inherit; color: var(--ink); }
+select, input[type=number] { min-height: var(--tap); background: var(--chip); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 1rem; }
+input.num { width: 7rem; }
+input[type=range] { height: var(--tap); margin: 0; accent-color: var(--accent); }
+input[type=checkbox] { accent-color: var(--ink); }
+/* the file input is hidden and its label is a .button */
+label.file { display: inline-block; }
+label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label.file:focus-within { box-shadow: var(--focus-ring); }
+#controls label { display: inline-flex; align-items: center; gap: 8px; }
