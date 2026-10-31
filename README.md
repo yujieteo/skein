@@ -101,7 +101,7 @@ golden files again and read the diff:
 | `src/codegen/` | native code generation and study execution |
 | `src/runtime/` | hexahedron meshes, solid elements, solvers and VTU output |
 | `src/solvers/` | sparse matrices, ILU(0), GMRES and Newton |
-| `src/elements/` | triangle and tetrahedron elements for elasticity and heat |
+| `src/elements/` | triangle and tetrahedron elements for elasticity, heat and the complex wave equation of `harmonic` steps |
 | `src/mesher/` | geometry meshes, mesh checks, and STL and STEP export |
 | `src/shells/` | shell, beam and laminate solver routines, plus code generation for cylindrical shells |
 | `src/transient/` | transient heat solver routines |

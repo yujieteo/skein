@@ -1,5 +1,4 @@
 // femahoy: validation/cases/optics-mie-cylinder/res40/meep_case.py
-// blocked-by: G26
 // A plane wave of light (E along the axis, TM) scatters on a dielectric cylinder of radius a
 // and index 2 in air. The scattered field Ez solves the Helmholtz equation in 2D.
 // Reference: the series solution (Bohren and Huffman 1983): Q = 2.862930 at x = k*a = 1.
@@ -12,17 +11,20 @@ let a_c: Length = 1 um
 let c0: Velocity = 299792458 m/s
 let k0: Length^-1 = ka/a_c
 let f0: Frequency = k0*c0/(2*pi)
-let r_o: Length = 4.5 um
+let r_o: Length = 3.5 um
 let e0: Mass*Length/(Time^3*Current) = 1 V/m
 // The incident wave exp(-im*k0*x) along +x, for the time factor exp(im*omega*t).
 let e_inc: Complex<Mass*Length/(Time^3*Current)> = e0*(cos(k0*x) - im*sin(k0*x))
 
 scales a_c, c0, 1 V/m, 1 A
 
-let dom: Surface = circle((0, 0) um, r_o)
+// A square cell of 9 um of air round the rod, then a PML of 1 um, as in femahoy (meep).
+let dom: Surface = rect((-5.5, -5.5) um, (5.5, 5.5) um)
+let layer: Surface = dom - rect((-4.5, -4.5) um, (4.5, 4.5) um)
 let rod: Surface = circle((0, 0) um, a_c)
 let air: Surface = dom - rod
-let outer_face: Curve = boundary(dom)
+// The circle of radius r_o through which the scattered power flows out.
+let ring: Curve = boundary(circle((0, 0) um, r_o))
 
 material glass {
     eps_r: Real = 4
@@ -45,21 +47,20 @@ physics em on dom solves es: Complex<Mass*Length/(Time^3*Current)> {
 method em: cg {
     mesh: m
     order: 2
+    pml: { region: layer, thickness: 1 um }
 }
 
 step tone: harmonic(freq: [f0]) {
-    // gap G26: no PML. The first-order absorbing condition of Bayliss and Turkel for the
-    // outgoing scattered wave stands for the PML of femahoy.
-    bc outer_face: dot(grad(es), n) = -(im*k0 + 1/(2*r_o))*es
+    // Behind the PML, the default natural condition dot(grad(es), n) = 0.
     output es
 }
 
 // Q is the scattered power per length over 2*a_c times the incident intensity. With
 // H = curl(es)/(-im*omega*mu0), the outward power per area is
 // imag(es*conj(dot(grad(es), n)))/(2*omega*mu0), and the incident intensity is
-// e0^2/(2*mu0*c0). Thus Q = integral(imag(es*conj(dot(grad(es), n))), outer_face)/(2*k0*a_c*e0^2).
+// e0^2/(2*mu0*c0). Thus Q = integral(imag(es*conj(dot(grad(es), n))), ring)/(2*k0*a_c*e0^2).
 study spectrum: grid {
     ka: [1, 2, 2.5, 3]
-    expect q: integral(imag(es*conj(dot(grad(es), n))), outer_face)/(2*k0*a_c*e0^2) ==
+    expect q: integral(imag(es*conj(dot(grad(es), n))), ring)/(2*k0*a_c*e0^2) ==
         [2.862930, 4.293232, 3.613747, 2.582972] within 1%
 }

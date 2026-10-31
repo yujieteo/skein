@@ -1,0 +1,42 @@
+// One cell of 1 x 0.1 m of a periodic duct with a uniform source, on P2
+// triangles. The bloch group ties x = 1 m to x = 0 with the phase
+// exp(im*k*1 m) = im. The equation is p'' + kap^2*p = s with kap = 7/m and
+// s = 1 Pa/m^2. With P = s/kap^2, E = im and c = cos(kap) - E, the closed
+// form is p = P + A*cos(kap*x) + B*sin(kap*x), with
+// A = (E - 1)*P/(c + sin(kap)^2/c) and B = A*sin(kap)/c. At x = 0.3 m,
+// p = (0.0247168 - 0.0093576*im) Pa.
+
+model bloch_cell_tri: 2d, SI
+
+let kap: Length^-1 = 7 m^-1
+let s: Pressure/Length^2 = 1 Pa/m^2
+
+scales 1 m, 343 m/s, 1.2 kg/m^3
+
+let cell: Surface = rect((0, 0) m, (1, 0.1) m)
+let x0: Curve = boundary(cell, x == 0 m)
+let x1: Curve = boundary(cell, x == 1 m)
+
+material air {
+    c: Velocity = 343 m/s
+}
+
+mesh m on cell {
+    size: 25 mm
+    cell: tri
+}
+
+physics sound on cell solves p: Complex<Pressure> {
+    material air
+    eq div(grad(p)) + kap^2*p = s
+}
+
+method sound: cg { mesh: m, order: 2 }
+
+symmetry period: bloch { period: (1, 0) m, low: x0, high: x1, k: (pi/(2 m), 0 m^-1) }
+
+// The terms do not depend on the frequency.
+step tone: harmonic(freq: [1] Hz) {
+    expect real_part: re(p at (0.3, 0.05) m) == 0.0247168 Pa within 0.1%
+    expect imag_part: imag(p at (0.3, 0.05) m) == -0.0093576 Pa within 0.1%
+}

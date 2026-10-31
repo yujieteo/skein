@@ -1,5 +1,5 @@
 // femahoy: validation/cases/team7-eddy-current/50hz/case.pro
-// blocked-by: G26 G27
+// blocked-by: G27
 // TEAM problem 7: an aluminium plate with an off-centre hole under a coil with 50 Hz current.
 // Time-harmonic eddy currents with the vector potential a, E = -im*omega*a in the plate.
 // Reference: Bz on the line A1-B1 at omega*t = 0 and 90 deg (Fujiwara and Nakata 1990).
@@ -7,7 +7,6 @@
 model team7_eddy_current: 3d, SI
 
 let f0: Frequency = 50 Hz
-let omega: Frequency = 2*pi*f0
 let mu0: Mass*Length/(Time^2*Current^2) = 4*pi*1e-7 V*s/(A*m)
 let sigma_al: Current^2*Time^3/(Mass*Length^3) = 3.526e7 A/(V*m)
 let turns: Current = 2742 A
@@ -18,13 +17,16 @@ let xc: Length = 194 mm
 let yc: Length = 100 mm
 let bh: Length = 50 mm
 
-scales 294 mm, 1/omega, 100*gauss, turns
+scales 294 mm, 1/(2*pi*f0), 100*gauss, turns
 
 let plate: Solid = box((0, 0, 0) mm, (294, 294, 19) mm) - box((18, 18, -1) mm, (126, 126, 20) mm)
 /// The square of half side bh round (xc, yc), grown by r with round corners, from z = 49 mm to 149 mm.
 fn stadium(r: Length) -> Solid = box((xc - bh - r, yc - bh, 49 mm), (xc + bh + r, yc + bh, 149 mm)) | box((xc - bh, yc - bh - r, 49 mm), (xc + bh, yc + bh + r, 149 mm)) | pattern(pattern(cylinder((xc - bh, yc - bh, 49 mm), (0, 0, 1), r, 100 mm), (2*bh, 0 mm, 0 mm), 2), (0 mm, 2*bh, 0 mm), 2)
 let coil: Solid = stadium(50 mm) - stadium(25 mm)
-let world: Solid = sphere((147, 147, 74) mm, 0.45 m)
+// femahoy maps a shell from 0.35 m to 0.45 m round the centre to infinity. Here a PML of
+// 0.1 m round a box of half side 0.35 m absorbs the field.
+let world: Solid = box((-303, -303, -376) mm, (597, 597, 524) mm)
+let layer: Solid = world - box((-203, -203, -276) mm, (497, 497, 424) mm)
 let air: Solid = world - plate - coil
 let outer_face: Surface = boundary(world)
 let band: Solid = box((-6, 62, 26) mm, (294, 82, 42) mm)
@@ -72,11 +74,11 @@ method em: cg {
     mesh: m
     order: 1
     family: nedelec
+    pml: { region: layer, thickness: 0.1 m }
 }
 
 step ac: harmonic(freq: [f0]) {
-    // gap G26: no infinite region. femahoy maps a shell from 0.35 m to 0.45 m to infinity.
-    // Here a = 0 on the sphere of 0.45 m.
+    // a = 0 behind the PML.
     bc outer_face: a = 0
     output a, curl(a)
     report bz_36 = curl(a).z at (36, 72, 34) mm

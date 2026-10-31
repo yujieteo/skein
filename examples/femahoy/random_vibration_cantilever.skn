@@ -1,0 +1,189 @@
+// femahoy: validation/cases/random-vibration-cantilever/job.inp
+// A steel cantilever on a shaker: the base moves in z with a flat acceleration PSD of
+// 0.04 g^2/Hz from 20 to 2000 Hz, and each mode has the damping ratio 0.02. The check is the
+// RMS acceleration of the tip. Reference: the modal sum of the beam theory (40 modes, Blevins
+// 1979, Table 8-1) over the band, 400925.4 mm/s^2 (40.883 g).
+
+model random_vibration_cantilever: 3d, mm_N_MPa_s
+
+let L: Length = 100 mm
+let W: Length = 10 mm
+let H: Length = 5 mm
+let g: Acceleration = 9806.65 mm/s^2
+
+scales H, 210000 MPa, 7.85e-9 t/mm^3
+
+let beam: Solid = box((0, 0, 0) mm, (L, W, H))
+let fixed: Surface = boundary(beam, x == 0 mm)
+let tip: Surface = boundary(beam, x == L)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+    rho: Density = 7.85e-9 t/mm^3
+}
+
+mesh m on beam {
+    size: 2.5 mm
+    cell: tet
+}
+
+// u is the motion relative to the base, for a base acceleration g*exp(im*omega*t) in z. The
+// base acceleration gives the load -rho*g on each volume.
+physics solid on beam: linear_elastic(rho*(0, 0, -g)) solves u: Vector<Complex<Length>> {
+    material steel
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+bc fixed: u = 0
+
+// The frequencies are 20 Hz apart, and 2 Hz apart near mode 1 (419 Hz), where the response
+// has its peak of half width 0.02*419 Hz.
+step random: harmonic(
+    freq: [
+        20,
+        40,
+        60,
+        80,
+        100,
+        120,
+        140,
+        160,
+        180,
+        200,
+        220,
+        240,
+        260,
+        280,
+        300,
+        320,
+        340,
+        360,
+        380,
+        382,
+        384,
+        386,
+        388,
+        390,
+        392,
+        394,
+        396,
+        398,
+        400,
+        402,
+        404,
+        406,
+        408,
+        410,
+        412,
+        414,
+        416,
+        418,
+        420,
+        422,
+        424,
+        426,
+        428,
+        430,
+        432,
+        434,
+        436,
+        438,
+        440,
+        442,
+        444,
+        446,
+        448,
+        450,
+        452,
+        454,
+        456,
+        458,
+        460,
+        480,
+        500,
+        520,
+        540,
+        560,
+        580,
+        600,
+        620,
+        640,
+        660,
+        680,
+        700,
+        720,
+        740,
+        760,
+        780,
+        800,
+        820,
+        840,
+        860,
+        880,
+        900,
+        920,
+        940,
+        960,
+        980,
+        1000,
+        1020,
+        1040,
+        1060,
+        1080,
+        1100,
+        1120,
+        1140,
+        1160,
+        1180,
+        1200,
+        1220,
+        1240,
+        1260,
+        1280,
+        1300,
+        1320,
+        1340,
+        1360,
+        1380,
+        1400,
+        1420,
+        1440,
+        1460,
+        1480,
+        1500,
+        1520,
+        1540,
+        1560,
+        1580,
+        1600,
+        1620,
+        1640,
+        1660,
+        1680,
+        1700,
+        1720,
+        1740,
+        1760,
+        1780,
+        1800,
+        1820,
+        1840,
+        1860,
+        1880,
+        1900,
+        1920,
+        1940,
+        1960,
+        1980,
+        2000,
+    ] Hz,
+    damping: 0.02,
+) {
+    report a_tip = g - omega^2*mean(u.z, tip)
+}
+
+// The tip acceleration is g - omega^2*u.z for a base amplitude of g. Thus its RMS for the PSD
+// of the base acceleration 0.04 g^2/Hz is rms of it with the PSD 0.04/Hz.
+expect a_rms: rms(g - omega^2*mean(u.z, tip), 0.04/(1 Hz)) == 400925.4 mm/s^2 within 0.5%

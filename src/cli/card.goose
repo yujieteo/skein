@@ -20,7 +20,7 @@ let CARD = """
     - `//` starts a comment.
     - Declare a name before you use it. Steps run in file order.
     - Built-in names that a declaration may not use: `x`, `y`, `z`, `t`
-      (time), `n`, `I`, `pi`, `im`, and the built-in functions.
+      (time), `n`, `I`, `pi`, `im`, `omega`, and the built-in functions.
     - Indent by 4 spaces. A block is `{ ... }` with one entry on each line, or
       `{ a: 1, b: 2 }` on one line.
 

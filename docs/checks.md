@@ -148,6 +148,7 @@ in the file stays in the review.
 | `expect_form` | §15.3 | the two sides of an `expect` are not comparable | a field and a point value | `at` |
 | `eigenvalue_step` | §14.5 | `eigenvalue(k)` is not in a `report` or an `expect`, has no `modal` or `buckling` step, or `k` is outside `1..count` of the step | `report eigenvalue(1)` in a `static` step, `report eigenvalue(13)` in `modal(count: 12)` | a `modal` or `buckling` step, or a `k` in `1..count` |
 | `when_step` | §14.5 | `when(f, value)` is not in a `report` or an `expect` of a `transient` step, or in another `expect` whose last step is `transient` | `report when(front, 1 m)` in a `static` step | a `transient` step |
+| `rms_step` | §14.5 | `rms(f, psd)` is not in a `report` or an `expect` of a `harmonic` step, or in another `expect` whose last step is `harmonic` | `report rms(u.z at p, 0.04/(1 Hz))` in a `static` step | a `harmonic` step |
 | `expect_cases` | §15.3 | a list of an `expect` is not in a `grid` or a `zip` study, or does not have one value for each case | `== [1, 2] m` in a study of 3 cases | one value for each case |
 
 ### 2.9 Parameters, scales and studies

@@ -362,6 +362,7 @@ method solid: cg { mesh: m, order: 2 }
 method flow: cg { mesh: m, order: { v: 2, p: 1 } }
 method solid: cg { mesh: m, order: 1, family: incompatible }  // C3D8I
 method solid: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }  // C3D20R
+method em: cg { mesh: m, order: 2, pml: { region: layer, thickness: 1 um } }
 method flow: fv { mesh: m, gradient: least_squares, flux: linear_upwind, pv_coupling: rhie_chow }
 method wave: dg { mesh: m, order: 3, flux: upwind }
 method solid: rkpm { points: c, basis: linear, support: 2.5, integrate: scni, bc: nitsche }
@@ -373,7 +374,8 @@ lines. `stabilize` adds residual-based terms for flow: `supg`, `supg_pspg`,
 `supg_pspg_lsic` or `vms`. `limiter` (for `fv`) captures shocks.
 `family: serendipity` (order 2) and `family: incompatible` (order 1) need
 `cell: quad` or `hex`. `quadrature: reduced` takes one Gauss point fewer
-along each axis.
+along each axis. `pml` puts a perfectly matched layer on the cells of
+`region`, for a `Complex` unknown: it absorbs the outgoing waves.
 
 A physics with no `method` item gets `cg` on its mesh, `order: 2`,
 Taylor-Hood cells for incompressible flow, and `supg` when the equations
@@ -406,12 +408,17 @@ step heat_up: transient(end: 1 h, dt: 30 s, scheme: bdf2) {
 
 The procedures are `static`, `transient`, `modal`, `buckling` and
 `harmonic(freq: [f])`, which takes a list and uses `Complex` unknowns.
+`harmonic(freq: [...], damping: 0.02)` adds structural damping: the
+stiffness times 1 + 2i·0.02. The built-in `omega` is 2π·freq in a
+`harmonic` step and ω of the mode in a `modal` step.
 `dt: stable` with `scheme: central_difference` or `ssprk3` lets the solver
 choose the stable increment. Steps run in the order of the file.
 
 `re`, `imag`, `abs`, `arg` and `conj` take the parts of a `Complex` value.
 `eigenvalue(k)` is the natural frequency f = ω/(2π) in Hz of mode `k` of a
 `modal` step, or the load factor of a `buckling` step.
+`rms(f, psd)` is the root mean square of `f` over the frequencies of a
+`harmonic` step, for an input with the power spectral density `psd`.
 `when(f, value)` is the first time at which `f`, a scalar reduced over a
 region, gets to `value` in a `transient` step.
 

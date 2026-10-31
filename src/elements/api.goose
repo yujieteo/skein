@@ -31,6 +31,7 @@ import .csg;
 import .source;
 import .stages;
 import .eigen;
+import .wave;
 
 let X = 0;
 let Y = 1;
@@ -158,6 +159,33 @@ fn birth(g: i64) -> bool { return birth_cells(g) > 0; }
 // volume. In 2D, t is the thickness.
 fn heat(k: f64, q: f64, t: f64) { set_heat(k, q, t); }
 
+// The complex scalar wave div(grad(u)) + c u = s of a harmonic step
+// (wave.goose), with u as components 0 (the real part) and 1 (the
+// imaginary part). In 2D, t is the thickness.
+fn wave(t: f64) { set_wave(t); }
+
+// The terms of the next solve: c = c_re + i c_im, s = s_re + i s_im, and
+// the damping ratio ζ that multiplies the stiffness by 1 + 2iζ.
+fn wave_terms(c_re: f64, c_im: f64, s_re: f64, s_im: f64, damping: f64) {
+    set_wave_terms([c_re, c_im], [s_re, s_im], damping);
+}
+
+// The PML of the cells of shape g (spec §13): past the box from
+// (x0, y0, z0) to (x1, y1, z1), with the thickness h. Call it after
+// wave_terms, which gives the wave number.
+fn pml(g: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, h: f64) {
+    set_pml(g, [x0, y0, z0], [x1, y1, z1], h);
+}
+
+// The low region of a bloch group: the region of the last call that
+// selects one. False if it holds no node.
+fn bloch_low() -> bool { return keep_low(); }
+
+// Ties each node of the region of the last call that selects one to the
+// node of the low region at its point less (px, py, pz), with the phase
+// theta (spec §12.6). False if a node has no partner.
+fn bloch(px: f64, py: f64, pz: f64, theta: f64) -> bool { return tie_high([px, py, pz], theta); }
+
 // Selects the boundary plane where coordinate `axis` is `value`.
 fn plane(axis: i64, value: f64) -> bool {
     region.clear();
@@ -220,9 +248,10 @@ fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 // the value of the nodes that no live cell holds.
 fn clear_bcs() { clear_conditions(); }
 
-// Assembles and solves by CG with an AMG preconditioner. Returns false
-// if CG does not converge.
-fn solve() -> bool { return solve_system(); }
+// Assembles and solves by CG with an AMG preconditioner, or the wave
+// physics by GMRES with ILU(0). Returns false if the solver does not
+// converge.
+fn solve() -> bool { return if physics == WAVE { wave_solve() } else { solve_system() }; }
 
 // Component `comp` of u, or T (comp 0), at a point, and whether a cell
 // holds the point.
