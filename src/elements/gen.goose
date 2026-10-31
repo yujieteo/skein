@@ -1554,6 +1554,7 @@ let PRELUDE = """
         format(s, "verify[", check_count, "]{stage,id,result,value,limit}:\n", checks);
         format(s, "solve[", solve_count, "]{step,cells,dofs,cg_iterations,seconds,converged}:\n", solves);
         format(s, "results[", result_count, "]:\n", results);
+        s.append(solvers::memory_records());
         write_stdout(s);
     }
 

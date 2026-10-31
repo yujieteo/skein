@@ -1291,6 +1291,7 @@ let PRELUDE = """
         format(s, "verify[", check_count, "]{stage,id,result,value,limit}:\n", checks);
         format(s, "solve[", solve_count, "]{step,cells,dofs,cg_iterations,seconds,converged}:\n", solves);
         format(s, "results[", result_count, "]:\n", results);
+        s.append(solvers::memory_records());
         write_stdout(s);
     }
 
@@ -1447,7 +1448,9 @@ fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
            ", angle in rad.\n");
     out.append("import std;\nimport os;\nimport math;\nimport shells from ");
     quoted(out, shells_path);
-    out.append(";\n");
+    out.append(";\nimport solvers from ");
+    quoted(out, str(shells_path, "/../solvers"));
+    out.append(";   // the shells import it\n");
     out.append(PRELUDE);
     for si in 0..steps.len { emit_step(out, si, results_dir); }
     let nx = cells_for(x1 - x0, mesh_size);

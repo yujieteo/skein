@@ -1,6 +1,7 @@
 // The entry of the package shells: shells, beams and laminates (roadmap
-// lane 5). A program imports it with `import shells from "<path to src>/shells";`
-// and calls the functions of model.goose, laminate.goose and solve.goose:
+// lane 5). A program imports it, and the solvers of its memory check, with
+// `import shells from "<path to src>/shells";` and `import solvers from
+// "<path to src>/solvers";`, and calls the functions of model.goose, laminate.goose and solve.goose:
 //
 //     shells::clear();
 //     let s = shells::isotropic_section(E, nu, h);

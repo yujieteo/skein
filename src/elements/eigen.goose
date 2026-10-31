@@ -399,7 +399,10 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     guard kind == GEOMETRIC || density > 0.0 else { abort("eigen_solve: a density > 0 for a modal step"); }
     guard kind == MASS || held.len == sol.len else { abort("eigen_solve: the solution of a step before a buckling step"); }
     let start = clock();
-    assemble();
+    // The blocks of lobpcg of m = count + max(count / 2, 2) vectors: about
+    // 14 m, and the 6 rigid-body modes of the AMG.
+    let m = count + max(count / 2, 2);
+    assemble(if kind == MASS { "simplex modal lobpcg amg" } else { "simplex buckling lobpcg amg" }, 14 * m + 6);
     hold_dead_nodes();
     eigen_kind = kind;
     let factored = setup_preconditioner(true);

@@ -198,9 +198,23 @@ fn test_cantilever() {
     if amg_its * 3 >= cg_its { fail(str("cantilever: CG+AMG takes ", amg_its, " iterations, CG+Jacobi ", cg_its)); }
 }
 
+// The memory check (memory.goose): the /proc fields, and an estimate of the
+// RSS now and the entries and the vectors of a path.
+fn test_memory() {
+    let meminfo = "MemTotal:       32762052 kB\nMemAvailable:   1234 kB\n";
+    if solvers::proc_kb(meminfo, "MemAvailable:") != 1234.0 || solvers::proc_kb(meminfo, "Swap:") != -1.0 {
+        fail("memory: proc_kb of /proc/meminfo");
+    }
+    let p = solvers::MemoryPath { name: "test", entry_bytes: 10.0, thread_bytes: 16.0 };
+    if solvers::path_bytes(p, 1000, 100, 2, 1) != 11600.0 || solvers::path_bytes(p, 1000, 100, 2, 4) != 27600.0 + 4.0 * solvers::THREAD_BYTES {
+        fail("memory: path_bytes");
+    }
+}
+
 fn main() {
     test_newton();
     test_cantilever();
+    test_memory();
     if failures > 0 { exit(1); }
     print("solvers: all tests pass");
 }

@@ -87,7 +87,8 @@ fn setup_preconditioner(rigid: bool) -> bool {
 fn solve_system() -> bool {
     guard physics >= 0 && dofs_sized() else { abort("solve_system: a physics and the arrays of the dofs"); }
     let start = clock();
-    assemble();
+    // r, z, p, q and the source vector
+    assemble("simplex cg amg", 5);
     hold_dead_nodes();
     let n = sol.len;
     var r = zeros(n);

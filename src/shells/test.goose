@@ -6,6 +6,7 @@ import std;
 import math;
 import os;
 import shells from "../shells";
+import solvers from "../solvers";   // the shells import it
 
 var failures = 0;
 

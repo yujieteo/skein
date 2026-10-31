@@ -67,6 +67,9 @@ fn clear_bcs() {
         sol.push(0.0);
         raw.push(0.0);
     }
+    // The matrices and the solve of solve_steady: the basis of GMRES, f, du,
+    // trial, r, z and the `where` of ILU(0).
+    solvers::memory_check("flow newton gmres ilu0", col.len, n, LINEAR_RESTART + 7, "");
     val.clear();
     lu.clear();
     pre.clear();
