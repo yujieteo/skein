@@ -108,9 +108,9 @@ fn hex8i_condense(c: i64) {
         for j in NODE_DOFS { condensed.push(full[ALL_DOFS * (NODE_DOFS + r) + j]); }
     }
     for k in MODE_DOFS {
-        for r in k + 1 .. MODE_DOFS {
+        for r in k + 1..MODE_DOFS {
             let f = a[MODE_DOFS * r + k] / a[MODE_DOFS * k + k];
-            for q in k .. MODE_DOFS { a[MODE_DOFS * r + q] -= f * a[MODE_DOFS * k + q]; }
+            for q in k..MODE_DOFS { a[MODE_DOFS * r + q] -= f * a[MODE_DOFS * k + q]; }
             for j in NODE_DOFS { condensed[NODE_DOFS * r + j] -= f * condensed[NODE_DOFS * k + j]; }
         }
     }
@@ -118,7 +118,7 @@ fn hex8i_condense(c: i64) {
     while k >= 0 {
         for j in NODE_DOFS {
             var v = condensed[NODE_DOFS * k + j];
-            for q in k + 1 .. MODE_DOFS { v -= a[MODE_DOFS * k + q] * condensed[NODE_DOFS * q + j]; }
+            for q in k + 1..MODE_DOFS { v -= a[MODE_DOFS * k + q] * condensed[NODE_DOFS * q + j]; }
             condensed[NODE_DOFS * k + j] = v / a[MODE_DOFS * k + k];
         }
         k--;
