@@ -18,9 +18,12 @@ let REVOLVE = 6;
 let UNION = 7;
 let INTERSECT = 8;
 let SUBTRACT = 9;
+let LOFT = 10;
+let PATTERN = 11;
+let PATTERN_POLAR = 12;
 
-// `a` and `b` are child nodes, or the first point and the point count of a
-// polygon. `p` holds the numbers of the primitive.
+// `a` and `b` are child nodes, the first point and the point count of a
+// polygon, or the child node and the copy count of a pattern. `p` holds the numbers of the primitive.
 struct Shape {
     kind: i64,
     a: i64,
@@ -78,6 +81,35 @@ fn extrude(s: i64, h: f64) -> i64 {
 // radians, from the +x axis towards -z.
 fn revolve(s: i64, angle: f64) -> i64 {
     return add_shape(REVOLVE, s, -1, [angle, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// From the 2D section s1 at z = 0 to the 2D section s2 at z = h. At a
+// height z, φ is (1 - z/h) φ1 + (z/h) φ2.
+fn loft(s1: i64, s2: i64, h: f64) -> i64 {
+    return add_shape(LOFT, s1, s2, [h, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// n copies of shape a: copy k (0 <= k < n) is a moved by k (vx, vy, vz).
+fn pattern(a: i64, vx: f64, vy: f64, vz: f64, n: i64) -> i64 {
+    return add_shape(PATTERN, a, n, [vx, vy, vz, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// n copies of shape a: copy k (0 <= k < n) is a turned by k 2π/n about the
+// axis (ax, ay, az) through the origin.
+fn pattern_polar(a: i64, ax: f64, ay: f64, az: f64, n: i64) -> i64 {
+    let l = sqrt(ax * ax + ay * ay + az * az);
+    return add_shape(PATTERN_POLAR, a, n, [ax / l, ay / l, az / l, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// The point q turned by `angle` about the unit axis u through the origin
+// (Rodrigues).
+fn turn(q: f64[3], u: f64[3], angle: f64) -> f64[3] {
+    let c = cos(angle);
+    let s = sin(angle);
+    let d = (u[0] * q[0] + u[1] * q[1] + u[2] * q[2]) * (1.0 - c);
+    return [q[0] * c + (u[1] * q[2] - u[2] * q[1]) * s + u[0] * d,
+            q[1] * c + (u[2] * q[0] - u[0] * q[2]) * s + u[1] * d,
+            q[2] * c + (u[0] * q[1] - u[1] * q[0]) * s + u[2] * d];
 }
 
 fn union(a: i64, b: i64) -> i64 { return add_shape(UNION, a, b, default<f64[8]>()); }
@@ -156,6 +188,22 @@ recursive fn phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
         if p[0] >= TAU - 1.0e-12 { return d; }
         return max(d, wedge_phi(p[0], x, z));
     }
+    if s.kind == LOFT {
+        let t = clamp(z / p[0], 0.0, 1.0);
+        return slab((1.0 - t) * phi(s.a, x, y, 0.0) + t * phi(s.b, x, y, 0.0), z, p[0]);
+    }
+    if s.kind == PATTERN || s.kind == PATTERN_POLAR {
+        var f = 1.0e300;
+        for k in s.b {
+            if s.kind == PATTERN {
+                f = min(f, phi(s.a, x - k * p[0], y - k * p[1], z - k * p[2]));
+            } else {
+                let q = turn([x, y, z], [p[0], p[1], p[2]], -TAU * k / s.b);
+                f = min(f, phi(s.a, q[0], q[1], q[2]));
+            }
+        }
+        return f;
+    }
     let fa = phi(s.a, x, y, z);
     let fb = phi(s.b, x, y, z);
     if s.kind == UNION { return min(fa, fb); }
@@ -203,7 +251,36 @@ recursive fn bounds(g: i64) -> f64[6] {
         let r = max(abs(a[0]), abs(a[3]));
         return [-r, a[1], -r, r, a[4], r];
     }
+    if s.kind == LOFT {
+        let a = bounds(s.a);
+        let b = bounds(s.b);
+        return [min(a[0], b[0]), min(a[1], b[1]), 0.0, max(a[3], b[3]), max(a[4], b[4]), p[0]];
+    }
     let a = bounds(s.a);
+    if s.kind == PATTERN {
+        var u: f64[6] = a;
+        for c in 3 {
+            let shift = (s.b - 1) * p[c];
+            u[c] = min(a[c], a[c] + shift);
+            u[3 + c] = max(a[3 + c], a[3 + c] + shift);
+        }
+        return u;
+    }
+    if s.kind == PATTERN_POLAR {
+        // The box of the 8 turned corners of the box of a, for each copy.
+        var u: f64[6] = [1.0e300, 1.0e300, 1.0e300, -1.0e300, -1.0e300, -1.0e300];
+        for k in s.b {
+            for m in 8 {
+                let q = turn([a[3 * (m % 2)], a[1 + 3 * (m / 2 % 2)], a[2 + 3 * (m / 4)]],
+                             [p[0], p[1], p[2]], TAU * k / s.b);
+                for c in 3 {
+                    u[c] = min(u[c], q[c]);
+                    u[3 + c] = max(u[3 + c], q[c]);
+                }
+            }
+        }
+        return u;
+    }
     if s.kind == SUBTRACT { return a; }
     let b = bounds(s.b);
     var u: f64[6] = a;
