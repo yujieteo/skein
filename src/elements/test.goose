@@ -353,6 +353,38 @@ fn test_heated_bar() {
     heated_bar(3, 2, 8, 0.002);
 }
 
+// --- a body force ------------------------------------------------------------------
+
+// A column of length L under its own weight rho*g, held at z = 0 with
+// rollers on x = 0 and y = 0, with nu = 0: u_z = -(rho g / E)(L z - z²/2).
+// P2 cells hold the quadratic, so the tip value is exact. The base takes
+// the weight rho g V.
+fn test_body_force() {
+    let L = 4.0;
+    let w = 1.0;
+    let E = 1000.0;
+    let rg = 2.0;
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, w, w, L, 2, 2, 4);
+    elements::elastic(E, 0.0);
+    elements::body_force(0.0, 0.0, -rg);
+    for axis in 3 {
+        assert(elements::plane(axis, 0.0));
+        elements::fix(axis, 0.0);
+    }
+    if !elements::solve() {
+        failures++;
+        print("FAIL body force: CG does not converge");
+    }
+    let uz, found = elements::value_at(elements::Z, 0.5 * w, 0.5 * w, L);
+    let fx, fy, fz = elements::applied_load();
+    assert(elements::plane(elements::Z, 0.0));
+    let rx, ry, rz = elements::reaction();
+    print("body force: tip u_z ", uz, ", weight ", fz, ", base reaction ", rz);
+    expect_near("body force tip", uz, -rg * L * L / (2.0 * E), 1.0e-8);
+    expect_near("body force weight", fz, -rg * w * w * L, 1.0e-10);
+    expect_near("body force base", rz, rg * w * w * L, 1.0e-8);
+}
+
 // --- the scale of the check `equilibrium` -----------------------------------------
 
 // One nonzero temperature at all fixed nodes and no source: the reactions
@@ -401,6 +433,7 @@ let MODELS = [
     "examples/elements/heated_bar_template_tet.skn",
     "examples/elements/conduction_slab_tet.skn",
     "examples/elements/uniform_temperature_tet.skn",
+    "examples/elements/column_weight_tet.skn",
 ];
 
 fn test_runs() {
@@ -420,6 +453,7 @@ fn main() {
     test_patches();
     test_kirsch();
     test_heated_bar();
+    test_body_force();
     test_equilibrium_scale();
     test_runs();
     if failures > 0 { exit(1); }

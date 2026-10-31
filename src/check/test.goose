@@ -223,6 +223,13 @@ fn test_types() {
 }
 
 fn test_physics() {
+    // skein help std prints the templates, with no model line.
+    let std = check::std_text();
+    let want = "template physics linear_elastic(b: Vector<Force/Volume> = 0) solves u: Vector<Length> {";
+    if std.len < want.len || std[..want.len] != want {
+        failures++;
+        print("FAIL help std: the text does not start with the linear_elastic template");
+    }
     let elastic = str(H, SOLID, "\n");
     expect_id("template_eq", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    eq div(u) = 0\n}\n"));
     expect_id("eq_count", str(elastic, "physics s on b solves u: Vector<Length>, q: Pressure {\n    material steel\n    eq div(hooke(E, nu, strain(u))) = 0\n}\n"));

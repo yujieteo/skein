@@ -20,7 +20,7 @@ let USAGE = """
     commands:
       check   parse and type-check a model
       fmt     rewrite files in the standard layout
-      help    print this text
+      help    print this text (help std: the standard library, help --llm: the language card)
       lint    check a model, then give the lint warnings
       run     build and run a model (linear static or steady heat: a box, a quarter of a tube, a plate with a hole or a cylindrical shell)
       md      write a model as a Markdown document
@@ -36,6 +36,10 @@ fn main() {
     let command = args[1];
     if command == "help" && args.len > 2 && args[2] == "--llm" {
         print(cli::CARD);
+        exit(0);
+    }
+    if command == "help" && args.len > 2 && args[2] == "std" {
+        print(check::std_text());
         exit(0);
     }
     if command == "help" || command == "--help" || command == "-h" {

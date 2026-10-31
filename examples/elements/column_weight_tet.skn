@@ -1,0 +1,46 @@
+// A square column under its own weight, with the body force b of the
+// linear_elastic template, on P2 tetrahedra. The base is on rollers and
+// two sides are planes of symmetry. With nu = 0 the displacement is
+// u.z = -(rho g / E) (L z - z^2/2), a quadratic that P2 cells hold, so
+// the top moves by rho g L^2 / (2 E) = 0.000770085 mm. The base takes the
+// weight rho g V = 1540.17 N.
+
+model column_weight_tet: 3d, mm_N_MPa_s
+
+let a: Length = 100 mm
+let L: Length = 2000 mm
+let g: Acceleration = 9.81 m/s^2
+
+scales L, 200 GPa, 7850 kg/m^3
+
+let column: Solid = box((0, 0, 0) mm, (a, a, L))
+let base: Surface = boundary(column, z == 0 mm)
+let x_sym: Surface = boundary(column, x == 0 mm)
+let y_sym: Surface = boundary(column, y == 0 mm)
+
+material steel {
+    E: Pressure = 200 GPa
+    nu: Real = 0
+    rho: Density = 7850 kg/m^3
+}
+
+mesh m on column {
+    size: 100 mm
+    cell: tet
+}
+
+physics solid on column: linear_elastic(b: rho*(0, 0, -g)) solves u: Vector<Length> {
+    material steel
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+step weight: static {
+    bc base: u.z = 0
+    bc x_sym: u.x = 0
+    bc y_sym: u.y = 0
+    output u
+    report weight = reaction(base)
+}
+
+expect top: u.z at (50, 50, 2000) mm == -0.000770085 mm within 0.01%
