@@ -21,8 +21,7 @@ fn is_digit(c: u8) -> bool { c >= '0' && c <= '9' }
 
 // True for the names whose `<` opens a type argument (spec §3, `type`).
 fn is_type_constructor(word: u8[:]) -> bool {
-    word == "Vector" || word == "Tensor2" || word == "Tensor4" ||
-        word == "Complex" || word == "Quaternion" || word == "Dual"
+    word == "Vector" || word == "Tensor2" || word == "Tensor4" || word == "Complex"
 }
 
 // True when a line that ends with a token of this kind continues on the

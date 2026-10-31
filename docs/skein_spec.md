@@ -24,7 +24,7 @@
 - [19. Static semantics checklist](#19-static-semantics-checklist)
 - [20. Parameters and studies](#20-parameters-and-studies)
 - [21. Dimensional analysis and scaling](#21-dimensional-analysis-and-scaling)
-- [22. Manufacture](#22-manufacture)
+- [22. Export](#22-export)
 - [Appendix A. Built-in names](#appendix-a-built-in-names)
 - [Appendix B. References](#appendix-b-references)
 
@@ -61,12 +61,11 @@ model contains all of these parts, in one language:
 | Equations in strong form, with assumptions, and their unknowns | `physics … solves` | §10.1, §10.3, §11 |
 | Numerical method for each physics, with defaults | `method` | §13 |
 | Boundary conditions and loads | `bc` | §12 |
-| Symmetry groups: cyclic, dihedral, periodic | `symmetry` | §12.6 |
+| Periodic symmetry | `symmetry` | §12.6 |
 | The analysis sequence | `step` | §14 |
 | Checks on the results | `expect` | §15.3 |
 | Reference scales for the solver | `scales` | §21 |
 | Parameter studies | `study` | §20 |
-| Manufacturing process and tolerances | `manufacture`, `tolerance` | §22 |
 | Turned-off checks, each with a reason | `allow` | [checks.md](checks.md) |
 
 Four rules shape the whole language.
@@ -147,14 +146,14 @@ except before a `degC` literal (§6.3).
 ### 2.5 Keywords
 
 ```
-adapt       allow       assume      at          bc          birth
-contact     crack_tip   death       eq          every       expect
-false       fn          in          interface   layers      let
-manufacture material    mesh        method      model       on
-output      param       physics     plastic     points      refine
-release     report      scales      solve       solves      state
-step        study       symmetry    table       template    tol
-tolerance   true        use         where       within
+allow       assume      at          bc          birth       contact
+crack_tip   death       eq          every       expect      false
+fn          in          interface   layers      let         material
+mesh        method      model       on          output      param
+physics     plastic     points      refine      release     report
+scales      solve       solves      state       step        study
+symmetry    table       template    true        use         where
+within
 ```
 
 A keyword is not an identifier, except as the name before the `:` of a
@@ -190,16 +189,13 @@ unitfield   = ident ":" unitexpr ;
 
 item        = usedecl | paramdecl | letdecl | fndecl | tabledecl | material
             | meshdecl | pointsdecl | physics | method | bcdecl | contact
-            | interface | symmetry | step | expect | allow | scales | study
-            | manufacture | tolerance ;
+            | interface | symmetry | step | expect | allow | scales | study ;
 
 usedecl     = "use" string NL ;
 fndecl      = "fn" ident "(" fnparam { "," fnparam } [ "," ] ")" "->" type "=" expr NL ;
 fnparam     = ident ":" type ;
 
-paramdecl   = "param" ident ":" type "=" expr [ "tol" expr ] [ "in" expr ".." expr ] NL ;
-manufacture = "manufacture" region ":" procedure block NL ;  (* entry = setting *)
-tolerance   = "tolerance" ident ":" expr "in" expr ".." expr [ block ] NL ;
+paramdecl   = "param" ident ":" type "=" expr [ "in" expr ".." expr ] NL ;
 letdecl     = "let" ident ":" type "=" expr NL ;
 scales      = "scales" expr { "," expr } NL ;
 study       = "study" ident ":" procedure block NL ;  (* entry = ident ":" ( list | range ) | setting | check *)
@@ -250,7 +246,7 @@ procedure   = ident [ "(" [ args ] ")" ] ;
 stepstmt    = bcdecl | "release" region
             | "birth" region { "," region } [ "where" expr ]
             | "death" region { "," region } [ "where" expr ]
-            | "solve" block | "adapt" block
+            | "solve" block
             | "output" expr { "," expr } [ "every" expr ]
             | "report" [ ident "=" ] expr { "," [ ident "=" ] expr }
             | check ;
@@ -264,7 +260,7 @@ region      = expr ;
 type        = qtype | "Vector" "<" stype ">" | "Tensor2" "<" stype ">"
             | "Tensor4" "<" stype ">" | numsys | ident ;
 stype       = qtype | numsys ;
-numsys      = ( "Complex" | "Quaternion" | "Dual" ) "<" qtype ">" ;
+numsys      = "Complex" "<" qtype ">" ;
 qtype       = dimterm { ("*" | "/") dimterm } ;
 dimterm     = ident [ "^" ["-"] number ] | "(" qtype ")" ;
 
@@ -328,18 +324,10 @@ and it puts each error at the line of the use.
 
 ### 3.2 Layout for small diffs
 
-A change to a model must give a small diff that a person can read. Skein
-text and `skein fmt` follow these rules (command_line.md §3.1):
-
-- One item, one statement or one block entry on each line. A table row is
-  one line.
-- No column alignment. `fmt` never adds spaces to line up values, so a
-  change to one value does not change the lines near it. This holds for
-  TOON tables too.
-- A list that does not fit on one line has one item on each line, with a
-  comma after each item. A new item then adds one line.
-- `fmt` keeps the order of items and never reflows a line that did not
-  change.
+A change to a model must give a small diff that a person can read. The
+format rules of [command_line.md §3.1](command_line.md#31-format-rules) give
+this layout: one statement on each line, no column alignment, one list item
+on each line, and no reflow of a line that did not change.
 
 Reason: LLMs write changes of thousands of lines that a person cannot
 review. With these rules, a change to one load, one step or one study
@@ -426,13 +414,15 @@ enter the namespace of the model. The block of the model may add `material`,
 `assume` and `let` statements. It may not add `eq` [`template_eq`]. Only
 the standard library declares templates in this version.
 
-| Template | Unknowns | Phase |
-|---|---|---|
-| `linear_elastic(b)` | `u` | 2 |
-| `heat(q_v)` | `T` | 2 |
-| `stokes(f)`, `navier_stokes(f)` | `v`, `p` | 3 |
-| `reissner_mindlin(layup, mirror, axis, top, q)` (shell), `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` (beam), §4.3 | `w`, `theta` | 5 |
-| `k_omega_sst` (turbulence) | `k`, `omega` | 5 |
+| Template | Unknowns |
+|---|---|
+| `linear_elastic(b)` | `u` |
+| `heat(q_v)` | `T` |
+| `stokes(f)`, `navier_stokes(f)` | `v`, `p` |
+| `reissner_mindlin(layup, mirror, axis, top, q)` (shell), `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` (beam), §4.3 | `w`, `theta` |
+| `k_omega_sst` (turbulence) | `k`, `omega` |
+
+The [roadmap](roadmap.md) gives the phase of each template.
 
 Reason: nobody writes a shell or a k-ω SST model from memory, and a
 template cuts the size of the common models. The source stays strong form,
@@ -542,23 +532,13 @@ the type of the expression and reports [`type_mismatch`] or
 | `Angle` | a dimensionless real number. Literals take `rad` or `deg`. |
 | `Int` | an integer, for counts such as the number of modes |
 | `Bool` | `true` or `false` |
-| `Str` | a string, for file paths |
 
-Each quantity can also take a value in one of three other number systems.
-The list is closed: Skein has no user number systems.
-
-| Type | Values | Use |
-|---|---|---|
-| `Complex<D>` | `a + b*im` with `a`, `b` of dimension `D` | the `harmonic` procedure (§14.2): acoustics, electromagnetics, vibration |
-| `Quaternion<D>` | four components of dimension `D` | rotations in rigid-body ODEs and beams with large rotations |
-| `Dual<D>` | `a + b*dual_eps` with `dual_eps² = 0` | forward-mode derivatives, for example the sensitivity of a report to a `param` |
-
-A tensor takes a number system in its argument: `Vector<Complex<Velocity>>`.
-The built-in constants `im` and `dual_eps` are the units of the imaginary
-part and of the dual part.
-Reason: these four cover the number systems that engineering models use in
-practice. Each one needs its own solver arithmetic, so the list stays
-closed.
+A quantity can also be complex. `Complex<D>` holds `a + b*im`, with `a`
+and `b` of dimension `D`. A tensor takes it in its argument:
+`Vector<Complex<Velocity>>`. The built-in constant `im` is the imaginary
+unit. Reason: the `harmonic` procedure (§14.2) of the acoustic and
+electromagnetic models of femahoy needs complex unknowns. Skein has no
+other number system, because no model needs one.
 
 ### 5.2 Tensor types
 
@@ -634,7 +614,7 @@ only exceptions:
    bare number has type `Real`. `Real` and `Angle` accept `Int`. `Angle`
    accepts `Real`.
 3. `Int` converts to `Real` in arithmetic.
-4. `Complex<D>`, `Quaternion<D>` and `Dual<D>` accept a value of `D`.
+4. `Complex<D>` accepts a value of `D`.
 
 Reason for exception 1: `u = 0` is the most common boundary condition, and
 `u = (0, 0, 0) mm` adds tokens and gives no safety.
@@ -751,8 +731,7 @@ numbers that the tools print. Reason: a user reads results in the units of
 the drawing.
 
 The `scales` line (§21.2), not the unit system, sets the size of the
-numbers in the solver. Each model with dimensions has one
-[`scales_missing`].
+numbers in the solver.
 
 The header `model m: 2d, nondim` declares a model with no dimensions. Each
 quantity has type `Real`, and a literal with a unit is an error
@@ -760,6 +739,8 @@ quantity has type `Real`, and a literal with a unit is an error
 a PDE that has no physical units, for example a model problem from a
 textbook in dimensionless form. The dimension checks then give no
 protection, so the `check` report says `units: nondim` at its top.
+Reason: the femahoy cases shape-hole-biaxial and fit-nist-pontius have no
+units.
 
 ### 6.6 What Skein leaves out
 
@@ -850,8 +831,6 @@ function, so that the mesher can find sharp edges (§9.2).
 | `box(p0, p1)` | `Solid` | corners `p0` and `p1` |
 | `cylinder(c, axis, r, h)` | `Solid` | base centre, axis direction, radius, height |
 | `sphere(c, r)` | `Solid` | |
-| `cone(c, axis, r0, r1, h)` | `Solid` | |
-| `torus(c, axis, R, r)` | `Solid` | |
 | `rect(p0, p1)` | `Surface` | 2D only |
 | `circle(c, r)` | `Surface` | 2D only |
 | `polygon(p1, p2, …)` | `Surface` | 2D only, counter-clockwise or clockwise |
@@ -863,7 +842,6 @@ function, so that the mesher can find sharp edges (§9.2).
 | `shell(a, t)` | same as `a` | a wall of constant thickness `t` inside the surface of `a`: `max(φa, −φa − t)` |
 | `loft(s1, s2, h)` | `Solid` | from 2D section `s1` at z = 0 to `s2` at z = `h` |
 | `pattern(a, v, n)`, `pattern_polar(a, axis, n)` | same as `a` | `n` copies of `a`, along `v` or about `axis` |
-| `nurbs(…)` | `Surface` or `Solid` | phase 5 (roadmap) |
 
 Operators and modifiers:
 
@@ -873,7 +851,6 @@ Operators and modifiers:
 | `a & b` | intersection | `max(φa, φb)` |
 | `a - b` | difference | `max(φa, −φb)` |
 | `fillet(a, r)` | round the convex and concave edges of `a` | smooth minimum with radius `r` |
-| `chamfer(a, d)` | bevel the edges of `a` | chamfer minimum with distance `d` |
 | `move(a, v)`, `rotate(a, axis, angle)`, `scale(a, k)` | rigid motions and uniform scale | |
 
 The `min` and `max` of distance functions give a bound on the distance, not
@@ -1179,8 +1156,7 @@ An `interface` joins a boundary of a fluid physics and a boundary of a solid
 physics. It adds the kinematic condition (the fluid velocity equals
 `ddt(u)` of the solid) and the dynamic condition (the tractions balance).
 The fluid equations move to an arbitrary Lagrangian-Eulerian frame, and the
-setting `mesh_motion` gives the equation of the mesh displacement. FSI is in
-phase 5 of the [roadmap](roadmap.md).
+setting `mesh_motion` gives the equation of the mesh displacement.
 
 ---
 
@@ -1205,7 +1181,7 @@ gives examples.
 | `compressible` | density is a varying value or an unknown | `incompressible` |
 | `newtonian` | the fluid stress must be linear in `sym(grad(v))` | |
 | `laminar` | no turbulence model | `turbulent(model)` |
-| `turbulent(model)` | adds the closure `model` (phase 5) | `laminar` |
+| `turbulent(model)` | adds the closure `model` | `laminar` |
 | `boussinesq(T0, beta)` | density is constant except in the body force term, `rho*(1 − beta*(T − T0))` | `compressible` |
 | `isothermal` | no energy equation is expected. A `T` in an expression is a constant. | |
 
@@ -1346,7 +1322,7 @@ contact grip: jaw_face, part_face {
 A `contact` item names two boundary regions that can touch. The first is the
 master, the second the slave. `enforce` is `penalty` (with `stiffness`),
 `nitsche` or `mortar`. Contact makes the system nonlinear, so the step uses
-Newton's method. Contact is in phase 5 of the [roadmap](roadmap.md).
+Newton's method.
 
 ### 12.5 Values from other models
 
@@ -1357,27 +1333,23 @@ integration points for a weak condition.
 ### 12.6 Symmetry groups
 
 ```skein
-symmetry rotor: cyclic { n: 24, axis: (0, 0, 1), low: face_a, high: face_b }
+symmetry cell: bloch { period: (1, 0, 0) m, low: x0, high: x1, k: 0 }
 ```
 
-A `symmetry` item solves one sector of a body that repeats. It ties the
-unknowns on the boundary `high` to the unknowns on `low`, through the
-transformation of the group. The list of groups is closed:
+A `symmetry` item solves one cell of a body that repeats. It ties the
+unknowns on the boundary `high` to the unknowns on `low`. The one group is
+`bloch`, with the settings `period` (a vector), `low`, `high` and `k` (a
+wave vector). The value on `high` is the value on `low` multiplied by
+`exp(im*dot(k, period))` (Bloch and Floquet). A `k` other than 0 needs
+`Complex` unknowns (§5.1).
 
-| Group | Settings | Condition on `high` |
-|---|---|---|
-| `cyclic` | `n`, `axis`, `low`, `high`, `harmonic` (Int, default 0) | the value on `low`, rotated by 2π/n and multiplied by `exp(im*2*pi*harmonic/n)` |
-| `dihedral` | `n`, `axis`, `low`, `high` | `cyclic` plus a mirror plane on each side of the sector |
-| `bloch` | `period` (a vector), `low`, `high`, `k` (a wave vector) | the value on `low` multiplied by `exp(im*dot(k, period))` (Bloch and Floquet) |
+The checker tests that the shift by `period` maps `low` onto `high`
+[`symmetry_map`]. Reason: a `period` that does not match the cell ties
+the wrong points and gives a wrong result with no error.
 
-The checker tests that the transformation maps `low` onto `high`
-[`symmetry_map`]. A `harmonic` other than 0, or a `k` other than 0, needs
-`Complex` unknowns (§5.1). A `modal` step over the harmonics gives the
-modes of the full body.
-
-Reason: rotors, gears and periodic structures are common, and a sector
-model is many times smaller than the full body. A closed list of groups
-keeps each one testable.
+Reason for `bloch`: the periodic cells of femahoy (grid-laminate-cell,
+grid-fibre-composite-cell) use it. No femahoy case needs a rotational
+group.
 
 ---
 
@@ -1412,8 +1384,8 @@ The kinds:
 
 | Kind | Settings | Notes |
 |---|---|---|
-| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple` | continuous Galerkin FEM. `nedelec` (H(curl)) and `raviart_thomas` (H(div)) are phase 5. |
-| `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty`, `shock_capturing` (`none`, `entropy_viscosity`) | interior penalty for second-order terms |
+| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple` | continuous Galerkin FEM. `nedelec` is H(curl) and `raviart_thomas` is H(div). |
+| `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty` | interior penalty for second-order terms |
 | `fv` | `mesh`, `gradient` (`green_gauss`, `least_squares`), `flux` (`upwind`, `linear_upwind`, `central`), `limiter` (`none`, `minmod`, `van_leer`, `venkatakrishnan`), `pv_coupling` (`rhie_chow`) | cell-centred finite volume |
 | `rkpm` | `points`, `basis` (`linear`, `quadratic`), `support` (Real, times the spacing), `integrate` (`scni`, `gauss`), `bc` (`nitsche`) | Galerkin meshless |
 | `gfd` | `points`, `stencil` (Int), `weight` | strong-form collocation |
@@ -1482,7 +1454,7 @@ physics thermal on part solves T: Temperature = 293 K { … }
 | Procedure | Arguments | Meaning |
 |---|---|---|
 | `static` | `ramp` (Int, default 1) | `ddt` = 0. Nonlinear problems take `ramp` load increments. |
-| `transient` | `end`, `dt`, `scheme`, `adapt` | time stepping from the end time of the step before. `adapt: { rtol, atol }` changes `dt` to keep the estimated local error below the limits. `dt` is then the first step. |
+| `transient` | `end`, `dt`, `scheme` | time stepping from the end time of the step before |
 | `harmonic` | `freq` (a list of `Frequency`) | steady response to loads of the form `F·exp(im·ω·t)`. The unknowns and loads are `Complex` (§5.1). |
 | `modal` | `count`, `shift` | the `count` lowest eigenpairs of the linearized operator about the current state |
 | `buckling` | `count` | eigenpairs of the stiffness and the geometric stiffness of the current state |
@@ -1493,7 +1465,6 @@ Time schemes:
 |---|---|---|---|
 | `backward_euler` | 1 | implicit | |
 | `bdf2` | 2 | implicit | first-order in time (`ddt`) |
-| `bdf` | 1 to 5, variable | implicit | `adapt` with `ddt` (stiff ODEs) |
 | `crank_nicolson` | 2 | implicit | |
 | `generalized_alpha(rho_inf)` | 2 | implicit | second-order in time (`ddt2`) |
 | `ssprk3` | 3 | explicit | |
@@ -1510,8 +1481,8 @@ of the mesh, and takes a step a little below it.
 step pull: transient(end: 80 us, dt: stable, scheme: central_difference) { … }
 ```
 
-`dt: stable` needs `scheme: ssprk3` or `scheme: central_difference`, and no
-`adapt`. Otherwise the error is `procedure_args`.
+`dt: stable` needs `scheme: ssprk3` or `scheme: central_difference`.
+Otherwise the error is `procedure_args`.
 
 ### 14.3 Birth and death
 
@@ -1543,8 +1514,8 @@ step burn: transient(end: 10 s, dt: 0.1 s) {
 - `where cond` selects the cells of `r` where `cond` is true at the start of
   the step. `cond` may use the fields.
 - The mesh of the whole model, alive or dead, is made once, before the first
-  step. Thus each region that a `birth` names must be a part of the region
-  of the mesh.
+  step. The region of a `birth` is inside the region of its unknown
+  [`region_outside`] (§8.4), so the mesh holds it.
 
 Reason for removal (not a small stiffness factor): the removed unknowns
 give no ill conditioning to the solver.
@@ -1621,27 +1592,6 @@ text as the column name.
 `integral(f, r)` has the dimension of `f` times `Length^k`, where `k` is
 the topological dimension of `r`. In a `2d` model with no thickness, a force
 on a curve is thus `Force/Length`, the force per unit depth.
-
-### 14.6 Mesh adaptivity
-
-```skein
-adapt { estimator: zz, target: 1%, max_levels: 3 }
-```
-
-`adapt` in a step solves, estimates the error in each cell, refines the
-cells with the largest error, and solves again. It stops when the estimated
-relative error in the energy norm is below `target`, or after `max_levels`.
-`estimator` is `zz` (Zienkiewicz and Zhu 1987) or `residual` (from `R` in
-the SIR). The state of the step before moves to the new mesh by
-interpolation.
-
-### 14.7 Restarts
-
-The run writes the state of the model at the end of each step to
-`.skein/state/<model>/<step>.sks`. `skein run model.skn --from <step>`
-starts at step `<step>` from the state at the end of the step before it. The
-source of the steps before `<step>` must not change
-[`restart_stale`]: the state file holds a hash of their text.
 
 ---
 
@@ -1754,7 +1704,7 @@ M(U) ∂ₜ U  +  N(U) ∂ₜ² U  +  div F(U, ∇U)  +  S(U, ∇U)  =  0
 - `M` and `N` are the coefficients of the time derivatives.
 
 The SIR also keeps the **full strong residual** `R(U)` of each equation.
-Residual-based stabilization (§17.2) and residual error estimates need it.
+Residual-based stabilization (§17.2) and `gfd` (§17.5) need it.
 
 ### 16.2 SIR records
 
@@ -1949,20 +1899,19 @@ thread_fn assemble_worker() {
 `runtime` is a Goose package in `src/runtime/`. GMRES(m), ILU(0) and
 Newton are in the package `solvers` in `src/solvers/`. `runtime` calls its
 GMRES(m) and ILU(0). `runtime` holds no C, except the C that the Goose
-standard library uses for files and the clock. The
-[end-to-end slice](roadmap.md#the-end-to-end-slice) ships a box mesher, CG
-with Jacobi and the VTU writer before phase 2.
+standard library uses for files and the clock. The [roadmap](roadmap.md)
+gives the phase of each part.
 
-| Part | Contents | Phase |
-|---|---|---|
-| sparse | CSR matrices, colouring, assembly | 2 |
-| linear | CG, GMRES(m), Jacobi, ILU(0) | 2 |
-| nonlinear | Newton with line search, load ramps | 2 |
-| eigen | LOBPCG (Knyazev 2001) for `modal` and `buckling` | 3 |
-| multigrid | smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996) | 3 |
-| mesher | §9.2 | 2 |
-| output | VTU writer, TOON reports, state files | 2 |
-| tasks | the work-stealing task pool of §20.5 | 3 |
+| Part | Contents |
+|---|---|
+| sparse | CSR matrices, colouring, assembly |
+| linear | CG, GMRES(m), Jacobi, ILU(0) |
+| nonlinear | Newton with line search, load ramps |
+| eigen | LOBPCG (Knyazev 2001) for `modal` and `buckling` |
+| multigrid | smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996) |
+| mesher | §9.2 |
+| output | VTU writer, TOON reports, state files |
+| tasks | the work-stealing task pool of §20.5 |
 
 ### 18.5 The compiler in Goose
 
@@ -1974,28 +1923,10 @@ browser runs `check`, `fmt` and `lint` with no server.
 
 ## 19. Static semantics checklist
 
-`skein check` applies these checks in this order. Each failed check gives
-the diagnostic in brackets. The full list with the fixes is in
-[checks.md](checks.md).
-
-1. Lexical and syntax rules (§2, §3).
-2. Names: declared before use, no duplicates (§3.1, §4).
-3. Types and dimensions of each declaration and expression (§5, §6, §7).
-4. Geometry dimensions and region containment (§8).
-5. Fields, materials and physics: each unknown solved once, one equation
-   per unknown, materials cover the region (§10).
-6. Assumptions: no conflicts, conditions met (§11).
-7. Boundary conditions: form, conflicts, location (§12).
-8. Methods: present, settings valid, compatible with the physics (§13).
-9. Steps: procedures valid, constant arguments, birth and death regions
-   (§14).
-10. Results and expectations: files exist, types match (§15).
-11. Parameters, scales and studies (§20, §21), manufacture and tolerance
-    items (§22).
-12. `use` files, functions, templates and symmetry groups (§4.1, §4.2,
-    §7.4, §12.6).
-13. `allow` names a check that exists, with a reason that is not empty
-    [`allow_reason`].
+`skein check` gives each error of [checks.md §2](checks.md#2-errors). That
+catalogue is the one list of the checks, with the section of this document
+that states each rule. An `allow` must name a lint rule or a verification
+check, with a reason that is not empty [`allow_reason`].
 
 ---
 
@@ -2050,9 +1981,8 @@ run is a **case**. The procedure after the colon makes the cases:
 - `minimize` is gradient-free. Gradients by adjoint are in the roadmap
   (phase 5). `objective` names a scalar `report` of the last step
   [`study_objective`].
-- An entry can be an `expect` (§15.3). Each case evaluates it, and a
-  `minimize` study evaluates it in the best case. The cases of a `grid` are
-  in the order of the Cartesian product, with the last entry the fastest.
+- An entry can be an `expect` (§15.3). The cases of a `grid` are in the
+  order of the Cartesian product, with the last entry the fastest.
 
 ### 20.3 How cases run: Go-style concurrency
 
@@ -2123,11 +2053,9 @@ of the Go scheduler. Each hardware thread is a worker with its own queue of
 tasks. A task is one case, or one part of the work in a case: a colour of
 the assembly, a block of a solver. A worker that has no task takes one
 from the queue of another worker. Thus a study with 3 large cases on 16
-threads keeps each thread busy, and the user sets no `--jobs`.
-
-The pool needs atomic operations for the queues. Before phase 3 starts,
-check whether Goose gives atomics. If it does not, each queue uses a lock,
-which costs more time for each task but gives the same results.
+threads keeps each thread busy, and the user sets no `--jobs`. Each queue
+uses atomic operations, or a lock if Goose has no atomics. Both give the
+same results.
 
 ### 20.6 The results table
 
@@ -2253,122 +2181,16 @@ scaled form helps the solver, where the user does not write.
 
 ---
 
-## 22. Manufacture
+## 22. Export
 
-Skein is a simulation language first. But the geometry of a model is a
-parametric part, and the same parameters drive the part, the simulation
-and the studies. This section adds three things that use that fact: the
-manufacturing process of a part, its checks, and tolerance stack-ups. It
-also says how the part leaves Skein for manufacture.
-
-### 22.1 Parametric parts
-
-A part is a geometry value built from `param` values (§8, §20):
-
-```skein
-param t_wall: Length = 2 mm tol 0.1 mm in 1 mm..5 mm
-param r_fil: Length = 1.5 mm
-param d_hole: Length = 6 mm tol 0.02 mm
-
-let outer: Solid = box((0, 0, 0) mm, (80, 40, 30) mm)
-let inner: Solid = move(box((0, 0, 0) mm, (80 mm - 2*t_wall, 40 mm - 2*t_wall, 30 mm)), (t_wall, t_wall, t_wall))
-let housing: Solid = fillet(outer - inner, r_fil) - cylinder((40, 20, 0) mm, (0, 0, 1), d_hole/2, t_wall)
+```
+skein export samples/01_cantilever.skn --geometry beam --format stl
 ```
 
-This is the form that text-to-CAD tools produce from a sentence: a short
-script whose parameters have names. In Skein the script has types and
-units, so `check` finds a wall thickness in `Pressure` or a hole that the
-range of its parameter makes larger than the part.
-
-### 22.2 `manufacture`
-
-```skein
-manufacture housing: injection_mould {
-    pull: (0, 0, 1)
-    draft: 1 deg
-    min_wall: 1.2 mm
-    max_wall: 4 mm
-}
-```
-
-`manufacture r: process { … }` declares the process for region `r`. The
-processes and their settings:
-
-| Process | Settings |
+| Format | Contents |
 |---|---|
-| `cnc_mill` | `axes` (3 or 5), `tool_radius`, `max_depth_ratio`, `approach` (a list of directions for 3 axes) |
-| `injection_mould` | `pull`, `draft`, `min_wall`, `max_wall` |
-| `casting` | `pull`, `draft`, `min_wall` |
-| `sheet_metal` | `thickness`, `min_bend_radius`, `min_flange` |
-| `additive` | `build` (direction), `max_overhang`, `min_wall`, `min_hole` |
-| `turning` | `axis`, `tool_radius` |
-
-A setting that does not belong to the process is an error
-[`process_setting`].
-
-### 22.3 Design-for-manufacture checks
-
-`skein verify --dfm` runs these checks on each `manufacture` region. They
-are `verify` checks, so `allow` with a reason can turn one off. They need no
-solve, only the geometry.
-
-| Id | Test | Processes |
-|---|---|---|
-| `dfm_wall` | the local wall thickness is between `min_wall` and `max_wall` | all with `min_wall` |
-| `dfm_draft` | each face that the pull direction drags along has at least the `draft` angle | `injection_mould`, `casting` |
-| `dfm_undercut` | each surface is visible from the pull or approach directions | `injection_mould`, `casting`, `cnc_mill` |
-| `dfm_inner_radius` | each concave edge has a radius of at least `tool_radius` | `cnc_mill`, `turning` |
-| `dfm_hole` | each hole has a diameter of at least `min_hole`, and a depth of at most `max_depth_ratio` times the diameter | `additive`, `cnc_mill` |
-| `dfm_overhang` | each downward face is within `max_overhang` of the build direction | `additive` |
-| `dfm_bend` | each bend radius is at least `min_bend_radius`, each flange at least `min_flange` | `sheet_metal` |
-
-The checks work on the distance function. The local wall thickness is twice
-the radius of the largest ball inside the part at that point, which the
-distance function gives directly. Draft and overhang use the normal ∇φ.
-Undercuts and tool access use rays along the directions, on the distance
-function. Each check reports the worst place as a point, so the viewer can
-show it.
-
-Each check runs on the default parameter values, and on each case of a
-study. Thus a sweep of `t_wall` shows which cases cannot be made.
-
-### 22.4 Tolerances and stack-ups
-
-`tol` on a `param` gives a symmetric tolerance. A `tolerance` item states a
-stack-up:
-
-```skein
-param L: Length = 80 mm tol 0.1 mm
-param a: Length = 39.8 mm tol 0.05 mm
-param b: Length = 39.8 mm tol 0.05 mm
-let gap: Length = L - a - b
-
-tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
-```
-
-The compiler differentiates the expression with respect to each parameter
-that has a tolerance. It reports the nominal value and the range by the
-worst case (the sum of |∂f/∂p|·tol) and by root sum square. The check
-`dfm_stack` fails when the range of the chosen `method` (`worst_case`,
-`rss` or `monte_carlo`) is not inside the limits.
-
-`method: monte_carlo` is for a stack-up that is not linear, for example a
-gap that depends on an angle. It runs a `sample` study (§20.2) with each
-toleranced parameter uniform in its tolerance band, and takes the range of
-the expression over the samples. `samples: n` sets the number (default
-10000). The expression needs no solve, so the study is fast. The expression must be a constant: it can
-use geometry and parameters, but not fields [`not_constant`].
-
-### 22.5 Export for manufacture
-
-```
-skein export housing.skn --geometry housing --format stl
-```
-
-| Format | Contents | Phase |
-|---|---|---|
-| `stl` | a triangulated surface from the mesher, at the size of `--size` | 2 |
-| `step` | AP242 with tessellated geometry from the mesher | 4 |
+| `stl` | a triangulated surface from the mesher, at the size of `--size` |
+| `step` | AP242 with tessellated geometry from the mesher |
 
 Skein does not export exact surfaces (a B-rep). Reason: a B-rep kernel is a
 project of its own size, and Skein is a simulation language first. See the
@@ -2391,7 +2213,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `elasticity(E, nu)` | the isotropic elasticity tensor, a `Tensor4` |
 | `interp(xs, ys, x)` | piecewise linear function from two table columns |
 | `sum(expr)` | the sum of `expr` over the rows of a table (§5.6) |
-| `von_mises(sigma)`, `tresca(sigma)`, `principal(sigma)` | stress measures |
+| `von_mises(sigma)`, `principal(sigma)` | stress measures |
 | `fourier(k, T)` | heat flux `−k grad(T)` |
 | `abs`, `sqrt`, `exp`, `ln`, `sin`, `cos`, `tan`, `tanh`, `atan`, `atan2(y, x)`, `min`, `max`, `pi` | scalar math |
 | `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
@@ -2404,8 +2226,7 @@ project of its own size, and Skein is a simulation language first. See the
 
 ### Constants
 
-`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `tau` (the unit tangent of a `Curve`), `im` (imaginary unit),
-`dual_eps` (dual unit).
+`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `tau` (the unit tangent of a `Curve`), `im` (imaginary unit).
 
 ### Standard library
 
@@ -2445,4 +2266,3 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Simo, J. C., Hughes, T. J. R. (1998). Computational Inelasticity. Springer.
 - Tezduyar, T. E. (1992). Stabilized finite element formulations for incompressible flow computations. Adv. Appl. Mech. 28.
 - Vaněk, P., Mandel, J., Brezina, M. (1996). Algebraic multigrid by smoothed aggregation for second and fourth order elliptic problems. Computing 56.
-- Zienkiewicz, O. C., Zhu, J. Z. (1987). A simple error estimator and adaptive procedure for practical engineering analysis. IJNME 24.

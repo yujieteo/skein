@@ -45,7 +45,6 @@ fn add_builtins() {
         if name == "t" { t = num_ty(TIME, 0); t.varying = true; }
         if name == "n" || name == "tau" { t = num_ty(NO_DIM, 1); t.varying = true; }
         if name == "im" { t = base_ty(B_REAL); t.num = NS_COMPLEX; }
-        if name == "dual_eps" { t = base_ty(B_REAL); t.num = NS_DUAL; }
         syms.push(Sym { kind: S_BUILTIN, tok: -1, node: -1, ty: t, has_val: false, val: 0.0, phys: -1 });
         visible.insert(key(name), syms.len - 1);
     }
@@ -222,9 +221,6 @@ fn check_value_decl(n: i64, kind: i64) -> i64 {
         want_constant(value, val, str("the param '", tok_text(k.tok), "'"));
         var c = syntax::nodes[value].next;
         while c >= 0 {
-            if syntax::nodes[c].kind == syntax::N_TOL {
-                assign(first_tok(syntax::nodes[c].first), decl, expr_ty(syntax::nodes[c].first), "the tolerance");
-            }
             if syntax::nodes[c].kind == syntax::N_RANGE {
                 let lo = syntax::nodes[c].first;
                 let hi = syntax::nodes[lo].next;

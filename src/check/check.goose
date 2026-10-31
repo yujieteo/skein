@@ -94,8 +94,6 @@ fn check_item(n: i64) {
         syntax::N_ALLOW => { check_allow(n); },
         syntax::N_SCALES => { check_scales(n); },
         syntax::N_STUDY => { check_study(n); },
-        syntax::N_MANUFACTURE => { check_manufacture(n); },
-        syntax::N_TOLERANCE => { check_tolerance(n); },
         syntax::N_TEMPLATE => {
             error(syntax::nodes[n].tok, "duplicate_name", "only the standard library declares templates",
                   "write the physics in full");

@@ -83,67 +83,62 @@ let TK_BAR = 50;        // | (union)
 let TK_AMP = 51;        // & (intersection)
 
 // Keywords (spec §2.5), in the order of that list.
-let KW_ADAPT = 100;
-let KW_ALLOW = 101;
-let KW_ASSUME = 102;
-let KW_AT = 103;
-let KW_BC = 104;
-let KW_BIRTH = 105;
-let KW_CONTACT = 106;
-let KW_CRACK_TIP = 107;
-let KW_DEATH = 108;
-let KW_EQ = 109;
-let KW_EVERY = 110;
-let KW_EXPECT = 111;
-let KW_FALSE = 112;
-let KW_FN = 113;
-let KW_IN = 114;
-let KW_INTERFACE = 115;
-let KW_LAYERS = 116;
-let KW_LET = 117;
-let KW_MANUFACTURE = 118;
-let KW_MATERIAL = 119;
-let KW_MESH = 120;
-let KW_METHOD = 121;
-let KW_MODEL = 122;
-let KW_ON = 123;
-let KW_OUTPUT = 124;
-let KW_PARAM = 125;
-let KW_PHYSICS = 126;
-let KW_PLASTIC = 127;
-let KW_POINTS = 128;
-let KW_REFINE = 129;
-let KW_RELEASE = 130;
-let KW_REPORT = 131;
-let KW_SCALES = 132;
-let KW_SOLVE = 133;
-let KW_SOLVES = 134;
-let KW_STATE = 135;
-let KW_STEP = 136;
-let KW_STUDY = 137;
-let KW_SYMMETRY = 138;
-let KW_TABLE = 139;
-let KW_TEMPLATE = 140;
-let KW_TOL = 141;
-let KW_TOLERANCE = 142;
-let KW_TRUE = 143;
-let KW_USE = 144;
-let KW_WHERE = 145;
-let KW_WITHIN = 146;
+let KW_ALLOW = 100;
+let KW_ASSUME = 101;
+let KW_AT = 102;
+let KW_BC = 103;
+let KW_BIRTH = 104;
+let KW_CONTACT = 105;
+let KW_CRACK_TIP = 106;
+let KW_DEATH = 107;
+let KW_EQ = 108;
+let KW_EVERY = 109;
+let KW_EXPECT = 110;
+let KW_FALSE = 111;
+let KW_FN = 112;
+let KW_IN = 113;
+let KW_INTERFACE = 114;
+let KW_LAYERS = 115;
+let KW_LET = 116;
+let KW_MATERIAL = 117;
+let KW_MESH = 118;
+let KW_METHOD = 119;
+let KW_MODEL = 120;
+let KW_ON = 121;
+let KW_OUTPUT = 122;
+let KW_PARAM = 123;
+let KW_PHYSICS = 124;
+let KW_PLASTIC = 125;
+let KW_POINTS = 126;
+let KW_REFINE = 127;
+let KW_RELEASE = 128;
+let KW_REPORT = 129;
+let KW_SCALES = 130;
+let KW_SOLVE = 131;
+let KW_SOLVES = 132;
+let KW_STATE = 133;
+let KW_STEP = 134;
+let KW_STUDY = 135;
+let KW_SYMMETRY = 136;
+let KW_TABLE = 137;
+let KW_TEMPLATE = 138;
+let KW_TRUE = 139;
+let KW_USE = 140;
+let KW_WHERE = 141;
+let KW_WITHIN = 142;
 
 let KEYWORDS = [
-    "adapt", "allow", "assume", "at", "bc", "birth", "contact", "crack_tip", "death", "eq", "every",
-    "expect", "false", "fn", "in", "interface", "layers", "let", "manufacture",
-    "material", "mesh", "method", "model", "on", "output", "param", "physics", "plastic",
-    "points", "refine", "release", "report", "scales", "solve", "solves", "state", "step",
-    "study", "symmetry", "table", "template", "tol", "tolerance", "true", "use", "where",
-    "within",
+    "allow", "assume", "at", "bc", "birth", "contact", "crack_tip", "death", "eq", "every",
+    "expect", "false", "fn", "in", "interface", "layers", "let", "material", "mesh", "method",
+    "model", "on", "output", "param", "physics", "plastic", "points", "refine", "release", "report",
+    "scales", "solve", "solves", "state", "step", "study", "symmetry", "table", "template", "true",
+    "use", "where", "within",
 ];
 
 // The keyword kind of `word`, or TK_IDENT.
 fn keyword_kind(word: u8[:]) -> i64 {
     for k, i in KEYWORDS {
-        if k == word { return KW_ADAPT + i; }
+        if k == word { return KW_ALLOW + i; }
     }
     return TK_IDENT;
 }
@@ -153,8 +148,7 @@ fn starts_item(kind: i64) -> bool {
     match kind {
         KW_MODEL, KW_USE, KW_PARAM, KW_LET, KW_FN, KW_TABLE, KW_MATERIAL, KW_MESH => true,
         KW_POINTS, KW_PHYSICS, KW_TEMPLATE, KW_METHOD, KW_BC, KW_CONTACT, KW_INTERFACE => true,
-        KW_SYMMETRY, KW_STEP, KW_EXPECT, KW_ALLOW, KW_SCALES, KW_STUDY, KW_MANUFACTURE => true,
-        KW_TOLERANCE => true,
+        KW_SYMMETRY, KW_STEP, KW_EXPECT, KW_ALLOW, KW_SCALES, KW_STUDY => true,
         _ => false,
     }
 }
@@ -181,8 +175,7 @@ let N_SPACE = 3;         // tok: TK_SPACE, or the ident `axi`
 let N_UNITSYS = 4;       // tok: the system name, `nondim` or `{`. N_UNITFIELD* for `{`
 let N_UNITFIELD = 5;     // tok: field name. N_UNIT
 let N_USE = 6;           // tok: the string
-let N_PARAM = 7;         // tok: name. type, value, [N_TOL], [N_RANGE]
-let N_TOL = 8;           // tok: `tol`. the tolerance
+let N_PARAM = 7;         // tok: name. type, value, [N_RANGE]
 let N_LET = 9;           // tok: name. type, value
 let N_FN = 10;           // tok: name. N_FNPARAM*, result type, body
 let N_FNPARAM = 11;      // tok: name. type
@@ -209,8 +202,6 @@ let N_EXPECT = 31;       // tok: name. left, right, within. An item, a step stat
 let N_ALLOW = 32;        // tok: check id, aux: the reason string
 let N_SCALES = 33;       // tok: `scales`. the scales
 let N_STUDY = 34;        // tok: name. N_PROC, N_BLOCK of N_SETTING and N_EXPECT
-let N_MANUFACTURE = 35;  // tok: `manufacture`. region, N_PROC, N_BLOCK
-let N_TOLERANCE = 36;    // tok: name. value, low, high, [N_BLOCK]
 
 // Physics statements (spec §3, `physstmt`). A physics also holds N_LET.
 let N_MATASSIGN = 40;    // tok: `material`. N_MATON*
@@ -227,7 +218,6 @@ let N_BIRTH = 51;        // tok: `birth`. regions, [N_WHERE]
 let N_DEATH = 52;        // tok: `death`. regions, [N_WHERE]
 let N_WHERE = 53;        // tok: `where`. condition
 let N_SOLVE = 54;        // tok: `solve`. N_BLOCK
-let N_ADAPT = 55;        // tok: `adapt`. N_BLOCK
 let N_OUTPUT = 56;       // tok: `output`. values, [N_EVERY]
 let N_EVERY = 57;        // tok: `every`. count
 let N_REPORT = 58;       // tok: `report`. N_REPORTITEM*
@@ -245,7 +235,7 @@ let N_CRACK_TIP = 67;    // tok: `crack_tip`. region, value
 
 // Types (spec §3, `type`).
 let N_TYPE_NAME = 70;    // tok: name, for example `Real`, `Solid` or `Length`
-let N_TYPE_APPLY = 71;   // tok: `Vector`, `Tensor2`, `Tensor4`, `Complex`, `Quaternion` or `Dual`. type
+let N_TYPE_APPLY = 71;   // tok: `Vector`, `Tensor2`, `Tensor4` or `Complex`. type
 let N_DIM_MUL = 72;      // tok: `*`. left, right
 let N_DIM_DIV = 73;      // tok: `/`. left, right
 let N_DIM_POW = 74;      // tok: `^`, aux: the exponent in halves. base
@@ -273,13 +263,13 @@ let N_MEMBER = 101;      // tok: the member name. object
 let N_AT = 102;          // tok: `at`. field, point
 
 let NODE_NAMES = [
-    "", "program", "header", "space", "unitsys", "unitfield", "use", "param", "tol",
+    "", "program", "header", "space", "unitsys", "unitfield", "use", "param", "",
     "let", "fn", "fnparam", "table", "column", "row", "material", "prop", "mesh",
     "points", "physics", "on", "uses", "unknown", "template", "tparam", "method", "bc",
     "contact", "interface", "symmetry", "step", "expect", "allow", "scales", "study",
-    "manufacture", "tolerance", "", "", "", "matassign", "maton", "assume", "assumption",
+    "", "", "", "", "", "matassign", "maton", "assume", "assumption",
     "eq", "state", "plastic", "", "", "", "release", "birth", "death", "where", "solve",
-    "adapt", "output", "every", "report", "reportitem", "block", "setting", "refine",
+    "", "output", "every", "report", "reportitem", "block", "setting", "refine",
     "layers", "proc", "list", "range", "crack_tip", "", "", "type", "type_apply", "dim_mul",
     "dim_div", "dim_pow", "", "", "", "", "", "unit", "unit_name", "unit_mul", "unit_div",
     "unit_pow", "", "", "", "", "", "number", "percent", "string", "bool", "name",

@@ -135,8 +135,7 @@ in the file stays in the review.
 | `method_physics` | §13 | the method cannot discretize the physics | `gfd` with a `plastic` block | a method that can |
 | `inf_sup` | §13 | an unstable velocity-pressure pair with no stabilization | `order: { v: 1, p: 1 }`, `stabilize: none` | `stabilize: supg_pspg` or `order: { v: 2, p: 1 }` |
 | `order_too_low` | §13 | the cell order is too low for the derivatives | `order: 1` with `lap(lap(w))` | the minimum order |
-| `procedure_args` | §14.2 | a procedure argument is missing or not valid, or `dt: stable` has an implicit scheme or `adapt` | `transient(end: 1 s)` with no `dt` | the argument list |
-| `birth_not_meshed` | §14.3 | a `birth` region is not a part of the mesh region | | the mesh region |
+| `procedure_args` | §14.2 | a procedure argument is missing or not valid, or `dt: stable` has an implicit scheme | `transient(end: 1 s)` with no `dt` | the argument list |
 | `allow_reason` | §19 | `allow` has an empty reason or an unknown id | | the list of ids |
 
 ### 2.8 Results and expectations
@@ -150,7 +149,7 @@ in the file stays in the review.
 | `when_step` | §14.5 | `when(f, value)` is not in a `report` or an `expect` of a `transient` step, or in another `expect` whose last step is `transient` | `report when(front, 1 m)` in a `static` step | a `transient` step |
 | `expect_cases` | §15.3 | a list of an `expect` is not in a `grid` or a `zip` study, or does not have one value for each case | `== [1, 2] m` in a study of 3 cases | one value for each case |
 
-### 2.9 Parameters, scales, studies and manufacture
+### 2.9 Parameters, scales and studies
 
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
@@ -160,9 +159,8 @@ in the file stays in the review.
 | `scales_dependent` | §21.2 | two scales have dependent dimensions | `scales D, a` (both `Length`) | remove one |
 | `scales_incomplete` | §21.2 | the scales do not make a dimension that the model uses | `scales D, U` in a model with a density | the missing base dimension |
 | `scales_missing` | §21.2 | a model with dimensions has no `scales` line | | a `scales` line from the sizes of the model, for example `scales L, E` |
-| `symmetry_map` | §12.6 | the transformation of a `symmetry` item does not map `low` onto `high` | `n: 24` on a sector of 30 degrees | the angle of the sector |
+| `symmetry_map` | §12.6 | the shift by `period` of a `symmetry` item does not map `low` onto `high` | `period: (2, 0, 0) m` on a cell 1 m long | the size of the cell |
 | `nondim_unit` | §6.5 | a literal has a unit in a `nondim` model | `model m: 2d, nondim` and `1 m` | remove the unit |
-| `process_setting` | §22.2 | a setting does not belong to the process | `draft:` in `cnc_mill` | the valid settings |
 
 ---
 
@@ -203,29 +201,11 @@ mesh or the assembled operator:
 | `points_quality` | the fill distance divided by the separation distance of each point cloud | at most 4 |
 | `material_admissible` | `E` > 0, −1 < `nu` < 0.5, `rho` > 0, `mu` > 0, `k` > 0, where the material gives them | the physical range |
 
-### 4.2a Design for manufacture
-
-`skein verify --dfm` runs these checks on each `manufacture` region (spec
-§22.3). They need the geometry only, so they run with no solve, and on each
-case of a study.
-
-| Id | Test | Limit |
-|---|---|---|
-| `dfm_wall` | local wall thickness | `min_wall` to `max_wall` |
-| `dfm_draft` | draft angle of each face along the pull direction | at least `draft` |
-| `dfm_undercut` | each surface is visible from a pull or approach direction | no hidden surface |
-| `dfm_inner_radius` | radius of each concave edge | at least `tool_radius` |
-| `dfm_hole` | hole diameter and depth ratio | `min_hole`, `max_depth_ratio` |
-| `dfm_overhang` | angle of each downward face to the build direction | at most `max_overhang` |
-| `dfm_bend` | bend radius and flange length | `min_bend_radius`, `min_flange` |
-| `dfm_stack` | the range of a `tolerance` stack-up by its `method` | inside the limits of the item |
-
 ### 4.2 After the solve
 
 | Id | Test | Limit |
 |---|---|---|
 | `residual` | the relative residual of the final linear or nonlinear iteration | at most 10 × `rtol` |
-| `newton_converged` | Newton met `rtol` in each increment, with no cut of the increment left | converged |
 | `equilibrium` | the sum of the reactions and the applied loads, for each static step of a solid | 10⁻⁶ × the largest applied load |
 | `energy_balance` | linear static: the external work equals 2 × the strain energy. Transient: kinetic energy + strain energy − external work + dissipation stays constant. | 10⁻⁶ relative (static), 10⁻³ relative (transient) |
 | `conservation` | the net mass flux through the boundary of an incompressible flow, divided by the total flux | `fv`: 10⁻⁸. `cg`, `dg`: 10⁻³. |
@@ -254,8 +234,6 @@ These stop a run. `allow` cannot turn them off.
 | Id | Cause | Suggested fix |
 |---|---|---|
 | `probe_outside` | an `at` point is outside the region of the field | the bounding box of the region |
-| `restart_stale` | `--from` with a source that changed before that step | run from the first step |
 | `mesh_failed` | the mesher could not mesh a region | the smallest feature and the size that it needs |
 | `solver_diverged` | the linear or the nonlinear solver did not converge | a smaller increment, `ramp`, or another preconditioner |
-| `out_of_memory` | the model does not fit the memory of the target | a coarser mesh, or the native target |
 | `case_failed` | one case of a study stopped. The study continues and the table gives the case this status with the message. | the message of the case |

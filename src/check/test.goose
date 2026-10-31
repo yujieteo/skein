@@ -362,7 +362,6 @@ fn test_steps() {
     expect_clean("G21 dt: stable with ssprk3", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: ssprk3) {\n    bc f: u = 0\n}\n"));
     expect_ids("dt: stable with the default scheme", str(elastic, "step go: transient(end: 1 s, dt: stable) {\n    bc f: u = 0\n}\n"), "procedure_args\n");
     expect_ids("dt: stable with an implicit scheme", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: bdf2) {\n    bc f: u = 0\n}\n"), "procedure_args\n");
-    expect_ids("dt: stable with adapt", str(elastic, "step go: transient(end: 1 s, dt: stable, scheme: ssprk3, adapt: { rtol: 1e-4, atol: 1e-8 }) {\n    bc f: u = 0\n}\n"), "procedure_args\n");
     expect_clean("G9 a list of frequencies", str(elastic, "step go: harmonic(freq: [10, 20] Hz) {\n    bc f: u = 0\n}\n"));
     expect_clean("G6 an eigenvalue", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 10 Hz within 1%\n"));
     expect_clean("an eigenvalue with no units", "model m: 3d, nondim\nlet b: Solid = box((0, 0, 0), (1, 1, 1))\nlet f: Surface = boundary(b, x == 0)\nmaterial steel {\n    E: Pressure = 1000\n    nu: Real = 0.3\n    rho: Density = 1\n}\nmesh m1 on b { size: 0.1 }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nstep go: modal(count: 4) {\n    bc f: u = 0\n    report f1 = eigenvalue(1)\n}\nexpect f1: eigenvalue(1) == 2.5 within 1%\n");
@@ -419,7 +418,6 @@ fn test_studies() {
     expect_id("scales_missing", "model m: 3d, SI\nlet a: Length = 1 m\n");
     expect_id("scales_dependent", "model m: 3d, SI\nlet a: Length = 1 m\nscales a, 2*a\n");
     expect_id("scales_incomplete", "model m: 3d, SI\nlet a: Length = 1 m\nlet r: Density = 1 kg/m^3\nscales a\n");
-    expect_id("process_setting", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nmanufacture b: cnc_mill {\n    draft: 1 deg\n}\n"));
 }
 
 // The stage of the work of a case that each param reaches (spec §20.4),

@@ -18,21 +18,18 @@
 - [13. Methods](#13-methods)
 - [14. Steps](#14-steps)
 - [15. Birth and death](#15-birth-and-death)
-- [16. Restarts](#16-restarts)
-- [17. Results and submodels](#17-results-and-submodels)
-- [18. Tables](#18-tables)
-- [19. Expectations](#19-expectations)
-- [20. Turning off a check](#20-turning-off-a-check)
-- [21. Inelastic materials](#21-inelastic-materials)
-- [22. Coupled physics](#22-coupled-physics)
-- [23. Contact](#23-contact)
-- [24. Mesh adaptivity](#24-mesh-adaptivity)
-- [25. ODEs](#25-odes)
-- [26. Parameters and studies](#26-parameters-and-studies)
-- [27. Scales and dimensionless groups](#27-scales-and-dimensionless-groups)
-- [28. Manufacture and tolerances](#28-manufacture-and-tolerances)
-- [29. Library files](#29-library-files)
-- [30. Symmetry groups](#30-symmetry-groups)
+- [16. Results and submodels](#16-results-and-submodels)
+- [17. Tables](#17-tables)
+- [18. Expectations](#18-expectations)
+- [19. Turning off a check](#19-turning-off-a-check)
+- [20. Inelastic materials](#20-inelastic-materials)
+- [21. Coupled physics](#21-coupled-physics)
+- [22. Contact](#22-contact)
+- [23. ODEs](#23-odes)
+- [24. Parameters and studies](#24-parameters-and-studies)
+- [25. Scales and dimensionless groups](#25-scales-and-dimensionless-groups)
+- [26. Library files](#26-library-files)
+- [27. Symmetry groups](#27-symmetry-groups)
 - [Appendix A. Keywords](#appendix-a-keywords)
 
 </details>
@@ -81,7 +78,7 @@ are `SI`, `mm_N_MPa_s`, `mm_kg_ms` and `nondim`, or a record:
 model bracket: 3d, { length: mm, mass: t, time: s, temperature: K }
 ```
 
-`use` lines for library files come after the header (§29).
+`use` lines for library files come after the header (§26).
 
 Spec: [§3](skein_spec.md#3-grammar), [§6.5](skein_spec.md#65-unit-systems).
 
@@ -117,8 +114,8 @@ Spec: [§3.1](skein_spec.md#31-order-of-items), [§4](skein_spec.md#4-names-and-
 | Kind | Types |
 |---|---|
 | scalar quantities | `Length`, `Pressure`, … or a dimension expression such as `Force/Length` |
-| other scalars | `Real`, `Angle`, `Int`, `Bool`, `Str` |
-| number systems | `Complex<D>`, `Quaternion<D>`, `Dual<D>`. The list is closed. |
+| other scalars | `Real`, `Angle`, `Int`, `Bool` |
+| complex values | `Complex<D>` |
 | tensors | `Vector<D>`, `Tensor2<D>`, `Tensor4<D>` |
 | geometry | `Solid`, `Surface`, `Curve`, `Point` |
 | model | `Mesh`, `Points`, `Results` |
@@ -184,10 +181,10 @@ Spec: [§7](skein_spec.md#7-expressions-and-operators).
 
 ## 7. Geometry
 
-Shapes: `box`, `cylinder`, `sphere`, `cone`, `torus`, `rect`, `circle`,
+Shapes: `box`, `cylinder`, `sphere`, `rect`, `circle`,
 `polygon`, `extrude`, `revolve`, `sweep`, `line`, `arc`, `spline`, `point`.
 Operators: `|` union, `&` intersection, `-` difference. Modifiers: `fillet`,
-`chamfer`, `move`, `rotate`, `scale`.
+`move`, `rotate`, `scale`.
 
 ```skein
 let profile: Surface = polygon((0, 0) mm, (60, 0) mm, (60, 8) mm, (8, 8) mm, (8, 40) mm, (0, 40) mm)
@@ -371,8 +368,7 @@ method thermal: gfd { points: c, stencil: 12 }
 
 A block may hold its settings on one line, with commas, or on separate
 lines. `stabilize` adds residual-based terms for flow: `supg`, `supg_pspg`,
-`supg_pspg_lsic` or `vms`. `limiter` (for `fv`) and `shock_capturing:
-entropy_viscosity` (for `dg`) capture shocks.
+`supg_pspg_lsic` or `vms`. `limiter` (for `fv`) captures shocks.
 `family: serendipity` (order 2) and `family: incompatible` (order 1) need
 `cell: quad` or `hex`. `quadrature: reduced` takes one Gauss point fewer
 along each axis.
@@ -408,8 +404,6 @@ step heat_up: transient(end: 1 h, dt: 30 s, scheme: bdf2) {
 
 The procedures are `static`, `transient`, `modal`, `buckling` and
 `harmonic(freq: [f])`, which takes a list and uses `Complex` unknowns.
-`transient(adapt: { rtol: 1e-4, atol: 1e-8 })` with `scheme: bdf` changes
-the time step and the order to keep the error below the limits.
 `dt: stable` with `scheme: central_difference` or `ssprk3` lets the solver
 choose the stable increment. Steps run in the order of the file.
 
@@ -442,22 +436,7 @@ Spec: [§14.3](skein_spec.md#143-birth-and-death).
 
 ---
 
-## 16. Restarts
-
-Each run saves the state at the end of each step. To start again from a
-step:
-
-```
-skein run embankment.skn --from lift_3
-```
-
-The steps above `lift_3` must not change since the saved run.
-
-Spec: [§14.7](skein_spec.md#147-restarts).
-
----
-
-## 17. Results and submodels
+## 16. Results and submodels
 
 ```skein
 let global: Results = results("bracket.skn", step: "load")
@@ -474,7 +453,7 @@ Spec: [§15](skein_spec.md#15-results-submodels-and-expectations).
 
 ---
 
-## 18. Tables
+## 17. Tables
 
 ```skein
 table hardening{eps_p: Real, sy: Pressure in MPa}:
@@ -491,7 +470,7 @@ Spec: [§5.6](skein_spec.md#56-tables).
 
 ---
 
-## 19. Expectations
+## 18. Expectations
 
 ```skein
 expect tip: u.z at (L, 0 mm, 0 mm) == -P*L^3/(3*E*I_z) within 2%
@@ -514,7 +493,7 @@ Spec: [§15.3](skein_spec.md#153-expect).
 
 ---
 
-## 20. Turning off a check
+## 19. Turning off a check
 
 ```skein
 allow volumetric_lock: "nu = 0.49 is for a sensitivity study; the result is not used"
@@ -527,7 +506,7 @@ Spec: [checks.md §1](checks.md#1-how-diagnostics-work).
 
 ---
 
-## 21. Inelastic materials
+## 20. Inelastic materials
 
 ```skein
 physics solid on bar solves u: Vector<Length> {
@@ -552,7 +531,7 @@ Spec: [§10.6](skein_spec.md#106-inelastic-materials).
 
 ---
 
-## 22. Coupled physics
+## 21. Coupled physics
 
 Two physics blocks couple when one uses the field of the other:
 
@@ -579,7 +558,7 @@ Spec: [§10.4](skein_spec.md#104-coupling), [§10.7](skein_spec.md#107-fsi-inter
 
 ---
 
-## 23. Contact
+## 22. Contact
 
 ```skein
 contact grip: jaw_face, part_face {
@@ -592,19 +571,7 @@ Spec: [§12.4](skein_spec.md#124-contact).
 
 ---
 
-## 24. Mesh adaptivity
-
-```skein
-step load: static {
-    adapt { estimator: zz, target: 1%, max_levels: 3 }
-}
-```
-
-Spec: [§14.6](skein_spec.md#146-mesh-adaptivity).
-
----
-
-## 25. ODEs
+## 23. ODEs
 
 A physics with no region solves global unknowns. It is a system of ODEs:
 
@@ -632,7 +599,7 @@ Spec: [§10.5](skein_spec.md#105-odes-and-global-unknowns).
 
 ---
 
-## 26. Parameters and studies
+## 24. Parameters and studies
 
 A `param` is a `let` that a study or `--set` can change. `in lo..hi` gives
 its range:
@@ -648,7 +615,7 @@ study re_sweep: grid {
 The procedures are `grid`, `zip`, `sample` and `minimize`. Each case runs
 all the steps. Cases run at the same time on worker threads. A named
 `report cd = …` and each `expect` give a column of the results table. An
-`expect` in the study checks each case (§19).
+`expect` in the study checks each case.
 
 ```
 skein run model.skn --study re_sweep --jobs 3
@@ -659,7 +626,7 @@ Spec: [§20](skein_spec.md#20-parameters-and-studies).
 
 ---
 
-## 27. Scales and dimensionless groups
+## 25. Scales and dimensionless groups
 
 ```skein
 let mu: DynViscosity = rho*U*D/Re
@@ -674,32 +641,7 @@ Spec: [§21](skein_spec.md#21-dimensional-analysis-and-scaling).
 
 ---
 
-## 28. Manufacture and tolerances
-
-```skein
-param t_wall: Length = 2 mm tol 0.1 mm in 1 mm..5 mm
-
-manufacture housing: injection_mould {
-    pull: (0, 0, 1)
-    draft: 1 deg
-    min_wall: 1.2 mm
-}
-
-tolerance fit: gap in 0.1 mm..0.7 mm { method: worst_case }
-```
-
-`skein verify --dfm` checks the part against its process: wall thickness,
-draft, undercuts, inner radii, holes, overhangs and bends. A `tolerance`
-item checks a stack-up of `tol` values, by `worst_case`, `rss` or
-`monte_carlo`. `skein export` writes the part as STL or tessellated STEP.
-`shell`, `loft` and `pattern` make the common features of a housing or a
-bracket.
-
-Spec: [§22](skein_spec.md#22-manufacture), [§8.1](skein_spec.md#81-distance-functions).
-
----
-
-## 29. Library files
+## 26. Library files
 
 ```skein
 use "materials.skn"
@@ -713,15 +655,14 @@ Spec: [§4.1](skein_spec.md#41-use-phase-2).
 
 ---
 
-## 30. Symmetry groups
+## 27. Symmetry groups
 
 ```skein
-symmetry rotor: cyclic { n: 24, axis: (0, 0, 1), low: face_a, high: face_b }
+symmetry cell: bloch { period: (1, 0, 0) m, low: x0, high: x1, k: 0 }
 ```
 
-A `symmetry` item solves one sector of a body that repeats. The groups are
-`cyclic`, `dihedral` and `bloch` (periodic, with a wave vector `k`). The
-list is closed.
+A `symmetry` item solves one cell of a body that repeats, with a wave
+vector `k`. The one group is `bloch`.
 
 Spec: [§12.6](skein_spec.md#126-symmetry-groups).
 
@@ -729,16 +670,6 @@ Spec: [§12.6](skein_spec.md#126-symmetry-groups).
 
 ## Appendix A. Keywords
 
-```
-adapt       allow       assume      at          bc          birth
-contact     crack_tip   death       eq          every       expect
-false       fn          in          interface   layers      let
-manufacture material    mesh        method      model       on
-output      param       physics     plastic     points      refine
-release     report      scales      solve       solves      state
-step        study       symmetry    table       template    tol
-tolerance   true        use         where       within
-```
-
+Spec [§2.5](skein_spec.md#25-keywords) lists the keywords.
 A keyword can be a name only before the `:` of a setting, a named argument
 or a record entry: `mesh: m`, `step: "load"`.

@@ -1,5 +1,5 @@
 // `skein export model.skn --geometry name --format stl` (docs/command_line.md
-// §7.1, spec §22.5): `check`, then the mesh of one `let` shape, and its
+// §7.1, spec §22): `check`, then the mesh of one `let` shape, and its
 // surface as ASCII STL on standard output. A Solid gives the boundary
 // faces of its tetrahedra, with the normals out of the solid. A 2D
 // Surface gives its triangles, in the plane z = 0. The coordinates are in

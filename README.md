@@ -123,7 +123,7 @@ The language design has these goals:
   finite volume, and meshless methods (RKPM, generalized finite
   differences).
 - **Advanced analysis from the start.** Element birth and death, submodels,
-  CFD stabilization, restarts, coupled physics, modal and buckling steps.
+  CFD stabilization, coupled physics, modal and buckling steps.
 - **Verification by default.** Each run checks the rigid-body modes, the
   mesh quality, the residual, the equilibrium, the energy balance and the
   conservation of mass, and prints the result.
@@ -136,8 +136,7 @@ The language design has these goals:
   command prints `Re`, `Pr` and the other groups of the model. A `param` and a `study` sweep a
   model, with the cases on parallel workers.
 
-Simulation is the core. Parametric parts, export for manufacture and
-design-for-manufacture checks come later, and the
+Simulation is the core. Parametric parts and export come later, and the
 [tradeoffs](docs/tradeoffs.md) rank all the goals.
 
 ## Documentation
