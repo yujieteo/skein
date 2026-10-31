@@ -486,6 +486,7 @@ fn test_lint() {
     expect_lints("allow", str(fixed, "let a: Length = 1 m\nallow unused_let: \"a is for the reader\"\n"), "");
     expect_lints("unused_material", str(H, SOLID), "unused_let\nunused_material\n");
     expect_lints("unused_field", str(elastic, "step go: static {\n    bc f: u = 0\n}\n"), "unused_field\n");
+    expect_lints("unused_field with a material of the unknown", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial solid {\n    k: Conductivity = 2 W/(m*K)*(1 + 0.002 K^-1*T)\n}\nmesh m1 on b { size: 0.2 m }\nphysics s on b solves T: Temperature = 400 K {\n    material solid\n    eq div(-k*grad(T)) = 0\n}\nstep go: static {\n    bc f: T = 300 K\n}\n"), "unused_field\n");
     expect_lints("a field in a report", str(elastic, "step go: static {\n    bc f: u = 0\n    report max(von_mises(sigma), b)\n}\n"), "");
     // A load on a region before its birth, and after its death.
     let staged = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet top: Solid = box((0, 0, 1) m, (1, 1, 2) m)\nlet all: Solid = b | top\nlet f: Surface = boundary(b, z == 0 m)\nlet lid: Surface = boundary(top, z == 2 m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n}\nmesh m1 on all { size: 0.1 m }\nphysics s on all: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nbc f: u = 0\n");

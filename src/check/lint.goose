@@ -44,16 +44,15 @@ fn warn(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
     add_diag(tok, id, msg, fix, true);
 }
 
-// Adds each name of the subtree of `n` to `used_names`, except in the
-// subtree `skip`. With `targets` false, the left side of a `bc` is not a use.
-recursive fn note_names(n: i64, skip: i64, targets: bool) {
-    if n == skip { return; }
+// Adds each name of the subtree of `n` to `used_names`. With `targets`
+// false, the left side of a `bc` is not a use.
+recursive fn note_names(n: i64, targets: bool) {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_NAME { used_names.insert(key(tok_text(k.tok)), 1); }
     var c = k.first;
     var i = 0;
     while c >= 0 {
-        if targets || k.kind != syntax::N_BC || i != 1 { note_names(c, skip, targets); }
+        if targets || k.kind != syntax::N_BC || i != 1 { note_names(c, targets); }
         c = syntax::nodes[c].next;
         i++;
     }
@@ -63,7 +62,7 @@ recursive fn note_names(n: i64, skip: i64, targets: bool) {
 // that no name uses. A `let` of a `use` file is not a part of the model.
 fn unused_let() {
     used_names.clear();
-    note_names(model_prog, -1, true);
+    note_names(model_prog, true);
     var c = syntax::nodes[model_prog].first;
     while c >= 0 {
         let k = syntax::nodes[c];
@@ -102,13 +101,17 @@ fn unused_material() {
     }
 }
 
-// `unused_field`: no part of the model outside a physics uses a name of it
-// (an unknown, a state or a `let`), other than as the left side of a `bc`.
-// Then the solve of its unknowns gives nothing.
+// `unused_field`: no part of the model outside a physics and its materials
+// uses a name of it (an unknown, a state or a `let`), other than as the left
+// side of a `bc`. Then the solve of its unknowns gives nothing.
 fn unused_field() {
     for p, i in physics {
         used_names.clear();
-        note_names(model_prog, p.node, false);
+        var c = syntax::nodes[model_prog].first;
+        while c >= 0 {
+            if c != p.node && syntax::nodes[c].kind != syntax::N_MATERIAL { note_names(c, false); }
+            c = syntax::nodes[c].next;
+        }
         var used = false;
         for s in syms {
             if s.phys == i && s.tok >= 0 && used_names.contains(key(tok_text(s.tok))) { used = true; }
