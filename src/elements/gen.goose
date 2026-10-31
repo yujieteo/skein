@@ -551,7 +551,7 @@ fn mesh(n: i64) {
                 mesh_fine = scalar_value(child(s, 1));
             }
         } else if kind(s) != syntax::N_SETTING {
-            unsupported(tok(s), "layers are not in this generator", "remove the line");
+            unsupported(tok(s), "layers and crack_tip are not in this generator", "remove the line");
         } else if name(s) == "size" {
             mesh_size = scalar_value(v);
         } else if name(s) == "cell" {

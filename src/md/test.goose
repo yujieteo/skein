@@ -113,10 +113,21 @@ fn test_escapes() {
     }
 }
 
+// A mesh lists its `crack_tip` entry (gap G20).
+fn test_crack_tip() {
+    let result = document("examples/femahoy/fracture_centre_crack.skn");
+    let want = "- crack_tip `tip`: $L_{\\mathrm{q}}$";
+    if find(result, want) < 0 {
+        failures++;
+        print("FAIL crack_tip: no '", want, "' in:\n", result);
+    }
+}
+
 fn main() {
     test_golden();
     test_deterministic();
     test_escapes();
+    test_crack_tip();
     if failures > 0 {
         print("md: ", failures, " failures");
         exit(1);

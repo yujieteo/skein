@@ -351,5 +351,31 @@ fn check_discretization(n: i64, kind: i64) {
     check_values(b);
     let size = setting(b, "size");
     if size >= 0 { want_constant(size, setting_ty(size), "the size"); }
+    var c = syntax::nodes[b].first;
+    while c >= 0 {
+        if syntax::nodes[c].kind == syntax::N_CRACK_TIP { check_crack_tip(c, kind); }
+        c = syntax::nodes[c].next;
+    }
     declare(kind, k.tok, n, kind_ty(if kind == S_MESH { K_MESH } else { K_POINTS }));
+}
+
+// `crack_tip r: size` (spec §9.1): a Point of a 2D mesh and a constant Length.
+// check_values skips the entry: this function types it once.
+fn check_crack_tip(c: i64, kind: i64) {
+    let region = syntax::nodes[c].first;
+    let t = region_ty(region);
+    let size = syntax::nodes[region].next;
+    let s = setting_ty(size);
+    if kind != S_MESH || space != 2 {
+        error(syntax::nodes[c].tok, "crack_tip_form", "crack_tip stands only in the mesh of a 2d model",
+              "use refine, or a 2d model");
+    } else if !is_any(t) && (t.kind != K_GEOM || t.geo != 0) {
+        error(first_tok(region), "crack_tip_form", str("the crack tip is ", ty_str(t), ", not a Point"),
+              "let tip: Point = point((a, 0 mm))");
+    } else if !is_any(s) && (!is_num(s) || s.dim != LENGTH || s.rank != 0) {
+        error(first_tok(size), "crack_tip_form", str("the size of the cells at the crack tip is ", ty_str(s)),
+              "give a Length, for example crack_tip tip: 0.5 mm");
+    } else {
+        want_constant(size, s, "the size of the cells at the crack tip");
+    }
 }
