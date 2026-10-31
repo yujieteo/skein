@@ -183,14 +183,15 @@ fn check_step(n: i64) {
     cur_step = -1;
 }
 
-// The constant `count` of a `modal` or `buckling` step, its first argument,
-// or -1 (spec §14.2).
+// The literal `count` of a `modal` or `buckling` step, its first argument,
+// or -1 when no literal gives it (spec §14.2).
 fn proc_count(pr: i64) -> i64 {
     var a = syntax::nodes[pr].first;
     var i = 0;
     while a >= 0 {
         let k = syntax::nodes[a];
         if (k.aux >= 0 && tok_text(k.aux) == "count") || (k.aux < 0 && i == 0) {
+            guard syntax::nodes[k.first].kind == syntax::N_NUMBER else { return -1; }
             let v, ok = const_value(k.first);
             return if ok { v as i64 } else { -1 };
         }
