@@ -80,19 +80,18 @@ fn dof_estimate(lane: i64) -> i64 {
 }
 
 // Writes the program of the model that `read_model` read with generator
-// `lane`. The program puts its results in `results_dir`. With a
-// `mesh_dir`, it writes its mesh there, or with `mesh_read` it reads its
-// mesh from there. The shell generator meshes each time.
-fn write_program(lane: i64, results_dir: u8[:], mesh_dir: u8[:], mesh_read: bool, program: u8[>..]&) {
+// `lane`. The program puts its results in `results_dir`. In a study, it
+// writes or reads the stages of `share`. The shell generator shares none.
+fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&) {
     // The skein executable is build/skein in the repository, so the runtime
     // is in src/runtime beside it.
     let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" } else { "../src/runtime" });
     if lane == LANE_SHELL {
         shells_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_SIMPLEX {
-        elements_gen::generate(runtime_path, results_dir, mesh_dir, mesh_read, program);
+        elements_gen::generate(runtime_path, results_dir, share, program);
     } else {
-        generate(runtime_path, results_dir, mesh_dir, mesh_read, program);
+        generate(runtime_path, results_dir, share, program);
     }
 }
 
@@ -153,7 +152,7 @@ fn run(args: const u8[:][:]) -> i64 {
         return 1;
     }
     var program: u8[>..] = [];
-    write_program(lane, results_dir, "", false, program);
+    write_program(lane, results_dir, no_share(), program);
     let source = str(build_dir, "/main.goose");
     let exe = str(build_dir, "/", model_name);
     if !write_file(source, program) {
@@ -179,13 +178,16 @@ fn run(args: const u8[:][:]) -> i64 {
 //
 //     .skein/build/<model>/<study>/<case>/main.goose    the program of a case
 //     .skein/studies/<model>/<study>/<case>/             the results of a case
-//     .skein/studies/<model>/<study>/mesh/               the shared mesh
+//     .skein/studies/<model>/<study>/shared/             the shared stages
 //     .skein/studies/<model>/<study>.toon                the table
 //
-// When no varied param reaches the mesh (spec §20.4), case 1 runs first and
-// writes its mesh, and each other case reads that mesh. Each case assembles
-// and solves again. The shell generator meshes each case again, because
-// its mesh holds the section of each cell.
+// Case 1 runs first and writes the stages that no varied param reaches
+// (spec §20.4), and each other case reads them. When the varied params
+// reach the physics or the loads, the mesh is shared. When they reach only
+// expect and report expressions, the mesh and the solution of each step
+// are shared, and each other case runs only the post-processing. The shell
+// generator shares no stage, because its mesh holds the section of each
+// cell.
 
 // The bytes of memory of a case for each dof of its mesh. Reason: a row of
 // the matrix of a 27-node hexahedron mesh holds up to 375 entries of 12
@@ -285,7 +287,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
     var case_jobs: CaseJob[>..] = [];
     var model: u8[>..] = [];
-    var mesh_dir: u8[>..] = [];
+    var share = no_share();
     var dofs = 0;
     for c in 0..case_count {
         let cp = syntax::parse_model(path, case_source(text, c));
@@ -296,14 +298,16 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         };
         model.clear();
         model.append(model_name);
-        if c == 0 && stage < check::STAGE_MESH && lane != LANE_SHELL {
-            format(mesh_dir, ".skein/studies/", model, "/", study, "/mesh");
-            shell(str("rm -rf ", shell_quoted(mesh_dir)));
-            if !make_dirs(mesh_dir) {
+        if c == 0 && lane != LANE_SHELL {
+            share.stages = check::STAGE_MESH - max(stage, check::STAGE_POST);
+            format(share.dir, ".skein/studies/", model, "/", study, "/shared");
+            shell(str("rm -rf ", shell_quoted(share.dir)));
+            if share.stages > 0 && !make_dirs(share.dir) {
                 write_stderr("skein run: cannot make the directory .skein\n");
                 return 1;
             }
         }
+        share.reads = c > 0;
         dofs = max(dofs, dof_estimate(lane));
         let build_dir = str(".skein/build/", model, "/", study, "/", c + 1);
         let case_dir = str(".skein/studies/", model, "/", study, "/", c + 1);
@@ -312,7 +316,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
             return 1;
         }
         var program: u8[>..] = [];
-        write_program(lane, case_dir, mesh_dir, mesh_dir.len > 0 && c > 0, program);
+        write_program(lane, case_dir, share, program);
         let source = str(build_dir, "/main.goose");
         let exe = str(build_dir, "/", model);
         if !write_file(source, program) {
@@ -340,7 +344,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     }
     for &job in case_jobs { job.threads = threads; }
     outs.clear();
-    var ends = run_cases(case_jobs[..if mesh_dir.len > 0 { 1 } else { 0 }], 1);
+    var ends = run_cases(case_jobs[..if share.stages > 0 { 1 } else { 0 }], 1);
     ends.append(run_cases(case_jobs[ends.len..], k));
     // The tokens of the cases replaced those of the model: read it again
     // for the columns and the place of the study.

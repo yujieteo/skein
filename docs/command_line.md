@@ -156,8 +156,10 @@ per output time) and the state to `.skein/state/<model>/<step>.sks`.
 `run --study` writes the results of each case under
 `.skein/studies/<model>/<study>/<case>/`, and the table of all cases to
 `.skein/studies/<model>/<study>.toon` (§6.5).
-When no varied parameter reaches the mesh (spec §20.4), case 1 writes its
-mesh to `.skein/studies/<model>/<study>/mesh/`, and the other cases read it.
+Case 1 writes the stages that no varied parameter reaches (spec §20.4) to
+`.skein/studies/<model>/<study>/shared/`, and the other cases read them:
+the mesh, and also the solution of each step when the varied parameters
+reach only `expect` and `report` expressions.
 Each case gets its threads in the environment variable `SKEIN_THREADS`.
 
 ---

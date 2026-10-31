@@ -3,13 +3,16 @@
 // adiabatic, so the centre temperature does not change with the length:
 // the expect holds in each case. The heat out of the sides grows with the
 // length. The study sources varies only the source, so its cases share
-// one mesh (spec §20.4). The expect holds only for the default source.
+// one mesh (spec §20.4). The expect holds only for the default source. The
+// study bands varies only the tolerance of the expect, so its cases share
+// the mesh and the solution, and the model solves once.
 
 model heated_bar_study_tet: 3d, SI
 
 param lx: Length = 0.005 m in 0.004 m..0.01 m
 let a: Length = 0.02 m
 param qv: Power/Volume = 1e7 W/m^3
+param band: Temperature = 0.0147 K
 
 scales a, 100 K, 20 W/(m*K)
 
@@ -47,4 +50,8 @@ study sources: grid {
     qv: [1e7, 2e7] W/m^3
 }
 
-expect centre: T at (0.0025, 0.01, 0.01) m == 14.734270656 degC within 0.0147 K
+study bands: grid {
+    band: [0.0147, 1e-12] K
+}
+
+expect centre: T at (0.0025, 0.01, 0.01) m == 14.734270656 degC within band

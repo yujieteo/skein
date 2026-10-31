@@ -140,6 +140,10 @@ fn list_cases(grid: bool, entries: i64[:]) -> bool {
         first.push(texts.len);
         list_texts(v, texts);
         count.push(texts.len - first[first.len - 1]);
+        guard count[count.len - 1] > 0 else {
+            syntax::error_at(tok(e), "procedure_args", str("the list of '", name(e), "' has no values"), "give the list one value or more");
+            return false;
+        };
     }
     if grid {
         case_count = 1;

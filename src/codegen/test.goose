@@ -26,7 +26,7 @@ fn generate(text: u8[:]) -> u8[>..] {
         format(out, "error ", e.id, " ", t.line, ":", t.col, " ", e.msg);
         return out;
     }
-    codegen::generate("RUNTIME", "RESULTS", "", false, out);
+    codegen::generate("RUNTIME", "RESULTS", codegen::no_share(), out);
     return out;
 }
 
@@ -411,6 +411,8 @@ fn test_study_cases() {
                 "error procedure_args 12:20 n of sample is a whole number of 1 or more");
     expect_text("a sample unit", cases("study s: sample(n: 2, method: lhs, seed: 1) {\n    a: 500 mm..2 m\n}\n"),
                 "error unsupported 13:5 a sample takes a range of two numbers in one unit");
+    expect_text("an empty list", cases("study s: grid {\n    a: [] m\n}\n"),
+                "error procedure_args 13:5 the list of 'a' has no values");
     expect_text("a param twice", cases("study s: grid {\n    a: [1] m\n    a: [2] m\n}\n"),
                 "error study_param 14:5 the study varies 'a' twice");
     // A bare number in a list takes the unit of the list, also after a `-`.
@@ -528,6 +530,7 @@ fn test_study_run() {
         ["--jobs 2", "2"],
         ["--study lengths --jobs 0", "2"],
         ["--study sources --jobs 2", "1"],
+        ["--study bands --jobs 2", "1"],
     ];
     for r in runs {
         var c: u8[>..] = [];
@@ -549,9 +552,9 @@ fn test_study_run() {
     // lx reaches the mesh, so each case meshes. qv reaches only the physics:
     // case 2 reads the mesh of case 1, and gives twice its heat.
     let studies = "build/.skein/studies/heated_bar_study_tet";
-    if is_dir(str(studies, "/lengths/mesh")) || !is_dir(str(studies, "/sources/mesh")) {
+    if is_dir(str(studies, "/lengths/shared")) || !is_dir(str(studies, "/sources/shared")) {
         failures++;
-        print("FAIL skein run --study: the study lengths has a shared mesh, or the study sources has none");
+        print("FAIL skein run --study: the study lengths shares stages, or the study sources shares none");
     }
     table.clear();
     read_file(str(studies, "/sources.toon"), table);
@@ -559,6 +562,26 @@ fn test_study_run() {
         if find(table, want) < 0 {
             failures++;
             print("FAIL skein run --study sources: no '", want, "' in:\n", table);
+        }
+    }
+    // band reaches only the expect: case 2 reads the solution of case 1,
+    // so the study solves once, and the tolerance of case 2 is too small.
+    table.clear();
+    read_file(str(studies, "/bands.toon"), table);
+    for want in ["  1,0.0147 K,ok,pass,-20.0", "  2,1e-12 K,ok,fail,-20.0"] {
+        if find(table, want) < 0 {
+            failures++;
+            print("FAIL skein run --study bands: no '", want, "' in:\n", table);
+        }
+    }
+    // The solve record of a case (command_line.md §6) has one row for each solve.
+    for c in ["1", "2"] {
+        var record: u8[>..] = [];
+        read_file(str(studies, "/bands/", c, "/run.toon"), record);
+        let want = if c == "1" { "\nsolve[1]{" } else { "\nsolve[0]{" };
+        if find(record, want) < 0 {
+            failures++;
+            print("FAIL skein run --study bands: case ", c, " has no '", want[1..], "' in:\n", record);
         }
     }
 }

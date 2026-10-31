@@ -3470,11 +3470,11 @@ static uint8_t elements_plane_g8(int64_t axis_g, double value_g, int64_t gs_sp) 
         t2.r_g = 0.0;
         t4 = t2;
         int64_t t5 = (int64_t)GS_GL->elements_region_g8.len;
-        if (t5 >= 8) gs_abort(GS_E_CAPACITY, gs_file4, 104);
+        if (t5 >= 8) gs_abort(GS_E_CAPACITY, gs_file4, 125);
         elements_Part_g8 *t6 = (elements_Part_g8 *)(GS_GL->elements_region_g8.e + t5);
         *(elements_Part_g8 *)t6 = t4;
         GS_GL->elements_region_g8.len = (uint8_t)(t5 + 1);
-        int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file4, 105);
+        int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file4, 126);
         int64_t t7 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
         for (int64_t n_g = 0; n_g < t7; n_g++) {
             uint8_t t10 = elements_on_part_g8(n_g, k_g, gs_sp + 0);
@@ -3488,7 +3488,7 @@ static uint8_t elements_plane_g8(int64_t axis_g, double value_g, int64_t gs_sp) 
     }
     L1:;
     return t0;
-    GS_UNREACHABLE(gs_file4, 96);
+    GS_UNREACHABLE(gs_file4, 117);
     uint8_t t11 = {0};
     return t11;
 }
@@ -6693,7 +6693,7 @@ static GS_INLINE double elements_total_reaction_g8(double *gs_r1, double *gs_r2,
     t31 = r_g.e[2];
     *gs_r2 = t31;
     return t29;
-    GS_UNREACHABLE(gs_file4, 159);
+    GS_UNREACHABLE(gs_file4, 180);
     double t32 = {0};
     return t32;
 }
@@ -6742,7 +6742,7 @@ static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, i
     t22 = f_g.e[2];
     *gs_r2 = t22;
     return t20;
-    GS_UNREACHABLE(gs_file4, 165);
+    GS_UNREACHABLE(gs_file4, 186);
     double t23 = {0};
     return t23;
 }
@@ -7136,10 +7136,10 @@ static uint8_t elements_write_vtu_file_g8(void *path_g_data, int64_t path_g_len,
 static GS_INLINE double elements_stress_at_g8(int64_t i_g, int64_t j_g, double x_g, double y_g, double z_g, uint8_t *gs_r1, int64_t gs_sp) {
     double t0;
     uint8_t t1;
-    double t2 = elements_field_at_g8(1, gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file4, 144)), j_g, gs_file4, 144), x_g, y_g, z_g, &t1, gs_sp + 0);
+    double t2 = elements_field_at_g8(1, gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file4, 165)), j_g, gs_file4, 165), x_g, y_g, z_g, &t1, gs_sp + 0);
     *gs_r1 = t1;
     return t2;
-    GS_UNREACHABLE(gs_file4, 143);
+    GS_UNREACHABLE(gs_file4, 164);
     double t3 = {0};
     return t3;
 }
