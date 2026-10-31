@@ -231,7 +231,8 @@ The current tool runs the `fv` and `dg` models, and gives the order of
 each `expect` of two fields from the two finest levels. It does not give
 the order of a `report` yet. The expected order is `order + 1` for `dg`,
 1 for `fv` with `flux: upwind` and advection, and 2 for the other `fv`
-models. It writes `.skein/build/<model>/convergence/<level>/` and prints:
+models. The tool stops with an error when the solve of a level does not
+converge. It writes `.skein/build/<model>/convergence/<level>/` and prints:
 
 ```
 convergence[3]{expect,level,cells,error,order}:
