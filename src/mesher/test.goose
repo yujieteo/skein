@@ -438,6 +438,24 @@ fn test_cells() {
     let holed = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0), mesher::cylinder(0.0, 0.5, 0.5, 1.0, 0.0, 0.0, 0.25, 2.0));
     let block_volume = 2.0 - 2.0 * PI * 0.0625;
     cells_case("mapped hex grid on a block with a hole", holed, 3, 0.1, block_volume, tolerance(2.0 * TAU * 0.25, 0.25, 0.0, 0.1, block_volume));
+    // A unit square, a clockwise rhombus with angles of 30 degrees, and a
+    // quad with an edge of zero length: only the square gives angles.
+    mesher::clear_mesh(2);
+    let s0 = mesher::add_point(0.0, 0.0, 0.0);
+    let s1 = mesher::add_point(1.0, 0.0, 0.0);
+    let s2 = mesher::add_point(1.0, 1.0, 0.0);
+    let s3 = mesher::add_point(0.0, 1.0, 0.0);
+    mesher::add_grid_cell([s0, s1, s2, s3]);
+    let r0 = mesher::add_point(2.0, 0.0, 0.0);
+    let r1 = mesher::add_point(2.0 + 0.5 * sqrt(3.0), 0.5, 0.0);
+    let r2 = mesher::add_point(3.0 + 0.5 * sqrt(3.0), 0.5, 0.0);
+    let r3 = mesher::add_point(3.0, 0.0, 0.0);
+    mesher::add_grid_cell([r0, r1, r2, r3]);
+    mesher::add_grid_cell([s1, s1, r0, s2]);
+    let bad = mesher::mesh_quality();
+    if bad.inverted != 2 || bad.min_angle != 90.0 || bad.max_angle != 90.0 {
+        fail(str("bad quads: ", bad.inverted, " inverted, angles ", bad.min_angle, " to ", bad.max_angle));
+    }
 }
 
 // `skein export` of the model `src` with the options `words`: the exit

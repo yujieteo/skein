@@ -115,19 +115,20 @@ fn grid_cell_quality(c: i64, hex: bool, q: Quality&) {
     var shortest = 1.0e300;
     var inverted = false;
     var measure = 0.0;
+    var angles = q;
     for i in k {
         let a = sub3(v[if hex { HEX_CORNERS[i][0] } else { (i + 1) % 4 }], v[i]);
         let b = sub3(v[if hex { HEX_CORNERS[i][1] } else { (i + 3) % 4 }], v[i]);
         longest = max(longest, norm3(a));
         shortest = min(shortest, norm3(a));
-        add_angle(q, a, b);
+        add_angle(angles, a, b);
         if hex {
             let d = sub3(v[HEX_CORNERS[i][2]], v[i]);
             if dot3(cross3(a, b), d) <= 0.0 { inverted = true; }
             longest = max(longest, norm3(d));
             shortest = min(shortest, norm3(d));
-            add_angle(q, b, d);
-            add_angle(q, d, a);
+            add_angle(angles, b, d);
+            add_angle(angles, d, a);
         } else {
             if cross3(a, b)[2] <= 0.0 { inverted = true; }
             // The shoelace sum: each corner adds x_i y_{i+1} - x_{i+1} y_i.
@@ -140,6 +141,8 @@ fn grid_cell_quality(c: i64, hex: bool, q: Quality&) {
         q.inverted++;
         return;
     }
+    q.min_angle = angles.min_angle;
+    q.max_angle = angles.max_angle;
     q.max_aspect = max(q.max_aspect, longest / shortest);
 }
 
