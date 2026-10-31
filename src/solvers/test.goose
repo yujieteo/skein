@@ -205,8 +205,8 @@ fn test_memory() {
     if solvers::proc_kb(meminfo, "MemAvailable:") != 1234.0 || solvers::proc_kb(meminfo, "Swap:") != -1.0 {
         fail("memory: proc_kb of /proc/meminfo");
     }
-    let p = solvers::MemoryPath { name: "test", entry_bytes: 10.0, thread_bytes: 16.0 };
-    if solvers::path_bytes(p, 1000, 100, 2, 1) != 11600.0 || solvers::path_bytes(p, 1000, 100, 2, 4) != 27600.0 + 4.0 * solvers::THREAD_BYTES {
+    let p = solvers::MemoryPath { name: "test", entry_bytes: 10.0, dof_bytes: 4.0, thread_bytes: 16.0 };
+    if solvers::path_bytes(p, 1000, 100, 2, 1) != 12000.0 || solvers::path_bytes(p, 1000, 100, 2, 4) != 28000.0 + 4.0 * solvers::THREAD_BYTES {
         fail("memory: path_bytes");
     }
 }

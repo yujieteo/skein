@@ -6,7 +6,7 @@
 // are all in the count.
 //
 //     peak = RSS now + entries × (bytes of the path + bytes of the threads)
-//                    + dofs × vectors × 8
+//                    + dofs × (bytes of the path + vectors × 8)
 //
 // The RSS now holds the mesh and the pattern. `vectors` is the number of
 // vectors of one value for each dof that the solver of the path holds
@@ -25,12 +25,13 @@ import os;
 namespace solvers;
 
 // The memory model of one solution path: the bytes of the peak for each
-// entry of the pattern, and the bytes more for each entry when the case
-// has more than one thread (the rows of solvers::rows_start, and the cell
-// matrices of the assembly workers).
+// entry of the pattern and for each dof, and the bytes more for each entry
+// when the case has more than one thread (the rows of solvers::rows_start,
+// and the cell matrices of the assembly workers).
 struct MemoryPath {
     name: u8[..32],
     entry_bytes: f64,
+    dof_bytes: f64,
     thread_bytes: f64,
 }
 
@@ -50,7 +51,13 @@ struct MemoryPath {
 //                         again on 2026-11-01: the 6 rigid-body modes of the AMG setup
 //                         (#58) took the peak from 38.1.
 //     box gmres ilu0      closed cylinder 5 mm, 10,251 dofs: 17.0 (the copy of K and its ILU(0)), and 0
-//     simplex cg amg      sample 01, 319,320 dofs: 47.0, and 15.4 more
+//     simplex cg amg      sample 01, 319,320 dofs (elastic, 79 entries for each dof): 47.0,
+//                         and 15.4 more. Measured again on 2026-11-01 with steady heat (a
+//                         scalar field, 27 entries for each dof), which took 78 at 137,781
+//                         dofs and 80 at 1,257,525 dofs: the memory of each dof is a larger
+//                         part of the peak when each dof has fewer entries. The fit of
+//                         sample 01 and the heat at 1,257,525 dofs is 28.5 for each entry
+//                         and 1468 for each dof.
 //     simplex modal       frequency cantilever 1.5 mm, 54,675 dofs: 66.3, and 1.0 more
 //     simplex buckling    buckling column 3 mm, 32,805 dofs: 36.6, and 0 more. The static
 //                         step before it leaves pages that the buckling step uses again.
@@ -64,15 +71,15 @@ struct MemoryPath {
 //                         measured on 16 threads: the 16 of simplex cg amg, which also
 //                         has rows_start.
 let MEMORY_PATHS = [
-    MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, thread_bytes: 16.0 },
-    MemoryPath { name: "box cg amg", entry_bytes: 64.0, thread_bytes: 1.0 },
-    MemoryPath { name: "box gmres ilu0", entry_bytes: 18.0, thread_bytes: 1.0 },
-    MemoryPath { name: "simplex cg amg", entry_bytes: 52.0, thread_bytes: 16.0 },
-    MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, thread_bytes: 1.0 },
-    MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, thread_bytes: 1.0 },
-    MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, thread_bytes: 0.0 },
-    MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, thread_bytes: 16.0 },
-    MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, thread_bytes: 16.0 },
+    MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, dof_bytes: 0.0, thread_bytes: 16.0 },
+    MemoryPath { name: "box cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 1.0 },
+    MemoryPath { name: "box gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 1.0 },
+    MemoryPath { name: "simplex cg amg", entry_bytes: 32.0, dof_bytes: 1600.0, thread_bytes: 16.0 },
+    MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, dof_bytes: 0.0, thread_bytes: 1.0 },
+    MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, dof_bytes: 0.0, thread_bytes: 1.0 },
+    MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
+    MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
 ];
 
 // The bytes of each worker thread of a case: its stacks and its copy of
@@ -177,7 +184,7 @@ fn memory_path(name: u8[:]) -> MemoryPath {
 // threads.
 fn path_bytes(p: MemoryPath, entries: i64, dofs: i64, vectors: i64, threads: i64) -> f64 {
     guard entries >= 0 && dofs >= 0 && vectors >= 0 && threads >= 1 else { abort("path_bytes: entries, dofs and vectors >= 0, and threads >= 1"); }
-    let bytes = p.entry_bytes * entries + 8.0 * dofs * vectors;
+    let bytes = p.entry_bytes * entries + (p.dof_bytes + 8.0 * vectors) * dofs;
     guard threads > 1 else { return bytes; };
     return bytes + p.thread_bytes * entries + THREAD_BYTES * threads;
 }

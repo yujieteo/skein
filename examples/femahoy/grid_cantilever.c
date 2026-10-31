@@ -1187,6 +1187,7 @@ typedef struct { uint8_t len; uint8_t e[32]; } l32_u8;
 struct solvers_MemoryPath_g7 {
     l32_u8 name_g;
     double entry_bytes_g;
+    double dof_bytes_g;
     double thread_bytes_g;
 };
 
@@ -7141,7 +7142,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
             t14.len = t16;
             t21.data = (uint8_t *)((t14.base)); t21.len = (t14.len);
             t22 = t21;
-            gs_abort_msg(t22.data, t22.len, gs_file9, 172);
+            gs_abort_msg(t22.data, t22.len, gs_file9, 179);
             t140 = t14.base;
             GS(gs_sp + 0)->top = t140;
         }
@@ -7156,7 +7157,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         goto L0;
     }
     L0:;
-    GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file9, 201);
+    GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file9, 208);
     probe_g.base = GS(gs_sp + 0)->top; probe_g.len = 0;
     probe_g.len = 0;
     t29.data = ((uint8_t *)gs_str104); t29.len = 18;
@@ -7275,7 +7276,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t71.len = t73;
         t78.data = (uint8_t *)((t71.base)); t78.len = (t71.len);
         t79 = t78;
-        gs_abort_msg(t79.data, t79.len, gs_file9, 172);
+        gs_abort_msg(t79.data, t79.len, gs_file9, 179);
         t138 = t71.base;
     }
     L61:;
@@ -7504,7 +7505,7 @@ static double solvers_resident_bytes_g7(int64_t gs_sp) {
     }
     L2:;
     return t0;
-    GS_UNREACHABLE(gs_file9, 160);
+    GS_UNREACHABLE(gs_file9, 167);
     double t13 = {0};
     return t13;
 }
@@ -7597,7 +7598,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
         int64_t t31 = line_g.len;
         int64_t t32 = (key_g.len);
         int64_t t33 = t31;
-        if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 96);
+        if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 103);
         s_g_2.data = t30 + t32; s_g_2.len = t33 - t32;
         {
             s_g_4 = s_g_2;
@@ -7674,8 +7675,8 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
             uint8_t *t66 = field_g.data;
             int64_t t67 = field_g.len;
             int64_t t68 = 0;
-            int64_t t69 = gs_sub_i64((int64_t)((field_g.len)), 3, gs_file9, 97);
-            if (t68 < 0 || t69 < t68 || t69 > t67) gs_abort(GS_E_SLICE, gs_file9, 97);
+            int64_t t69 = gs_sub_i64((int64_t)((field_g.len)), 3, gs_file9, 104);
+            if (t68 < 0 || t69 < t68 || t69 > t67) gs_abort(GS_E_SLICE, gs_file9, 104);
             field_g.data = t66 + t68; field_g.len = t69 - t68;
         }
         L57:;
@@ -7697,7 +7698,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
     double t72;
     t72 = -1.0;
     return t72;
-    GS_UNREACHABLE(gs_file9, 93);
+    GS_UNREACHABLE(gs_file9, 100);
     double t73 = {0};
     return t73;
 }
@@ -7970,10 +7971,10 @@ static double solvers_path_bytes_g7(solvers_MemoryPath_g7 p_g, int64_t entries_g
     {
         t2.data = ((uint8_t *)gs_str124); t2.len = 60;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file9, 179);
+        gs_abort_msg(t3.data, t3.len, gs_file9, 186);
     }
     L0:;
-    double bytes_g = ((double)((double)(((double)((double)(p_g.entry_bytes_g)) * (double)((double)(entries_g))))) + (double)(((double)((double)(((double)((double)(8.0)) * (double)((double)(dofs_g))))) * (double)((double)(vectors_g)))));
+    double bytes_g = ((double)((double)(((double)((double)(p_g.entry_bytes_g)) * (double)((double)(entries_g))))) + (double)(((double)((double)(((double)((double)(p_g.dof_bytes_g)) + (double)(((double)((double)(8.0)) * (double)((double)(vectors_g))))))) * (double)((double)(dofs_g)))));
     if (!((uint8_t)((int64_t)((int64_t)(threads_g)) > (int64_t)(1)))) {
         double t4;
         t4 = bytes_g;
@@ -7982,7 +7983,7 @@ static double solvers_path_bytes_g7(solvers_MemoryPath_g7 p_g, int64_t entries_g
     double t5;
     t5 = ((double)((double)(((double)((double)(bytes_g)) + (double)(((double)((double)(p_g.thread_bytes_g)) * (double)((double)(entries_g))))))) + (double)(((double)((double)(1500000.0)) * (double)((double)(threads_g)))));
     return t5;
-    GS_UNREACHABLE(gs_file9, 178);
+    GS_UNREACHABLE(gs_file9, 185);
     double t6 = {0};
     return t6;
 }
@@ -8105,7 +8106,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     int64_t t31 = (s_g.len);
     int64_t t32 = 3;
     int64_t t33 = t31;
-    if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 123);
+    if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 130);
     t34.data = (uint8_t *)(t30) + t32; t34.len = t33 - t32;
     t35 = trim_g(t34.data, t34.len);
     dir_g = t35;
@@ -8401,7 +8402,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         int64_t t134 = dir_g.len;
         int64_t t135 = 0;
         int64_t t136 = up_g;
-        if (t135 < 0 || t136 < t135 || t136 > t134) gs_abort(GS_E_SLICE, gs_file9, 130);
+        if (t135 < 0 || t136 < t135 || t136 > t134) gs_abort(GS_E_SLICE, gs_file9, 137);
         dir_g.data = t133 + t135; dir_g.len = t136 - t135;
     }
     L36:;
@@ -8412,7 +8413,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     GS(gs_sp + 0)->top = t139;
     return t137;
     GS(gs_sp + 0)->top = t139;
-    GS_UNREACHABLE(gs_file9, 116);
+    GS_UNREACHABLE(gs_file9, 123);
     double t138 = {0};
     return t138;
 }
@@ -20701,6 +20702,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t2.e, ((uint8_t *)gs_str207), 13);
     t1.name_g = t2;
     t1.entry_bytes_g = 1.0;
+    t1.dof_bytes_g = 0.0;
     t1.thread_bytes_g = 16.0;
     t0.e[0] = t1;
     t3 = (solvers_MemoryPath_g7){0};
@@ -20709,6 +20711,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t4.e, ((uint8_t *)gs_str208), 10);
     t3.name_g = t4;
     t3.entry_bytes_g = 64.0;
+    t3.dof_bytes_g = 0.0;
     t3.thread_bytes_g = 1.0;
     t0.e[1] = t3;
     t5 = (solvers_MemoryPath_g7){0};
@@ -20717,6 +20720,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t6.e, ((uint8_t *)gs_str209), 14);
     t5.name_g = t6;
     t5.entry_bytes_g = 18.0;
+    t5.dof_bytes_g = 0.0;
     t5.thread_bytes_g = 1.0;
     t0.e[2] = t5;
     t7 = (solvers_MemoryPath_g7){0};
@@ -20724,7 +20728,8 @@ static void gs_init_globals(void) {
     t8.len = 14;
     GS_MEMCPY(t8.e, ((uint8_t *)gs_str210), 14);
     t7.name_g = t8;
-    t7.entry_bytes_g = 52.0;
+    t7.entry_bytes_g = 32.0;
+    t7.dof_bytes_g = 1600.0;
     t7.thread_bytes_g = 16.0;
     t0.e[3] = t7;
     t9 = (solvers_MemoryPath_g7){0};
@@ -20733,6 +20738,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t10.e, ((uint8_t *)gs_str211), 24);
     t9.name_g = t10;
     t9.entry_bytes_g = 73.0;
+    t9.dof_bytes_g = 0.0;
     t9.thread_bytes_g = 1.0;
     t0.e[4] = t9;
     t11 = (solvers_MemoryPath_g7){0};
@@ -20741,6 +20747,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t12.e, ((uint8_t *)gs_str212), 27);
     t11.name_g = t12;
     t11.entry_bytes_g = 40.0;
+    t11.dof_bytes_g = 0.0;
     t11.thread_bytes_g = 1.0;
     t0.e[5] = t11;
     t13 = (solvers_MemoryPath_g7){0};
@@ -20749,6 +20756,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t14.e, ((uint8_t *)gs_str213), 18);
     t13.name_g = t14;
     t13.entry_bytes_g = 9.0;
+    t13.dof_bytes_g = 0.0;
     t13.thread_bytes_g = 0.0;
     t0.e[6] = t13;
     t15 = (solvers_MemoryPath_g7){0};
@@ -20757,6 +20765,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t16.e, ((uint8_t *)gs_str214), 23);
     t15.name_g = t16;
     t15.entry_bytes_g = 18.0;
+    t15.dof_bytes_g = 0.0;
     t15.thread_bytes_g = 16.0;
     t0.e[7] = t15;
     t17 = (solvers_MemoryPath_g7){0};
@@ -20765,6 +20774,7 @@ static void gs_init_globals(void) {
     GS_MEMCPY(t18.e, ((uint8_t *)gs_str215), 22);
     t17.name_g = t18;
     t17.entry_bytes_g = 25.0;
+    t17.dof_bytes_g = 0.0;
     t17.thread_bytes_g = 16.0;
     t0.e[8] = t17;
     GS_GL->solvers_MEMORY_PATHS_g7 = t0;
