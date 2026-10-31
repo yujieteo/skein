@@ -183,6 +183,9 @@ case. The generated program reads the mesh from these files.
 Each case gets its threads in the environment variable `SKEIN_THREADS`.
 The program of a model reads it for its assembly and its matrix products. Without
 it, the program uses all hardware threads.
+Each case also gets the memory budget of the study in bytes in
+`SKEIN_MEMORY_BUDGET`, in place of the budget that the program reads
+itself (spec §20.5).
 
 ---
 
