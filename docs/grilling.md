@@ -445,7 +445,7 @@ answer.
 | G5.2 | B. No exact B-rep. STL and tessellated STEP only. | spec [§22](skein_spec.md#22-export) |
 | G5.3 | A. Monte Carlo stack-ups through a `sample` study. | cut on 2026-10-31 ([tradeoffs §5](tradeoffs.md#5-design-for-manufacture)) |
 | G5.4 | Yes. The list of processes stays. | cut on 2026-10-31 ([tradeoffs §5](tradeoffs.md#5-design-for-manufacture)) |
-| G6.1 | B and C. Make the candidate cuts now, and compare the total cost. | [llm_test.md §6](llm_test.md#6-syntax-changes-made-before-the-test) |
+| G6.1 | B and C. Make the candidate cuts now, and compare the total cost. | [llm_test.md §4](llm_test.md#4-syntax-changes-made-before-the-test) |
 | G6.2 | A. `skein help --llm`. | [command_line.md §1](command_line.md#1-commands) |
 | G6.3 | No WebAssembly risk and no fallback: Goose writes C, and `emcc` compiles it, as in earlier Goose projects. | spec [§18.1](skein_spec.md#181-why-goose) |
 | G6.4 | No exception for kernels: split each generated function to at most 60 lines. One namespace stays, and the standard library and `use` files enter it with no prefix. This is the one deviation from the Power of Ten (rule 6). | [tradeoffs §6](tradeoffs.md#6-reliability-the-power-of-ten) |

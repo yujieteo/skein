@@ -2,12 +2,16 @@
 
 Skein must be easy for an LLM to write. This test measures it. It is the
 gate of phase 1 in the [roadmap](roadmap.md): if Skein is not clearly better
-than an Abaqus or APDL deck on both measures, the syntax changes. The test
-also measures the size of the diff of small edits, because a person must
-review each change that an LLM makes.
+than a CalculiX deck on both measures, the syntax changes. The test also
+measures the size of the diff of small edits, because a person must review
+each change that an LLM makes.
 
-**Status:** this protocol has no recorded results in §7. `skein check`
-is available. Separate experiments have results in the
+The baseline is a CalculiX deck that femahoy runs with `fh run`. Reason: no
+Abaqus or APDL licence is available, so a check of those decks needs a
+person. The driver `scripts/llm/workflow.py` runs both paths with no person.
+
+**Status:** this protocol has no recorded results in §5. Separate
+experiments have results in the
 [cantilever comparison](readability.md#41-results) and the
 [B787 study](studies/b787/readability.md#3-llm-runs). Those experiments do
 not complete this protocol.
@@ -16,133 +20,100 @@ not complete this protocol.
 
 ## 1. Measures
 
-For each of samples 01 to 05, and for each language (Skein, and an Abaqus
-or APDL deck):
+For each request of §3, and for each path of `scripts/llm/workflow.py`
+(`skein` and `inp`):
 
 | Measure | Definition |
 |---|---|
-| pass rate | the fraction of attempts that pass the checker with no error within 5 rounds |
-| total cost | the input and output tokens of all rounds of an attempt, until it passes or until round 5, counted with the tokenizer of the model under test. For Skein, the language card counts in each round. |
+| pass rate | the fraction of attempts that pass within 5 rounds (`passed` in the results file) |
+| total cost | the input and output tokens of all rounds of an attempt, until it passes or until round 5, as the driver counts them. For Skein, the language card counts in each round. |
 | repair rounds | the number of rounds after the first, until the answer passes |
 | first-try pass rate | recorded, not part of the gate |
 
-The checker for Skein is `skein check`. The checker for a deck is the
-solver's own syntax check when a licence is available (`abaqus datacheck`,
-or APDL in batch mode up to `SOLVE`). Without a licence, a person reviews
-the deck against the reference deck in `llm_test/decks/` with this list:
-the geometry, the mesh controls, the material, the boundary conditions,
-the loads, the analysis sequence and the outputs. A deck passes when all
-seven items are right.
+An attempt passes when the run passes and the value is within 2 percent
+of the reference of §3. For `skein`, the run is `skein check`, then `skein
+run`. For `inp`, the run is `fh run`, which gives the deck to ccx. Reason
+for the value check: a deck with a wrong load or wrong dimensions also
+passes `fh run`.
 
 **Clearly better** means both of these:
 
 - the Skein pass rate is at least 20 percentage points higher than the deck
-  pass rate, summed over samples 01 to 05;
+  pass rate, summed over the requests of §3;
 - the median Skein total cost is at most 0.8 times the median deck total
   cost.
 
 Reason for total cost and not the size of the first answer: a Skein answer
-holds the equations, the units and the checks, so it is larger. But an
-error in a deck often shows only in the solver, after many rounds. The cost
-that a user pays is the cost of all the rounds. Reason for the limits:
-smaller differences are inside the noise of 5 attempts for each sample.
+holds the equations, the units and the checks, and the card adds about
+2700 input tokens. But an error in a deck often shows only in the solver,
+after many rounds. The cost that a user pays is the cost of all the rounds.
+Reason for the limits: smaller differences are inside the noise of 5
+attempts for each request.
 
 ---
 
 ## 2. Protocol
 
-1. Use a fresh model session for each attempt, with no memory of earlier
-   attempts.
-2. For Skein, give the model the language card of `skein help --llm` in the
-   context (about 2000 tokens: the grammar, the keywords, the standard
-   library and one example). Do not give it the samples. For a deck, give
-   no documentation, because the model knows APDL and Abaqus from its
-   training.
-3. Give the one-line request of §3, then "Write the complete Skein model."
-   or "Write the complete APDL input deck." (Abaqus for the cavity).
-4. Run the checker on the answer. If it fails, give the model the checker
-   output and "Fix the model." This is one repair round. Stop when the
-   answer passes or after round 5.
-5. Count the tokens of all rounds.
-6. Do 5 attempts for each sample and each language: 50 attempts in total.
-7. Record the model id and the date.
+For each request of §3 and each path:
 
-For a deck without a licence, the feedback of a repair round is the list of
-the items that the person found wrong.
+```sh
+./build.sh
+scripts/llm/workflow.py skein --request cantilever --runs 5 --out /tmp/llm-test
+scripts/llm/workflow.py inp --request cantilever --runs 5 --out /tmp/llm-test
+```
+
+The driver gives a fresh model session the request (for Skein, after the
+card of `skein help --llm`). If the run fails, it gives the model the output
+and "Fix the model." or "Fix the deck.", until the run passes or round 5.
+[readability.md §4](readability.md#4-the-llm-workflow) gives the details.
+Record the model id and the date from the results file.
 
 ### 2.1 Edit tasks
 
 A person must read each change that an LLM makes. So the test also gives
-three edit tasks on the reference answer of sample 01, in each language:
+three edit tasks on a passed answer of the cantilever request, in each
+path. Give the answer and the task to a fresh session:
 
 | Task | Request |
 |---|---|
-| E1 | change the end load from 2 kN to 3 kN |
-| E2 | add a second static step that adds a 500 N load in y on the tip |
-| E3 | make the hole radius a sweep parameter with the values 4, 6 and 8 mm |
+| E1 | change the tip load from 1 kN to 1.5 kN |
+| E2 | add a second static step in which the tip load is 2 kN |
+| E3 | sweep the beam height H over 100, 150 and 200 mm |
 
 Record the number of changed lines (added plus removed, from `git diff
 --numstat`) for each answer that passes. The [layout rules](skein_spec.md#32-layout-for-small-diffs)
 aim at 1 line for E1, at most 6 for E2 and at most 3 for E3. These numbers
-are a record, not a gate, until a first run shows what a deck needs.
+are a record, not a gate.
+[readability.md §2](readability.md#2-three-edit-tasks) gives similar tasks on
+a smaller cantilever, written by a person, for Skein and CalculiX.
 
 ---
 
 ## 3. The requests
 
-| # | Request |
+Each request is one short line, and its answer is a small file. Reason: a
+long request or a large deck costs context and cache tokens in each round,
+and adds no information to the test.
+
+| Name | Request |
 |---|---|
-| 01 | A 200 × 20 × 40 mm steel cantilever, fixed at x = 0, with a 6 mm radius hole through its 20 mm width at x = 40 mm, z = 20 mm, and a 2 kN downward load on the free end. Use quadratic tetrahedra, 5 mm cells, 1 mm at the hole. Report the root reaction and output the von Mises stress. |
-| 02 | A 2D lid-driven cavity, 1 m square, lid speed 1 m/s, Re = 100, steady incompressible laminar flow. Use a 64 × 64 resolution and fix the pressure at one corner. Output velocity and pressure. |
-| 03 | A 2D plane strain embankment: a 60 × 10 m clay foundation (E 40 MPa, ν 0.3, ρ 1900 kg/m³) and three 2 m fill lifts (E 25 MPa, ν 0.3, ρ 1800 kg/m³), base 24 m and top 12 m, plus a triangular toe berm. Apply gravity, add the lifts one per step, then remove the berm. Fix the base and the sides in x. |
-| 04 | A submodel of the hole in model 01: a block x 25 to 55 mm, z 5 to 35 mm, 1.5 mm cells and 0.25 mm at the hole, with the cut-boundary displacements from model 01. Output the von Mises stress. |
-| 05 | A quarter of a 200 × 200 × 2 mm aluminium plate (E 70 GPa, ν 0.33) with a central 10 mm radius hole, under 100 MPa tension in x, plane stress, with symmetry. Check that the peak stress at the hole is near 300 MPa. For Skein, use a meshless method (RKPM). |
+| `cantilever` | a steel cantilever 1 m x 50 mm x 100 mm, E 210 GPa, fixed at one end, 1 kN tip load along the 100 mm side, report the tip deflection |
+| `plate` | an aluminium plate 100 mm x 50 mm x 2 mm, E 70 GPa, plane stress, one short edge fixed, 10 MPa tension on the other short edge, report the elongation |
 
-Request 05 asks for a meshless method only in Skein, because APDL and
-Abaqus have no RKPM for this problem. The deck uses the finite element
-method for the same physical model.
-
----
-
-## 4. Reference answers
-
-| # | Skein | Deck |
-|---|---|---|
-| 01 | [samples/01_cantilever.skn](../samples/01_cantilever.skn) | [APDL](../llm_test/decks/01_cantilever.mac) |
-| 02 | [samples/02_cavity.skn](../samples/02_cavity.skn) | [Abaqus/CFD](../llm_test/decks/02_cavity.inp) |
-| 03 | [samples/03_birth_death.skn](../samples/03_birth_death.skn) | [APDL](../llm_test/decks/03_birth_death.mac) |
-| 04 | [samples/04_submodel.skn](../samples/04_submodel.skn) | [APDL](../llm_test/decks/04_submodel.mac) |
-| 05 | [samples/05_meshless_plate.skn](../samples/05_meshless_plate.skn) | [APDL](../llm_test/decks/05_plate.mac) |
-
-The decks are written for this test. They copy no text from the Abaqus or
-APDL manuals. They are not run, because no licence was available.
+The requests are in `REQUESTS` in `scripts/llm/workflow.py`. Euler-Bernoulli
+gives 0.381 mm for the cantilever, and σL/E gives 0.0143 mm for the plate.
+Each request gives E and the load direction, so each request has one
+correct value. These references are in `REFERENCE_MM`. The gate compares
+the magnitude of the value with the reference, with a 2 percent tolerance.
+The driver converts a Skein value to mm. The units of a deck are unknown,
+so the driver accepts a deck value in mm or in m. If the run passes but the
+value is wrong or missing, the driver tells the model, and the rounds
+continue. The `inp` prompt tells the model to write the displacements with
+`*NODE PRINT`, because the driver reads the value from the .dat file.
 
 ---
 
-## 5. An early signal: the size of the reference answers
-
-This is not the test, because a person wrote both answers. But it shows a
-risk early. The byte counts of the reference answers, without comments and
-blank lines, before and after the syntax changes of §6:
-
-| # | Skein before (bytes) | Skein after (bytes) | Deck (bytes) | Skein after / deck |
-|---|---|---|---|---|
-| 01 | 920 | 766 | 405 | 1.9 |
-| 02 | 1236 | 1055 | 914 | 1.2 |
-| 03 | 1543 | 1416 | 1049 | 1.3 |
-| 04 | 921 | 766 | 505 | 1.5 |
-| 05 | 1067 | 960 | 374 | 2.6 |
-
-The changes cut the Skein answers by 8 to 17 percent. They are still 1.2 to
-2.6 times longer than the decks in bytes. The required `scales` line adds
-one line to each model. Thus the first answer of Skein stays larger, and
-the gate compares the total cost (§1).
-Bytes are not tokens, and the APDL commands with many commas can use more
-tokens for each byte. Some of the extra length is content that the decks do
-not have: the equations, the units, the scales and the checks (`expect`,
-`report`).
-
-## 6. Syntax changes made before the test
+## 4. Syntax changes made before the test
 
 The captain chose to make these changes before phase 1 (grilling G6.1):
 
@@ -156,15 +127,15 @@ The captain chose to make these changes before phase 1 (grilling G6.1):
    §13).
 4. **A one-line header.** `model cantilever: 3d, mm_N_MPa_s` (spec §3).
 5. **Functions of one expression** (spec §7.4). The samples do not need
-   them, so they do not change the numbers of §5.
+   them.
 
 Each change removes text that an LLM must write, but each change also adds
 a rule to learn. The test decides whether the syntax changes again.
 
 ---
 
-## 7. Results
+## 5. Results
 
-| Date | Model | # | Language | Pass rate | Median total cost | Median repair rounds | Diff lines E1, E2, E3 |
+| Date | Model | Request | Path | Pass rate | Median total cost | Median repair rounds | Diff lines E1, E2, E3 |
 |---|---|---|---|---|---|---|---|
 | | | | | | | | |

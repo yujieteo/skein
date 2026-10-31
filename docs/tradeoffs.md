@@ -259,13 +259,13 @@ Costs:
 | TOON tables in source and output | fewer tokens than JSON for uniform rows | a second syntax inside the language |
 | stable ids with a fix in each diagnostic | an LLM repairs a model from the output alone | each new rule needs a fix strategy |
 | `allow` only in the file | an LLM cannot turn off a check from the command line to make a run pass | a user must edit the file |
-| strong form, with standard-library templates for the common physics | an LLM knows textbook equations well, and a template removes them from the common models | the reference answers are 1.2 to 2.6 times larger than the APDL decks in bytes after the cuts of G6.1 ([llm_test.md](llm_test.md) §5) |
+| strong form, with standard-library templates for the common physics | an LLM knows textbook equations well, and a template removes them from the common models | a Skein answer holds the equations, so the model gets a card of about 2700 tokens in each round, and a CalculiX deck needs none ([readability.md §4.1](readability.md#41-results)) |
 | one item on each line, no column alignment, a comma after each item of a long list (spec §3.2) | a change to one load, one step or one study parameter is a diff of a few lines that a person can review | `fmt` output is less compact than an aligned table, and rows of a TOON table do not line up |
-| `skein help --llm`, a language card of about 2000 tokens | the context of each LLM session is small | one more text to keep in step with the spec |
+| `skein help --llm`, a language card of about 2700 tokens | the context of each LLM session is small | one more text to keep in step with the spec |
 
-The size of the first answer stays larger than a deck. The captain chose
-total cost as the measure (G6.1): the tokens of all rounds until the model
-passes `check`. The [LLM test](llm_test.md) measures it in phase 1, with the
+The input of each Skein round stays larger than for a deck, because of the
+card. The captain chose total cost as the measure (G6.1): the tokens of all
+rounds until the run passes. The [LLM test](llm_test.md) measures it in phase 1, with the
 diff size of three edit tasks.
 
 ---

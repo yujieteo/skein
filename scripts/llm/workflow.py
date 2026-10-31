@@ -9,13 +9,19 @@ the rounds, the tokens, the wall time and the result.
     scripts/llm/workflow.py skein --out DIR   # the model gets `skein help --llm`
     scripts/llm/workflow.py inp --out DIR     # a CalculiX deck for femahoy, no card
 
+--request picks one of the short requests of REQUESTS. Then an attempt
+passes only when the run passes and the value is within 2 percent of the
+reference of that request in REFERENCE_MM. With no --request, the driver
+sends REQUEST and does not check the value.
+
 Path `skein`: the check is `skein check`, the run is `skein run`.
 Path `inp`: the check and the run are one `fh run` (femahoy gives the deck to
 ccx, which is the parser of the deck).
 
 The model is the claude CLI in print mode, with no tools, no settings and no
 memory. Each run is one new session. The repair rounds resume that session.
-DIR gets the files of each round and results.toon.
+DIR gets the files of each round and results-<path>.toon, or
+results-<path>-<request>.toon with --request.
 """
 
 import argparse
@@ -28,15 +34,25 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-REQUEST = ("a steel cantilever 1 m x 50 mm x 100 mm, fixed at one end, "
-           "1 kN tip load, report the tip deflection")
+REQUESTS = {
+    "cantilever": ("a steel cantilever 1 m x 50 mm x 100 mm, E 210 GPa, "
+                   "fixed at one end, 1 kN tip load along the 100 mm side, "
+                   "report the tip deflection"),
+    "plate": ("an aluminium plate 100 mm x 50 mm x 2 mm, E 70 GPa, plane "
+              "stress, one short edge fixed, 10 MPa tension on the other "
+              "short edge, report the elongation"),
+}
+REFERENCE_MM = {"cantilever": 0.381, "plate": 0.0143}
+REQUEST = REQUESTS["cantilever"]
+TOLERANCE = 0.02
+MM = {"mm": 1.0, "m": 1000.0, "cm": 10.0, "um": 0.001}
 SYSTEM = ("You write simulation input files. Answer with the complete file "
           "in one fenced code block.")
 ASK = {
     "skein": "Write the complete Skein model.",
     "inp": ("Write the complete CalculiX input deck. femahoy solves it with "
             "`fh run deck.inp`, which gives the deck to ccx. Put the mesh in "
-            "the deck."),
+            "the deck. Write the nodal displacements with *NODE PRINT."),
 }
 SUFFIX = {"skein": ".skn", "inp": ".inp"}
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,11 +136,23 @@ def inp_value(text):
     return (f"{value:.6g} deck units" if value else ""), reaction
 
 
-def one_run(path, n, args, card):
-    work = args.out / f"{path}-{n}"
+def value_ok(path, value, reference):
+    """True when the magnitude of the value is within TOLERANCE of the
+    reference in mm. The units of a deck are unknown, so a deck value
+    passes in mm or in m."""
+    if not value:
+        return False
+    number, unit = value.split()[:2]
+    scales = [MM[unit]] if path == "skein" else [1.0, 1000.0]
+    return any(abs(abs(float(number)) * s - reference)
+               <= TOLERANCE * reference for s in scales)
+
+
+def one_run(path, stem, n, args, card, request, reference):
+    work = args.out / f"{stem}-{n}"
     work.mkdir(parents=True, exist_ok=True)
     session = str(uuid.uuid4())
-    prompt = "\n\n".join(x for x in (card, REQUEST, ASK[path]) if x)
+    prompt = "\n\n".join(x for x in (card, request, ASK[path]) if x)
     record = {"path": path, "run": n, "first_try_pass": "no", "passed": "no",
               "repair_rounds": 0, "input_tokens": 0, "output_tokens": 0}
     start = time.monotonic()
@@ -146,18 +174,25 @@ def one_run(path, n, args, card):
                                   str(args.timeout)], work)
             fix = "fh run printed this. Fix the deck."
         (work / f"check-{k}.txt").write_text(output)
-        if status == 0 and k == 1:
-            record["first_try_pass"] = "yes"
         if status == 0 and path == "skein":
             status, output = run([str(args.skein), "run", file.name], work)
             fix = "skein run printed this. Fix the model."
             (work / f"run-{k}.txt").write_text(output)
         record["run_status"] = status
         if status == 0:
-            record["passed"] = "yes"
             value = skein_value if path == "skein" else inp_value
             record["value"], record["reaction"] = value(output)
-            break
+            if reference is None or value_ok(path, record["value"],
+                                             reference):
+                record["passed"] = "yes"
+                if k == 1:
+                    record["first_try_pass"] = "yes"
+                break
+            what = "model" if path == "skein" else "deck"
+            wrong = (f"the result {record['value']} is not the expected value"
+                     if record["value"] else "no value was recorded")
+            prompt = f"The run passed, but {wrong}. Fix the {what}."
+            continue
         prompt = f"{fix}\n\n{output}"
     record["wall_s"] = round(time.monotonic() - start, 1)
     return record
@@ -168,11 +203,11 @@ FIELDS = ["path", "run", "model", "first_try_pass", "passed", "repair_rounds",
           "reaction"]
 
 
-def toon(records):
+def toon(records, request):
     rows = [",".join(json.dumps(r.get(f, "")) if isinstance(r.get(f, ""), str)
                      else str(r.get(f, "")) for f in FIELDS) for r in records]
     head = f"runs[{len(records)}]{{{','.join(FIELDS)}}}:"
-    return "\n".join([f"date: {date.today()}", f"request: {json.dumps(REQUEST)}",
+    return "\n".join([f"date: {date.today()}", f"request: {json.dumps(request)}",
                       head] + ["  " + r for r in rows]) + "\n"
 
 
@@ -180,6 +215,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("path", choices=["skein", "inp"])
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--request", choices=REQUESTS)
     p.add_argument("--runs", type=int, default=3)
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--model", default="claude-opus-5-5")
@@ -193,12 +229,20 @@ def main():
         status, card = run([str(args.skein), "help", "--llm"], ROOT)
         if status != 0:
             sys.exit(f"workflow: skein help --llm failed:\n{card}")
+    if args.request:
+        request = REQUESTS[args.request]
+        reference = REFERENCE_MM[args.request]
+        stem = f"{args.path}-{args.request}"
+    else:
+        request, reference, stem = REQUEST, None, args.path
+    results = args.out / f"results-{stem}.toon"
     records = []
     for n in range(1, args.runs + 1):
-        records.append(one_run(args.path, n, args, card))
-        print(toon(records[-1:]).splitlines()[-1], flush=True)
-        (args.out / f"results-{args.path}.toon").write_text(toon(records))
-    print(toon(records), end="")
+        records.append(one_run(args.path, stem, n, args, card, request,
+                               reference))
+        print(toon(records[-1:], request).splitlines()[-1], flush=True)
+        results.write_text(toon(records, request))
+    print(toon(records, request), end="")
 
 
 if __name__ == "__main__":
