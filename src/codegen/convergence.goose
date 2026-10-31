@@ -67,7 +67,7 @@ fn run_level(path: u8[:], text: u8[:], level: i64, errors: Errors[>..]&) -> bool
         return false;
     };
     guard lane == LANE_GRID else {
-        write_stderr("skein verify convergence: the model has no method fv, dg, rkpm or gfd. Only these run yet.\n");
+        write_stderr("skein verify convergence: the model has no method fv or dg, and no scalar rkpm or gfd. Only these run yet.\n");
         return false;
     };
     let build_dir = str(".skein/build/", model_name, "/convergence/", level);
