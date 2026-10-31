@@ -24,17 +24,22 @@ var grids: Grid[>..] = [];
 
 // The node (i, j) of grid g: i along x, j along θ.
 fn grid_node(g: i64, i: i64, j: i64) -> i64 {
+    guard g >= 0 && g < grids.len && i >= 0 && i <= grids[g].nx && j >= 0 && j <= grids[g].nt else { abort("grid_node: 0 <= g < grids.len, 0 <= i <= nx and 0 <= j <= nt"); }
     let gr = grids[g];
     let k = if gr.x_fast { i + (gr.nx + 1) * j } else { j + (gr.nt + 1) * i };
     return gr.first_node + k;
 }
 
 // The cell (i, j) of grid g, or -1 if the cell was left out.
-fn grid_cell(g: i64, i: i64, j: i64) -> i64 { return grids[g].first_cell + i + grids[g].nx * j; }
+fn grid_cell(g: i64, i: i64, j: i64) -> i64 {
+    guard g >= 0 && g < grids.len && i >= 0 && i < grids[g].nx && j >= 0 && j < grids[g].nt else { abort("grid_cell: 0 <= g < grids.len, 0 <= i < nx and 0 <= j < nt"); }
+    return grids[g].first_cell + i + grids[g].nx * j;
+}
 
 // The nodes of side `side` of grid g in sequence: side 0 is x = x0, 1 is
 // x = x1, 2 is θ = t0 and 3 is θ = t1.
 fn grid_side(g: i64, side: i64) -> i64[>..] {
+    guard g >= 0 && g < grids.len && side >= 0 && side < 4 else { abort("grid_side: 0 <= g < grids.len, and 0 <= side < 4"); }
     let gr = grids[g];
     var out: i64[>..] = [];
     for k in (if side < 2 { gr.nt + 1 } else { gr.nx + 1 }) {
@@ -48,6 +53,7 @@ fn grid_side(g: i64, side: i64) -> i64[>..] {
 // the point in it, from 0 to 1 along x and along θ. False if the point is
 // farther than tol from the patch.
 fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, bool {
+    guard g >= 0 && g < grids.len else { abort("grid_locate: 0 <= g < grids.len"); }
     let gr = grids[g];
     let span = gr.t1 - gr.t0;
     // θ from t0, in [0, 2π), or a little below 0 near t0.
@@ -71,7 +77,7 @@ fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, 
 // node numbers run along the shorter side first, for a small profile.
 fn mesh_cylinder(r: f64, x0: f64, x1: f64, t0: f64, t1: f64, nx: i64, nt: i64,
                  section: i64, ax: f64, ay: f64, az: f64) -> i64 {
-    assert(r > 0.0 && x1 > x0 && t1 > t0 && nx > 0 && nt > 0 && section >= 0 && section < sections.len);
+    guard r > 0.0 && x1 > x0 && t1 > t0 && nx > 0 && nt > 0 && section >= 0 && section < sections.len else { abort("mesh_cylinder: r > 0, x1 > x0, t1 > t0, nx, nt > 0, and 0 <= section < sections.len"); }
     grids.push(Grid { first_node: node_count(), first_cell: shells.len, nx: nx, nt: nt, x_fast: nx <= nt,
                       r: r, x0: x0, x1: x1, t0: t0, t1: t1 });
     let g = grids.len - 1;

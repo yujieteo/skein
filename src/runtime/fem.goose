@@ -87,6 +87,7 @@ fn mesh_clear() {
 }
 
 fn add_point_field(name: const u8[:], first: i64, count: i64) {
+    guard first >= 0 && count > 0 && first + count <= dofs_per_node else { abort("add_point_field: 0 <= first and first + count <= dofs_per_node"); }
     var f = Field { name: [], first: first, count: count };
     f.name.append(name[..min(name.len, 64)]);
     point_fields.push(f);
@@ -100,14 +101,17 @@ fn add_node(x: f64, y: f64, z: f64) -> i64 {
 }
 
 fn add_cell(t: i64, nodes: i64[:]) -> i64 {
-    assert(t >= 0 && t < CELL_NODES.len && nodes.len == CELL_NODES[t]);
+    guard t >= 0 && t < CELL_NODES.len && nodes.len == CELL_NODES[t] else { abort("add_cell: a cell type and its number of nodes"); }
     cell_type.push(t as u8);
     for n in nodes { cell_nodes.push(n); }
     cell_start.push(cell_nodes.len);
     return cell_count() - 1;
 }
 
-fn cell_node(c: i64, l: i64) -> i64 { return cell_nodes[cell_start[c] + l]; }
+fn cell_node(c: i64, l: i64) -> i64 {
+    guard c >= 0 && c < cell_count() && l >= 0 && l < cell_start[c + 1] - cell_start[c] else { abort("cell_node: a cell and one of its local nodes"); }
+    return cell_nodes[cell_start[c] + l];
+}
 
 fn add_set(name: const u8[:], face: bool, items: i64[:]) {
     var w: u8[..64] = [];
@@ -126,16 +130,21 @@ fn add_face_set(name: const u8[:], faces: i64[:]) { add_set(name, true, faces); 
 // The index of the node set (face false) or the face set (face true)
 // `name`, or -1. A node set and a face set can have the same name.
 fn find_set(name: const u8[:], face: bool) -> i64 {
+    guard set_is_face.len == set_names.len && set_start.len == set_names.len + 1 else { abort("find_set: the arrays of the sets agree"); }
     for s, i in set_names {
         if s == name && set_is_face[i] == face { return i; }
     }
     return -1;
 }
 
-fn set_members(s: i64) -> const i64[:] { return set_items[set_start[s]..set_start[s + 1]]; }
+fn set_members(s: i64) -> const i64[:] {
+    guard s >= 0 && s + 1 < set_start.len else { abort("set_members: a set"); }
+    return set_items[set_start[s]..set_start[s + 1]];
+}
 
 // Whether the node sets a and b have a node in common.
 fn sets_meet(a: i64, b: i64) -> bool {
+    guard a >= 0 && b >= 0 && a < set_is_face.len && b < set_is_face.len && !set_is_face[a] && !set_is_face[b] else { abort("sets_meet: two node sets"); }
     var mark: bool[>..] = [];
     for n in node_count() { mark.push(false); }
     for n in set_members(a) { mark[n] = true; }
@@ -181,6 +190,7 @@ fn load_mesh(dir: const u8[:]) -> bool {
 // each node a, and dn[3 a + r] = ∂N_a/∂ξ_r. A cell of dimension d < 3
 // uses only the first d entries of xi and of each row of dn.
 fn cell_shape(t: i64, xi: f64[3], n: f64[>..]&, dn: f64[>..]&) -> bool {
+    guard t >= 0 && t < CELL_NODES.len else { abort("cell_shape: a cell type"); }
     n.clear();
     dn.clear();
     if t == HEX27 { hex27_shape(xi, n, dn); return true; }
@@ -192,6 +202,7 @@ fn cell_shape(t: i64, xi: f64[3], n: f64[>..]&, dn: f64[>..]&) -> bool {
 // The quadrature of cell type t: xi[3 g + r] and the weight w[g] of each
 // point g.
 fn cell_quadrature(t: i64, xi: f64[>..]&, w: f64[>..]&) -> bool {
+    guard t >= 0 && t < CELL_NODES.len else { abort("cell_quadrature: a cell type"); }
     xi.clear();
     w.clear();
     if t == HEX27 { gauss_hex3(xi, w); return true; }
@@ -204,8 +215,8 @@ fn cell_quadrature(t: i64, xi: f64[>..]&, w: f64[>..]&) -> bool {
 // dofs_per_node dofs for each node, dof p of node a at row
 // dofs_per_node a + p). False if the cell type has no routine.
 fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
+    guard c >= 0 && c < cell_count() && cell_start[c + 1] - cell_start[c] == CELL_NODES[cell_type[c]] else { abort("cell_matrix: a cell with the nodes of its type"); }
     let t = cell_type[c] as i64;
-    assert(cell_start[c + 1] - cell_start[c] == CELL_NODES[t]);
     if t == HEX27 { return solid_stiffness(c, ke); }
     if t == HEX8I { return hex8i_matrix(c, ke); }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_matrix(c, ke); }
@@ -217,6 +228,7 @@ fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
 // is the integral of N_a n_k, with n the unit normal out of the cell.
 // False if the cell type has no face routine.
 fn cell_face_weights(c: i64, f: i64, w: f64[>..]&) -> bool {
+    guard c >= 0 && c < cell_count() && f >= 0 && f < FACE_STRIDE else { abort("cell_face_weights: a cell and a local face"); }
     w.clear();
     let t = cell_type[c] as i64;
     if t == HEX27 || t == HEX8I { hex_face_weights(c, f, w); return true; }
@@ -226,12 +238,14 @@ fn cell_face_weights(c: i64, f: i64, w: f64[>..]&) -> bool {
 
 // Whether the reference point xi is in a cell of the 3D cell type t.
 fn cell_inside(t: i64, xi: f64[3]) -> bool {
+    guard t >= 0 && t < CELL_NODES.len else { abort("cell_inside: a cell type"); }
     if t == HEX27 || t == HEX8I { return max(abs(xi[0]), max(abs(xi[1]), abs(xi[2]))) <= 1.0 + 1.0e-9; }
     return elements_inside(t, xi);
 }
 
 // The tensor product of 3-point Gauss rules on [-1, 1]^3, x fastest.
 fn gauss_hex3(xi: f64[>..]&, w: f64[>..]&) {
+    guard xi.len == 0 && w.len == 0 else { abort("gauss_hex3: empty xi and w"); }
     for c in 3 {
         for b in 3 {
             for a in 3 {

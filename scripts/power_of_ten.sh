@@ -7,7 +7,7 @@
 #            closing brace (the splitter, src/codegen/split.goose, makes it
 #            so for the generated functions)
 #   rule 5   each call of tests/power_of_ten/faults.goose, with a broken
-#            precondition, stops on an assert of the runtime
+#            precondition, stops on the abort of that precondition
 #
 #   scripts/power_of_ten.sh main.goose...
 #
@@ -72,13 +72,28 @@ awk -v root="$root/" '
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 "${GOOSE:-goose}" build -q "$root/tests/power_of_ten/faults.goose" -o "$work/faults"
-for call in runtime_material runtime_cells_for runtime_mesh_box runtime_solve_static \
-            elements_elastic elements_fix shells_laminate_ply shells_fix solvers_multiply \
-            solvers_ilu0_apply; do
-    if "$work/faults" "$call" 2>"$work/err" || ! grep -q "assert failed" "$work/err"; then
+# Each call of faults.goose and the message of the abort that must stop it.
+while IFS='|' read -r call message; do
+    if "$work/faults" "$call" 2>"$work/err" || ! grep -qF "goose runtime error: $message (" "$work/err"; then
         cat "$work/err"
-        echo "FAIL faults.goose $call: no assert stops it (rule 5)"
+        echo "FAIL faults.goose $call: no abort \"$message\" stops it (rule 5)"
         status=1
     fi
-done
+done <<'CALLS'
+runtime_material|material: E > 0 and -1 < nu < 0.5
+runtime_cells_for|cells_for: length > 0 and size > 0
+runtime_mesh_box|build_lattice: counts > 0 and hi > lo on each axis
+runtime_fix|fix: a mesh and its dofs
+runtime_solve_static|solve_linear_static: a material, a mesh and its dofs
+elements_elastic|set_elastic: E > 0, -1 < nu < 0.5, t > 0 and a plane assumption
+elements_fix|fix_region: a physics, -1 <= comp < ncomp and the arrays of the dofs
+elements_traction|add_region_load: a physics and the arrays of the dofs
+elements_solve|solve_system: a physics and the arrays of the dofs
+shells_laminate_ply|laminate_ply: t, e1, e2, g12, g13 and g23 > 0
+shells_fix|fix: 0 <= n < node_count(), and 0 <= dof < 6
+shells_force|force: 0 <= n < node_count(), and 0 <= dof < 6
+shells_mesh_cylinder|mesh_cylinder: r > 0, x1 > x0, t1 > t0, nx, nt > 0, and 0 <= section < sections.len
+solvers_multiply|multiply: row_start has y.len + 1 entries, col and val one size, x and y one size
+solvers_ilu0_apply|ilu0_apply: row_start has r.len + 1 entries, z and diag r.len, lu col.len
+CALLS
 exit $status

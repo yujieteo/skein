@@ -18,6 +18,7 @@ import .sparse;
 // `hk` = its rows 0..k + 1, makes rotation k that sets row k + 1 to zero,
 // and applies it to `g`.
 fn rotate(hk: f64[:], cs: f64[:], sn: f64[:], g: f64[:], k: i64) {
+    guard k >= 0 && hk.len == k + 2 && cs.len > k && sn.len > k && g.len > k + 1 else { abort("rotate: hk has k + 2 entries, cs and sn more than k, g more than k + 1"); }
     for i in k {
         let a = hk[i];
         let c = hk[i + 1];
@@ -38,6 +39,7 @@ fn rotate(hk: f64[:], cs: f64[:], sn: f64[:], g: f64[:], k: i64) {
 // r = V y for the first k vectors of `basis`, with H y = g by back
 // substitution. H is (m + 1) × m, column-major in `h`.
 fn combine(h: f64[:], g: f64[:], y: f64[:], basis: f64[:], r: f64[:], m: i64, k: i64) {
+    guard k >= 0 && k <= m && h.len == (m + 1) * m && g.len >= k && y.len >= k && basis.len >= k * r.len else { abort("combine: 0 <= k <= m, h is (m + 1) x m, g and y have k entries, basis k vectors"); }
     let n = r.len;
     for t in k {
         let i = k - 1 - t;
@@ -58,7 +60,7 @@ fn combine(h: f64[:], g: f64[:], y: f64[:], basis: f64[:], r: f64[:], m: i64, k:
 // residual that it measures is the true residual b - A x.
 fn gmres<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
             rtol: f64, m: i64, max_iterations: i64) -> i64, bool {
-    assert(m > 0 && x.len == b.len && row_start.len == b.len + 1 && col.len == val.len);
+    guard m > 0 && x.len == b.len && row_start.len == b.len + 1 && col.len == val.len else { abort("gmres: m > 0, x and b one size, row_start b.len + 1 entries, col and val one size"); }
     let n = b.len;
     var basis: f64[>..] = [];       // m + 1 vectors of n, one after the other
     zeros(basis, (m + 1) * n);

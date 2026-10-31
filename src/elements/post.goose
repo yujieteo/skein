@@ -17,6 +17,7 @@ let FIELD_FLUX = 2;     // the heat flux -k grad(T) at comp
 
 // The barycentric coordinates of p in cell c, from its vertices.
 fn barycentric(c: i64, p: f64[3]) -> f64[4] {
+    guard c >= 0 && c < cell_count() && (dim == 2 || dim == 3) else { abort("barycentric: c < cell_count()"); }
     var e: f64[9] = [0.0; 9];
     var b: f64[3] = [0.0; 3];
     let v0 = cell_node(c, 0);
@@ -51,6 +52,7 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
 
 // The field in cell c at reference point xi.
 fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
+    guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 && ncomp <= 3 && sol.len == dof_total() else { abort("cell_field: a field, 0 <= comp < 9 and a solution of each dof"); }
     cell_geometry(c, xi);
     if what == FIELD_VALUE {
         var v = 0.0;
@@ -85,6 +87,7 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
 // a little outside the mesh, as on the arc of a hole between two nodes,
 // takes the nearest cell.
 fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
+    guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 else { abort("field_at: a field and 0 <= comp < 9"); }
     guard cell_count() > 0 && sol.len > 0 else { return 0.0, false; }
     let p: f64[3] = [x, y, z];
     let tol = 1.0e-9;
@@ -120,6 +123,7 @@ fn vtk_type() -> i64 {
 }
 
 fn write_vtu_file(path: const u8[:], field: const u8[:]) -> bool {
+    guard ncomp >= 1 && sol.len == dof_total() else { abort("write_vtu_file: a solution of each dof"); }
     let nodes = node_count();
     let cells = cell_count();
     var out: u8[>..] = [];

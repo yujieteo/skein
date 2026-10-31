@@ -16,18 +16,21 @@ var poisson = 0.0;
 
 // The quadratic Lagrange function of node a (at -1, 0 and 1) at s.
 fn shape_1d(a: i64, s: f64) -> f64 {
+    guard a >= 0 && a < 3 else { abort("shape_1d: 0 <= a < 3"); }
     if a == 0 { return 0.5 * s * (s - 1.0); }
     if a == 1 { return 1.0 - s * s; }
     return 0.5 * s * (s + 1.0);
 }
 
 fn shape_1d_ds(a: i64, s: f64) -> f64 {
+    guard a >= 0 && a < 3 else { abort("shape_1d_ds: 0 <= a < 3"); }
     if a == 0 { return s - 0.5; }
     if a == 1 { return -2.0 * s; }
     return s + 0.5;
 }
 
 fn hex27_shape(xi: f64[3], n: f64[>..]&, dn: f64[>..]&) {
+    guard n.len == 0 && dn.len == 0 else { abort("hex27_shape: empty n and dn"); }
     for l in 27 {
         let a = l % 3;
         let b = l / 3 % 3;
@@ -42,6 +45,7 @@ fn hex27_shape(xi: f64[3], n: f64[>..]&, dn: f64[>..]&) {
 // The weights of local face f = 2 r + side of the hexahedron c, hex27 or
 // hex8i (cell_face_weights in fem.goose), by 3 × 3 Gauss points on the face.
 fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
+    guard c >= 0 && c < cell_count() && (cell_type[c] as i64 == HEX27 || cell_type[c] as i64 == HEX8I) && f >= 0 && f < 6 && w.len == 0 else { abort("hex_face_weights: a hexahedron, a local face and an empty w"); }
     let t = cell_type[c] as i64;
     let nn = CELL_NODES[t];
     let r = f / 2;
@@ -89,6 +93,7 @@ fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
 // jac[3 r + s] = ∂x_s / ∂ξ_r in cell c, from the shape function
 // derivatives dn of cell_shape.
 fn cell_jacobian(c: i64, dn: f64[:], jac: f64[9]&) {
+    guard c >= 0 && c < cell_count() && dn.len == 3 * (cell_start[c + 1] - cell_start[c]) else { abort("cell_jacobian: a cell and 3 derivatives for each node"); }
     for i in 9 { jac[i] = 0.0; }
     for l in cell_start[c + 1] - cell_start[c] {
         let n = cell_node(c, l);
@@ -126,6 +131,7 @@ var grad: f64[>..] = [];      // the gradient of each shape function at a quadra
 // The stiffness of the 3D cell c, with 3 dofs for each node:
 // K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV.
 fn solid_stiffness(c: i64, ke: f64[>..]&) -> bool {
+    guard c >= 0 && c < cell_count() && cell_start[c + 1] - cell_start[c] == CELL_NODES[cell_type[c]] else { abort("solid_stiffness: a cell with the nodes of its type"); }
     let t = cell_type[c] as i64;
     guard CELL_DIMS[t] == 3 && cell_quadrature(t, quad_xi, quad_w) else { return false; }
     let nn = CELL_NODES[t];
@@ -156,6 +162,7 @@ fn solid_stiffness(c: i64, ke: f64[>..]&) -> bool {
 // Adds dv times the integrand of solid_stiffness to ke, for `count` shape
 // functions with the gradients grad[3 i + s]. ke has 3 count rows.
 fn add_elastic(grad: f64[:], count: i64, dv: f64, ke: f64[>..]&) {
+    guard count > 0 && grad.len == 3 * count && ke.len == 9 * count * count else { abort("add_elastic: 3 count gradients and a 3 count square ke"); }
     let size = 3 * count;
     let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
     let mu = young / (2.0 * (1.0 + poisson));

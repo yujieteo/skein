@@ -51,6 +51,7 @@ var e3: f64[3];
 var area = 0.0;     // |a_1 × a_2|
 
 fn load_cell(c: i64) {
+    guard c >= 0 && c < shells.len && directors.len == coords.len else { abort("load_cell: 0 <= c < shells.len, and a director for each node"); }
     for l in 4 {
         let n = shells[c].n[l];
         for k in 3 {
@@ -60,11 +61,15 @@ fn load_cell(c: i64) {
     }
 }
 
-fn node_vec(v: f64[12], l: i64) -> f64[3] { return [v[3 * l], v[3 * l + 1], v[3 * l + 2]]; }
+fn node_vec(v: f64[12], l: i64) -> f64[3] {
+    guard l >= 0 && l < 4 else { abort("node_vec: 0 <= l < 4"); }
+    return [v[3 * l], v[3 * l + 1], v[3 * l + 2]];
+}
 
 // The covariant strain rows `cov` at (xi, eta), with a1, a2 and the shape
 // functions.
 fn covariant(xi: f64, eta: f64) {
+    guard abs(xi) <= 1.0 && abs(eta) <= 1.0 else { abort("covariant: -1 <= xi, eta <= 1"); }
     var dn: f64[8] = [0.0; 8];     // ∂Ni/∂ξ, then ∂Ni/∂η
     for l in 4 {
         shape[l] = 0.25 * (1.0 + xi * NODE_XI[l]) * (1.0 + eta * NODE_ETA[l]);
@@ -115,6 +120,7 @@ fn covariant(xi: f64, eta: f64) {
 
 // The local strain rows at (xi, eta) of cell c, with the MITC4 shear.
 fn local_rows(c: i64, xi: f64, eta: f64) {
+    guard c >= 0 && c < shells.len && abs(xi) <= 1.0 && abs(eta) <= 1.0 else { abort("local_rows: 0 <= c < shells.len, and -1 <= xi, eta <= 1"); }
     // The tying points: G1 at A (0, -1) and C (0, 1), G2 at D (-1, 0) and B (1, 0).
     var g1: f64[24] = [0.0; 24];
     var g2: f64[24] = [0.0; 24];
@@ -169,6 +175,7 @@ fn local_rows(c: i64, xi: f64, eta: f64) {
 // The drilling row at (xi, eta): θ · e3 - ½ (∂u/∂x1 · e2 - ∂u/∂x2 · e1),
 // with c[2 a + k] = g^a · e_k (local_rows).
 fn drilling_rows(xi: f64, eta: f64, c00: f64, c01: f64, c10: f64, c11: f64) {
+    guard abs(xi) <= 1.0 && abs(eta) <= 1.0 else { abort("drilling_rows: -1 <= xi, eta <= 1"); }
     for l in 4 {
         let d1 = 0.25 * NODE_XI[l] * (1.0 + eta * NODE_ETA[l]);
         let d2 = 0.25 * NODE_ETA[l] * (1.0 + xi * NODE_XI[l]);
@@ -183,6 +190,7 @@ fn drilling_rows(xi: f64, eta: f64, c00: f64, c01: f64, c10: f64, c11: f64) {
 
 // The product of a symmetric 3 × 3 matrix m and the column j of rows r0.
 fn mat3_row(m: f64[9], r0: i64, j: i64) -> f64[3] {
+    guard (r0 == 0 || r0 == 72) && j >= 0 && j < 24 else { abort("mat3_row: r0 is 0 or 72, and 0 <= j < 24"); }
     let x = rows[r0 + j];
     let y = rows[r0 + 24 + j];
     let z = rows[r0 + 48 + j];
@@ -191,7 +199,7 @@ fn mat3_row(m: f64[9], r0: i64, j: i64) -> f64[3] {
 
 // The stiffness ke of shell cell c, by 2 × 2 Gauss points.
 fn shell_stiffness(c: i64) {
-    assert(c >= 0 && c < shells.len && shells[c].section >= 0 && shells[c].section < sections.len);
+    guard c >= 0 && c < shells.len && shells[c].section >= 0 && shells[c].section < sections.len else { abort("shell_stiffness: 0 <= c < shells.len, and its section < sections.len"); }
     load_cell(c);
     let s = sections[shells[c].section];
     let kd = DRILL * s.a[8];
@@ -226,6 +234,7 @@ fn shell_stiffness(c: i64) {
 // Adds a load per area (qx, qy, qz) on cell c. With `normal`, the load is
 // a pressure qx along the top normal e3 instead.
 fn shell_load(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {
+    guard c >= 0 && c < shells.len && load.len == dof_count() else { abort("shell_load: 0 <= c < shells.len, and a load for each dof"); }
     load_cell(c);
     for gp in 4 {
         let xi = if gp % 2 == 0 { -GAUSS } else { GAUSS };
@@ -244,6 +253,7 @@ fn shell_load(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {
 // The membrane strain and the curvature of cell c at (xi, eta) in the axes
 // of the section: (11, 22, engineering 12).
 fn shell_strains(c: i64, xi: f64, eta: f64) -> f64[3], f64[3] {
+    guard c >= 0 && c < shells.len && disp.len == dof_count() else { abort("shell_strains: 0 <= c < shells.len, and a solution for each dof"); }
     load_cell(c);
     local_rows(c, xi, eta);
     var eps: f64[3] = [0.0, 0.0, 0.0];
@@ -264,6 +274,7 @@ fn shell_strains(c: i64, xi: f64, eta: f64) -> f64[3], f64[3] {
 // The membrane force N and the membrane strain of cell c at its centre, as
 // 3 × 3 tensors in global axes (row-major).
 fn shell_resultants(c: i64) -> f64[9], f64[9] {
+    guard c >= 0 && c < shells.len && shells[c].section >= 0 && shells[c].section < sections.len else { abort("shell_resultants: 0 <= c < shells.len, and its section < sections.len"); }
     let s = sections[shells[c].section];
     let eps, kap = shell_strains(c, 0.0, 0.0);
     var nl: f64[3] = [0.0; 3];
@@ -285,6 +296,7 @@ fn shell_resultants(c: i64) -> f64[9], f64[9] {
 
 // The mean of shell_resultants over the shell cells at node n.
 fn mean_resultants(n: i64) -> f64[9], f64[9] {
+    guard n >= 0 && n < node_count() else { abort("mean_resultants: 0 <= n < node_count()"); }
     var nt: f64[9] = [0.0; 9];
     var et: f64[9] = [0.0; 9];
     var count = 0;
@@ -307,6 +319,7 @@ fn mean_resultants(n: i64) -> f64[9], f64[9] {
 // Sets the director of each node that has none to the mean normal of the
 // shell cells at the node.
 fn mean_directors() {
+    guard directors.len == coords.len else { abort("mean_directors: a director for each node"); }
     var sum: f64[>..] = [];
     for i in coords.len { sum.push(0.0); }
     for c in shells.len {
@@ -324,4 +337,7 @@ fn mean_directors() {
     }
 }
 
-fn node_vec3(v: f64[:], n: i64) -> f64[3] { return [v[3 * n], v[3 * n + 1], v[3 * n + 2]]; }
+fn node_vec3(v: f64[:], n: i64) -> f64[3] {
+    guard n >= 0 && 3 * n + 2 < v.len else { abort("node_vec3: 0 <= n < v.len / 3"); }
+    return [v[3 * n], v[3 * n + 1], v[3 * n + 2]];
+}

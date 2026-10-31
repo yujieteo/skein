@@ -93,7 +93,7 @@ fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
 
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
-    assert(length > 0.0 && size > 0.0);
+    guard length > 0.0 && size > 0.0 else { abort("cells_for: length > 0 and size > 0"); }
     return max(ceil(length / size - 1.0e-9) as i64, 1);
 }
 
@@ -106,7 +106,7 @@ fn elastic_plane_strain(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRA
 // Sets a uniform body force per volume (bx, by, bz) on the elastic
 // physics of the last `elastic` call, for example rho*g.
 fn body_force(bx: f64, by: f64, bz: f64) {
-    assert(physics == ELASTIC);
+    guard physics == ELASTIC else { abort("body_force: after elastic"); }
     volume_force = [bx, by, bz];
 }
 
@@ -123,6 +123,7 @@ fn plane(axis: i64, value: f64) -> bool {
 // Adds a plane to the region of the last `plane` or `hole` call, so the
 // region is their union. It gives false when the plane holds no node.
 fn also_plane(axis: i64, value: f64) -> bool {
+    guard axis >= 0 && axis < 3 && region.len < 8 else { abort("also_plane: 0 <= axis < 3 and at most 8 parts"); }
     region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
@@ -132,6 +133,7 @@ fn also_plane(axis: i64, value: f64) -> bool {
 // Selects the surface of the hole of radius r about the z axis through
 // (cx, cy).
 fn hole(cx: f64, cy: f64, r: f64) -> bool {
+    guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
     region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r });
     return region_node_count() > 0;

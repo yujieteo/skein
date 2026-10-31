@@ -18,6 +18,7 @@ let TRI_EDGES: i64[6] = [0, 1, 1, 2, 2, 0];
 let TET_EDGES: i64[12] = [0, 1, 1, 2, 0, 2, 0, 3, 1, 3, 2, 3];
 
 fn edge_count(d: i64) -> i64 {
+    guard d >= 1 && d <= 3 else { abort("edge_count: 1 <= d <= 3"); }
     if d == 1 { return 1; }
     if d == 2 { return 3; }
     return 6;
@@ -25,18 +26,21 @@ fn edge_count(d: i64) -> i64 {
 
 // Vertex `side` (0 or 1) of edge e of the simplex of dimension d.
 fn edge_node(d: i64, e: i64, side: i64) -> i64 {
+    guard e >= 0 && e < edge_count(d) && (side == 0 || side == 1) else { abort("edge_node: e < edge_count(d) and side 0 or 1"); }
     if d == 1 { return LINE_EDGES[2 * e + side]; }
     if d == 2 { return TRI_EDGES[2 * e + side]; }
     return TET_EDGES[2 * e + side];
 }
 
 fn node_count_of(d: i64, order: i64) -> i64 {
+    guard d >= 1 && d <= 3 && (order == 1 || order == 2) else { abort("node_count_of: 1 <= d <= 3 and order 1 or 2"); }
     if order == 1 { return d + 1; }
     return d + 1 + edge_count(d);
 }
 
 // The derivative of barycentric coordinate k by xi_r.
 fn bary_grad(k: i64, r: i64) -> f64 {
+    guard k >= 0 && k <= 3 && r >= 0 && r < 3 else { abort("bary_grad: 0 <= k <= 3 and 0 <= r < 3"); }
     if k == 0 { return -1.0; }
     if k - 1 == r { return 1.0; }
     return 0.0;
@@ -45,6 +49,7 @@ fn bary_grad(k: i64, r: i64) -> f64 {
 // The values n[l] and the reference gradients dn[3 l + r] = dN_l / dxi_r of
 // the shape functions at xi.
 fn shape(d: i64, order: i64, xi: f64[3], n: f64[10]&, dn: f64[30]&) {
+    guard node_count_of(d, order) <= n.len && 3 * n.len <= dn.len else { abort("shape: n and dn hold the nodes of the simplex"); }
     var bc: f64[4] = [1.0, 0.0, 0.0, 0.0];
     for r in d {
         bc[r + 1] = xi[r];
@@ -79,9 +84,13 @@ let TET_A = 0.1381966011250105;
 let TET_B = 0.5854101966249685;
 let LINE_G = 0.21132486540518713;   // (1 - 1/sqrt(3)) / 2
 
-fn quad_count(d: i64) -> i64 { return d + 1; }
+fn quad_count(d: i64) -> i64 {
+    guard d >= 1 && d <= 3 else { abort("quad_count: 1 <= d <= 3"); }
+    return d + 1;
+}
 
 fn quad_point(d: i64, q: i64) -> f64[3], f64 {
+    guard q >= 0 && q < quad_count(d) else { abort("quad_point: 0 <= q < quad_count(d)"); }
     if d == 1 {
         let s = if q == 0 { LINE_G } else { 1.0 - LINE_G };
         return [s, 0.0, 0.0], 0.5;
@@ -108,9 +117,13 @@ let TET_FACES: i64[24] = [
     0, 2, 3, 6, 9, 7,
 ];
 
-fn facet_count(d: i64) -> i64 { return d + 1; }
+fn facet_count(d: i64) -> i64 {
+    guard d == 2 || d == 3 else { abort("facet_count: d is 2 or 3"); }
+    return d + 1;
+}
 
 fn facet_node(d: i64, f: i64, l: i64) -> i64 {
+    guard f >= 0 && f < facet_count(d) && l >= 0 && l < node_count_of(d - 1, 2) else { abort("facet_node: f < facet_count(d) and l < the nodes of a facet"); }
     if d == 3 { return TET_FACES[6 * f + l]; }
     if l < 2 { return TRI_EDGES[2 * f + l]; }
     return 3 + f;
