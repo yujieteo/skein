@@ -791,8 +791,8 @@ fn test_kernels(write: bool) {
 }
 
 // A thermal strain on a union of boxes of 2 materials, with a support at a
-// Point (spec §10.4), and the interposer: a table of the material, degC
-// values and a report of a difference of values at Points.
+// Point (spec §10.4), a material value from a table, and a report of a
+// difference of values at Points.
 fn test_thermal_union() {
     var text: u8[>..] = [];
     read_file("examples/femahoy/warpage_thick_copper.skn", text);
@@ -809,17 +809,17 @@ fn test_thermal_union() {
     ]);
     expect_error("a Point bc on a box", replace(replace(text, "si | cu", "si"), "copper on cu", "copper on si"),
                  "error unsupported 49:5 a bc on a Point needs a union of boxes");
-    text.clear();
-    read_file("examples/package/interposer_warpage.skn", text);
-    expect_lines("interposer_warpage", text, [
-        "face(runtime::point_set(\"point_centre_top\", 0.0, 0.0, 0.1), \"centre_top\");",
-        "runtime::material_box(165000.0, 0.22, -0.000496, -13.5, 0.0, 0.0, 13.5, 13.5, 0.1);",
-        "runtime::material_box(27000.0, 0.35, -0.003875, 2.6875, 0.0, 0.11, 12.6875, 3.5, 0.16);",
-        "        let ux1, uy1, uz1 = runtime::displacement_at(13.5, 13.5, 0.0);\n        let ux2, uy2, uz2 = runtime::displacement_at(0.0, 0.0, 0.0);",
-        "report(\"cool\", \"warpage = u.z at corner_a - u.z at centre\", quantity((uz1 - uz2), \"mm\"));",
-    ]);
-    expect_lines("interp of a table", replace(text, "param mat: Real = 1 in", "param mat: Real = 2.5 in"), [
-        "runtime::material_box(75500.0, 0.22, -0.000759",
+    // A material value from a table and a param, and a report of a difference
+    // of values at two Points.
+    let t2 = replace(replace(replace(replace(text,
+        "let dT: Temperature = 40 K", "let dT: Temperature = 40 K\nparam mat: Real = 1.5 in 1..2"),
+        "material copper {\n    E: Pressure = 77500 MPa",
+        "table cu_props{id: Real, E: Pressure in MPa}:\n    1, 77500\n    2, 110000\n\nmaterial copper {\n    E: Pressure = interp(cu_props.id, cu_props.E, mat)"),
+        "let origin: Point = point((0, 0, 0) mm)", "let origin: Point = point((0, 0, 0) mm)\nlet end: Point = point((25, 0, 0) mm)"),
+        "    output u, sigma\n", "    output u, sigma\n    report bow = u.z at end - u.z at origin\n");
+    expect_lines("interp of a table and a report of a difference", t2, [
+        "runtime::material_box(93750.0, 0.364,",
+        "report(\"heat_up\", \"bow = u.z at end - u.z at origin\", quantity((uz1 - uz2), \"mm\"));",
     ]);
 }
 
