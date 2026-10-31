@@ -46,7 +46,9 @@ struct MemoryPath {
 // are its copy of the matrix (12 bytes) and the assembly. The models:
 //
 //     box cg jacobi       closed cylinder, 65,835 dofs: 0.2, and 16.3 more on 16 threads
-//     box cg amg          closed cylinder 2 mm, 143,787 dofs: 38.1, and 1.0 more
+//     box cg amg          closed cylinder 2 mm, 143,787 dofs: 57.9, and 0.8 more. Measured
+//                         again on 2026-11-01: the 6 rigid-body modes of the AMG setup
+//                         (#58) took the peak from 38.1.
 //     box gmres ilu0      closed cylinder 5 mm, 10,251 dofs: 17.0 (the copy of K and its ILU(0)), and 0
 //     simplex cg amg      sample 01, 319,320 dofs: 47.0, and 15.4 more
 //     simplex modal       frequency cantilever 1.5 mm, 54,675 dofs: 66.3, and 1.0 more
@@ -59,7 +61,7 @@ struct MemoryPath {
 //                         has rows_start.
 let MEMORY_PATHS = [
     MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, thread_bytes: 16.0 },
-    MemoryPath { name: "box cg amg", entry_bytes: 42.0, thread_bytes: 1.0 },
+    MemoryPath { name: "box cg amg", entry_bytes: 64.0, thread_bytes: 1.0 },
     MemoryPath { name: "box gmres ilu0", entry_bytes: 18.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex cg amg", entry_bytes: 52.0, thread_bytes: 16.0 },
     MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, thread_bytes: 1.0 },
