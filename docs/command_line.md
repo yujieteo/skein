@@ -292,7 +292,11 @@ gives the size of the model.
 
 Current limits:
 
-- only the models of the simplex generator (`tri` or `tet` cells);
+- only the models of the simplex generator (`tri` or `tet` cells).
+  Sample 01 (the cantilever) is the validated model of the page. The
+  Hisada interposer model (`examples/package/interposer_warpage.skn`,
+  `hex27` cells) does not run in the page yet;
+- `build` stops with an error if a native run fails;
 - a value must not change the structure of the program, for example the
   number of steps or of shapes. `build` stops with an error for such a
   `param`;

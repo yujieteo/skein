@@ -263,7 +263,7 @@ fn link_sources(dir: u8[:]) -> bool {
 // Runs the profile of `dir` with the words of --set `sets`. Its standard
 // output goes to `out` in `dir`. It gives the peak of each data stack in
 // `peaks` (MB) and the seconds of the run. False, with an error, if the
-// run gives no profile.
+// run fails or gives no profile.
 fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> bool, f64 {
     var command = str("cd ", shell_quoted(dir), " && SKEIN_THREADS=1 ./profile");
     for w in sets { format(command, " ", shell_quoted(w)); }
@@ -272,10 +272,14 @@ fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> 
     for w in sets { write_stderr(str(" ", w)); }
     write_stderr("\n");
     let start = clock();
-    shell(command);
+    let status = shell(command);
     let seconds = clock() - start;
     var err: u8[>..] = [];
     read_file(str(dir, "/profile.err"), err);
+    guard status == 0 else {
+        write_stderr(str("skein build: the native run failed with exit status ", status, ":\n", err));
+        return false, seconds;
+    };
     guard profile_peaks(err, peaks) else {
         write_stderr(str("skein build: the native run gave no profile:\n", err));
         return false, seconds;

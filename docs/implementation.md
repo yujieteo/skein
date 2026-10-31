@@ -244,7 +244,7 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    gives the records and the VTU file of `skein run --set`, bit for bit.
 3. It runs that program natively at the default values and at the corner
    of the ranges with the most dofs, and measures the peak of each Goose
-   data stack.
+   data stack. A run that fails stops the build with an error.
 4. It compiles the C with `emcc` to 64-bit WebAssembly (memory64). Each
    data stack gets a fixed region: 1.5 times the larger peak of the two
    runs. Reason: WebAssembly memory has no address-space reservation and
@@ -254,6 +254,11 @@ Goose projects do (spec §18.1). `skein build --target wasm`
 5. It writes one HTML page with the module in it. Each run has a Web
    Worker and a module of its own. Thus a new value stops the run before
    it, and the memory of a run goes back when it ends.
+
+The page runs the simplex models only (`tri` or `tet` cells). Sample 01
+(the cantilever) is the validated model of the page. The Hisada
+interposer model (`examples/package/interposer_warpage.skn`, `hex27`
+cells) does not run in the page yet.
 
 The front end needs little memory. The solver needs much more, so the
 browser limit on memory sets the size of the models that it can solve.
