@@ -42,8 +42,8 @@ if it costs too much. The captain set this ranking in
 | 4 | Concurrency: one work-stealing task pool | layered, high value | none | the task pool in the runtime | small | memory grows with the number of cases in flight | 3 |
 | 5 | Web output: the tool chain and the viewer in the browser | layered | none | the browser shell and the viewer | a second target: Goose to C, then `emcc` | the browser limits memory | 4 |
 | 6 | Power of Ten reliability | layered, mostly free | none: most rules hold by construction | tests, emitter checks, the kernel splitter | small | none | 2 onwards, as tests |
-| 7 | Parametric parts and text-to-CAD | layered | `tol`, `shell`, `loft`, `pattern` | the STL and tessellated STEP writers. No B-rep kernel. | small | none for simulation | 2 (STL), 4 (tessellated STEP) |
-| 8 | Design for manufacture | layered, first to cut | `manufacture`, `tolerance` | the DFM checks on distance functions | small | geometry checks only, fast | 5 |
+| 7 | Parametric parts and text-to-CAD | layered | `shell`, `loft`, `pattern` | the STL and tessellated STEP writers. No B-rep kernel. | small | none for simulation | 2 (STL), 4 (tessellated STEP) |
+| 8 | Design for manufacture | cut on 2026-10-31 (§5) | none | none | none | none | — |
 
 Rank 2 merges the units, the static analysis and the dimensional analysis
 into one goal. Reason, in the words of the captain: dimensional analysis
@@ -54,16 +54,15 @@ when it counts".
 Rules that follow from the ranking:
 
 - A layered goal may add syntax, but it must not change the meaning of a
-  model that does not use it. A model with no `manufacture` or `tolerance`
-  item is the same model as before.
+  model that does not use it.
 - When two goals conflict, the higher rank wins. Example: a geometry
   operation that the mesher cannot mesh with good cells is not added for
   text-to-CAD (rank 7 against rank 1).
 - The LLM-native goal (rank 3) is protected because it is the reason for
   the language, but it does not overrule correctness: units stay strict
   (rank 2) even when they cost tokens (G0.3).
-- If the schedule is late, cut DFM (rank 8) first, then the tessellated
-  STEP export (rank 7). STL export stays. Rank 6 costs almost nothing, so
+- If the schedule is late, cut the tessellated STEP export (rank 7) first.
+  STL export stays. Rank 6 costs almost nothing, so
   it stays.
 
 ---
@@ -95,25 +94,25 @@ The core choices that each section tests:
 | Workload | What works | Cost or gap | What the spec does |
 |---|---|---|---|
 | Linear structures (static, modal, buckling) | C1 with `hooke`, `cg`, all procedures, the `linear_elastic` template | none of note | — |
-| Rotors and periodic structures | `symmetry` with `cyclic`, `dihedral` or `bloch` (spec §12.6) | a closed list of groups | accepted. The list covers the common cases (G4.5b). |
+| Periodic structures | `symmetry` with `bloch` (spec §12.6) | no rotational group: a rotor is a full model | accepted. The femahoy cells need only `bloch`. Add a group when a real model needs it. |
 | Nonlinear structures (plasticity, hyperelasticity, large deformation) | `plastic`, `diff(W, C)`, `finite_strain` (§10.6) | a user law with many state variables needs a return map that the compiler must derive. A general return map for any yield function is hard. | phase 5. Start with von Mises and Drucker-Prager, and give a clear error for a law the compiler cannot map. |
 | Shells and beams | lower-dimension regions (§8.3) | the strong form of a shell (Reissner-Mindlin, Kirchhoff-Love) is long. Users do not write it from memory. | standard-library templates `reissner_mindlin` and `timoshenko`, in Skein source (spec §4.2, G4.1), phase 5 |
 | Contact | `contact` (§12.4) | not a PDE: an inequality. It does not fit the strong form, so it is a separate item. | accepted cost |
 | Heat transfer | C1 with `fourier`, `transient` | radiation between surfaces needs view factors, a non-local term | a `radiation` item with view factors, phase 5 (G4.2) |
 | Incompressible CFD | `supg_pspg`, `vms`, `fv` with Rhie-Chow | none of note for laminar flow | — |
 | Turbulent CFD | `turbulent(model)` assumption | RANS models add equations with wall functions. LES needs `vms`. Each model is many lines. | the standard-library template `k_omega_sst` (spec §4.2, G4.1), phase 5 |
-| Compressible CFD with shocks | `dg`, `fv` with Roe flux | shocks need limiters or artificial viscosity, and the spec has no setting for them | `limiter` for `fv` and `shock_capturing: entropy_viscosity` for `dg` (spec §13, G4.3) |
+| Compressible CFD with shocks | `dg`, `fv` with Roe flux | shocks need limiters or artificial viscosity, and the spec has no setting for them | `limiter` for `fv` (spec §13, G4.3). `dg` has no shock capturing until a model needs it. |
 | Multiphysics (thermal-structural) | two physics that share fields (§10.4), `monolithic` or `staggered` | none of note | — |
 | FSI | `interface` with ALE (§10.7) | mesh motion and large deformation of the fluid mesh are hard to make robust | phase 5, accepted cost |
 | Electromagnetics | `curl` exists | `curl curl` problems need H(curl) (Nédélec) elements. The method table has no element family setting. Time-harmonic problems need complex numbers. | `family: nedelec` in `cg`, phase 5 (G4.4). `Complex<D>` and the `harmonic` procedure (spec §5.1, §14.2, G4.5). |
 | Acoustics (Helmholtz) | the equation is easy to write | frequency domain needs complex numbers and absorbing boundaries | `Complex<D>` and `harmonic` (G4.5) |
 | Porous media (Darcy, consolidation) | mixed forms with two unknowns | a mixed Darcy form needs H(div) (Raviart-Thomas) elements | `family: raviart_thomas`, phase 5 (G4.4) |
-| ODE systems (control, lumped models, chemistry) | global unknowns (§10.5), `ode` method | stiff chemistry needs adaptive implicit time steps with error control. The spec has fixed `dt` only. | `transient(adapt: { rtol, atol })` with `scheme: bdf` of variable order (spec §14.2, G4.6) |
+| ODE systems (control, lumped models, chemistry) | global unknowns (§10.5), `ode` method | stiff chemistry needs adaptive implicit time steps with error control. The spec has fixed `dt` only. | a fixed `dt`. Adaptive steps come back when a real model needs them (G4.6). |
 | Phase field, reaction-diffusion | C1, `transient` | fourth-order terms (Cahn-Hilliard) need a mixed form or C1 elements | accepted. Write the mixed form with two unknowns. |
 | Free surface (level set, VOF) | a level set is a PDE | reinitialization is a process, not an equation | out of scope for v1. No `process` statement until a real model shows which processes are necessary (G4.7). |
 | Meshless (large deformation, fracture) | `rkpm`, `gfd` | fragmentation needs particle methods with contact. That is closer to DEM, which is not a PDE. | out of scope for v1 |
 | Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh. Each case runs, with no reuse of similar cases (G2.3). |
-| Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | adjoint gradients from the SIR, phase 5 (G3.3). `Dual<D>` gives forward-mode derivatives before that (spec §5.1). |
+| Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | adjoint gradients from the SIR, phase 5 (G3.3) |
 | Uncertainty quantification | `study … sample` with `lhs` or `sobol` | no statistics of the results in the tool | the table is TOON. Other tools compute the statistics (G3.4). |
 | General PDEs with no physics | a `nondim` model (§6.5) | no dimension checks | accepted cost, the check report states it |
 
@@ -142,8 +141,8 @@ What static analysis cannot prove, and what Skein does instead:
 
 | Not provable before the run | Instead |
 |---|---|
-| the mesh resolves the solution | `verify convergence`, `adapt` |
-| the nonlinear solve converges | `newton_converged` check, `ramp` |
+| the mesh resolves the solution | `verify convergence` |
+| the nonlinear solve converges | the `solver_diverged` run error, `ramp` |
 | the time step is stable for a nonlinear problem | `dt_unstable` lint is an estimate. The post-solve energy check finds growth. |
 | the model is the right model of the real part | `expect` against tests or benchmarks. This is validation, not verification. |
 
@@ -157,13 +156,13 @@ local iteration must come from the standard library or the built-ins
 
 Recent text-to-CAD tools have an LLM write a short parametric script, in
 the style of CadQuery or build123d, from a sentence. Skein geometry has the
-same shape (spec §22.1): named parameters drive a CSG tree.
+same shape (spec §8, §20): named parameters drive a CSG tree.
 
 What Skein adds to that trend:
 
 - **One set of parameters** drives the part, the simulation and the study.
-  A sweep of the wall thickness changes the part, the mesh, the stress and
-  the manufacturing checks in one run.
+  A sweep of the wall thickness changes the part, the mesh and the stress
+  in one run.
 - **Types and units** on each dimension of the part, so an LLM that writes
   `2` for a wall gets an error, not a part 2 m thick.
 - **Ranges** on parameters, so a study cannot make a part with a hole wider
@@ -181,19 +180,9 @@ What it costs:
 
 ## 5. Design for manufacture
 
-The checks of spec §22.3 run on the parametric part with the process that
-the file declares. They are in the `verify` family, so they report the same
-way as the other checks, and `allow` with a reason turns one off.
-
-| Choice | Gives | Costs |
-|---|---|---|
-| checks on the distance function | wall thickness and draft come directly from φ and ∇φ, with no B-rep | the result has the accuracy of the sampling. Thin features near the size of the sample can hide. The checks sample at a fraction of `min_wall`. |
-| the process in the file | the checks know the rules, and a reviewer sees them | a part made by two processes (cast, then machined) needs two `manufacture` items on one region. The spec allows it. |
-| tolerance stack-ups by derivatives, and by sampling | exact sensitivities from the expression for worst case and RSS. `method: monte_carlo` runs a `sample` study for a stack-up that is not linear (G5.3). | a Monte Carlo stack-up needs many samples, but each one is an expression with no solve |
-| DFM on each study case | a sweep shows which designs cannot be made | the checks cost time for each case. They are geometry-only, so they are fast compared with a solve. |
-
-What the DFM checks do not cover: cost, cycle time, machine choice and
-fixturing. These are out of scope.
+The spec cut DFM on 2026-10-31: the `manufacture` and `tolerance` items,
+`tol` on a `param`, and the DFM checks. Reason: no sample and no femahoy
+case used them, and rank 8 is the first goal to cut.
 
 ---
 
@@ -229,7 +218,7 @@ emitter.
 |---|---|---|
 | only `param` can change (§20.1) | a reviewer finds each input. The dependency analysis is exact. | a user must mark a value `param` before a study can vary it |
 | Go-style workers over typed queues (§20.3) | no shared memory, so no data races. A failed case does not stop the study. The same design works on native threads and Web Workers. | each worker holds its own copy of the shared mesh. Memory grows with the number of workers. §20.5 limits the workers by memory. |
-| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. The pool keeps each thread busy also when the cases are few and large, with no `--jobs` from the user. | the pool needs atomic queues. If Goose has no atomics, a lock on each queue costs time for each task (G3.2b). |
+| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. The pool keeps each thread busy also when the cases are few and large, with no `--jobs` from the user. | each queue needs atomics, or a lock that costs time for each task (G3.2b). |
 
 ---
 
@@ -298,11 +287,11 @@ The captain decided each gap on 2026-10-30 ([grilling.md](grilling.md#answers)).
 |---|---|---|---|---|
 | standard-library physics | shells, beams, turbulence | physics templates in Skein source (spec §4.2) | 2 to 5 | G4.1 |
 | radiation | heat transfer | a `radiation` item with view factors | 5 | G4.2 |
-| shock capturing | compressible CFD | `limiter` for `fv`, entropy viscosity for `dg` | 4 | G4.3 |
+| shock capturing | compressible CFD | `limiter` for `fv` | 4 | G4.3 |
 | element families | electromagnetics, porous media | `family: nedelec \| raviart_thomas` | 5 | G4.4 |
-| number systems | electromagnetics, acoustics, rotations, sensitivities | the closed list `Real`, `Complex`, `Quaternion`, `Dual`, and the `harmonic` procedure (spec §5.1) | 4 | G4.5, G4.5b |
-| symmetry groups | rotors, gears, periodic structures | the closed list `cyclic`, `dihedral`, `bloch` (spec §12.6) | 4 | G4.5b |
-| adaptive time steps | stiff ODEs | `transient(adapt:)` with variable-order BDF | 3 | G4.6 |
+| number systems | electromagnetics, acoustics | `Real` and `Complex`, and the `harmonic` procedure (spec §5.1). `Quaternion` and `Dual` cut on 2026-10-31: no model used them. | 4 | G4.5, G4.5b |
+| symmetry groups | periodic structures | `bloch` (spec §12.6). `cyclic` and `dihedral` cut on 2026-10-31: no model used them. | 4 | G4.5b |
+| adaptive time steps | stiff ODEs | cut on 2026-10-31: no model used `adapt` | — | G4.6 |
 | processes in a step | level-set reinitialization | out of scope for v1 | — | G4.7 |
 | adjoint gradients | shape and topology optimization | adjoints from the SIR | 5 | G3.3 |
 | exact STEP | export for CAM | no exact B-rep. STL and tessellated STEP only. | — | G5.2 |

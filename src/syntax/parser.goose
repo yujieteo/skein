@@ -61,7 +61,7 @@ fn expect(k: i64, what: u8[:]) -> i64 {
 
 fn expect_ident(what: u8[:]) -> i64 {
     if kind() != TK_IDENT {
-        if kind() >= KW_ADAPT {
+        if kind() >= KW_ALLOW {
             fail(str("expected ", what, ", found the keyword '", text(tok()), "'"),
                  str("use a name that is not a keyword (spec §2.5)"));
         }
@@ -73,7 +73,7 @@ fn expect_ident(what: u8[:]) -> i64 {
 // True when the cursor is at a name and `:`. The name of a setting or of an
 // argument may be a keyword, as in `mesh: m` and `results(f, step: "load")`.
 fn at_label() -> bool {
-    (kind() == TK_IDENT || kind() >= KW_ADAPT) && kind_at(1) == TK_COLON
+    (kind() == TK_IDENT || kind() >= KW_ALLOW) && kind_at(1) == TK_COLON
 }
 
 // The name of a setting, an argument or a field, and its `:`.
@@ -502,10 +502,6 @@ fn param_decl() -> i64 {
     let n = typed_name(N_PARAM, "a parameter name");
     expect(TK_ASSIGN, "'='");
     add(n, expr());
-    if at(KW_TOL) {
-        let t = advance();
-        add(n, node1(N_TOL, t, expr()));
-    }
     if accept(KW_IN) {
         let lo = expr();
         let t = expect(TK_DOTDOT, "'..'");
@@ -785,7 +781,6 @@ fn step_statement() -> i64 {
         KW_DEATH => { return active_set(N_DEATH); },
         KW_EXPECT => { return expect_statement(false); },
         KW_SOLVE => { advance(); return node1(N_SOLVE, t, parse_block(false)); },
-        KW_ADAPT => { advance(); return node1(N_ADAPT, t, parse_block(false)); },
         KW_OUTPUT => {
             advance();
             let n = node(N_OUTPUT, t);
@@ -876,30 +871,6 @@ fn scales_decl() -> i64 {
     return n;
 }
 
-fn manufacture_decl() -> i64 {
-    let n = node(N_MANUFACTURE, advance());
-    add(n, expr());
-    expect(TK_COLON, "':'");
-    add(n, procedure());
-    add(n, parse_block(false));
-    end_statement();
-    return n;
-}
-
-fn tolerance_decl() -> i64 {
-    advance();
-    let n = node(N_TOLERANCE, expect_ident("a name"));
-    expect(TK_COLON, "':'");
-    add(n, expr());
-    expect(KW_IN, "'in'");
-    add(n, expr());
-    expect(TK_DOTDOT, "'..'");
-    add(n, expr());
-    if at(TK_LBRACE) { add(n, parse_block(false)); }
-    end_statement();
-    return n;
-}
-
 // One item. It gives -1 after a syntax error.
 fn parse_item(first: bool) -> i64 {
     if first != at(KW_MODEL) {
@@ -943,8 +914,6 @@ fn parse_item(first: bool) -> i64 {
         KW_ALLOW => allow_decl(),
         KW_SCALES => scales_decl(),
         KW_STUDY => procedure_decl(N_STUDY),
-        KW_MANUFACTURE => manufacture_decl(),
-        KW_TOLERANCE => tolerance_decl(),
         _ => fail_expected("an item", "start the line with a keyword such as let, material or step"),
     }
 }

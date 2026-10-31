@@ -30,9 +30,9 @@ fn tok(kind: i64, start: i64, len: i64) -> i64 {
 fn test_keywords() {
     expect_int("keyword let", syntax::keyword_kind("let"), syntax::KW_LET);
     expect_int("keyword within", syntax::keyword_kind("within"), syntax::KW_WITHIN);
-    expect_int("keyword adapt", syntax::keyword_kind("adapt"), syntax::KW_ADAPT);
+    expect_int("keyword allow", syntax::keyword_kind("allow"), syntax::KW_ALLOW);
     expect_int("not a keyword", syntax::keyword_kind("Length"), syntax::TK_IDENT);
-    expect_int("keyword count", syntax::KEYWORDS.len, syntax::KW_WITHIN - syntax::KW_ADAPT + 1);
+    expect_int("keyword count", syntax::KEYWORDS.len, syntax::KW_WITHIN - syntax::KW_ALLOW + 1);
 }
 
 fn test_tree() {

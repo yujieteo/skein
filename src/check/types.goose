@@ -26,9 +26,7 @@ let B_ANGLE = 2;
 // The number systems (spec §5.1).
 let NS_REAL = 0;
 let NS_COMPLEX = 1;
-let NS_QUATERNION = 2;
-let NS_DUAL = 3;
-let NS_NAMES = ["", "Complex", "Quaternion", "Dual"];
+let NS_NAMES = ["", "Complex"];
 
 struct Ty {
     kind: i64,

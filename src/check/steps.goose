@@ -16,7 +16,7 @@ import .physics;
 
 // The arguments of each procedure. The first one is also the positional one.
 let STATIC_ARGS = ["ramp"];
-let TRANSIENT_ARGS = ["end", "dt", "scheme", "adapt"];
+let TRANSIENT_ARGS = ["end", "dt", "scheme"];
 let EXPLICIT_SCHEMES = ["ssprk3", "central_difference"];
 let HARMONIC_ARGS = ["freq"];
 let MODAL_ARGS = ["count", "shift"];
@@ -37,7 +37,6 @@ fn check_procedure(pr: i64) {
     var have_freq = false;
     var stable = -1;
     var explicit = false;
-    var have_adapt = false;
     var a = syntax::nodes[pr].first;
     var i = 0;
     while a >= 0 {
@@ -55,7 +54,6 @@ fn check_procedure(pr: i64) {
         if arg == "dt" && is_stable(k.first) { stable = k.first; }
         if arg == "scheme" && syntax::nodes[k.first].kind == syntax::N_NAME
            && contains_name(EXPLICIT_SCHEMES, tok_text(syntax::nodes[k.first].tok)) { explicit = true; }
-        if arg == "adapt" { have_adapt = true; }
         if arg == "freq" { have_freq = true; }
         i++;
         a = k.next;
@@ -64,10 +62,9 @@ fn check_procedure(pr: i64) {
         error(syntax::nodes[pr].tok, "procedure_args", str("transient needs ", if have_end { "dt" } else { "end" }),
               "write transient(end: <time>, dt: <time>)");
     }
-    if stable >= 0 && (!explicit || have_adapt) {
-        error(first_tok(stable), "procedure_args",
-              if have_adapt { "dt: stable cannot go with adapt" } else { "dt: stable needs an explicit scheme" },
-              if have_adapt { "remove adapt, or give dt a time" } else { "scheme: central_difference or ssprk3, or give dt a time" });
+    if stable >= 0 && !explicit {
+        error(first_tok(stable), "procedure_args", "dt: stable needs an explicit scheme",
+              "scheme: central_difference or ssprk3, or give dt a time");
     }
     if name == "harmonic" && !have_freq {
         error(syntax::nodes[pr].tok, "procedure_args", "harmonic needs freq", "write harmonic(freq: [<frequency>])");
@@ -139,7 +136,7 @@ fn check_step(n: i64) {
                     r = syntax::nodes[r].next;
                 }
             },
-            syntax::N_SOLVE, syntax::N_ADAPT => { check_values(s.first); },
+            syntax::N_SOLVE => { check_values(s.first); },
             syntax::N_EXPECT => { check_expect(c, 0); },
             syntax::N_OUTPUT => {
                 var o = s.first;
@@ -246,9 +243,7 @@ fn expect_values(v: i64, cases: i64) -> Ty[>..] {
 let ALLOWABLE = [
     "unused_let", "unused_material", "unused_field", "load_no_cells", "bending_lock", "volumetric_lock",
     "dt_unstable", "stabilization_missing", "mesh_feature_small", "rigid_body", "pressure_level",
-    "mesh_quality", "points_quality", "material_admissible", "dfm_wall", "dfm_draft", "dfm_undercut",
-    "dfm_inner_radius", "dfm_hole", "dfm_overhang", "dfm_bend", "dfm_stack", "residual",
-    "newton_converged", "equilibrium", "energy_balance", "conservation", "submodel_cut", "expect",
+    "mesh_quality", "points_quality", "material_admissible", "residual", "equilibrium", "energy_balance", "conservation", "submodel_cut", "expect",
     "convergence",
 ];
 
@@ -480,16 +475,9 @@ fn objectives_end() {
     }
 }
 
-// --- other items (spec §12.4, §12.6, §10.7, §22) -------------------------------------------
+// --- other items (spec §12.4, §12.6, §10.7) -----------------------------------------------
 
-let GROUPS = ["cyclic", "dihedral", "bloch"];
-let PROCESSES = ["cnc_mill", "injection_mould", "casting", "sheet_metal", "additive", "turning"];
-let CNC_SETTINGS = ["axes", "tool_radius", "max_depth_ratio", "approach"];
-let MOULD_SETTINGS = ["pull", "draft", "min_wall", "max_wall"];
-let CASTING_SETTINGS = ["pull", "draft", "min_wall"];
-let SHEET_SETTINGS = ["thickness", "min_bend_radius", "min_flange"];
-let ADDITIVE_SETTINGS = ["build", "max_overhang", "min_wall", "min_hole"];
-let TURNING_SETTINGS = ["axis", "tool_radius"];
+let GROUPS = ["bloch"];
 
 fn check_pair(n: i64) {
     let a = syntax::nodes[n].first;
@@ -509,32 +497,4 @@ fn check_symmetry(n: i64) {
     }
     check_values(syntax::nodes[pr].next);
     declare(S_SYMMETRY, k.tok, n, kind_ty(K_DECL));
-}
-
-fn check_manufacture(n: i64) {
-    let region = syntax::nodes[n].first;
-    region_ty(region);
-    let pr = syntax::nodes[region].next;
-    let p = tok_text(syntax::nodes[pr].tok);
-    let b = syntax::nodes[pr].next;
-    guard contains_name(PROCESSES, p) else {
-        error(syntax::nodes[pr].tok, "process_setting", str("'", p, "' is not a process"), str("use one of: ", join(PROCESSES)));
-        check_values(b);
-        return;
-    };
-    let valid = if p == "cnc_mill" { CNC_SETTINGS[..] } else if p == "injection_mould" { MOULD_SETTINGS[..] }
-                else if p == "casting" { CASTING_SETTINGS[..] } else if p == "sheet_metal" { SHEET_SETTINGS[..] }
-                else if p == "additive" { ADDITIVE_SETTINGS[..] } else { TURNING_SETTINGS[..] };
-    check_block(b, valid, "process_setting", str("the process ", p));
-}
-
-fn check_tolerance(n: i64) {
-    let v = syntax::nodes[n].first;
-    let lo = syntax::nodes[v].next;
-    let hi = syntax::nodes[lo].next;
-    let t = expr_ty(v);
-    want_constant(v, t, "the value of a tolerance");
-    sum_ty(first_tok(lo), t, expr_ty(lo), "the value and its low limit");
-    sum_ty(first_tok(hi), t, expr_ty(hi), "the value and its high limit");
-    check_block(syntax::nodes[hi].next, ["method", "samples"], "type_mismatch", "a tolerance");
 }

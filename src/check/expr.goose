@@ -16,17 +16,17 @@ import .typeexpr;
 // them [`duplicate_name`].
 let BUILTIN_FNS = [
     "sym", "skew", "tr", "det", "inv", "transpose", "dev", "dot", "cross", "outer", "norm",
-    "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "sum", "von_mises", "tresca",
+    "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "sum", "von_mises",
     "principal", "fourier", "abs", "sqrt", "exp", "ln", "sin", "cos", "tan", "tanh", "atan",
     "atan2", "min", "max", "diff", "reaction", "integral", "mean", "results", "boundary",
     "grad", "div", "curl", "lap", "ddt", "ddt2", "re", "imag", "arg", "conj", "eigenvalue",
-    "box", "cylinder", "sphere", "cone", "torus", "rect", "circle", "polygon", "extrude",
+    "box", "cylinder", "sphere", "rect", "circle", "polygon", "extrude",
     "revolve", "sweep", "line", "arc", "spline", "point", "shell", "loft", "pattern",
-    "pattern_polar", "fillet", "chamfer", "move", "rotate", "scale",
+    "pattern_polar", "fillet", "move", "rotate", "scale",
     // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
     "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
 ];
-let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "dual_eps"];
+let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im"];
 
 fn tok_text(t: i64) -> const u8[:] { syntax::text(t) }
 fn node_tok(n: i64) -> i64 { syntax::nodes[n].tok }

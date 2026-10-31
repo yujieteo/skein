@@ -60,8 +60,8 @@ Output format:
 skein check samples/01_cantilever.skn
 ```
 
-`check` applies the rules of the [specification](skein_spec.md#19-static-semantics-checklist)
-in order. It continues after an error where it can, so that one run reports
+`check` applies the rules of the [check catalogue](checks.md#2-errors).
+It continues after an error where it can, so that one run reports
 as many errors as possible. It also prints the parts of the boundary that
 get the default natural condition (spec §12.3), because a missing `bc` is
 the most common modelling fault.
@@ -141,34 +141,29 @@ Rules that need the mesh, for example `bending_lock` and
 Current `run` accepts one model file. With `--study`, it also accepts
 `--jobs` and `--format`. The other options below are planned.
 Current `verify` accepts only one model file and reports `mesh_quality`.
-It does not support `convergence`, `--mesh` or `--dfm`.
+It does not support `convergence` or `--mesh`.
 
 The examples and option table below describe the planned interface:
 
 ```
 skein run samples/02_cavity.skn
-skein run samples/03_birth_death.skn --from lift_3
 skein verify convergence samples/05_meshless_plate.skn --levels 3
 skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
-skein verify samples/01_cantilever.skn --dfm
 ```
 
 | Option | Commands | Meaning |
 |---|---|---|
-| `--from <step>` | `run` | restart from the state at the end of the step before `<step>` (spec §14.7) |
 | `--target native\|wasm` | `run`, `build` | native executable (default) or WebAssembly |
 | `--threads n` | `run` | worker threads for assembly and solvers. Default: all hardware threads. With `--study`, the default is `max(1, H / k)` for `H` hardware threads and `k` jobs (spec §20.5). |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
-| `--dfm` | `verify` | run the DFM checks of the `manufacture` items ([checks.md §4.2a](checks.md#42a-design-for-manufacture)) |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
 | `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
 | `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in the memory, and the table gives the `k` that it used (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 Current `run` writes VTU results under `.skein/results/<model>/`.
-The solver determines each file name. State files for restarts remain
-planned work.
+The solver determines each file name.
 `run --study` writes the results of each case under
 `.skein/studies/<model>/<study>/<case>/`, and the table of all cases to
 `.skein/studies/<model>/<study>.toon` (§6.5).
@@ -286,7 +281,7 @@ The WebAssembly target compiles the C from Goose with emcc (spec §18.1).
 skein export samples/01_cantilever.skn --geometry beam --format stl
 ```
 
-`export` writes one `let` shape as an STL file (spec §22.5). It needs
+`export` writes one `let` shape as an STL file (spec §22). It needs
 no solve. It checks the model, meshes the `let` shape that `--geometry`
 names, and writes the STL to standard output:
 
@@ -333,7 +328,7 @@ The language server is planned. The current executable rejects `lsp`.
 | `*.skn` | Skein source |
 | `.skein/build/` | generated Goose, C and native executables |
 | `.skein/results/<model>/` | VTU result files. A single run prints its TOON log to standard output. |
-| `.skein/state/<model>/<step>.sks` | planned state files for restarts and submodels |
+| `.skein/state/<model>/<step>.sks` | planned state files for submodels |
 | `.skein/studies/<model>/<study>/` | one directory of results for each case |
 | `.skein/studies/<model>/<study>.toon` | the table of the study |
 

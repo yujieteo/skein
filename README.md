@@ -136,8 +136,7 @@ The language design has these goals:
   command prints `Re`, `Pr` and the other groups of the model. A `param` and a `study` sweep a
   model, with the cases on parallel workers.
 
-Simulation is the core. Parametric parts, export for manufacture and
-design-for-manufacture checks come later, and the
+Simulation is the core. Parametric parts and export come later, and the
 [tradeoffs](docs/tradeoffs.md) rank all the goals.
 
 ## Documentation

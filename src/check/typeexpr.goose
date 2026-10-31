@@ -6,7 +6,7 @@ import .dims;
 import .types;
 import .state;
 
-let TYPE_NAMES = ["Real", "Int", "Angle", "Bool", "Str", "Solid", "Surface", "Curve", "Point",
+let TYPE_NAMES = ["Real", "Int", "Angle", "Bool", "Solid", "Surface", "Curve", "Point",
                   "Mesh", "Points", "Results"];
 
 // The type of the type node `n`. With `report`, an unknown name is an error.
@@ -19,7 +19,6 @@ recursive fn type_of(n: i64, report: bool) -> Ty {
             if name == "Int" { return base_ty(B_INT); }
             if name == "Angle" { return base_ty(B_ANGLE); }
             if name == "Bool" { return kind_ty(K_BOOL); }
-            if name == "Str" { return kind_ty(K_STR); }
             if name == "Point" { return geom_ty(0); }
             if name == "Curve" { return geom_ty(1); }
             if name == "Surface" { return geom_ty(2); }
@@ -41,7 +40,7 @@ recursive fn type_of(n: i64, report: bool) -> Ty {
                 t.rank = if name == "Vector" { 1 } else if name == "Tensor2" { 2 } else { 4 };
                 return t;
             }
-            t.num = if name == "Complex" { NS_COMPLEX } else if name == "Quaternion" { NS_QUATERNION } else { NS_DUAL };
+            t.num = NS_COMPLEX;
             return t;
         },
         syntax::N_DIM_MUL, syntax::N_DIM_DIV => {

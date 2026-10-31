@@ -679,7 +679,7 @@ fn group(n: i64) -> i64 {
         syntax::N_PHYSICS => G_PHYSICS,
         syntax::N_BC, syntax::N_CONTACT, syntax::N_INTERFACE, syntax::N_SYMMETRY => G_BC,
         syntax::N_STEP => G_STEPS,
-        syntax::N_EXPECT, syntax::N_ALLOW, syntax::N_TOLERANCE => G_CHECKS,
+        syntax::N_EXPECT, syntax::N_ALLOW => G_CHECKS,
         syntax::N_SCALES, syntax::N_HEADER => G_NONE,
         _ => G_OTHER,
     }
@@ -706,10 +706,7 @@ fn value_table(n0: i64) -> i64 {
         inline(v);
         var c = next(v);
         while c >= 0 {
-            if node_kind(c) == syntax::N_TOL {
-                out.append(", tolerance ");
-                inline(first(c));
-            } else if node_kind(c) == syntax::N_RANGE {
+            if node_kind(c) == syntax::N_RANGE {
                 out.append(", in ");
                 inline(c);
             }
@@ -977,17 +974,11 @@ fn pair_item(n: i64) {
     block_list(next(next(first(n))));
 }
 
-// An item with a procedure and a block: `symmetry`, `study`, `manufacture`.
+// An item with a procedure and a block: `symmetry` or `study`.
 fn procedure_item(n: i64, title: u8[:]) {
     format(out, "### ", title, " ");
-    var c = first(n);
-    if node_kind(n) == syntax::N_MANUFACTURE {
-        out.append("of ");
-        words(c);
-        c = next(c);
-    } else {
-        code_node(n);
-    }
+    let c = first(n);
+    code_node(n);
     line_note(n);
     out.append("\n\nProcedure: ");
     procedure(c);
@@ -1077,8 +1068,8 @@ fn step_item(n: i64) {
             }
             line_note(c);
             out.append(".\n\n");
-        } else if k == syntax::N_SOLVE || k == syntax::N_ADAPT {
-            out.append(if k == syntax::N_SOLVE { "Solver settings" } else { "Adaptivity" });
+        } else if k == syntax::N_SOLVE {
+            out.append("Solver settings");
             line_note(c);
             out.append(":\n\n");
             block_list(first(c));
@@ -1160,20 +1151,6 @@ fn other_item(n: i64) {
         let s = syntax::text(syntax::nodes[n].aux);
         text(s[1..s.len - 1]);
         out.append("\n\n");
-    } else if k == syntax::N_TOLERANCE {
-        out.append("### Tolerance ");
-        code_node(n);
-        line_note(n);
-        out.append("\n\nThe value ");
-        let v = first(n);
-        let lo = next(v);
-        inline(v);
-        out.append(" is in ");
-        inline(lo);
-        out.append(" to ");
-        inline(next(lo));
-        out.append(".\n\n");
-        block_list(next(next(lo)));
     } else if k == syntax::N_FN {
         out.append("### Function ");
         code_node(n);
@@ -1194,8 +1171,8 @@ fn other_item(n: i64) {
         out.append("\n$$\n\n");
     } else if k == syntax::N_TABLE {
         table_item(n);
-    } else if k == syntax::N_SYMMETRY || k == syntax::N_STUDY || k == syntax::N_MANUFACTURE {
-        procedure_item(n, if k == syntax::N_SYMMETRY { "Symmetry" } else if k == syntax::N_STUDY { "Study" } else { "Manufacture" });
+    } else if k == syntax::N_SYMMETRY || k == syntax::N_STUDY {
+        procedure_item(n, if k == syntax::N_SYMMETRY { "Symmetry" } else { "Study" });
     } else if k == syntax::N_CONTACT || k == syntax::N_INTERFACE {
         pair_item(n);
     } else if k == syntax::N_USE {

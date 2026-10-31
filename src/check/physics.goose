@@ -805,7 +805,7 @@ fn free_boundary() {
 
 let METHOD_KINDS = ["cg", "dg", "fv", "rkpm", "gfd", "ode"];
 let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple"];
-let DG_SETTINGS = ["mesh", "order", "flux", "penalty", "shock_capturing", "couple"];
+let DG_SETTINGS = ["mesh", "order", "flux", "penalty", "couple"];
 let FV_SETTINGS = ["mesh", "gradient", "flux", "limiter", "pv_coupling", "couple"];
 let RKPM_SETTINGS = ["points", "basis", "support", "integrate", "bc", "couple"];
 let GFD_SETTINGS = ["points", "stencil", "weight", "couple"];

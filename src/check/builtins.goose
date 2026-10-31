@@ -147,7 +147,7 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         r.dim = NO_DIM - t0.dim;
         return r;
     }
-    if name == "tr" || name == "von_mises" || name == "tresca" || name == "det" {
+    if name == "tr" || name == "von_mises" || name == "det" {
         guard arity(tok, name, a, 1, 1) && want_rank(tok, name, a, 0, 2) && !is_any(t0) else { return any_ty(); }
         var r = same(t0, v);
         r.rank = 0;
@@ -480,7 +480,7 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         want_point(name, t1, a.node[1], 1);
         return geom_ty(if name == "box" { 3 } else { 2 });
     }
-    if name == "cylinder" || name == "cone" || name == "torus" {
+    if name == "cylinder" {
         space_3d(tok, name);
         guard arity(tok, name, a, 4, 5) else { return any_ty(); }
         want_point(name, t0, a.node[0], 0);
@@ -520,7 +520,7 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return geom_ty(0);
     }
     if name == "shell" || name == "pattern" || name == "pattern_polar" || name == "fillet" ||
-       name == "chamfer" || name == "move" || name == "rotate" || name == "scale" {
+       name == "move" || name == "rotate" || name == "scale" {
         let lo = if name == "pattern" || name == "pattern_polar" { 3 } else { 2 };
         guard arity(tok, name, a, lo, 3) && want_geom(tok, name, a, 0) else { return any_ty(); }
         // A pattern keeps its copies: max(f, r) on it gives one value for

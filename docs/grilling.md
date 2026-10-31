@@ -442,9 +442,9 @@ answer.
 | G4.6 | A. Adaptive time steps, variable-order BDF. | spec [§14.2](skein_spec.md#142-procedures) |
 | G4.7 | B. No `process` statement in v1. | [tradeoffs §2](tradeoffs.md#2-the-design-against-the-workloads) |
 | G5.1 | A. `shell`, `loft`, `pattern`. | spec [§8.1](skein_spec.md#81-distance-functions) |
-| G5.2 | B. No exact B-rep. STL and tessellated STEP only. | spec [§22.5](skein_spec.md#225-export-for-manufacture) |
-| G5.3 | A. Monte Carlo stack-ups through a `sample` study. | spec [§22.4](skein_spec.md#224-tolerances-and-stack-ups) |
-| G5.4 | Yes. The list of processes stays. | spec [§22.2](skein_spec.md#222-manufacture) |
+| G5.2 | B. No exact B-rep. STL and tessellated STEP only. | spec [§22](skein_spec.md#22-export) |
+| G5.3 | A. Monte Carlo stack-ups through a `sample` study. | cut on 2026-10-31 ([tradeoffs §5](tradeoffs.md#5-design-for-manufacture)) |
+| G5.4 | Yes. The list of processes stays. | cut on 2026-10-31 ([tradeoffs §5](tradeoffs.md#5-design-for-manufacture)) |
 | G6.1 | B and C. Make the candidate cuts now, and compare the total cost. | [llm_test.md §6](llm_test.md#6-syntax-changes-made-before-the-test) |
 | G6.2 | A. `skein help --llm`. | [command_line.md §1](command_line.md#1-commands) |
 | G6.3 | No WebAssembly risk and no fallback: Goose writes C, and `emcc` compiles it, as in earlier Goose projects. | spec [§18.1](skein_spec.md#181-why-goose) |
