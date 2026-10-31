@@ -133,7 +133,7 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
             let p = physics[cur_phys];
             if has_reduction(s) {
                 let f = field_use(s);
-                if f >= 0 && is_diff_name(tok_text(f)) {
+                if f >= 0 && has_diff(s) {
                     error(f, "global_eq", str("a field PDE eq cannot use mean or integral (spec §10.5), but this eq has '", tok_text(f), "'"),
                           "remove the mean or integral term from this eq");
                 } else if f >= 0 {
@@ -173,13 +173,10 @@ fn is_reduction(n: i64) -> bool {
     return name == "mean" || name == "integral";
 }
 
-fn is_diff_name(name: const u8[:]) -> bool {
-    return name == "grad" || name == "div" || name == "curl" || name == "strain";
-}
-
 fn is_diff(n: i64) -> bool {
     guard syntax::nodes[n].kind == syntax::N_CALL else { return false; }
-    return is_diff_name(call_name(syntax::nodes[n].first));
+    let name = call_name(syntax::nodes[n].first);
+    return name == "grad" || name == "div" || name == "curl" || name == "strain";
 }
 
 // True if `n` has grad, div, curl or strain outside mean and integral.
@@ -219,7 +216,6 @@ recursive fn field_use(n: i64) -> i64 {
         if syms[s].kind == S_UNKNOWN && physics[syms[s].phys].region >= 0 && !has_sym(globals, s) { return k.tok; }
         if syms[s].kind == S_LET && syms[s].node >= 0 {
             let f = field_use(syntax::nodes[syntax::nodes[syms[s].node].first].next);
-            if f >= 0 && is_diff_name(tok_text(f)) { return f; }
             if f >= 0 { return k.tok; }
         }
         return -1;
