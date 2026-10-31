@@ -40,6 +40,7 @@ models. It reports the verification checks that its solver implements.
 | `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
 | `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current: STL only |
 | `skein view model.skn` | opens the results in the WebGL viewer | Planned |
+| `skein report model.skn` | runs the model, then writes one HTML file with the source, the solver tables and a WebGL viewer of the results (§12) | Current |
 | `skein md model.skn` | `check`, then writes the model as a Markdown document (§11) | Current |
 | `skein lsp` | serves an editor over the Language Server Protocol | Planned |
 | `skein help [command]` | prints help | Current: general help only |
@@ -159,7 +160,7 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
 | `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
-| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in the memory, and the table gives the `k` that it used (spec §20.5). |
+| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in half of the available memory (`MemAvailable` of `/proc/meminfo`), and the table gives the `k` that it used (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 Current `run` writes VTU results under `.skein/results/<model>/`.
@@ -370,6 +371,7 @@ The language server is planned. The current executable rejects `lsp`.
 | `.skein/results/<model>/<step>.state_sol` | the state of a step, for submodels |
 | `.skein/studies/<model>/<study>/` | one directory of results for each case |
 | `.skein/studies/<model>/<study>.toon` | the table of the study |
+| `.skein/report/<model>/` | the TOON of `check`, `verify` and `run`, and the small VTU files of a report (§12) |
 
 ---
 
@@ -424,3 +426,60 @@ the subscript "air".
 
 A model with errors gives no document: `md` writes the diagnostics of
 `check` to standard error and exits 1.
+
+---
+
+## 12. The HTML report
+
+```
+skein report samples/01_cantilever.skn --study sizes -o cantilever.html
+```
+
+`report` runs `check`, `verify` and `run` on the model, then writes one
+HTML file. The file opens offline in a browser with WebGL2: it holds the
+viewer, the source, the tables and the results. Without `-o`, the file is
+`<model>.html`. Without `--study`, the report uses the first study of the
+model, or a single run if the model has no study. With `--no-run`,
+`report` uses the last run of the study in `.skein/studies/` and solves
+nothing. Reason: a study of 108 cases can run for more than an hour. The
+results must be of the current source.
+
+The page has two panes:
+
+- the source of the model. A region name marks its region in the viewer.
+  A param name moves to its study slider. The chips at the end of an
+  `output`, `expect`, `report`, `step` or `material` line show its field,
+  point, step or region.
+- the viewer of the results: the contours of a field, the deformed shape
+  with a scale, a cut plane, bands, the mesh lines and a probe. A click
+  on the mesh gives the value at that point and the regions there. Each
+  step of a case is in the step list.
+
+Under the viewer are the solver tables: the method of each physics, the
+linear solver and its preconditioner, the mesh and its quality, the
+solve of each step (cells, dofs, iterations, time, convergence), the
+verification checks with their values, limits and results, the reports,
+and the study table. Each row links to its line of the source.
+
+With a study, each param of the grid has a slider. A slider moves
+between the stored cases. The page does not solve: it shows only the
+cases of the native run.
+
+The input "Open VTU" opens a VTU file of another solver in the same
+viewer, without source links.
+
+To keep the file small, each VTU result keeps only the corner nodes of
+each cell. The mesh is Float32, and cases with the same mesh share it.
+The fields are Int16, scaled to the largest value of each field: the
+viewer shows about 4 significant digits, and the tables give the exact
+values of the run. gzip compresses each part. Reason: the VTU files of
+sample 01 and its 16 cases are 230 MB as text. `report` prints the path,
+the size in bytes and the number of cases:
+
+```
+report: cantilever.html
+bytes: 9123456
+cases: 16
+```
+
+The exit status is that of `run` (§10).

@@ -2088,7 +2088,8 @@ A machine has `H` hardware threads. A study with `k` workers gives each case
 independent, so parallel cases scale better than parallel assembly in one
 case. But a study with fewer cases than threads still uses all threads.
 
-The memory of one case times `k` must fit the target. The runner estimates
+The memory of one case times `k` must fit in half of the available memory
+of the target. The runner estimates
 the memory of a case from the mesh size before it starts the workers, and
 lowers `k` if necessary. It reports the value that it chose.
 

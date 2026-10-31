@@ -146,3 +146,152 @@ fn other_axes(axis: i64) -> i64, i64 {
     if axis == 1 { return 0, 2; }
     return 0, 1;
 }
+
+// --- the grid of a union of boxes ----------------------------------------------
+
+// The grid mesher: 27-node hexahedra on the grid lines lx, ly and lz, which
+// need not be uniform. Cell (i, j, k) spans lx[i] to lx[i + 1], and so on.
+// It is in the mesh if its centre is in a box of `boxes`. The nodes are the
+// grid lines and the midpoints between them, and only the nodes of a cell
+// of the mesh are made.
+fn build_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
+    guard lx.len >= 2 && ly.len >= 2 && lz.len >= 2 && boxes.len > 0 && boxes.len % 6 == 0 else { abort("build_grid: 2 grid lines on each axis and a box"); }
+    mesh_clear();
+    let px = with_midpoints(lx);
+    let py = with_midpoints(ly);
+    let pz = with_midpoints(lz);
+    cells = [lx.len - 1, ly.len - 1, lz.len - 1];
+    lattice = [px.len, py.len, pz.len];
+    var ids: i64[>..] = [];
+    for i in px.len * py.len * pz.len { ids.push(-1); }
+    var grid: i64[>..] = [];   // the cell of each cell of the grid, or -1
+    var nodes: i64[27] = [0; 27];
+    for k in cells[2] {
+        for j in cells[1] {
+            for i in cells[0] {
+                let centre: f64[3] = [0.5 * (lx[i] + lx[i + 1]), 0.5 * (ly[j] + ly[j + 1]), 0.5 * (lz[k] + lz[k + 1])];
+                if !in_boxes(boxes, centre) {
+                    grid.push(-1);
+                    continue;
+                }
+                for l in 27 {
+                    let at = node_at(2 * i + l % 3, 2 * j + l / 3 % 3, 2 * k + l / 9);
+                    if ids[at] < 0 { ids[at] = add_node(px[2 * i + l % 3], py[2 * j + l / 3 % 3], pz[2 * k + l / 9]); }
+                    nodes[l] = ids[at];
+                }
+                grid.push(add_cell(HEX27, nodes));
+            }
+        }
+    }
+    add_grid_face_sets(grid);
+    young = 0.0;
+    poisson = 0.0;
+    clear_dofs();
+}
+
+// The grid lines `l` and the midpoint between each two of them.
+fn with_midpoints(l: f64[:]) -> f64[>..] {
+    guard l.len >= 2 else { abort("with_midpoints: 2 grid lines"); }
+    var out: f64[>..] = [l[0]];
+    for i in 1..l.len {
+        guard l[i] > l[i - 1] else { abort("with_midpoints: grid lines in increasing order"); }
+        out.push(0.5 * (l[i - 1] + l[i]));
+        out.push(l[i]);
+    }
+    return out;
+}
+
+// Whether the point p is in one of the boxes (x0, y0, z0, x1, y1, z1).
+fn in_boxes(boxes: f64[:], p: f64[3]) -> bool {
+    guard boxes.len % 6 == 0 else { abort("in_boxes: 6 numbers for each box"); }
+    for b in boxes.len / 6 {
+        var all = true;
+        for a in 3 {
+            if p[a] < boxes[6 * b + a] || p[a] > boxes[6 * b + 3 + a] { all = false; }
+        }
+        if all { return true; }
+    }
+    return false;
+}
+
+// The node set and the face set of each bounding plane of the grid: the
+// faces there of the cells of the mesh. `grid` holds the cell of each cell
+// of the grid, or -1.
+fn add_grid_face_sets(grid: i64[:]) {
+    guard grid.len == cells[0] * cells[1] * cells[2] else { abort("add_grid_face_sets: a cell or -1 for each cell of the grid"); }
+    var faces: i64[>..] = [];
+    var nodes: i64[>..] = [];
+    var mark: bool[>..] = [];
+    for axis in 3 {
+        for side in 2 {
+            faces.clear();
+            nodes.clear();
+            mark.clear();
+            for n in node_count() { mark.push(false); }
+            for g, at in grid {
+                let index: i64[3] = [at % cells[0], at / cells[0] % cells[1], at / (cells[0] * cells[1])];
+                if g < 0 || index[axis] != side * (cells[axis] - 1) { continue; }
+                faces.push(FACE_STRIDE * g + 2 * axis + side);
+                for l in 27 {
+                    let local: i64[3] = [l % 3, l / 3 % 3, l / 9];
+                    let n = cell_node(g, l);
+                    if local[axis] == 2 * side && !mark[n] {
+                        mark[n] = true;
+                        nodes.push(n);
+                    }
+                }
+            }
+            add_node_set(FACE_NAMES[2 * axis + side], nodes);
+            add_face_set(FACE_NAMES[2 * axis + side], faces);
+        }
+    }
+}
+
+// The centre of cell c: the mean of its nodes.
+fn cell_centre(c: i64) -> f64[3] {
+    guard c >= 0 && c < cell_count() else { abort("cell_centre: a cell"); }
+    var p: f64[3] = [0.0, 0.0, 0.0];
+    let nn = cell_start[c + 1] - cell_start[c];
+    for l in nn {
+        let n = cell_node(c, l);
+        for s in 3 { p[s] += coords[3 * n + s] / nn; }
+    }
+    return p;
+}
+
+// Gives E, nu and the thermal strain to each cell whose centre is in the
+// box lo to hi, and gives the number of these cells.
+fn set_box_material(E: f64, nu: f64, strain: f64, lo: f64[3], hi: f64[3]) -> i64 {
+    guard cell_young.len == cell_count() && cell_poisson.len == cell_count() && cell_strain.len == cell_count() else { abort("set_box_material: a material for each cell"); }
+    var count = 0;
+    for c in cell_count() {
+        if !in_boxes([lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]], cell_centre(c)) { continue; }
+        cell_young[c] = E;
+        cell_poisson[c] = nu;
+        cell_strain[c] = strain;
+        count++;
+    }
+    return count;
+}
+
+// Adds the node set `name` of the node at p, to 1e-9 of the size of the
+// mesh. False if no node is there.
+fn add_point_set(name: const u8[:], p: f64[3]) -> bool {
+    guard node_count() > 0 else { abort("add_point_set: a mesh"); }
+    var lo: f64[3] = [coords[0], coords[1], coords[2]];
+    var hi: f64[3] = lo;
+    for n in node_count() {
+        for s in 3 {
+            lo[s] = min(lo[s], coords[3 * n + s]);
+            hi[s] = max(hi[s], coords[3 * n + s]);
+        }
+    }
+    let tol = 1.0e-9 * max(hi[0] - lo[0], max(hi[1] - lo[1], hi[2] - lo[2]));
+    for n in node_count() {
+        if abs(coords[3 * n] - p[0]) <= tol && abs(coords[3 * n + 1] - p[1]) <= tol && abs(coords[3 * n + 2] - p[2]) <= tol {
+            add_node_set(name, [n]);
+            return true;
+        }
+    }
+    return false;
+}

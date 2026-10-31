@@ -110,6 +110,47 @@ fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64, sn: f64) -> bool {
     return true;
 }
 
+// Adds f = ∫ Bᵀ D ε_th dV of each cell with a thermal strain ε_th to the
+// load. With ε_th = s I, D ε_th = (3 λ + 2 μ) s I, so node a gets
+// ∫ (3 λ + 2 μ) s ∂N_a/∂x_k dV along x_k.
+fn add_thermal_load() {
+    guard cell_strain.len == cell_count() && load.len == dof_total() && dofs_per_node == 3 else { abort("add_thermal_load: a material and the dofs of a solid"); }
+    for c in cell_count() {
+        let t = cell_type[c] as i64;
+        if cell_strain[c] == 0.0 || CELL_DIMS[t] != 3 { continue; }
+        guard t != HEX8I else { abort("add_thermal_load: no thermal strain on hex8i cells"); }
+        guard cell_quadrature(t, quad_xi, quad_w) else { abort("add_thermal_load: a cell type with a quadrature"); }
+        let lambda, mu = cell_lame(c);
+        let stress = (3.0 * lambda + 2.0 * mu) * cell_strain[c];
+        for w, g in quad_w {
+            let xi: f64[3] = [quad_xi[3 * g], quad_xi[3 * g + 1], quad_xi[3 * g + 2]];
+            cell_shape(t, xi, shape_n, shape_dn);
+            var jac: f64[9] = [0.0; 9];
+            cell_jacobian(c, shape_dn, jac);
+            var inv: f64[9] = [0.0; 9];
+            let det = inverse3(jac, inv);
+            for a in shape_n.len {
+                let d = 3 * cell_node(c, a);
+                for k in 3 {
+                    let dk = inv[3 * k] * shape_dn[3 * a] + inv[3 * k + 1] * shape_dn[3 * a + 1] + inv[3 * k + 2] * shape_dn[3 * a + 2];
+                    load[d + k] += stress * dk * w * det;
+                }
+            }
+        }
+    }
+    clear_solution();
+}
+
+// The largest sum of the positive loads along one axis.
+fn positive_load() -> f64 {
+    guard load.len == dof_total() else { abort("positive_load: the loads of the dofs"); }
+    var s: f64[3] = [0.0, 0.0, 0.0];
+    for n in node_count() {
+        for k in min(dofs_per_node, 3) { s[k] += max(load[dofs_per_node * n + k], 0.0); }
+    }
+    return max(s[0], max(s[1], s[2]));
+}
+
 // The area of the faces of face set s that have a face routine.
 fn set_area(s: i64) -> f64 {
     guard s >= 0 && s < set_is_face.len && set_is_face[s] else { abort("set_area: a face set"); }
@@ -575,7 +616,7 @@ fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
 }
 
 // The linear elastic stress at (x, y, z) from the gradient of the dofs 0
-// to 2 in the cell of find_cell: xx, yy, zz, yz, xz and xy. A point
+// to 2 and the thermal strain in the cell of find_cell: xx, yy, zz, yz, xz and xy. A point
 // outside the 3D cells gives 0.
 fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
     guard disp.len == dof_total() else { abort("stress_at_point: the solution of the dofs"); }
@@ -598,9 +639,9 @@ fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
         }
     }
     if cell_type[c] as i64 == HEX8I { hex8i_add_modes(c, point_xi, det, g); }
-    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    let mu = young / (2.0 * (1.0 + poisson));
-    let tr = lambda * (g[0] + g[4] + g[8]);
+    // sigma = D (strain - the thermal strain).
+    let lambda, mu = cell_lame(c);
+    let tr = lambda * (g[0] + g[4] + g[8]) - (3.0 * lambda + 2.0 * mu) * cell_strain[c];
     return tr + 2.0 * mu * g[0], tr + 2.0 * mu * g[4], tr + 2.0 * mu * g[8],
         mu * (g[5] + g[7]), mu * (g[2] + g[6]), mu * (g[1] + g[3]);
 }

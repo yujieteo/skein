@@ -27,9 +27,28 @@ extern "libc.so.6" {
     fn sysconf(name: i32) -> i64;
 }
 
-// The bytes of memory of this machine: _SC_PHYS_PAGES (85) times
-// _SC_PAGESIZE (30) of Linux.
-fn memory_bytes() -> f64 { return sysconf(85) * sysconf(30); }
+// The bytes of memory that the cases of a study can use: half of the
+// MemAvailable of /proc/meminfo, or half of the memory of the machine,
+// _SC_PHYS_PAGES (85) times _SC_PAGESIZE (30), if Linux gives no
+// MemAvailable. Reason: a study of 108 cases on 31 GB sized k with the
+// memory of the machine. Its cases had a peak 1.3 times the estimate, and
+// with the other programs they filled the memory and the swap, and the
+// kernel killed a browser.
+fn memory_bytes() -> f64 {
+    var info: u8[>..] = [];
+    if read_file("/proc/meminfo", info) {
+        let at = find(info, "MemAvailable:");
+        if at >= 0 {
+            var i = at + 13;
+            while i < info.len && info[i] == ' ' { i++; }
+            var end = i;
+            while end < info.len && info[end] >= '0' && info[end] <= '9' { end++; }
+            let kb, good = parse_int(info[i..end]);
+            if good { return kb * 1024.0 / 2.0; }
+        }
+    }
+    return sysconf(85) * sysconf(30) / 2.0;
+}
 
 let USAGE = "usage: skein run <file.skn> [--set name=value]... [--study <name> [--jobs k] [--format toon|json]]\n";
 
@@ -383,7 +402,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     let k, threads = study_workers(want, h, case_bytes, memory_bytes());
     if k < want {
         write_stderr(str("skein run: ", k, " cases at a time, not ", want, ": a case needs about ", round(case_bytes / 1.0e6),
-                         " MB of the ", round(memory_bytes() / 1.0e6), " MB of memory\n"));
+                         " MB of the ", round(memory_bytes() / 1.0e6), " MB of memory that a study can use\n"));
     }
     for &job in case_jobs { job.threads = threads; }
     outs.clear();

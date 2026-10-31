@@ -313,8 +313,7 @@ fn hex27_stiffness(c: i64, ke: f64[>..]&) {
     for i in 81 * 81 { ke.push(0.0); }
     grad.clear();
     for i in 81 { grad.push(0.0); }
-    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    let mu = young / (2.0 * (1.0 + poisson));
+    let lambda, mu = cell_lame(c);
     for w, g in quad_w {
         let xi: f64[3] = [quad_xi[3 * g], quad_xi[3 * g + 1], quad_xi[3 * g + 2]];
         guard cell_shape(HEX27, xi, shape_n, shape_dn) else { return false; }
@@ -486,8 +485,7 @@ fn hex8i_full(c: i64) {
     for i in ALL_DOFS * ALL_DOFS { full.push(0.0); }
     grad.clear();
     for i in ALL_DOFS { grad.push(0.0); }
-    let lambda = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    let mu = young / (2.0 * (1.0 + poisson));
+    let lambda, mu = cell_lame(c);
     for w, g in quad_w {
         let xi: f64[3] = [quad_xi[3 * g], quad_xi[3 * g + 1], quad_xi[3 * g + 2]];
         shape_n.clear();

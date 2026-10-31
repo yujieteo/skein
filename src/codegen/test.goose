@@ -163,7 +163,7 @@ fn test_closed_cylinder() {
                  ["\"(p*a^2/(b^2 - a^2))*(1 + b^2/r_m^2) within 0.1%\""]);
     let tube = "let wall: Solid = (barrel - bore) & quarter";
     expect_error("a full tube", replace(text, tube, "let wall: Solid = barrel - bore"),
-                 "error unsupported 28:31 the solid 'wall' is not a box or a quarter of a tube");
+                 "error unsupported 28:31 the solid 'wall' is not a box, a union of boxes or a quarter of a tube");
     expect_error("a cut off the centre", replace(text, "box((0, 0, 0) mm, (b, b, L))", "box((1, 0, 0) mm, (b, b, L))"),
                  "error unsupported 27:35 this slice cuts only the quarter x >= cx, y >= cy of a tube");
     expect_lines("an edge with the same fixed component", replace(text, "bc bottom: u.z = 0", "bc bottom: u = 0"), [
@@ -824,6 +824,39 @@ fn test_slots() {
     }
 }
 
+// A thermal strain on a union of boxes of 2 materials, with a support at a
+// Point (spec §10.4), a material value from a table, and a report of a
+// difference of values at Points.
+fn test_thermal_union() {
+    var text: u8[>..] = [];
+    read_file("examples/femahoy/warpage_thick_copper.skn", text);
+    expect_lines("warpage_thick_copper", text, [
+        "                      [0.0, 0.365, 0.73, 0.75],\n                      [0.0, 0.0, 0.0, 25.0, 5.0, 0.73, 0.0, 0.0, 0.73, 25.0, 5.0, 0.75]);",
+        "face(runtime::point_set(\"point_origin\", 0.0, 0.0, 0.0), \"origin\");",
+        "runtime::material(120000.0, 0.28);",
+        "runtime::material_box(120000.0, 0.28, 0.0001, 0.0, 0.0, 0.0, 25.0, 5.0, 0.73);",
+        "runtime::material_box(77500.0, 0.364, 0.0006559999999999999, 0.0, 0.0, 0.73, 25.0, 5.0, 0.75);",
+        "face(runtime::fix_component(\"point_origin\", runtime::Z), \"origin\");",
+        "runtime::thermal_load();\n    solve(\"heat_up\", \"cg\", \"amg\");",
+        "largest = max(largest, runtime::load_spread());",
+        "expect(\"warpage\", uz, -0.028, 0.12, true, \"mm\", \"-(0.700 um/K)*dT within 12%\");",
+    ]);
+    expect_error("a Point bc on a box", replace(replace(text, "si | cu", "si"), "copper on cu", "copper on si"),
+                 "error unsupported 49:5 a bc on a Point needs a union of boxes");
+    // A material value from a table and a param, and a report of a difference
+    // of values at two Points.
+    let t2 = replace(replace(replace(replace(text,
+        "let dT: Temperature = 40 K", "let dT: Temperature = 40 K\nparam mat: Real = 1.5 in 1..2"),
+        "material copper {\n    E: Pressure = 77500 MPa",
+        "table cu_props{id: Real, E: Pressure in MPa}:\n    1, 77500\n    2, 110000\n\nmaterial copper {\n    E: Pressure = interp(cu_props.id, cu_props.E, mat)"),
+        "let origin: Point = point((0, 0, 0) mm)", "let origin: Point = point((0, 0, 0) mm)\nlet end: Point = point((25, 0, 0) mm)"),
+        "    output u, sigma\n", "    output u, sigma\n    report bow = u.z at end - u.z at origin\n");
+    expect_lines("interp of a table and a report of a difference", t2, [
+        "runtime::material_box(93750.0, 0.364,",
+        "report(\"heat_up\", \"bow = u.z at end - u.z at origin\", quantity((uz1 - uz2), \"mm\"));",
+    ]);
+}
+
 fn main() {
     test_kernels(args().len > 1 && args()[1] == "write");
     test_grid_cantilever();
@@ -834,6 +867,7 @@ fn main() {
     test_reaction();
     test_dispatch();
     test_unsupported();
+    test_thermal_union();
     test_study_cases();
     test_study_table();
     test_study_workers();

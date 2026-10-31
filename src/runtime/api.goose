@@ -27,7 +27,7 @@
 // sector r0, r1, t0, t1, z0 and z1 (r, θ and z).
 //
 // The mesh is the unstructured mesh of fem.goose. mesh_box and
-// mesh_annulus are its first meshers. The state is global: one mesh, one material, one set of supports and one
+// mesh_annulus are its first meshers, and mesh_grid meshes a union of boxes. The state is global: one mesh, a material for each cell, one set of supports and one
 // set of loads. A second load step calls `clear_loads`, applies its loads
 // and solves again. A second mesh (a sweep over a dimension) starts again
 // at `mesh_box`, which clears all of the state.
@@ -65,6 +65,15 @@ fn mesh_box_incompatible(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
 fn mesh_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, z1: f64,
                 nr: i64, nt: i64, nz: i64) {
     build_annulus(cx, cy, r0, r1, t0, t1, z0, z1, nr, nt, nz);
+}
+
+// Meshes the union of the boxes of `boxes` (x0, y0, z0, x1, y1, z1 for
+// each) with 27-node hexahedra on the grid lines lx, ly and lz. A cell of
+// the grid is in the mesh if its centre is in a box. The node set and the
+// face set x0, x1, y0, y1, z0 and z1 hold the boundary on each bounding
+// plane of the grid. Clears the state as `mesh_box` does.
+fn mesh_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
+    build_grid(lx, ly, lz, boxes);
 }
 
 // Writes the mesh and its named sets in the directory `dir`, for the
@@ -113,6 +122,43 @@ fn material(E: f64, nu: f64) {
     guard E > 0.0 && nu > -1.0 && nu < 0.5 else { abort("material: E > 0 and -1 < nu < 0.5"); }
     young = E;
     poisson = nu;
+    cell_young.clear();
+    cell_poisson.clear();
+    cell_strain.clear();
+    for c in cell_count() {
+        cell_young.push(E);
+        cell_poisson.push(nu);
+        cell_strain.push(0.0);
+    }
+}
+
+// Gives the material E, nu and the isotropic thermal strain `strain`
+// (alpha (T - T0)) to each cell whose centre is in the box from
+// (x0, y0, z0) to (x1, y1, z1). Call it after `material`. It gives the
+// number of these cells.
+fn material_box(E: f64, nu: f64, strain: f64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> i64 {
+    guard E > 0.0 && nu > -1.0 && nu < 0.5 && cell_young.len == cell_count() else { abort("material_box: E > 0, -1 < nu < 0.5, after material"); }
+    return set_box_material(E, nu, strain, [x0, y0, z0], [x1, y1, z1]);
+}
+
+// Adds the loads of the thermal strain of each cell: f = ∫ Bᵀ D ε_th dV.
+fn thermal_load() {
+    guard cell_strain.len == cell_count() && load.len == dof_total() && dofs_per_node == 3 else { abort("thermal_load: a material and the dofs of a solid"); }
+    add_thermal_load();
+}
+
+// The largest sum of the positive loads along x, y or z: the scale of a
+// load that sums to 0, as a thermal load does, for the check equilibrium.
+fn load_spread() -> f64 {
+    guard load.len == dof_total() else { abort("load_spread: the loads of the dofs"); }
+    return positive_load();
+}
+
+// Adds the node set `name` of the one node at (x, y, z), for a support at
+// a point. False if no node is there.
+fn point_set(name: const u8[:], x: f64, y: f64, z: f64) -> bool {
+    guard node_count() > 0 else { abort("point_set: a mesh"); }
+    return add_point_set(name, [x, y, z]);
 }
 
 // Holds all dofs at 0 on the nodes of a node set.

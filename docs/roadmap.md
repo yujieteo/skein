@@ -66,6 +66,8 @@ Each phase 4 lane changes only the rows of its own items.
 
 | Item | Status |
 |---|---|
+| the WebGL viewer | done as `skein report` ([command_line.md §12](command_line.md#12-the-html-report)): one offline HTML file with the source, the solver tables and the results of each study case, `src/report/`. The browser solve is `skein build --target wasm`. |
+| thermal strain on a union of boxes (spec §10.4) | done: `hooke(E, nu, strain(u) - alpha*(T - T0)*I)` with constant temperatures, a material on each box or union of boxes, 27-node hexahedra on a grid with a plane on each box face and through each Point of a bc, and supports at Points (`src/codegen/codegen.goose`, `src/runtime/mesh.goose`). `warpage_thick_copper.skn` passes its `expect`: -0.0271 mm against the measured -0.028 mm (Calabretta et al. 2021). |
 | the browser target: Goose to C, then `emcc` | done for the simplex models: `skein build --target wasm` writes a page that meshes and solves in the browser, on the CPU with the implicit solvers (`src/codegen/build.goose`, `src/codegen/web.goose`). Sample 01 in the page gives the records and the VTU file of `skein run --set`, bit for bit. The GPU and the explicit solver are phase 4.5. |
 
 ## Risks
