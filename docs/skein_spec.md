@@ -1633,6 +1633,18 @@ the field `u` in it. The `let` fields of a physics of the other model are
 fields of the `Results` value too, for example `global.e_hoop`. The run uses the saved state, or runs the other model
 first if no state exists.
 
+```skein
+param p_U: Pressure = 97.5 kPa
+let global: Results = results("fuselage.skn", step: "pressurize", case: p_U)
+```
+
+`case: p` names a `param` of this model, declared before the `results`.
+The other model must declare a `param` of the same name and unit
+[`results_case`]. Each case of a study of this model then uses the state
+of the other model run with the same value of `p`, as with
+`skein run <file> --set p=<value>`. The cases that need the same state
+run the other model once.
+
 ### 15.2 Submodels
 
 A submodel is a model whose essential conditions on a **cut boundary** come

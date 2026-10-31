@@ -164,6 +164,10 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 
 Current `run` writes VTU results under `.skein/results/<model>/`.
 The solver determines each file name.
+A run with `--set` writes them under `.skein/results/<model>/set/<words>/`,
+so that it does not write over the results of the default values. A
+submodel (spec §15.1) reads the state of the other model from this
+directory, and runs the other model first if the state is not there.
 `run --study` writes the results of each case under
 `.skein/studies/<model>/<study>/<case>/`, and the table of all cases to
 `.skein/studies/<model>/<study>.toon` (§6.5).
@@ -331,7 +335,7 @@ The language server is planned. The current executable rejects `lsp`.
 | `*.skn` | Skein source |
 | `.skein/build/` | generated Goose, C and native executables |
 | `.skein/results/<model>/` | VTU result files. A single run prints its TOON log to standard output. |
-| `.skein/state/<model>/<step>.sks` | planned state files for submodels |
+| `.skein/results/<model>/<step>.state_sol` | the state of a step, for submodels |
 | `.skein/studies/<model>/<study>/` | one directory of results for each case |
 | `.skein/studies/<model>/<study>.toon` | the table of the study |
 
