@@ -66,6 +66,10 @@ gives the roadmap phase that closes the gap:
   hexahedra with incompatible modes. G19 still keeps the quad and hex cells
   from taylor_bar_impact, contact_cattaneo, turek_hron_fsi1 and
   hyperelastic_tube.
+- Phase 2 closes G20. Spec [§9.1](skein_spec.md#91-mesh) states
+  `crack_tip`, and the mesh of
+  [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)
+  uses it.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -122,7 +126,7 @@ result, or the mesh or the solve is less efficient.
 |---|---|---|---|---|---|
 | G18 | Element families: reduced integration (`C3D20R`, `C3D8R`, `CPE8R`, `S8R`), serendipity cells (`C3D20`, `CPE8`) and incompatible modes (`C3D8I`, the hex8 of the grid solver). | `validation/cases/frequency-cantilever/mesh.inp:2120`, `validation/cases/dynamics-bar-step/mesh.inp:2028`, `validation/cases/grid-cantilever/derivation.md:3` | The setting `quadrature` has no values, and `family` is `lagrange`, `nedelec` or `raviart_thomas` (§13). The models use `lagrange` of order 2. | Give `quadrature` the values `full` and `reduced`, and add `serendipity` and `incompatible` to `family`. | 2, closed by [§13](skein_spec.md#13-methods) |
 | G19 | A structured hex grid through layers and blocks, with a grid plane on each material face. | `validation/cases/warpage-2p5d-frame/mesh.inp:5462`, `validation/cases/grid-heated-block-ccx/block/grid.toml:16`, `validation/cases/grid-layered-wall/wall/grid.toml:18` | `hex` and `quad` need one `box` or `rect` (or, for `hex`, a quarter of a tube) with one `size` (§9.1). §9.2 does not put a grid plane on an inner material face. The models use tetrahedra, or a size that puts the planes on the faces. | Allow `hex` and `quad` on a union of axis-aligned boxes or rects, with a grid plane on each face of each box. | 2 |
-| G20 | Quarter-point cells at a crack tip. | `validation/cases/fracture-centre-crack/derivation.md:38` | No mesh setting moves the mid-side nodes (§9.1). The model uses a fine mesh. | A mesh entry `crack_tip r: size`. | 2 |
+| G20 | Quarter-point cells at a crack tip. | `validation/cases/fracture-centre-crack/derivation.md:38` | No mesh setting moves the mid-side nodes (§9.1). The model uses a fine mesh. | A mesh entry `crack_tip r: size`. | 2, closed by [§9.1](skein_spec.md#91-mesh) |
 | G21 | The stable increment of an explicit step, chosen by the solver. | `validation/cases/dynamics-bar-step/job.inp:14` | `transient` needs `dt` (§14.2). The model gives a `dt` below the stable limit. | Accept `dt: stable` with an explicit scheme. | 2 |
 | G22 | Finite-strain J2 plasticity with a multiplicative split (plastic strain up to 3.24). | `validation/cases/taylor-bar-impact/job.inp:12` | §10.6 states `plastic` with an additive plastic strain. Under `finite_strain` this is a different law at large strain. | One rule in §10.6: under `finite_strain`, the `strain` state is `Fp`, the elastic part is `defgrad(u)*inv(Fp)`, and the return map is the exponential map. | 5 |
 | G23 | The stick stiffness of penalty friction. It changes the reference traction by 0.34 % to 3.4 %. | `validation/cases/contact-cattaneo/job.inp:15` | `contact` has only `friction`, `enforce` and `stiffness` (§12.4). | A `contact` setting `stick_stiffness`. | 5 |
@@ -216,7 +220,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A hex grid through layers or a union of blocks | warpage-2p5d-frame, warpage-thick-copper, grid-heated-block-ccx, grid-layered-wall, grid-laminate-cell | `cell: tet` with `refine`, or one `box` | gap [G19](#gaps-that-change-the-discretization-or-the-physics) |
 | Plane strain elements (`CPE4`, `CPE6`, `CPE8`, `CPE8R`) | submodel-kirsch-hole, fracture-centre-crack, contact-cattaneo, hyperelastic-tube, topology-mbb-beam | header `2d`, `cell: tri`, `assume plane_strain(th)` | [§3](skein_spec.md#3-grammar), [§9.1](skein_spec.md#91-mesh), [§11.1](skein_spec.md#111-assumption-table) |
 | Plane stress elements (`CPS6`) | shape-hole-biaxial | `assume plane_stress(th)` | [§11.1](skein_spec.md#111-assumption-table), [§11.2](skein_spec.md#112-how-plane_stress-reduces-a-3d-law) |
-| Quarter-point cells at a crack tip | fracture-centre-crack | `refine tip: size` | gap [G20](#gaps-that-change-the-discretization-or-the-physics) |
+| Quarter-point cells at a crack tip | fracture-centre-crack | `crack_tip tip: size` | [§9.1](skein_spec.md#91-mesh) |
 | Shell elements (`S8R`, `S6`), a composite shell section | scordelis-lo-roof, laminate-pagano | the `reissner_mindlin` template on a `Surface`, with a `layup` table for a composite section | [§4.3](skein_spec.md#43-shells-beams-and-laminates), [§8.3](skein_spec.md#83-lower-dimension-entities) |
 | First-order edge elements | grid-waveguide-te10, grid-waveguide-dielectric, grid-waveguide-step, grid-cavity-te101, team7-eddy-current, dipole-king-middleton | `method p: cg { order: 1, family: nedelec }` | [§13](skein_spec.md#13-methods) |
 | Triangles of the line solver | line-coax, line-stripline, line-wire-skin, line-bars-getdp | header `2d`, `cell: tri`, `order: 1` | [§9.1](skein_spec.md#91-mesh), [§13](skein_spec.md#13-methods) |

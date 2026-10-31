@@ -769,7 +769,7 @@ fn mesh(n: i64) {
     while s >= 0 {
         let value = syntax::nodes[s].first;
         if kind(s) != syntax::N_SETTING {
-            unsupported(tok(s), "refine and layers are not in this slice", "remove the line");
+            unsupported(tok(s), "refine, layers and crack_tip are not in this slice", "remove the line");
         } else if name(s) == "size" {
             mesh_size = eval(value).v[0];
         } else if name(s) == "cell" {

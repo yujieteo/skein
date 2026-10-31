@@ -333,6 +333,21 @@ fn test_conditions() {
     expect_ids("serendipity on tetrahedra", str(hex, "method s: cg { mesh: m1, order: 2, family: serendipity }\n"), "family_cell\n");
 }
 
+// Gap G20: quarter-point cells at a crack tip (spec §9.1).
+fn test_crack_tip() {
+    let plate = "let b: Surface = rect((0, 0) mm, (10, 10) mm)\nlet f: Curve = boundary(b, y == 0 mm)\nlet c: Point = point((5, 0) mm)\nscales 10 mm, 210 GPa\nmaterial steel {\n    E: Pressure = 210 GPa\n    nu: Real = 0.3\n}\n";
+    let solid = "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 mm)\n}\nbc f: u = 0\n";
+    let model = "model m: 2d, mm_N_MPa_s\n";
+    expect_clean("G20 a crack tip", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm\n}\n", solid));
+    expect_id("crack_tip_form", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip f: 0.2 mm\n}\n", solid));
+    expect_id("crack_tip_form", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2\n}\n", solid));
+    expect_id("crack_tip_form", str(model, plate, "points p1 on b {\n    spacing: 1 mm\n    crack_tip c: 0.2 mm\n}\nmesh m1 on b { size: 1 mm }\n", solid));
+    expect_id("crack_tip_form", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm\n}\n", solid, "method s: cg { mesh: m1, order: 1 }\n"));
+    expect_id("crack_tip_form", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm\n}\n", solid, "method s: cg { order: 1 }\n"));
+    expect_id("crack_tip_form", str(H, SOLID, "\nlet c: Point = point((1, 1, 1) m)\nmesh m2 on b {\n    size: 0.1 m\n    crack_tip c: 0.01 m\n}\n"));
+    expect_id("not_constant", str(model, plate, "mesh m1 on b {\n    size: 1 mm\n    crack_tip c: 0.2 mm*(1 + x/(1 mm))\n}\n", solid));
+}
+
 fn test_steps() {
     let elastic = str(H, SOLID, "\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n");
     expect_id("procedure_args", str(elastic, "step go: transient(end: 1 s) {\n    bc f: u = 0\n}\n"));
@@ -474,6 +489,8 @@ fn test_lint() {
     expect_lints("dt_unstable", str(impact, "1 ms, scheme: ssprk3) {\n    output u\n}\n"), "dt_unstable\n");
     expect_lints("a stable dt", str(impact, "1 us, scheme: ssprk3) {\n    output u\n}\n"), "");
     expect_lints("an implicit scheme", str(impact, "1 ms, scheme: bdf2) {\n    output u\n}\n"), "");
+    expect_lints("dt_unstable at a crack tip", str(H2, "let c: Surface = rect((0, 0) m, (1, 1) m)\nlet f: Curve = boundary(c, x == 0 m)\nlet tip: Point = point((0.5, 0) m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n    rho: Density = 7800 kg/m^3\n}\nmesh m1 on c {\n    size: 0.1 m\n    crack_tip tip: 1 mm\n}\nphysics s on c: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 m)\n}\nbc f: u = 0\nstep go: transient(end: 1 s, dt: 1 us, scheme: ssprk3) {\n    output u\n}\n"), "dt_unstable\n");
+    expect_lints("a meshless method beside a crack tip mesh", str(H2, "let c: Surface = rect((0, 0) m, (1, 1) m)\nlet f: Curve = boundary(c, x == 0 m)\nlet tip: Point = point((0.5, 0) m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n    rho: Density = 7800 kg/m^3\n}\nmesh m1 on c {\n    size: 0.1 m\n    crack_tip tip: 1 mm\n}\npoints cloud on c { spacing: 0.1 m }\nphysics s on c: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 m)\n}\nbc f: u = 0\nstep go: transient(end: 1 s, dt: 1 us, scheme: ssprk3) {\n    output u\n}\nmethod s: rkpm { points: cloud }\n"), "");
     let flow = str("model m: 2d, SI\nscales 1 m, 1 m/s, 1 kg/m^3\n", FLOW, "\nmethod flow: cg {\n    mesh: m1\n    order: { v: 2, p: 1 }\n    stabilize: ");
     let steady = "\n}\nstep go: static {\n    bc lid: v = (1, 0) m/s\n    output v\n}\n";
     expect_lints("stabilization_missing", str(flow, "none", steady), "stabilization_missing\n");
@@ -540,6 +557,7 @@ fn main() {
     test_types();
     test_physics();
     test_conditions();
+    test_crack_tip();
     test_method_defaults();
     test_steps();
     test_shells();

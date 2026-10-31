@@ -148,13 +148,13 @@ except before a `degC` literal (§6.3).
 
 ```
 adapt       allow       assume      at          bc          birth
-contact     death       eq          every       expect      false
-fn          in          interface   layers      let         manufacture
-material    mesh        method      model       on          output
-param       physics     plastic     points      refine      release
-report      scales      solve       solves      state       step
-study       symmetry    table       template    tol         tolerance
-true        use         where       within
+contact     crack_tip   death       eq          every       expect
+false       fn          in          interface   layers      let
+manufacture material    mesh        method      model       on
+output      param       physics     plastic     points      refine
+release     report      scales      solve       solves      state
+step        study       symmetry    table       template    tol
+tolerance   true        use         where       within
 ```
 
 A keyword is not an identifier, except as the name before the `:` of a
@@ -217,10 +217,11 @@ block       = "{" [ NL ] [ entry { ( "," | NL ) entry } [ NL ] ] "}" ;
 setting     = name ":" expr ;
 name        = ident | keyword ;   (* a keyword only before ":" *)
 
-meshdecl    = "mesh" ident "on" region block NL ;    (* entry = setting | refine | layers *)
+meshdecl    = "mesh" ident "on" region block NL ;    (* entry = setting | refine | layers | cracktip *)
 pointsdecl  = "points" ident "on" region block NL ;  (* entry = setting | refine *)
 refine      = "refine" region ":" expr ;
 layers      = "layers" region ":" expr ;
+cracktip    = "crack_tip" region ":" expr ;
 
 physics     = "physics" ident [ "on" region ] [ ":" ident [ "(" [ args ] ")" ] ]
               "solves" unknown { "," unknown } [ "{" NL { physstmt NL } "}" ] NL ;
@@ -938,9 +939,22 @@ mesh m on beam {
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
 | `layers r` | record | none | boundary layer cells on `r` (CFD) |
+| `crack_tip p` | `Length` | none | quarter-point cells of this size at the crack tip `p` |
 
 The cell order comes from the `method` (§13), not from the mesh. The mesher
 makes the nodes for that order on the true geometry.
+
+`crack_tip p: L` makes a fan of triangles with edges of length `L` around
+the `Point` `p` of a 2d model. On each edge that touches `p`, the mesher
+moves the mid-side node to `L/4` from `p`. These quarter-point cells give
+the 1/sqrt(r) strain of a linear elastic crack tip (Barsoum 1976). The
+crack opening at `r = L/4` and `r = L` then gives the stress intensity
+factor (Shih et al. 1976). The error [`crack_tip_form`] (checks.md)
+rejects `crack_tip` in a 3d model or in a `points` block, a region that is
+not a `Point`, a size that is not a `Length`, and a displacement with an
+order other than 2.
+Reason: femahoy gap G20. The case fracture-centre-crack reads K_I from
+the nodes of quarter-point cells, and no other mesh setting moves a node.
 
 ### 9.2 Mesh generation
 
@@ -1358,6 +1372,9 @@ physics with no `method` item takes the defaults:
   velocity under `incompressible`, which takes `order: 1` (Taylor-Hood);
 - `stabilize: supg` when the equations have a convection term, and `none`
   when they do not.
+
+A `cg`, `dg` or `fv` method with no `mesh` setting takes the same mesh as
+the default.
 
 Reason: these defaults are the right choice for most solid, heat and
 laminar flow models, and they cut a block of 4 lines from each of them.
@@ -2321,6 +2338,7 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Alliez, P., Cohen-Steiner, D., Yvinec, M., Desbrun, M. (2005). Variational tetrahedral meshing. ACM Trans. Graph. 24(3).
 - Arnold, D. N. (1982). An interior penalty finite element method with discontinuous elements. SIAM J. Numer. Anal. 19(4).
 - Arnold, D. N., Brezzi, F., Cockburn, B., Marini, L. D. (2002). Unified analysis of discontinuous Galerkin methods for elliptic problems. SIAM J. Numer. Anal. 39(5).
+- Barsoum, R. S. (1976). On the use of isoparametric finite elements in linear fracture mechanics. IJNME 10(1).
 - Bazilevs, Y., Calo, V. M., Cottrell, J. A., Hughes, T. J. R., Reali, A., Scovazzi, G. (2007). Variational multiscale residual-based turbulence modeling for large eddy simulation of incompressible flows. CMAME 197.
 - Benito, J. J., Ureña, F., Gavete, L. (2001). Influence of several factors in the generalized finite difference method. Appl. Math. Model. 25.
 - Bridson, R. (2007). Fast Poisson disk sampling in arbitrary dimensions. SIGGRAPH sketches.
@@ -2342,6 +2360,7 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Ruppert, J. (1995). A Delaunay refinement algorithm for quality 2-dimensional mesh generation. J. Algorithms 18(3).
 - Shakib, F., Hughes, T. J. R., Johan, Z. (1991). A new finite element formulation for computational fluid dynamics: X. CMAME 89.
 - Shewchuk, J. R. (2002). Delaunay refinement algorithms for triangular mesh generation. Comput. Geom. 22.
+- Shih, C. F., de Lorenzi, H. G., German, M. D. (1976). Crack extension modeling with singular quadratic isoparametric elements. Int. J. Fract. 12(4).
 - Shu, C.-W., Osher, S. (1988). Efficient implementation of essentially non-oscillatory shock-capturing schemes. J. Comput. Phys. 77.
 - Simo, J. C., Hughes, T. J. R. (1998). Computational Inelasticity. Springer.
 - Tezduyar, T. E. (1992). Stabilized finite element formulations for incompressible flow computations. Adv. Appl. Mech. 28.

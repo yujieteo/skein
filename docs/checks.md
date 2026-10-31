@@ -90,6 +90,7 @@ in the file stays in the review.
 | `geometry_space` | §8.1 | a 2D function in a `3d` model, or the reverse | `circle` in 3D | `cylinder` or `sphere` |
 | `empty_region` | §8.2 | a selection has no points | `boundary(beam, x == 300 mm)` with `L = 200 mm` | the bounding box of the geometry |
 | `region_outside` | §8.4 | a region is not inside the region of its field | `bc` on a face of another body | the region of the field |
+| `crack_tip_form` | §9.1 | `crack_tip` is not in the mesh of a `2d` model, its region is not a `Point`, its size is not a `Length`, or the displacement on the mesh does not have order 2 | `crack_tip front: 0.5 mm` with a `Curve` | a `Point` at the tip |
 
 ### 2.4 Fields, materials and physics
 

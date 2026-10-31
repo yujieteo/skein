@@ -225,6 +225,15 @@ mesh m on duct {
 }
 ```
 
+For a crack in 2D, put quarter-point cells at the tip:
+
+```skein
+mesh m on plate {
+    size: 5 mm
+    crack_tip tip: 0.5 mm
+}
+```
+
 A `points` block makes a point cloud for a meshless method:
 
 ```skein
@@ -703,13 +712,13 @@ Spec: [§12.6](skein_spec.md#126-symmetry-groups).
 
 ```
 adapt       allow       assume      at          bc          birth
-contact     death       eq          every       expect      false
-fn          in          interface   layers      let         manufacture
-material    mesh        method      model       on          output
-param       physics     plastic     points      refine      release
-report      scales      solve       solves      state       step
-study       symmetry    table       template    tol         tolerance
-true        use         where       within
+contact     crack_tip   death       eq          every       expect
+false       fn          in          interface   layers      let
+manufacture material    mesh        method      model       on
+output      param       physics     plastic     points      refine
+release     report      scales      solve       solves      state
+step        study       symmetry    table       template    tol
+tolerance   true        use         where       within
 ```
 
 A keyword can be a name only before the `:` of a setting, a named argument

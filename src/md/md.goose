@@ -606,7 +606,7 @@ fn block_list(b: i64) {
             out.append(": ");
             setting_value(first(c));
         } else {
-            out.append(if k == syntax::N_REFINE { "refine " } else { "layers " });
+            out.append(if k == syntax::N_REFINE { "refine " } else if k == syntax::N_LAYERS { "layers " } else { "crack_tip " });
             words(first(c));
             out.append(": ");
             inline(next(first(c)));

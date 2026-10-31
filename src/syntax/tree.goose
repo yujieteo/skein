@@ -90,48 +90,49 @@ let KW_AT = 103;
 let KW_BC = 104;
 let KW_BIRTH = 105;
 let KW_CONTACT = 106;
-let KW_DEATH = 107;
-let KW_EQ = 108;
-let KW_EVERY = 109;
-let KW_EXPECT = 110;
-let KW_FALSE = 111;
-let KW_FN = 112;
-let KW_IN = 113;
-let KW_INTERFACE = 114;
-let KW_LAYERS = 115;
-let KW_LET = 116;
-let KW_MANUFACTURE = 117;
-let KW_MATERIAL = 118;
-let KW_MESH = 119;
-let KW_METHOD = 120;
-let KW_MODEL = 121;
-let KW_ON = 122;
-let KW_OUTPUT = 123;
-let KW_PARAM = 124;
-let KW_PHYSICS = 125;
-let KW_PLASTIC = 126;
-let KW_POINTS = 127;
-let KW_REFINE = 128;
-let KW_RELEASE = 129;
-let KW_REPORT = 130;
-let KW_SCALES = 131;
-let KW_SOLVE = 132;
-let KW_SOLVES = 133;
-let KW_STATE = 134;
-let KW_STEP = 135;
-let KW_STUDY = 136;
-let KW_SYMMETRY = 137;
-let KW_TABLE = 138;
-let KW_TEMPLATE = 139;
-let KW_TOL = 140;
-let KW_TOLERANCE = 141;
-let KW_TRUE = 142;
-let KW_USE = 143;
-let KW_WHERE = 144;
-let KW_WITHIN = 145;
+let KW_CRACK_TIP = 107;
+let KW_DEATH = 108;
+let KW_EQ = 109;
+let KW_EVERY = 110;
+let KW_EXPECT = 111;
+let KW_FALSE = 112;
+let KW_FN = 113;
+let KW_IN = 114;
+let KW_INTERFACE = 115;
+let KW_LAYERS = 116;
+let KW_LET = 117;
+let KW_MANUFACTURE = 118;
+let KW_MATERIAL = 119;
+let KW_MESH = 120;
+let KW_METHOD = 121;
+let KW_MODEL = 122;
+let KW_ON = 123;
+let KW_OUTPUT = 124;
+let KW_PARAM = 125;
+let KW_PHYSICS = 126;
+let KW_PLASTIC = 127;
+let KW_POINTS = 128;
+let KW_REFINE = 129;
+let KW_RELEASE = 130;
+let KW_REPORT = 131;
+let KW_SCALES = 132;
+let KW_SOLVE = 133;
+let KW_SOLVES = 134;
+let KW_STATE = 135;
+let KW_STEP = 136;
+let KW_STUDY = 137;
+let KW_SYMMETRY = 138;
+let KW_TABLE = 139;
+let KW_TEMPLATE = 140;
+let KW_TOL = 141;
+let KW_TOLERANCE = 142;
+let KW_TRUE = 143;
+let KW_USE = 144;
+let KW_WHERE = 145;
+let KW_WITHIN = 146;
 
 let KEYWORDS = [
-    "adapt", "allow", "assume", "at", "bc", "birth", "contact", "death", "eq", "every",
+    "adapt", "allow", "assume", "at", "bc", "birth", "contact", "crack_tip", "death", "eq", "every",
     "expect", "false", "fn", "in", "interface", "layers", "let", "manufacture",
     "material", "mesh", "method", "model", "on", "output", "param", "physics", "plastic",
     "points", "refine", "release", "report", "scales", "solve", "solves", "state", "step",
@@ -233,13 +234,14 @@ let N_REPORT = 58;       // tok: `report`. N_REPORTITEM*
 let N_REPORTITEM = 59;   // tok: first token, aux: name or -1. value
 
 // Blocks and procedures (spec §3, `block`, `procedure`).
-let N_BLOCK = 60;        // tok: `{`. N_SETTING*, N_REFINE*, N_LAYERS* in source order
+let N_BLOCK = 60;        // tok: `{`. N_SETTING*, N_REFINE*, N_LAYERS*, N_CRACK_TIP* in source order
 let N_SETTING = 61;      // tok: name. value: an expression, N_LIST or N_RANGE
 let N_REFINE = 62;       // tok: `refine`. region, value
 let N_LAYERS = 63;       // tok: `layers`. region, value
 let N_PROC = 64;         // tok: procedure name. N_ARG*, and the value of an N_ARG can be N_LIST
 let N_LIST = 65;         // tok: `[`. items, [N_UNIT]
 let N_RANGE = 66;        // tok: `..`. low, high
+let N_CRACK_TIP = 67;    // tok: `crack_tip`. region, value
 
 // Types (spec §3, `type`).
 let N_TYPE_NAME = 70;    // tok: name, for example `Real`, `Solid` or `Length`
@@ -278,7 +280,7 @@ let NODE_NAMES = [
     "manufacture", "tolerance", "", "", "", "matassign", "maton", "assume", "assumption",
     "eq", "state", "plastic", "", "", "", "release", "birth", "death", "where", "solve",
     "adapt", "output", "every", "report", "reportitem", "block", "setting", "refine",
-    "layers", "proc", "list", "range", "", "", "", "type", "type_apply", "dim_mul",
+    "layers", "proc", "list", "range", "crack_tip", "", "", "type", "type_apply", "dim_mul",
     "dim_div", "dim_pow", "", "", "", "", "", "unit", "unit_name", "unit_mul", "unit_div",
     "unit_pow", "", "", "", "", "", "number", "percent", "string", "bool", "name",
     "vector", "record", "binary", "unary", "call", "arg", "member", "at",

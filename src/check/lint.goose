@@ -280,7 +280,7 @@ fn prop_value(mat: i64, name: u8[:]) -> f64, bool {
 }
 
 // The mesh item of physics `p`: the mesh that its method names, or else the
-// one mesh that the default method takes (spec §13), or -1.
+// one mesh that a cg, dg or fv method with no `mesh` takes (spec §13), or -1.
 fn mesh_of(p: i64) -> i64 {
     var mesh = -1;
     let m = method_of(p);
@@ -288,7 +288,7 @@ fn mesh_of(p: i64) -> i64 {
     if ms >= 0 && syntax::nodes[ms].kind == syntax::N_NAME {
         let s = visible.get(key(tok_text(syntax::nodes[ms].tok)));
         if s && syms[s].kind == S_MESH { mesh = syms[s].node; }
-    } else if m < 0 {
+    } else if ms < 0 && (m < 0 || syntax::nodes[m].aux >= 0 && contains_name(["cg", "dg", "fv"], tok_text(syntax::nodes[m].aux))) {
         var all = 0;
         for s in syms {
             if s.kind != S_MESH { continue; }
@@ -302,7 +302,7 @@ fn mesh_of(p: i64) -> i64 {
 }
 
 // The smallest constant cell size of the mesh of physics `p`: the `size`
-// and each `refine` of its mesh. False when it is unknown.
+// and each `refine` and `crack_tip` of its mesh. False when it is unknown.
 fn cell_size(p: i64) -> f64, bool {
     let mesh = mesh_of(p);
     guard mesh >= 0 else { return 0.0, false; };
@@ -312,13 +312,33 @@ fn cell_size(p: i64) -> f64, bool {
     var h, ok = const_value(size);
     var c = syntax::nodes[b].first;
     while c >= 0 {
-        if syntax::nodes[c].kind == syntax::N_REFINE {
+        if syntax::nodes[c].kind == syntax::N_REFINE || syntax::nodes[c].kind == syntax::N_CRACK_TIP {
             let v, vok = const_value(syntax::nodes[c].last);
             if vok && v < h { h = v; }
         }
         c = syntax::nodes[c].next;
     }
     return h, ok && h > 0.0;
+}
+
+// `crack_tip_form` (spec §9.1): a crack tip moves the mid-side nodes, so
+// the displacement of each physics on the mesh needs order 2.
+fn crack_tip_order() {
+    for p, i in physics {
+        let u = displacement_of(i);
+        let mesh = mesh_of(i);
+        guard u >= 0 && mesh >= 0 else { continue; };
+        let order = order_of(method_of(i), u);
+        var c = syntax::nodes[syntax::child_of_kind(mesh, syntax::N_BLOCK)].first;
+        while c >= 0 {
+            if syntax::nodes[c].kind == syntax::N_CRACK_TIP && order != 2.0 {
+                error(syntax::nodes[c].tok, "crack_tip_form",
+                      str("crack_tip moves the mid-side nodes, but ", tok_text(syms[u].tok), " has order ", order as i64),
+                      str("write order: 2 in method ", tok_text(syms[p.sym].tok)));
+            }
+            c = syntax::nodes[c].next;
+        }
+    }
 }
 
 // A value rounded to 3 significant digits, for a message.
