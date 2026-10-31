@@ -40,7 +40,7 @@ mesh mf on fluid_dom {
     refine cyl_wall | wet_fluid: 0.005 m
 }
 
-// The C3D8I of ccx: quads with incompatible modes on the flag.
+// Quads on the flag, with Lagrange order 2 on the triangles that stay.
 mesh ms on bar {
     size: 0.005 m
     cell: quad
@@ -75,8 +75,7 @@ method flow: fv {
 
 method flag: cg {
     mesh: ms
-    order: 1
-    family: incompatible
+    order: 2
 }
 
 // FSI1 is steady. The outlet takes the default natural condition sigma_f*n = 0.
