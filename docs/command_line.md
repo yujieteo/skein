@@ -160,7 +160,7 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
 | `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
-| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in the memory, and the table gives the `k` that it used (spec §20.5). |
+| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in half of the available memory (`MemAvailable` of `/proc/meminfo`), and the table gives the `k` that it used (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 Current `run` writes VTU results under `.skein/results/<model>/`.
