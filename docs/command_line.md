@@ -36,7 +36,7 @@ models. It reports the verification checks that its solver implements.
 | `skein lint model.skn` | `check`, then the lint rules | Current |
 | `skein verify model.skn` | `check`, the mesh, and the pre-solve verification. No solve. | Current: mesh quality only |
 | `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Planned |
-| `skein build model.skn` | writes the Goose source and builds a native executable or a WebAssembly module | Planned |
+| `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex models only |
 | `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
 | `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current: STL only |
 | `skein view model.skn` | opens the results in the WebGL viewer | Planned |
@@ -153,7 +153,7 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 
 | Option | Commands | Meaning |
 |---|---|---|
-| `--target native\|wasm` | `run`, `build` | native executable (default) or WebAssembly |
+| `--target wasm` | `build` | the page that solves in the browser (§7) |
 | `--threads n` | `run` | worker threads for assembly and matrix products. Default: all hardware threads. With `--study`, the default is `max(1, H / k)` for `H` hardware threads and `k` jobs (spec §20.5). |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
@@ -262,7 +262,6 @@ A case that fails gets the status `failed` and the diagnostic
 
 ## 7. Building
 
-The `skein build` command and its options below are planned.
 Current `skein run` writes `.skein/build/<model>/main.goose` and calls
 Goose to build a native executable. A run with `--set` builds in
 `.skein/build/<model>/set/<words>/`, so that runs with other values do
@@ -273,18 +272,41 @@ not share the program. Set `GOOSE` to select the compiler.
 skein build samples/01_cantilever.skn --target wasm
 ```
 
-`build` writes `.skein/build/<model>.goose`, then calls the Goose compiler.
-For `native`, Goose writes C and builds it with the C compiler that it
-finds. For `wasm`, Goose writes C and `skein` compiles it with `emcc`, in
-the same way as earlier Goose projects that run in the browser.
+`build --target wasm` writes one HTML page,
+`.skein/build/<model>/web/<model>.html`, that meshes and solves the model
+in the browser (implementation.md §8). The page has a control for each
+`param` with a range of literals, for example `param L: Length = 200 mm
+in 100 mm..400 mm`. When a control changes, the page meshes the model
+again, solves it with the new values, and shows the records of the run
+in TOON, the `mesh_quality` record and the deformed mesh. The run in the
+page gives the same records and VTU file as `skein run --set` with the
+same values. The page also shows the records of a native run at the
+default values.
 
-| Option | Meaning |
-|---|---|
-| `--emit goose` | write the Goose source and stop |
-| `--emit c` | write the C and stop |
-| `--goose path` | the Goose compiler to use |
+It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
+`emcc` on `PATH`. It runs the model natively twice: at the default values
+and at the corner of the param ranges with the most dofs. The data stacks
+of these runs set the memory of the page. A model whose data stacks need
+more than 15 GB gets a page with the native results only, and the page
+gives the size of the model.
 
-The WebAssembly target compiles the C from Goose with emcc (spec §18.1).
+Current limits:
+
+- only the models of the simplex generator (`tri` or `tet` cells);
+- a value must not change the structure of the program, for example the
+  number of steps or of shapes. `build` stops with an error for such a
+  `param`;
+- the page runs on one thread, in a browser with WebAssembly memory64
+  (tested in Chromium 156), from a `file://` or an `http://` address;
+- no `use` files.
+
+The page has a function `skeinSolve(values)` for other pages: `values`
+holds a number for each param, in the unit of its default value. It gives
+a promise of `{ code, out, err, files, seconds, sets }`: the exit status
+(section 10), the records in TOON, standard error, the VTU text of each
+result file, the time and the words of `--set`.
+
+The planned `build --target native` writes the executable of `run`.
 
 ### 7.1 Export
 
@@ -337,7 +359,7 @@ The language server is planned. The current executable rejects `lsp`.
 | Path | Contents |
 |---|---|
 | `*.skn` | Skein source |
-| `.skein/build/` | generated Goose, C and native executables |
+| `.skein/build/` | generated Goose, C and native executables. `.skein/build/<model>/web/` holds the page of `build --target wasm`. |
 | `.skein/results/<model>/` | VTU result files. A single run prints its TOON log to standard output. |
 | `.skein/results/<model>/<step>.state_sol` | the state of a step, for submodels |
 | `.skein/studies/<model>/<study>/` | one directory of results for each case |
@@ -353,6 +375,7 @@ The language server is planned. The current executable rejects `lsp`.
 | 1 | an error, a failed verification check, or a failed `expect` |
 | 2 | wrong use of the command line |
 | 3 | an internal fault of `skein`. Please report it. |
+| 4 | in the page: the model needs more memory than the page gives it |
 
 ---
 

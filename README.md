@@ -2,7 +2,9 @@
 
 Skein is a typed, units-checked language for numerical simulation. It
 compiles to [Goose](https://aardappel.github.io/goose/), which generates C
-for native executables. The WebAssembly target remains planned work.
+for native executables. `skein build --target wasm` writes a page that
+meshes and solves a model in the browser, with C from Goose compiled by
+`emcc`.
 
 ```skein
 model cantilever: 3d, mm_N_MPa_s
@@ -43,7 +45,10 @@ that need a mesh. `skein verify` creates the mesh and checks its quality.
 `skein md` writes a model as a Markdown document. `skein fmt` rewrites a
 file in the standard layout. `skein export --format stl` writes the surface of a shape as STL.
 `skein run --study` runs each case of a `grid`, `zip` or `sample`
-study on parallel workers, and prints the table of the cases. The
+study on parallel workers, and prints the table of the cases.
+`skein build --target wasm` writes one HTML page with a control for each
+`param` with a range: the page meshes and solves the model again in the
+browser for each value. The
 [command reference](docs/command_line.md) states the current limits. The
 [roadmap](docs/roadmap.md) gives the planned phases.
 

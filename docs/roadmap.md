@@ -60,6 +60,14 @@ each `expect` against Ghia et al. within the limit of 0.02 m/s. The gap
 G36 is closed. Samples 03 and 04 run with `skein run`, and each
 `expect` passes. The gap G34 is closed.
 
+## Phase 4 status
+
+Each phase 4 lane changes only the rows of its own items.
+
+| Item | Status |
+|---|---|
+| the browser target: Goose to C, then `emcc` | done for the simplex models: `skein build --target wasm` writes a page that meshes and solves in the browser, on the CPU with the implicit solvers (`src/codegen/build.goose`, `src/codegen/web.goose`). Sample 01 in the page gives the records and the VTU file of `skein run --set`, bit for bit. The GPU and the explicit solver are phase 4.5. |
+
 ## Risks
 
 | Risk | Effect | What to do |

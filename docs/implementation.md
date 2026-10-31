@@ -18,8 +18,8 @@
 
 These notes describe the planned architecture for the
 [specification](skein_spec.md). The repository already contains a front end,
-mesh tools and native solvers. The SIR pipeline, browser target and viewer
-remain planned work. See the [command reference](command_line.md) for the
+mesh tools, native solvers and a browser solve for the simplex models.
+The SIR pipeline and the viewer remain planned work. See the [command reference](command_line.md) for the
 current interface and the [roadmap](roadmap.md) for the planned phases.
 
 ---
@@ -222,17 +222,46 @@ The browser runs the same Goose code, compiled to WebAssembly:
 
 | Part | In the browser |
 |---|---|
-| `check`, `fmt`, `lint` | yes, in the editor, with no server |
-| mesher | yes |
-| solve | yes, for models that fit the memory of the browser |
-| viewer | yes, WebGL |
+| `check`, `fmt`, `lint` | planned, in the editor, with no server |
+| mesher | yes, in the page of `skein build --target wasm` |
+| solve | yes, for the simplex models whose data stacks fit in 15 GB |
+| viewer | planned, WebGL. The page draws the deformed surface mesh on a 2D canvas. |
 
 The browser target compiles the C that Goose writes with `emcc`, as earlier
-Goose projects do (spec §18.1). The front end needs little memory. The
-solver needs much more, so the browser limit on memory sets the size of
-the models that it can solve.
+Goose projects do (spec §18.1). `skein build --target wasm`
+(`src/codegen/build.goose`) does these steps:
 
----
+1. It generates the program of the model at the default values and at
+   each end of the range of each param. The number literals that change
+   become slots of the program of the page (`src/codegen/web.goose`).
+   Reason: the program holds each value as a literal, and the page has no
+   Goose compiler.
+2. It writes the program of the page. It holds the parser, the checker,
+   the generator, the mesher and the solvers. For the values of the page,
+   it generates the program again, takes the literals of the slots from
+   it, and runs the program with them. A program that differs in another
+   place than a slot stops the run with an error. Thus the run in the page
+   gives the records and the VTU file of `skein run --set`, bit for bit.
+3. It runs that program natively at the default values and at the corner
+   of the ranges with the most dofs, and measures the peak of each Goose
+   data stack.
+4. It compiles the C with `emcc` to 64-bit WebAssembly (memory64). Each
+   data stack gets a fixed region: 1.5 times the larger peak of the two
+   runs. Reason: WebAssembly memory has no address-space reservation and
+   no guard pages (Goose `docs/design/wasm.md`, fixed partitions). A
+   canary gap behind each region replaces the guard gap: each end of the
+   run checks it, and an overrun stops the run with exit status 4.
+5. It writes one HTML page with the module in it. Each run has a Web
+   Worker and a module of its own. Thus a new value stops the run before
+   it, and the memory of a run goes back when it ends.
+
+The front end needs little memory. The solver needs much more, so the
+browser limit on memory sets the size of the models that it can solve.
+Sample 01 at its default values has 70 244 cells and 319 320 dofs. Its
+regions take 4.3 GB of memory64. In Chromium 156, a run at L = 127 mm
+meshes and solves in 41 s on one thread. At the corner L = 400 mm,
+P = 10 kN (87 524 cells, 401 160 dofs), it takes 132 s and 2.3 GB in
+node 24.
 
 ## 9. Results and the viewer
 
