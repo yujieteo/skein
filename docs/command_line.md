@@ -35,7 +35,7 @@ models. It reports the verification checks that its solver implements.
 | `skein fmt model.skn…` | rewrites the files in the standard layout (§3) | Current |
 | `skein lint model.skn` | `check`, then the lint rules | Current |
 | `skein verify model.skn` | `check`, the mesh, and the pre-solve verification. No solve. | Current: mesh quality only |
-| `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Current: `fv` and `dg` models |
+| `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Current: `fv`, `dg`, and scalar `rkpm` and `gfd` models |
 | `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex models only |
 | `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
 | `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current |
@@ -143,7 +143,8 @@ Current `run` accepts one model file. With `--study`, it also accepts
 `--jobs` and `--format`. The other options below are planned.
 Current `verify` accepts only one model file and reports `mesh_quality`.
 It does not support `--mesh`. `verify convergence` accepts one model file
-and `--levels`, and runs the `fv` and `dg` models (checks.md §4.3).
+and `--levels`, and runs the `fv` and `dg` models and the scalar `rkpm`
+and `gfd` models (checks.md §4.3).
 
 The examples and option table below describe the planned interface:
 

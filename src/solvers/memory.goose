@@ -78,6 +78,10 @@ struct MemoryPath {
 //                         gmres -0.9 (140,625 dofs), fv ssprk3 0.3 (250,000 dofs). fv and dg
 //                         size the matrix and the vectors of the state before the check, so
 //                         the RSS at the check holds them. No threads.
+//     meshless skyline lu sample 05, 14,342 dofs, 15,389,813 entries of the profile, on
+//                         2026-11-01: 14.5 (U and L, 8 bytes each). The check is before the
+//                         factors are sized; the check of the solve counts 0 entries. No
+//                         threads.
 let MEMORY_PATHS = [
     MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "box cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 1.0 },
@@ -90,6 +94,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "grid ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "meshless skyline lu", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
 ];
 
 // The bytes of each worker thread of a case: its stacks. Measured: 16

@@ -1012,6 +1012,15 @@ The boundary points lie on φ = 0, with the normal from ∇φ. Each sharp
 corner gets a point. The pre-solve check [`points_quality`] measures the
 fill distance and the separation ratio.
 
+The current lowering (`src/meshless/`) takes the points of a 2D model in
+one of two ways. On a `rect`, the points are a lattice of the `spacing`,
+and each point inside moves by up to 0.15 of the spacing, so the cloud is
+not a grid. On the plate with a hole of sample 05, the points are the
+nodes of the P1 triangles of a mesh with the `spacing` as its size and
+the `refine` at the hole. In both, the triangles between the points give
+the nodal domains of `rkpm`, the boundary edges and the local spacing.
+Poisson disk sampling and `points_quality` do not run yet.
+
 ---
 
 ## 10. Fields, materials and physics
@@ -1905,6 +1914,27 @@ the default `penalty: 2`. `roe` is `upwind` for one scalar.
   difference stencils (Benito, Ureña and Gavete 2001). It uses `R` from the
   SIR directly, with no weak form. The natural conditions are collocated at
   the boundary points.
+
+The current lowering (`src/meshless/`) takes one scalar unknown with
+`div(a*u) - d*div(grad(u)) = f` and static steps, and `rkpm` also takes 2D
+linear elasticity in plane stress or plane strain.
+
+- `rkpm` has `basis: linear`, the cubic B-spline kernel and the support
+  `support` (default 2.5) times the spacing of each point. The spacing of
+  a point is the largest length of the middle edge of its triangles: the
+  lattice spacing of a lattice, and the larger spacing of a stretched
+  triangle. The nodal
+  domain of each point is cut into one quadrilateral in each of its
+  triangles, and the stiffness takes the smoothed gradient of each
+  quadrilateral (stabilized conforming nodal integration in the form of
+  Puso, Chen, Zywicz and Elmer 2008). A fixed value is weak, by the
+  symmetric method of Nitsche with the penalty 4 (λ + 2μ)/h or 4 d/h. The
+  stress at a point is from the smoothed gradient there.
+- `gfd` fits a Taylor polynomial of order 2 to the `stencil` (default 12)
+  nearest points of each point, with the weight 1/r³. A point on a free
+  edge collocates `(a·n) u - d ∂u/∂n = 0`.
+- The solve is direct: a profile LU factorization in the reverse
+  Cuthill-McKee order of the points.
 
 ### 17.6 Discrete IR
 

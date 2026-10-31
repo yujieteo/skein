@@ -227,11 +227,13 @@ It compares the observed order with the expected order of the method (for
 example 3 in L2 for `cg` with `order: 2` and a smooth solution) and fails
 when the observed order is lower by more than 0.3. The id is `convergence`.
 
-The current tool runs the `fv` and `dg` models, and gives the order of
-each `expect` of two fields from the two finest levels. It does not give
-the order of a `report` yet. The expected order is `order + 1` for `dg`,
-1 for `fv` with `flux: upwind` and advection, and 2 for the other `fv`
-models. The tool stops with an error when the solve of a level does not
+The current tool runs the `fv` and `dg` models and the scalar `rkpm` and
+`gfd` models, and gives the order of each `expect` of two fields from the
+two finest levels. It does not give the order of a `report` yet. The
+expected order is `order + 1` for `dg`, 1 for `fv` with `flux: upwind`
+and advection, and 2 for the other `fv` models, for `rkpm` with
+`basis: linear` and for `gfd`. A level of `rkpm` or `gfd` halves the
+`spacing` of the points. The tool stops with an error when the solve of a level does not
 converge. It writes `.skein/build/<model>/convergence/<level>/` and prints:
 
 ```
