@@ -154,7 +154,7 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 | Option | Commands | Meaning |
 |---|---|---|
 | `--target native\|wasm` | `run`, `build` | native executable (default) or WebAssembly |
-| `--threads n` | `run` | worker threads for assembly and solvers. Default: all hardware threads. With `--study`, the default is `max(1, H / k)` for `H` hardware threads and `k` jobs (spec §20.5). |
+| `--threads n` | `run` | worker threads for assembly and matrix products. Default: all hardware threads. With `--study`, the default is `max(1, H / k)` for `H` hardware threads and `k` jobs (spec §20.5). |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
