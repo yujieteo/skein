@@ -35,11 +35,12 @@ from datetime import date
 from pathlib import Path
 
 REQUESTS = {
-    "cantilever": ("a steel cantilever 1 m x 50 mm x 100 mm, fixed at one "
-                   "end, 1 kN tip load, report the tip deflection"),
-    "plate": ("an aluminium plate 100 mm x 50 mm x 2 mm, plane stress, one "
-              "short edge fixed, 10 MPa tension on the other short edge, "
-              "report the elongation"),
+    "cantilever": ("a steel cantilever 1 m x 50 mm x 100 mm, E 210 GPa, "
+                   "fixed at one end, 1 kN tip load along the 100 mm side, "
+                   "report the tip deflection"),
+    "plate": ("an aluminium plate 100 mm x 50 mm x 2 mm, E 70 GPa, plane "
+              "stress, one short edge fixed, 10 MPa tension on the other "
+              "short edge, report the elongation"),
 }
 REFERENCE_MM = {"cantilever": 0.381, "plate": 0.0143}
 REQUEST = REQUESTS["cantilever"]
@@ -51,7 +52,7 @@ ASK = {
     "skein": "Write the complete Skein model.",
     "inp": ("Write the complete CalculiX input deck. femahoy solves it with "
             "`fh run deck.inp`, which gives the deck to ccx. Put the mesh in "
-            "the deck."),
+            "the deck. Write the nodal displacements with *NODE PRINT."),
 }
 SUFFIX = {"skein": ".skn", "inp": ".inp"}
 ROOT = Path(__file__).resolve().parents[2]
@@ -173,8 +174,6 @@ def one_run(path, stem, n, args, card, request, reference):
                                   str(args.timeout)], work)
             fix = "fh run printed this. Fix the deck."
         (work / f"check-{k}.txt").write_text(output)
-        if status == 0 and k == 1:
-            record["first_try_pass"] = "yes"
         if status == 0 and path == "skein":
             status, output = run([str(args.skein), "run", file.name], work)
             fix = "skein run printed this. Fix the model."
@@ -186,11 +185,13 @@ def one_run(path, stem, n, args, card, request, reference):
             if reference is None or value_ok(path, record["value"],
                                              reference):
                 record["passed"] = "yes"
+                if k == 1:
+                    record["first_try_pass"] = "yes"
                 break
             what = "model" if path == "skein" else "deck"
-            prompt = (f"The run passed, but the result "
-                      f"{record['value'] or '(none)'} is not the expected "
-                      f"value. Fix the {what}.")
+            wrong = (f"the result {record['value']} is not the expected value"
+                     if record["value"] else "no value was recorded")
+            prompt = f"The run passed, but {wrong}. Fix the {what}."
             continue
         prompt = f"{fix}\n\n{output}"
     record["wall_s"] = round(time.monotonic() - start, 1)

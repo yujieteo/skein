@@ -97,17 +97,19 @@ and adds no information to the test.
 
 | Name | Request |
 |---|---|
-| `cantilever` | a steel cantilever 1 m x 50 mm x 100 mm, fixed at one end, 1 kN tip load, report the tip deflection |
-| `plate` | an aluminium plate 100 mm x 50 mm x 2 mm, plane stress, one short edge fixed, 10 MPa tension on the other short edge, report the elongation |
+| `cantilever` | a steel cantilever 1 m x 50 mm x 100 mm, E 210 GPa, fixed at one end, 1 kN tip load along the 100 mm side, report the tip deflection |
+| `plate` | an aluminium plate 100 mm x 50 mm x 2 mm, E 70 GPa, plane stress, one short edge fixed, 10 MPa tension on the other short edge, report the elongation |
 
 The requests are in `REQUESTS` in `scripts/llm/workflow.py`. Euler-Bernoulli
-gives 0.381 mm for the cantilever, and σL/E gives 0.0143 mm for the plate
-with E = 70 GPa. These references are in `REFERENCE_MM`. The gate compares
+gives 0.381 mm for the cantilever, and σL/E gives 0.0143 mm for the plate.
+Each request gives E and the load direction, so each request has one
+correct value. These references are in `REFERENCE_MM`. The gate compares
 the magnitude of the value with the reference, with a 2 percent tolerance.
 The driver converts a Skein value to mm. The units of a deck are unknown,
 so the driver accepts a deck value in mm or in m. If the run passes but the
-value is wrong, the driver tells the model that the result is wrong, and the
-rounds continue.
+value is wrong or missing, the driver tells the model, and the rounds
+continue. The `inp` prompt tells the model to write the displacements with
+`*NODE PRINT`, because the driver reads the value from the .dat file.
 
 ---
 
