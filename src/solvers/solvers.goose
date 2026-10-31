@@ -5,10 +5,11 @@
 // A sparse matrix is CSR in three arrays, as in the runtime
 // (docs/implementation.md §6): `row_start` (n + 1 entries), `col` (the
 // columns of each row in increasing order) and `val`. The solvers keep no
-// state between calls.
+// state between calls, except the workers of a product (pool.goose).
 namespace solvers;
 import .sparse;
 import .ilu;
 import .krylov;
 import .newton;
 import .amg;
+import .pool;

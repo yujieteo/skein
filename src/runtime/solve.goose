@@ -14,6 +14,7 @@ import .fem;
 import .solid;
 import .hex8i;
 import .lane_solvers;
+import solvers from "../solvers";
 
 var fixed: u8[>..] = [];            // 1 for each dof that is held at 0
 var load: f64[>..] = [];            // the external force on each dof
@@ -201,31 +202,80 @@ fn entry(r: i64, c: i64) -> i64 {
 
 var ke: f64[>..] = [];
 
-// Adds the element matrix of each cell into the matrix. False, with a
-// message, if a cell type has no element routine in the registry.
+// Adds the element matrix of each cell into the matrix, on the pool of the
+// threads of the case (src/solvers/pool.goose) if it has more than one
+// thread. False, with a message, if a cell type has no element routine in
+// the registry.
 fn assemble() -> bool {
     guard cell_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("assemble: a mesh and its dofs"); }
     build_pattern();
-    let dpn = dofs_per_node;
-    for c in cell_count() {
-        if !cell_matrix(c, ke) {
-            write_stderr(str("runtime: the cell type ", CELL_NAMES[cell_type[c]], " has no element routine\n"));
-            return false;
+    let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
+    var bad = -1;
+    if workers < 2 {
+        for c in cell_count() {
+            guard cell_matrix(c, ke) else { bad = c; break; };
+            add_cell(c, ke);
         }
-        let nn = cell_start[c + 1] - cell_start[c];
-        let size = dpn * nn;
-        for i in nn {
-            let ni = cell_node(c, i);
-            for j in nn {
-                let nj = cell_node(c, j);
-                for p in dpn {
-                    let e = entry(dpn * ni + p, dpn * nj);
-                    for q in dpn { val[e + q] += ke[size * (dpn * i + p) + dpn * j + q]; }
-                }
+    } else {
+        var largest = 0;
+        for c in cell_count() { largest = max(largest, cell_start[c + 1] - cell_start[c]); }
+        var ids: i64[>..] = [];
+        for w in workers { ids.push(thread_spawn(cell_worker)); }
+        bad = solvers::gather_cells(cell_count(), workers, (dofs_per_node * largest) * (dofs_per_node * largest), add_cells);
+        for id in ids { thread_wait(id); }
+    }
+    if bad >= 0 {
+        write_stderr(str("runtime: the cell type ", CELL_NAMES[cell_type[bad]], " has no element routine\n"));
+        return false;
+    }
+    return true;
+}
+
+// A worker of the assembly: the element matrices of the cells of each
+// task, one after the other. Its copy of the mesh is the copy of the
+// globals at its spawn.
+thread_fn cell_worker() {
+    var data: f64[>..] = [];
+    loop {
+        let job = qget<solvers::CellJob>();
+        guard job.lo >= 0 else { break; };
+        data.clear();
+        var bad = -1;
+        for c in job.lo..job.hi {
+            if bad < 0 && !cell_matrix(c, ke) { bad = c; }
+            data.append(ke);
+        }
+        qput(solvers::CellData { lo: job.lo, bad: bad, data: data[..] });
+    }
+}
+
+// Adds the element matrices of the cells lo <= c < hi, one after the
+// other in m, into the matrix.
+fn add_cells(lo: i64, hi: i64, m: f64[:]) {
+    var at = 0;
+    for c in lo..hi {
+        let size = dofs_per_node * (cell_start[c + 1] - cell_start[c]);
+        add_cell(c, m[at..at + size * size]);
+        at += size * size;
+    }
+}
+
+// Adds the element matrix k of cell c into the matrix.
+fn add_cell(c: i64, k: f64[:]) {
+    let dpn = dofs_per_node;
+    let nn = cell_start[c + 1] - cell_start[c];
+    let size = dpn * nn;
+    guard k.len == size * size else { abort("add_cell: the matrix of the nodes of the cell"); }
+    for i in nn {
+        let ni = cell_node(c, i);
+        for j in nn {
+            let nj = cell_node(c, j);
+            for p in dpn {
+                let e = entry(dpn * ni + p, dpn * nj);
+                for q in dpn { val[e + q] += k[size * (dpn * i + p) + dpn * j + q]; }
             }
         }
     }
-    return true;
 }
 
 // --- the linear solver interface -------------------------------------------------
@@ -241,14 +291,10 @@ fn assemble() -> bool {
 // It solves A x = b from the start value in x, until |b - A x| <= tol |b|,
 // and gives whether it converged and the number of iterations.
 
-// y = K x
+// y = K x, on the workers of solvers::rows_start during a solve.
 fn multiply(x: f64[:], y: f64[:]) {
     guard x.len == y.len && row_start.len == y.len + 1 && col.len == val.len else { abort("multiply: x and y of the size of the matrix"); }
-    for r in y.len {
-        var s = 0.0;
-        for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
-        y[r] = s;
-    }
+    solvers::rows_multiply(row_start, col, val, x, y);
 }
 
 // y = K x on the free dofs, and 0 on the fixed dofs.
@@ -328,7 +374,9 @@ fn solve_free(b: f64[:], x: f64[>..]&) -> bool {
     var converged = false;
     var found = true;
     if solver_name == "cg" && preconditioner_name == "jacobi" {
+        solvers::rows_start(row_start, col, val);
         converged, last_iterations = cg(b, x, CG_TOLERANCE, max_it, free_operator, jacobi);
+        solvers::rows_stop();
     } else {
         found, converged, last_iterations = solvers_solve(solver_name, preconditioner_name, b, x, CG_TOLERANCE, max_it);
     }

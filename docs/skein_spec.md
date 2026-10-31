@@ -1875,7 +1875,9 @@ target does not depend on a WebAssembly back end in Goose.
 
 The plan stores a mesh as flat arrays, which Goose keeps in data stacks with
 no pointers. A cell kernel is a `simd fn`. Assembly runs in worker threads
-over a colouring of the cells, so no two workers write one row.
+on blocks of cells, and the thread of the case adds the cell matrices
+(§20.5). Thus no two threads write one row, and the cells need no
+colouring.
 
 Each generated function has at most 60 lines (rule 4 of the Power of
 Ten). When the kernel of a cell is longer, the emitter splits it into
@@ -1923,9 +1925,9 @@ simd fn k_solid_tet4(x: double3[4], lam: f64, mu: f64, k: f64[144]&) {
 
 thread_fn assemble_worker() {
     loop {
-        let job = qget<runtime::ColourJob>();
-        guard job.first >= 0 else { break; }
-        qput(runtime::assemble_range(job, k_solid_tet4));
+        let job = qget<solvers::CellJob>();
+        guard job.lo >= 0 else { break; }
+        qput(runtime::assemble_cells(job, k_solid_tet4));
     }
 }
 ```
@@ -1940,7 +1942,7 @@ gives the phase of each part.
 
 | Part | Contents |
 |---|---|
-| sparse | CSR matrices, colouring, assembly |
+| sparse | CSR matrices, assembly |
 | linear | CG, GMRES(m), Jacobi, ILU(0) |
 | nonlinear | Newton with line search, load ramps |
 | eigen | LOBPCG (Knyazev 2001) for `modal` and `buckling` |
@@ -2081,7 +2083,7 @@ run.
 ### 20.5 Threads for a case and threads for a study
 
 A machine has `H` hardware threads. A study with `k` workers gives each case
-`max(1, H / k)` threads for assembly and solves. The default `k` is
+`max(1, H / k)` threads for assembly and matrix products. The default `k` is
 `min(H, number of cases)`. `--jobs k` sets it. Reason: cases are
 independent, so parallel cases scale better than parallel assembly in one
 case. But a study with fewer cases than threads still uses all threads.
@@ -2103,9 +2105,32 @@ argument of its spawn. The table is in case order, so the order of the
 runs does not change the results.
 
 On the native target, a case is a separate program. Thus a task of the
-pool is one whole case. A part of the work in a case, for example a colour
-of the assembly or a block of a solver, is not a task of the pool. A
-later phase adds the threads in a case.
+pool is one whole case.
+
+**The threads in a case.** Each case program has a second pool of
+`SKEIN_THREADS` workers for the work in the case. Without
+`SKEIN_THREADS`, it uses all hardware threads. Each worker has its own
+copy of the data that it uses:
+
+- Assembly: a task is a block of 16 cells. A free worker takes the next
+  task from one queue, and gives the cell matrices of its cells. A worker
+  copies the mesh when it starts.
+- A CG solve, and a GMRES(m) solve of flow: each worker holds a block of
+  the rows of the matrix, so the workers together hold one more copy of
+  the matrix. For each product of the matrix and a vector, the thread of
+  the case sends the vector to each worker, and each worker gives the
+  product of its rows. The preconditioners and the other solvers run on
+  the thread of the case.
+
+The thread of the case adds the cell matrices in cell order. Each row of
+a product is the same sum on each number of threads. Thus the results do
+not change with the thread count or with the order of the messages, to
+the last bit. A test compares a run on 1 thread with a run on 4 threads.
+
+The product of the matrix and a vector reads all of the matrix, so the
+memory bandwidth limits the gain of more threads in a solve. The shell
+models (`src/shells`) use a direct skyline solve, which runs on one
+thread.
 
 ### 20.6 The results table
 

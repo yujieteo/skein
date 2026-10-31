@@ -213,8 +213,10 @@ fn run(args: const u8[:][:]) -> i64 {
 
 // The bytes of memory of a case for each dof of its mesh. Reason: a row of
 // the matrix of a 27-node hexahedron mesh holds up to 375 entries of 12
-// bytes, and a case holds about 10 vectors of 8 bytes for each dof.
-let BYTES_PER_DOF = 4600;
+// bytes, the workers of a case with threads hold one more copy of the
+// matrix (spec §20.5), and a case holds about 10 vectors of 8 bytes for
+// each dof.
+let BYTES_PER_DOF = 9100;
 
 // A case record. The scheduler gives it to the worker as its argument, so
 // that the abort of a worker names its case.

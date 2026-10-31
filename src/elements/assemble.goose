@@ -13,6 +13,7 @@ import .mesh;
 import .kernels;   // cell_matrix
 import .csg;
 import .stages;
+import solvers from "../solvers";
 
 let ELASTIC = 0;
 let HEAT = 1;
@@ -211,37 +212,91 @@ fn entry(r: i64, c: i64) -> i64 {
 // The matrix, and the source vector added to `load`.
 var assembled_source: f64[>..] = [];
 
+// The matrix and the source vector, on the pool of the threads of the
+// case (src/solvers/pool.goose) if it has more than one thread.
 fn assemble() {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     let m = per_cell * ncomp;
-    for c in cell_count() {
-        if !is_live(c) { continue; }
-        use_law(c);
-        cell_matrix(c);
-        // A born cell: K_e u_b on its nodes (stages.goose).
-        if born.len > 0 && born[c] != 0 {
-            for r in m {
-                var s = 0.0;
-                for k in m { s += ke[m * r + k] * birth_u[m * c + k]; }
-                fe[r] += s;
-            }
+    let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
+    if workers < 2 {
+        for c in cell_count() {
+            if !is_live(c) { continue; }
+            cell_terms(c);
+            add_cell(c, ke[..m * m], fe[..m]);
         }
-        for i in per_cell {
-            let ni = cell_node(c, i);
-            for p in ncomp { assembled_source[ncomp * ni + p] += fe[ncomp * i + p]; }
-            for j in per_cell {
-                let nj = cell_node(c, j);
-                for p in ncomp {
-                    let e = entry(ncomp * ni + p, ncomp * nj);
-                    for q in ncomp { val[e + q] += ke[m * (ncomp * i + p) + ncomp * j + q]; }
-                }
+        use_law_0();
+        return;
+    }
+    var ids: i64[>..] = [];
+    for w in workers { ids.push(thread_spawn(cell_worker)); }
+    solvers::gather_cells(cell_count(), workers, m * m + m, add_cells);
+    for id in ids { thread_wait(id); }
+}
+
+// The matrix ke and the source fe of cell c, with the law of its region.
+// A born cell adds K_e u_b on its nodes (stages.goose).
+fn cell_terms(c: i64) {
+    let m = per_cell * ncomp;
+    use_law(c);
+    cell_matrix(c);
+    if born.len > 0 && born[c] != 0 {
+        for r in m {
+            var s = 0.0;
+            for k in m { s += ke[m * r + k] * birth_u[m * c + k]; }
+            fe[r] += s;
+        }
+    }
+}
+
+// A worker of the assembly: the matrix and then the source of each cell of
+// each task, one cell after the other. Its copy of the mesh is the copy of
+// the globals at its spawn. A dead cell sends the values of the cell before
+// it, and add_cells skips it.
+thread_fn cell_worker() {
+    let m = per_cell * ncomp;
+    var data: f64[>..] = [];
+    loop {
+        let job = qget<solvers::CellJob>();
+        guard job.lo >= 0 else { break; };
+        data.clear();
+        for c in job.lo..job.hi {
+            if is_live(c) { cell_terms(c); }
+            data.append(ke[..m * m]);
+            data.append(fe[..m]);
+        }
+        qput(solvers::CellData { lo: job.lo, bad: -1, data: data[..] });
+    }
+}
+
+// Adds the matrix and the source of the live cells lo <= c < hi, one cell
+// after the other in d.
+fn add_cells(lo: i64, hi: i64, d: f64[:]) {
+    let m = per_cell * ncomp;
+    for c in lo..hi {
+        if !is_live(c) { continue; }
+        let at = (c - lo) * (m * m + m);
+        add_cell(c, d[at..at + m * m], d[at + m * m..at + m * m + m]);
+    }
+}
+
+// Adds the matrix k and the source f of cell c.
+fn add_cell(c: i64, k: f64[:], f: f64[:]) {
+    let m = per_cell * ncomp;
+    guard k.len == m * m && f.len == m else { abort("add_cell: the matrix and the source of the nodes of a cell"); }
+    for i in per_cell {
+        let ni = cell_node(c, i);
+        for p in ncomp { assembled_source[ncomp * ni + p] += f[ncomp * i + p]; }
+        for j in per_cell {
+            let nj = cell_node(c, j);
+            for p in ncomp {
+                let e = entry(ncomp * ni + p, ncomp * nj);
+                for q in ncomp { val[e + q] += k[m * (ncomp * i + p) + ncomp * j + q]; }
             }
         }
     }
-    use_law_0();
 }
 
 // --- boundary regions --------------------------------------------------------
