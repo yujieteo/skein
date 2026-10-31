@@ -14,13 +14,53 @@ import math;
 namespace solvers;
 import .sparse;
 
+// Applies the rotations 0..k to column k of the Hessenberg matrix,
+// `hk` = its rows 0..k + 1, makes rotation k that sets row k + 1 to zero,
+// and applies it to `g`.
+fn rotate(hk: f64[:], cs: f64[:], sn: f64[:], g: f64[:], k: i64) {
+    guard k >= 0 && hk.len == k + 2 && cs.len > k && sn.len > k && g.len > k + 1 else { abort("rotate: hk has k + 2 entries, cs and sn more than k, g more than k + 1"); }
+    for i in k {
+        let a = hk[i];
+        let c = hk[i + 1];
+        hk[i] = cs[i] * a + sn[i] * c;
+        hk[i + 1] = -sn[i] * a + cs[i] * c;
+    }
+    let a = hk[k];
+    let c = hk[k + 1];
+    let rho = sqrt(a * a + c * c);
+    cs[k] = if rho == 0.0 { 1.0 } else { a / rho };
+    sn[k] = if rho == 0.0 { 0.0 } else { c / rho };
+    hk[k] = rho;
+    hk[k + 1] = 0.0;
+    g[k + 1] = -sn[k] * g[k];
+    g[k] = cs[k] * g[k];
+}
+
+// r = V y for the first k vectors of `basis`, with H y = g by back
+// substitution. H is (m + 1) × m, column-major in `h`.
+fn combine(h: f64[:], g: f64[:], y: f64[:], basis: f64[:], r: f64[:], m: i64, k: i64) {
+    guard k >= 0 && k <= m && h.len == (m + 1) * m && g.len >= k && y.len >= k && basis.len >= k * r.len else { abort("combine: 0 <= k <= m, h is (m + 1) x m, g and y have k entries, basis k vectors"); }
+    let n = r.len;
+    for t in k {
+        let i = k - 1 - t;
+        var s = g[i];
+        for j in i + 1..k { s -= h[(m + 1) * j + i] * y[j]; }
+        y[i] = s / h[(m + 1) * i + i];
+    }
+    for d in n { r[d] = 0.0; }
+    for j in k {
+        let vj = basis[j * n..(j + 1) * n];
+        for d in n { r[d] += y[j] * vj[d]; }
+    }
+}
+
 // Right-preconditioned GMRES with a restart after m iterations (Saad,
 // Algorithm 9.5), with Givens rotations for the least-squares problem and
 // modified Gram-Schmidt for the basis. With the right preconditioner, the
 // residual that it measures is the true residual b - A x.
 fn gmres<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
             rtol: f64, m: i64, max_iterations: i64) -> i64, bool {
-    assert(m > 0);
+    guard m > 0 && x.len == b.len && row_start.len == b.len + 1 && col.len == val.len else { abort("gmres: m > 0, x and b one size, row_start b.len + 1 entries, col and val one size"); }
     let n = b.len;
     var basis: f64[>..] = [];       // m + 1 vectors of n, one after the other
     zeros(basis, (m + 1) * n);
@@ -66,37 +106,13 @@ fn gmres<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
             let wn = norm(w);
             h[hk + k + 1] = wn;
             if wn > 0.0 { for d in n { w[d] /= wn; } }
-            for i in k {
-                let a = h[hk + i];
-                let c = h[hk + i + 1];
-                h[hk + i] = cs[i] * a + sn[i] * c;
-                h[hk + i + 1] = -sn[i] * a + cs[i] * c;
-            }
-            let a = h[hk + k];
-            let c = h[hk + k + 1];
-            let rho = sqrt(a * a + c * c);
-            cs[k] = if rho == 0.0 { 1.0 } else { a / rho };
-            sn[k] = if rho == 0.0 { 0.0 } else { c / rho };
-            h[hk + k] = rho;
-            h[hk + k + 1] = 0.0;
-            g[k + 1] = -sn[k] * g[k];
-            g[k] = cs[k] * g[k];
+            rotate(h[hk..hk + k + 2], cs, sn, g, k);
             k++;
             it++;
             if abs(g[k]) <= target || wn == 0.0 { break; }
         }
-        // x += M⁻¹ V y, with H y = g by back substitution
-        for t in k {
-            let i = k - 1 - t;
-            var s = g[i];
-            for j in i + 1..k { s -= h[(m + 1) * j + i] * y[j]; }
-            y[i] = s / h[(m + 1) * i + i];
-        }
-        for d in n { r[d] = 0.0; }
-        for j in k {
-            let vj = basis[j * n..(j + 1) * n];
-            for d in n { r[d] += y[j] * vj[d]; }
-        }
+        // x += M⁻¹ V y
+        combine(h, g, y, basis, r, m, k);
         P(r[..], z[..]);
         for d in n { x[d] += z[d]; }
     }

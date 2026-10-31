@@ -41,6 +41,13 @@ var val: f64[>..] = [];
 
 fn dof_total() -> i64 { return ncomp * node_count(); }
 
+// Whether each array of the dofs has one entry for each dof, and the
+// matrix, if there is one, one row for each dof.
+fn dofs_sized() -> bool {
+    return fixed.len == dof_total() && prescribed.len == fixed.len && load.len == fixed.len && sol.len == fixed.len &&
+           (row_start.len == 0 || (row_start.len == fixed.len + 1 && assembled_source.len == fixed.len));
+}
+
 fn clear_matrix() {
     row_start.clear();
     col.clear();
@@ -48,7 +55,7 @@ fn clear_matrix() {
 }
 
 fn start_physics(kind: i64, comps: i64) {
-    assert(per_cell > 0);
+    guard per_cell > 0 && (kind == ELASTIC || kind == HEAT) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
     physics = kind;
     ncomp = comps;
     fixed.clear();
@@ -65,6 +72,7 @@ fn start_physics(kind: i64, comps: i64) {
 }
 
 fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
+    guard E > 0.0 && nu > -1.0 && nu < 0.5 && t > 0.0 && assumption >= SOLID_3D && assumption <= PLANE_STRAIN else { abort("set_elastic: E > 0, -1 < nu < 0.5, t > 0 and a plane assumption"); }
     start_physics(ELASTIC, dim);
     plane = if dim == 3 { SOLID_3D } else { assumption };
     thickness = if dim == 3 { 1.0 } else { t };
@@ -75,6 +83,7 @@ fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
 }
 
 fn set_heat(k: f64, q: f64, t: f64) {
+    guard k > 0.0 && t > 0.0 else { abort("set_heat: k > 0 and t > 0"); }
     start_physics(HEAT, 1);
     thickness = if dim == 3 { 1.0 } else { t };
     conductivity = k;
@@ -87,11 +96,15 @@ var shp: f64[10];
 var dref: f64[30];
 var grad: f64[30];      // dN_l / dx_t at grad[3 l + t]
 
-fn cell_node(c: i64, l: i64) -> i64 { return conn[per_cell * c + l]; }
+fn cell_node(c: i64, l: i64) -> i64 {
+    guard c >= 0 && c < cell_count() && l >= 0 && l < per_cell else { abort("cell_node: c < cell_count() and l < per_cell"); }
+    return conn[per_cell * c + l];
+}
 
 // Fills shp and grad at reference point xi of cell c, and gives the
 // determinant of the Jacobian.
 fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
+    guard c >= 0 && c < cell_count() && per_cell <= shp.len && 3 * per_cell <= grad.len else { abort("cell_geometry: c < cell_count() and shp and grad hold the nodes of a cell"); }
     shape(dim, order, xi, shp, dref);
     // jac[3 r + t] = dx_t / dxi_r
     var jac: f64[9] = [0.0; 9];
@@ -145,6 +158,7 @@ var fe: f64[30];
 // f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.
 fn cell_matrix(c: i64) {
     let m = per_cell * ncomp;
+    guard c >= 0 && c < cell_count() && physics >= 0 && m <= fe.len && m * m <= ke.len else { abort("cell_matrix: c < cell_count(), a physics, and ke and fe hold the dofs of a cell"); }
     for &v in ke { v = 0.0; }
     for &v in fe { v = 0.0; }
     for qp in quad_count(dim) {
@@ -181,6 +195,7 @@ fn cell_matrix(c: i64) {
 // Two nodes are neighbours if they share a cell. The ncomp rows of a node
 // have the same columns, in increasing order.
 fn build_pattern() {
+    guard per_cell > 0 && ncomp > 0 else { abort("build_pattern: a mesh and a physics"); }
     clear_matrix();
     let nn = node_count();
     var keys: i64[>..] = [];
@@ -214,6 +229,7 @@ fn build_pattern() {
 
 // The position of column c in row r.
 fn entry(r: i64, c: i64) -> i64 {
+    guard r >= 0 && r + 1 < row_start.len && c >= 0 && c + 1 < row_start.len else { abort("entry: r and c are rows of the matrix"); }
     var lo = row_start[r];
     var hi = row_start[r + 1] - 1;
     while lo < hi {
@@ -228,6 +244,7 @@ fn entry(r: i64, c: i64) -> i64 {
 var assembled_source: f64[>..] = [];
 
 fn assemble() {
+    guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
@@ -264,6 +281,7 @@ struct Part {
 var region: Part[..8] = [];
 
 fn on_part(n: i64, k: i64) -> bool {
+    guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
     let tol = geometry_tolerance();
     let p = region[k];
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol; }
@@ -273,6 +291,7 @@ fn on_part(n: i64, k: i64) -> bool {
 }
 
 fn on_region(n: i64) -> bool {
+    guard n >= 0 && n < node_count() else { abort("on_region: n < node_count()"); }
     for k in region.len { if on_part(n, k) { return true; } }
     return false;
 }
@@ -286,6 +305,7 @@ fn region_node_count() -> i64 {
 // Holds component `comp` (or all components if comp < 0) of each node of
 // the region at `v`.
 fn fix_region(comp: i64, v: f64) {
+    guard physics >= 0 && comp >= -1 && comp < ncomp && dofs_sized() else { abort("fix_region: a physics, -1 <= comp < ncomp and the arrays of the dofs"); }
     for n in node_count() {
         if !on_region(n) { continue; }
         for p in ncomp {
@@ -299,6 +319,7 @@ fn fix_region(comp: i64, v: f64) {
 // Adds ∫ g Ni dA over the facets of the region to component p of node i,
 // for g = gv[p].
 fn add_region_load(gv: f64[3]) {
+    guard physics >= 0 && ncomp <= gv.len && dofs_sized() else { abort("add_region_load: a physics and the arrays of the dofs"); }
     let fd = dim - 1;
     let fnodes = node_count_of(fd, order);
     var fn_shape: f64[10] = [0.0; 10];
@@ -356,6 +377,7 @@ fn clear_conditions() {
 // them): K u - f on the fixed dofs of the region. With equilibrium, the
 // reactions and the applied loads sum to 0.
 fn region_reaction() -> f64[3] {
+    guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("region_reaction: a physics and the arrays of the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
     guard row_start.len > 0 else { return sum; }
     for n in node_count() {
@@ -373,6 +395,7 @@ fn region_reaction() -> f64[3] {
 
 // The sum of the reactions on all fixed dofs.
 fn all_reaction() -> f64[3] {
+    guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("all_reaction: a physics and the arrays of the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
@@ -391,6 +414,7 @@ fn all_reaction() -> f64[3] {
 // model. The second is the size of the round-off of K u, which is not 0
 // when one nonzero value at all fixed dofs drives nothing.
 fn load_magnitude() -> f64 {
+    guard dofs_sized() else { abort("load_magnitude: the arrays of the dofs"); }
     var sum = 0.0;
     for v in load { sum += abs(v); }
     for v in assembled_source { sum += abs(v); }
@@ -410,6 +434,7 @@ fn load_magnitude() -> f64 {
 
 // The sum of the applied loads and sources, by component.
 fn total_load() -> f64[3] {
+    guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("total_load: a physics and the arrays of the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
     for v, d in load { sum[d % ncomp] += v; }
     for v, d in assembled_source { sum[d % ncomp] += v; }

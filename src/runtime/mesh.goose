@@ -32,27 +32,30 @@ let FACE_NAMES = ["x0", "x1", "y0", "y1", "z0", "z1"];
 let ANNULUS_FACE_NAMES = ["r0", "r1", "t0", "t1", "z0", "z1"];
 
 fn node_at(i: i64, j: i64, k: i64) -> i64 {
+    guard i >= 0 && j >= 0 && k >= 0 && i < lattice[0] && j < lattice[1] && k < lattice[2] else { abort("node_at: a point of the lattice"); }
     return i + lattice[0] * (j + lattice[1] * k);
 }
 
 fn box_cell(cx: i64, cy: i64, cz: i64) -> i64 {
+    guard cx >= 0 && cy >= 0 && cz >= 0 && cx < cells[0] && cy < cells[1] && cz < cells[2] else { abort("box_cell: a cell of the lattice"); }
     return cx + cells[0] * (cy + cells[1] * cz);
 }
 
 // t is HEX27 or HEX8I.
 fn build_box(t: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
              nx: i64, ny: i64, nz: i64) {
+    guard t == HEX27 || t == HEX8I else { abort("build_box: t is HEX27 or HEX8I"); }
     build_lattice(t, false, 0.0, 0.0, [x0, y0, z0], [x1, y1, z1], nx, ny, nz);
 }
 
 fn build_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, z1: f64,
                  nr: i64, nt: i64, nz: i64) {
-    assert(r0 > 0.0);
+    guard r0 > 0.0 else { abort("build_annulus: r0 > 0"); }
     build_lattice(HEX27, true, cx, cy, [r0, t0, z0], [r1, t1, z1], nr, nt, nz);
 }
 
 fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
-    assert(nx > 0 && ny > 0 && nz > 0);
+    guard nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && hi[2] > lo[2] else { abort("build_lattice: counts > 0 and hi > lo on each axis"); }
     let per = if t == HEX27 { 2 } else { 1 };   // lattice steps along a cell edge
     mesh_clear();
     var spacing: f64[3] = [0.0, 0.0, 0.0];   // the size of a cell in q
@@ -75,7 +78,6 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
             }
         }
     }
-    let names = if annulus { ANNULUS_FACE_NAMES } else { FACE_NAMES };
     var nodes: i64[27] = [0; 27];
     for cz in nz {
         for cy in ny {
@@ -92,6 +94,16 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
             }
         }
     }
+    add_lattice_face_sets(annulus);
+    young = 0.0;
+    poisson = 0.0;
+    clear_dofs();
+}
+
+// The node set and the face set of each of the 6 faces of the lattice.
+fn add_lattice_face_sets(annulus: bool) {
+    guard cells[0] > 0 && cells[1] > 0 && cells[2] > 0 else { abort("add_lattice_face_sets: a lattice"); }
+    let names = if annulus { ANNULUS_FACE_NAMES } else { FACE_NAMES };
     var members: i64[>..] = [];
     for axis in 3 {
         let a, b = other_axes(axis);
@@ -116,21 +128,20 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
             add_face_set(names[2 * axis + side], members);
         }
     }
-    young = 0.0;
-    poisson = 0.0;
-    clear_dofs();
 }
 
 // The node at position (s, t) of the lattice of the face that is normal to
 // `axis` at lattice index `f`. s and t run over the two other axes in the
 // sequence x, y, z.
 fn face_node(axis: i64, f: i64, s: i64, t: i64) -> i64 {
+    guard axis >= 0 && axis < 3 else { abort("face_node: 0 <= axis < 3"); }
     if axis == 0 { return node_at(f, s, t); }
     if axis == 1 { return node_at(s, f, t); }
     return node_at(s, t, f);
 }
 
 fn other_axes(axis: i64) -> i64, i64 {
+    guard axis >= 0 && axis < 3 else { abort("other_axes: 0 <= axis < 3"); }
     if axis == 0 { return 1, 2; }
     if axis == 1 { return 0, 2; }
     return 0, 1;

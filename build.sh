@@ -2,8 +2,13 @@
 # Builds and tests the skein compiler.
 #
 #   ./build.sh          build build/skein
-#   ./build.sh test     build, then run each src/<part>/test.goose and
-#                       check the generated C (scripts/generated_c.sh)
+#   ./build.sh test     build, then build each src/<part>/test.goose with
+#                       the checks of goose --debug (Power of Ten rule 10),
+#                       run it, and check the generated C
+#                       (scripts/generated_c.sh). That script runs each
+#                       model, whose solves check rule 3, and skein run
+#                       checks rule 7. Then scripts/power_of_ten.sh checks
+#                       rules 1, 4 and 5.
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.
@@ -22,7 +27,7 @@ run_tests() {
     status=0
     for test in "$root"/src/*/test.goose; do
         part=$(basename "$(dirname "$test")")
-        if ! "$goose" build -q "$test" -o "$out/test_$part"; then
+        if ! "$goose" build -q --debug "$test" -o "$out/test_$part"; then
             echo "FAIL $part: the test does not build"
             status=1
             continue

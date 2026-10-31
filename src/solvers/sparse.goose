@@ -5,6 +5,7 @@ namespace solvers;
 
 // y = A x
 fn multiply(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[:]) {
+    guard row_start.len == y.len + 1 && col.len == val.len && x.len == y.len else { abort("multiply: row_start has y.len + 1 entries, col and val one size, x and y one size"); }
     for r in y.len {
         var s = 0.0;
         for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
@@ -13,6 +14,7 @@ fn multiply(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[:]) {
 }
 
 fn dot(a: f64[:], b: f64[:]) -> f64 {
+    guard a.len == b.len else { abort("dot: a and b have one size"); }
     var s = 0.0;
     for v, i in a { s += v * b[i]; }
     return s;
@@ -22,12 +24,14 @@ fn norm(a: f64[:]) -> f64 { return sqrt(dot(a, a)); }
 
 // Sets `v` to n zeros.
 fn zeros(v: f64[>..]&, n: i64) {
+    guard n >= 0 else { abort("zeros: n >= 0"); }
     v.clear();
     for i in n { v.push(0.0); }
 }
 
 // The position of column c in row r, or -1 if row r has no column c.
 fn entry(row_start: i64[:], col: i32[:], r: i64, c: i64) -> i64 {
+    guard r >= 0 && r + 1 < row_start.len && row_start[row_start.len - 1] == col.len else { abort("entry: 0 <= r < rows, and row_start ends at col.len"); }
     var lo = row_start[r];
     var hi = row_start[r + 1] - 1;
     while lo < hi {
@@ -42,6 +46,7 @@ fn entry(row_start: i64[:], col: i32[:], r: i64, c: i64) -> i64 {
 // those of the identity, and b[d] becomes 0. The matrix stays symmetric
 // if it was, so that CG and GMRES solve the same system.
 fn constrain(row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:], b: f64[:]) {
+    guard row_start.len == b.len + 1 && fixed.len == b.len && col.len == val.len else { abort("constrain: row_start has b.len + 1 entries, fixed has b.len, col and val one size"); }
     for r in b.len {
         for e in row_start[r]..row_start[r + 1] {
             let c = col[e];

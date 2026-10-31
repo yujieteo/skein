@@ -627,6 +627,8 @@ fn main() {
     test_corpus("samples");
     test_corpus("examples");
     test_corpus("examples/femahoy");
+    test_corpus("examples/elements");
+    test_corpus("examples/shells");
     if failures > 0 {
         print(failures, " failed");
         exit(1);

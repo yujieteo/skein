@@ -17,6 +17,7 @@ let VTK_TYPES: i64[10] = [5, 22, 10, 24, 12, 12, 9, 3, 12, 9];
 // The local nodes of sub-hexahedron (i, j, k) of a hex27 cell, in the VTK
 // order of a hexahedron.
 fn hex27_sub_cell(out: u8[>..]&, c: i64, i: i64, j: i64, k: i64) {
+    guard c >= 0 && c < cell_count() && cell_type[c] as i64 == HEX27 && i >= 0 && j >= 0 && k >= 0 && i < 2 && j < 2 && k < 2 else { abort("hex27_sub_cell: a hex27 cell and a sub-cell"); }
     for dk in 2 {
         let z = 9 * (k + dk);
         format(out, cell_node(c, i + 3 * j + z), " ", cell_node(c, i + 1 + 3 * j + z), " ",
@@ -25,22 +26,10 @@ fn hex27_sub_cell(out: u8[>..]&, c: i64, i: i64, j: i64, k: i64) {
     out.push('\n');
 }
 
-fn write_vtu_file(path: const u8[:]) -> bool {
-    let nodes = node_count();
-    var cells = 0;
-    for t in cell_type { cells += if t as i64 == HEX27 { 8 } else { 1 }; }
-    var out: u8[>..] = [];
-    format(out, """
-        <?xml version="1.0"?>
-        <VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian">
-        <UnstructuredGrid>
-        """, "\n");
-    format(out, "<Piece NumberOfPoints=\"", nodes, "\" NumberOfCells=\"", cells, "\">\n");
-    out.append("<Points>\n<DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">\n");
-    for n in nodes {
-        format(out, coords[3 * n], " ", coords[3 * n + 1], " ", coords[3 * n + 2], "\n");
-    }
-    out.append("</DataArray>\n</Points>\n<Cells>\n");
+// The DataArrays of the cells of the mesh: a 27-node hexahedron is 8
+// hexahedra of 8 nodes.
+fn write_vtu_cells(out: u8[>..]&) {
+    guard cell_start.len == cell_count() + 1 else { abort("write_vtu_cells: the cell arrays agree"); }
     out.append("<DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\n");
     for c in cell_count() {
         if cell_type[c] as i64 == HEX27 {
@@ -70,6 +59,26 @@ fn write_vtu_file(path: const u8[:]) -> bool {
         let t = cell_type[c] as i64;
         for p in (if t == HEX27 { 8 } else { 1 }) { format(out, VTK_TYPES[t], "\n"); }
     }
+}
+
+fn write_vtu_file(path: const u8[:]) -> bool {
+    guard disp.len == dof_total() else { abort("write_vtu_file: the dofs of the mesh"); }
+    let nodes = node_count();
+    var cells = 0;
+    for t in cell_type { cells += if t as i64 == HEX27 { 8 } else { 1 }; }
+    var out: u8[>..] = [];
+    format(out, """
+        <?xml version="1.0"?>
+        <VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian">
+        <UnstructuredGrid>
+        """, "\n");
+    format(out, "<Piece NumberOfPoints=\"", nodes, "\" NumberOfCells=\"", cells, "\">\n");
+    out.append("<Points>\n<DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">\n");
+    for n in nodes {
+        format(out, coords[3 * n], " ", coords[3 * n + 1], " ", coords[3 * n + 2], "\n");
+    }
+    out.append("</DataArray>\n</Points>\n<Cells>\n");
+    write_vtu_cells(out);
     out.append("</DataArray>\n</Cells>\n<PointData>\n");
     for f in point_fields {
         format(out, "<DataArray type=\"Float64\" Name=\"", f.name, "\" NumberOfComponents=\"", f.count,

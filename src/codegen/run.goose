@@ -16,6 +16,8 @@ import elements.gen;   // skein-elements: the simplex models
 import shells.gen;     // skein-shells: the shell models
 import check from "../check";
 import .study;
+import .split;
+import .status;
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -92,6 +94,12 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
         elements_gen::generate(runtime_path, results_dir, share, program);
     } else {
         generate(runtime_path, results_dir, share, program);
+    }
+    split_long_functions(program);
+    let at = unchecked_status(program);
+    if at > 0 {
+        write_stderr(str("skein run: internal fault: line ", at, " of the program drops the status of a solver call. Please report it.\n"));
+        exit(3);
     }
 }
 

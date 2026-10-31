@@ -9,6 +9,7 @@ import .sparse;
 // Factors A into `lu`, and puts the position of each diagonal entry in
 // `diag`. Returns false if a row has no diagonal entry or a pivot is 0.
 fn ilu0(row_start: i64[:], col: i32[:], val: f64[:], lu: f64[>..]&, diag: i64[>..]&) -> bool {
+    guard row_start.len > 0 && col.len == val.len && row_start[row_start.len - 1] == col.len else { abort("ilu0: row_start ends at col.len, and col and val have one size"); }
     let n = row_start.len - 1;
     lu.clear();
     for v in val { lu.push(v); }
@@ -42,6 +43,7 @@ fn ilu0(row_start: i64[:], col: i32[:], val: f64[:], lu: f64[>..]&, diag: i64[>.
 
 // z = (LU)⁻¹ r: a forward and a back substitution.
 fn ilu0_apply(row_start: i64[:], col: i32[:], lu: f64[:], diag: i64[:], r: f64[:], z: f64[:]) {
+    guard row_start.len == r.len + 1 && z.len == r.len && diag.len == r.len && lu.len == col.len else { abort("ilu0_apply: row_start has r.len + 1 entries, z and diag r.len, lu col.len"); }
     let n = r.len;
     for i in n {
         var s = r[i];

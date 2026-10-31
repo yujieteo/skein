@@ -18,6 +18,7 @@ var beam_len = 0.0;
 
 // The local stiffness in kb and the transformation in tb of beam b.
 fn beam_local(b: i64) {
+    guard b >= 0 && b < beams.len && beams[b].section >= 0 && beams[b].section < beam_sections.len else { abort("beam_local: 0 <= b < beams.len, and its section < beam_sections.len"); }
     let bm = beams[b];
     let s = beam_sections[bm.section];
     let o = bm.offset;
@@ -59,6 +60,7 @@ fn beam_local(b: i64) {
 }
 
 fn set_pair(i: i64, j: i64, k: f64) {
+    guard min(i, j) >= 0 && max(i, j) < 12 else { abort("set_pair: 0 <= i, j < 12"); }
     kb[12 * i + i] += k;
     kb[12 * j + j] += k;
     kb[12 * i + j] -= k;
@@ -67,6 +69,7 @@ fn set_pair(i: i64, j: i64, k: f64) {
 
 // The bending terms of dofs (w, θ) at both nodes. sign is 1 when θ = w'.
 fn bend(w: i64, t: i64, ei: f64, phi: f64, l: f64, sign: f64) {
+    guard min(w, t) >= 0 && max(w, t) < 6 && l > 0.0 else { abort("bend: 0 <= w, t < 6, and l > 0"); }
     let f = ei / (l * (1.0 + phi));
     let dofs = [w, t, w + 6, t + 6];
     let a = 12.0 * f / (l * l);
@@ -81,6 +84,7 @@ fn bend(w: i64, t: i64, ei: f64, phi: f64, l: f64, sign: f64) {
 
 // The stiffness of beam b in global dofs: tbᵀ kb tb, into ke[0..144].
 fn beam_stiffness(b: i64, out: f64[:]) {
+    guard b >= 0 && b < beams.len && out.len == 144 else { abort("beam_stiffness: 0 <= b < beams.len, and out has 144 entries"); }
     beam_local(b);
     var kt: f64[144] = [0.0; 144];
     for i in 12 {
@@ -102,6 +106,7 @@ fn beam_stiffness(b: i64, out: f64[:]) {
 // The local end forces of beam b: kb tb q. Index 6 is the axial force Nx
 // at node 1 (positive in tension).
 fn beam_forces(b: i64) -> f64[12] {
+    guard b >= 0 && b < beams.len && disp.len == dof_count() else { abort("beam_forces: 0 <= b < beams.len, and a solution for each dof"); }
     beam_local(b);
     var q: f64[12] = [0.0; 12];
     for l in 2 {

@@ -415,8 +415,8 @@ fn test_b787(nx: i64, nt: i64) {
     for d in r.len { if d % 6 < 3 { sum[d % 6] += r[d]; } }
     // The membrane stress at P (x = 4.8768 m, θ = 140 deg): the mean of the
     // 4 cells at the node.
-    let ip = (4.8768 / dx + 0.5) as i64;
-    let jp = (140.0 / 180.0 * nt + 0.5) as i64;
+    let ip = floor(4.8768 / dx + 0.5) as i64;
+    let jp = floor(140.0 / 180.0 * nt + 0.5) as i64;
     let tp = radians(140.0);
     let et: f64[3] = [0.0, cos(tp), -sin(tp)];
     var hoop = 0.0;

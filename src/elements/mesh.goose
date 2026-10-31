@@ -24,7 +24,10 @@ var bbox_hi: f64[3] = [0.0, 0.0, 0.0];
 fn node_count() -> i64 { return coords.len / 3; }
 fn cell_count() -> i64 { return if per_cell > 0 { conn.len / per_cell } else { 0 }; }
 
-fn node_x(n: i64, t: i64) -> f64 { return coords[3 * n + t]; }
+fn node_x(n: i64, t: i64) -> f64 {
+    guard n >= 0 && n < node_count() && t >= 0 && t < 3 else { abort("node_x: n < node_count() and t < 3"); }
+    return coords[3 * n + t];
+}
 
 // The tolerance of an equality on a coordinate: 1e-6 of the size of the
 // bounding box (spec §8.2).
@@ -41,7 +44,10 @@ fn geometry_tolerance() -> f64 {
 // index i + lat[0] (j + lat[1] k).
 var lat: i64[3] = [1, 1, 1];
 
-fn lattice_node(i: i64, j: i64, k: i64) -> i64 { return i + lat[0] * (j + lat[1] * k); }
+fn lattice_node(i: i64, j: i64, k: i64) -> i64 {
+    guard i >= 0 && i < lat[0] && j >= 0 && j < lat[1] && k >= 0 && k < lat[2] else { abort("lattice_node: (i, j, k) in the lattice"); }
+    return i + lat[0] * (j + lat[1] * k);
+}
 
 // The kind of map from the lattice to the geometry.
 let MAP_BOX = 0;
@@ -54,8 +60,7 @@ var hole_r = 0.0;
 var radial: f64[>..] = [];      // the parameter 0 to 1 of each radial vertex row
 
 fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
-    assert(d == 2 || d == 3);
-    assert(ord == 1 || ord == 2);
+    guard (d == 2 || d == 3) && (ord == 1 || ord == 2) else { abort("start_mesh: d is 2 or 3 and ord 1 or 2"); }
     dim = d;
     order = ord;
     per_cell = node_count_of(d, ord);
@@ -69,6 +74,7 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
 
 // The position of lattice point (i, j, k), which may be a midpoint.
 fn map_point(i: i64, j: i64, k: i64) -> f64[3] {
+    guard i >= 0 && i < lat[0] && j >= 0 && j < lat[1] && k >= 0 && k < lat[2] && lat[0] > 1 && lat[1] > 1 && (map_kind == MAP_BOX || j / order < radial.len) else { abort("map_point: (i, j, k) in the lattice and a radial row for j"); }
     let s = i as f64 / (lat[0] - 1);
     let w = if lat[2] > 1 { k as f64 / (lat[2] - 1) } else { 0.0 };
     let z = map_lo[2] + w * (map_hi[2] - map_lo[2]);
@@ -91,6 +97,7 @@ fn map_point(i: i64, j: i64, k: i64) -> f64[3] {
 // edge, so each cell edge is straight, except on the arc of a hole, where
 // the node is on the arc.
 fn place_nodes() {
+    guard lat[0] > 1 && lat[1] > 1 && lat[2] >= 1 && coords.len == 0 else { abort("place_nodes: a lattice of cells and no node yet"); }
     for k in lat[2] {
         for j in lat[1] {
             for i in lat[0] {
@@ -115,6 +122,7 @@ fn place_nodes() {
 
 // The signed size of a simplex from its vertex nodes.
 fn signed_size(v: i64[4]) -> f64 {
+    guard dim == 2 || dim == 3 else { abort("signed_size: dim is 2 or 3"); }
     var e: f64[9] = [0.0; 9];
     for r in dim {
         for t in 3 { e[3 * r + t] = node_x(v[r + 1], t) - node_x(v[0], t); }
@@ -127,6 +135,7 @@ fn signed_size(v: i64[4]) -> f64 {
 // Adds the simplex with the vertices at lattice offsets `off` (3 per
 // vertex, in cell units) from lattice cell corner (ci, cj, ck).
 fn add_simplex(ci: i64, cj: i64, ck: i64, off: i64[12]) {
+    guard ci >= 0 && cj >= 0 && ck >= 0 && order * (ci + 1) < lat[0] && order * (cj + 1) < lat[1] && (dim == 2 || order * (ck + 1) < lat[2]) else { abort("add_simplex: cell (ci, cj, ck) in the lattice"); }
     var p: i64[12] = [0; 12];
     var v: i64[4] = [0; 4];
     for a in dim + 1 {
@@ -156,6 +165,7 @@ fn add_simplex(ci: i64, cj: i64, ck: i64, off: i64[12]) {
 let KUHN: i64[3][6] = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
 
 fn cut_cells(nx: i64, ny: i64, nz: i64) {
+    guard nx > 0 && ny > 0 && nz > 0 && lat[0] == order * nx + 1 && lat[1] == order * ny + 1 else { abort("cut_cells: nx, ny and nz > 0 and the lattice of these cells"); }
     for ck in nz {
         for cj in ny {
             for ci in nx {
@@ -178,6 +188,7 @@ fn cut_cells(nx: i64, ny: i64, nz: i64) {
 }
 
 fn build_lattice(nx: i64, ny: i64, nz: i64) {
+    guard nx > 0 && ny > 0 && nz > 0 && per_cell > 0 else { abort("build_lattice: nx, ny and nz > 0 after start_mesh"); }
     lat = [order * nx + 1, order * ny + 1, if dim == 3 { order * nz + 1 } else { 1 }];
     place_nodes();
     cut_cells(nx, ny, if dim == 3 { nz } else { 1 });
@@ -187,7 +198,7 @@ fn build_lattice(nx: i64, ny: i64, nz: i64) {
 
 // A box (3D) or a rectangle (2D, z ignored) with nx × ny × nz lattice cells.
 fn build_box(d: i64, ord: i64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
-    assert(nx > 0 && ny > 0 && nz > 0);
+    guard nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && (d == 2 || hi[2] > lo[2]) else { abort("build_box: nx, ny and nz > 0 and hi > lo"); }
     start_mesh(d, ord, lo, hi);
     map_kind = MAP_BOX;
     build_lattice(nx, ny, nz);
@@ -199,6 +210,7 @@ fn build_box(d: i64, ord: i64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64
 let GRADE = 1.25;
 
 fn grade_rows(span: f64, fine: f64, size: f64) {
+    guard span > 0.0 && fine > 0.0 && size > 0.0 else { abort("grade_rows: span, fine and size > 0"); }
     var cells: f64[>..] = [];
     var h = min(fine, size);
     var total = 0.0;
@@ -221,7 +233,7 @@ fn grade_rows(span: f64, fine: f64, size: f64) {
 // plate with a round hole. The cells have the size `fine` at the hole and
 // grow to `size`.
 fn build_hole(d: i64, ord: i64, lo: f64[3], hi: f64[3], r: f64, size: f64, fine: f64) {
-    assert(r > 0.0 && r < min(hi[0] - lo[0], hi[1] - lo[1]));
+    guard r > 0.0 && r < min(hi[0] - lo[0], hi[1] - lo[1]) else { abort("build_hole: 0 < r < the sides of the plate"); }
     start_mesh(d, ord, lo, hi);
     map_kind = MAP_HOLE;
     hole_r = r;
@@ -241,7 +253,7 @@ fn build_hole(d: i64, ord: i64, lo: f64[3], hi: f64[3], r: f64, size: f64, fine:
 // nodes `xyz` (x, y and z of each node). For order 2 it adds a node at the
 // midpoint of each edge, once for the cells that share the edge.
 fn build_simplices(d: i64, ord: i64, xyz: f64[:], vertices: i64[:]) {
-    assert(xyz.len % 3 == 0 && vertices.len % (d + 1) == 0);
+    guard xyz.len >= 3 && xyz.len % 3 == 0 && vertices.len % (d + 1) == 0 && (vertices.len == 0 || (min(vertices) >= 0 && max(vertices) < xyz.len / 3)) else { abort("build_simplices: xyz holds the nodes and vertices d + 1 nodes of xyz for each cell"); }
     var lo: f64[3] = [0.0, 0.0, 0.0];
     var hi: f64[3] = [0.0, 0.0, 0.0];
     for t in 3 {

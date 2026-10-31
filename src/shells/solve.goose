@@ -24,6 +24,7 @@ var last_seconds = 0.0;
 var singular_dof = -1;          // the first dof with no stiffness, or -1
 
 fn cell_dofs(c: i64, beam_cell: bool) -> i64[24], i64 {
+    guard c >= 0 && c < (if beam_cell { beams.len } else { shells.len }) else { abort("cell_dofs: 0 <= c < the count of beams or of shells"); }
     var d: i64[24] = [0; 24];
     let nodes = if beam_cell { 2 } else { 4 };
     for l in nodes {
@@ -34,6 +35,7 @@ fn cell_dofs(c: i64, beam_cell: bool) -> i64[24], i64 {
 }
 
 fn profile() {
+    guard shells.len + beams.len > 0 && fixed.len == dof_count() && load.len == fixed.len && disp.len == fixed.len else { abort("profile: a cell, and a fixed, load and solution value for each dof"); }
     let n = dof_count();
     top.clear();
     for j in n { top.push(j); }
@@ -56,9 +58,13 @@ fn profile() {
     for i in s { sky.push(0.0); }
 }
 
-fn at(i: i64, j: i64) -> i64 { return start[j] + i - top[j]; }
+fn at(i: i64, j: i64) -> i64 {
+    guard j >= 0 && j < top.len && i >= top[j] && i <= j else { abort("at: (i, j) is in the profile"); }
+    return start[j] + i - top[j];
+}
 
 fn scatter(d: i64[24], m: i64, k: f64[:]) {
+    guard (m == 12 || m == 24) && k.len >= m * m && top.len == fixed.len else { abort("scatter: m is 12 or 24, k has m x m entries, and the profile is made"); }
     for a in m {
         let i = d[a];
         if fixed[i] != 0 { continue; }
@@ -80,6 +86,7 @@ fn fix_free_nodes() {
 }
 
 fn assemble() {
+    guard directors.len == coords.len && fixed.len == dof_count() && load.len == fixed.len && disp.len == fixed.len else { abort("assemble: a director, fixed, load and solution value for each node and dof"); }
     mean_directors();
     fix_free_nodes();
     profile();
@@ -99,6 +106,7 @@ fn assemble() {
 
 // sky = L D Lᵀ in place: the diagonal holds D, column j above it holds Lᵀ.
 fn factor() -> bool {
+    guard top.len == dof_count() && start.len == top.len else { abort("factor: the profile has each dof"); }
     let n = dof_count();
     singular_dof = -1;
     for j in n {
@@ -128,6 +136,7 @@ fn factor() -> bool {
 }
 
 fn substitute() {
+    guard top.len == dof_count() && start.len == top.len && fixed.len == dof_count() && load.len == fixed.len && disp.len == fixed.len else { abort("substitute: the profile, the loads and the solution have each dof"); }
     let n = dof_count();
     for j in n {
         disp[j] = if fixed[j] != 0 { 0.0 } else { load[j] };
@@ -150,8 +159,10 @@ fn substitute() {
 fn solve() -> bool {
     let t0 = clock();
     assemble();
+    let sizes = state_sizes();
     let ok = factor();
     if ok { substitute(); }
+    guard state_sizes() == sizes else { abort("solve: a solve grows no array of the state (rule 3)"); }
     last_seconds = clock() - t0;
     return ok;
 }
@@ -159,6 +170,7 @@ fn solve() -> bool {
 // The reaction forces: K u - f on the fixed dofs, from each cell again.
 // Returns the reaction of each dof (0 on a free dof).
 fn reactions() -> f64[>..] {
+    guard fixed.len == dof_count() && load.len == fixed.len && disp.len == fixed.len else { abort("reactions: a fixed, load and solution value for each dof"); }
     var r: f64[>..] = [];
     for d in dof_count() { r.push(0.0); }
     var kbeam: f64[144] = [0.0; 144];
@@ -184,6 +196,7 @@ fn reactions() -> f64[>..] {
 
 // The sum of the reaction forces r (from reactions) on the nodes.
 fn reaction_sum(r: f64[:], nodes: i64[:]) -> f64, f64, f64 {
+    guard r.len == dof_count() else { abort("reaction_sum: r has each dof"); }
     var s: f64[3] = [0.0, 0.0, 0.0];
     for n in nodes { for k in 3 { s[k] += r[6 * n + k]; } }
     return s[0], s[1], s[2];
@@ -192,9 +205,17 @@ fn reaction_sum(r: f64[:], nodes: i64[:]) -> f64, f64, f64 {
 // The sizes of the loads and of the reactions, for the limit of the
 // equilibrium check.
 fn load_scale(r: f64[:]) -> f64 {
+    guard r.len == load.len else { abort("load_scale: r and load have one size"); }
     var s = 0.0;
     for d in load.len { if d % 6 < 3 { s += abs(load[d]) + abs(r[d]); } }
     return s;
 }
 
 fn profile_size() -> i64 { return sky.len; }
+
+// The length of each array of the state of the package. A solve grows none
+// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
+fn state_sizes() -> i64[14] {
+    return [coords.len, directors.len, shells.len, beams.len, beam_sections.len, fixed.len, load.len,
+            disp.len, grids.len, sections.len, plies.len, top.len, start.len, sky.len];
+}

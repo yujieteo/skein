@@ -19,6 +19,7 @@ let CG_TOLERANCE = 1.0e-12;   // the residual relative to the larger of the load
 
 // y = K x
 fn multiply(x: f64[:], y: f64[:]) {
+    guard x.len == y.len && row_start.len == y.len + 1 && col.len == val.len else { abort("multiply: x and y have one entry for each row of the matrix"); }
     for r in y.len {
         var s = 0.0;
         for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
@@ -27,19 +28,21 @@ fn multiply(x: f64[:], y: f64[:]) {
 }
 
 fn dot(a: f64[:], b: f64[:]) -> f64 {
+    guard a.len == b.len else { abort("dot: a.len == b.len"); }
     var s = 0.0;
     for v, i in a { s += v * b[i]; }
     return s;
 }
 
 fn zeros(n: i64) -> f64[>..] {
+    guard n >= 0 else { abort("zeros: n >= 0"); }
     var v: f64[>..] = [];
     for i in n { v.push(0.0); }
     return v;
 }
 
 fn solve_system() -> bool {
-    assert(physics >= 0);
+    guard physics >= 0 && dofs_sized() else { abort("solve_system: a physics and the arrays of the dofs"); }
     let start = clock();
     assemble();
     let n = sol.len;
@@ -48,6 +51,7 @@ fn solve_system() -> bool {
     var p = zeros(n);
     var q = zeros(n);
     var inv_diag = zeros(n);
+    let sizes = state_sizes();
     for d in n { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
     multiply(sol, q);
     var f2 = 0.0;
@@ -85,7 +89,15 @@ fn solve_system() -> bool {
         rz = rz_new;
         for d in n { p[d] = z[d] + beta * p[d]; }
     }
+    guard state_sizes() == sizes else { abort("solve_system: a solve grows no array of the state (rule 3)"); }
     last_iterations = it;
     last_seconds = clock() - start;
     return converged;
+}
+
+// The length of each array of the state of the package. A solve grows none
+// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
+fn state_sizes() -> i64[11] {
+    return [coords.len, conn.len, radial.len, fixed.len, prescribed.len, load.len, sol.len, row_start.len,
+            col.len, val.len, assembled_source.len];
 }

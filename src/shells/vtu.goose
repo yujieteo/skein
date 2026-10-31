@@ -7,6 +7,7 @@ namespace shells;
 import .model;
 
 fn write_vtu(path: const u8[:], w: const u8[:], theta: const u8[:]) -> bool {
+    guard disp.len == dof_count() else { abort("write_vtu: a solution for each dof"); }
     let nodes = node_count();
     var out: u8[>..] = [];
     format(out, """

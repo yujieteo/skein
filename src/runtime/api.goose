@@ -103,18 +103,21 @@ fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
 
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
+    guard length > 0.0 && size > 0.0 else { abort("cells_for: length > 0 and size > 0"); }
     return max(ceil(length / size - 1.0e-9) as i64, 1);
 }
 
 // A linear isotropic material for all cells: Young's modulus E and
 // Poisson's ratio nu.
 fn material(E: f64, nu: f64) {
+    guard E > 0.0 && nu > -1.0 && nu < 0.5 else { abort("material: E > 0 and -1 < nu < 0.5"); }
     young = E;
     poisson = nu;
 }
 
 // Holds all dofs at 0 on the nodes of a node set.
 fn fix(set: const u8[:]) -> bool {
+    guard node_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("fix: a mesh and its dofs"); }
     let s = find_set(set, false);
     guard s >= 0 else { return false; }
     fix_set(s, 0, dofs_per_node);
@@ -124,6 +127,7 @@ fn fix(set: const u8[:]) -> bool {
 // Holds dof c (X, Y or Z for a solid) at 0 on the nodes of a node set, as
 // a plane of symmetry does.
 fn fix_component(set: const u8[:], c: i64) -> bool {
+    guard node_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("fix_component: a mesh and its dofs"); }
     let s = find_set(set, false);
     guard s >= 0 && c >= 0 && c < dofs_per_node else { return false; }
     fix_set(s, c, c + 1);
@@ -132,6 +136,7 @@ fn fix_component(set: const u8[:], c: i64) -> bool {
 
 // Adds a uniform traction (force per area) (tx, ty, tz) on a face set.
 fn traction(set: const u8[:], tx: f64, ty: f64, tz: f64) -> bool {
+    guard node_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("traction: a mesh and its dofs"); }
     let s = find_set(set, true);
     guard s >= 0 else { return false; }
     return add_set_traction(s, tx, ty, tz, 0.0);
@@ -140,6 +145,7 @@ fn traction(set: const u8[:], tx: f64, ty: f64, tz: f64) -> bool {
 // Adds the traction s n on a face set, with n the unit normal out of the
 // body. An internal pressure p is s = -p.
 fn normal_traction(set: const u8[:], s: f64) -> bool {
+    guard node_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("normal_traction: a mesh and its dofs"); }
     let fs = find_set(set, true);
     guard fs >= 0 else { return false; }
     return add_set_traction(fs, 0.0, 0.0, 0.0, s);
@@ -147,6 +153,7 @@ fn normal_traction(set: const u8[:], s: f64) -> bool {
 
 // The area of a face set, or 0 if the mesh has no face set of that name.
 fn face_area(set: const u8[:]) -> f64 {
+    guard node_count() > 0 else { abort("face_area: a mesh"); }
     let s = find_set(set, true);
     guard s >= 0 else { return 0.0; }
     return set_area(s);
@@ -194,6 +201,7 @@ fn stress_at(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
 
 // The sum of the reaction forces on the fixed nodes of a node set.
 fn reaction(set: const u8[:]) -> f64, f64, f64 {
+    guard node_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("reaction: a mesh and its dofs"); }
     let s = find_set(set, false);
     guard s >= 0 else { return 0.0, 0.0, 0.0; }
     return set_reaction(s);
@@ -202,6 +210,7 @@ fn reaction(set: const u8[:]) -> f64, f64, f64 {
 // Whether the node sets a and b have a node in common. False if the mesh
 // has no node set of one of the names.
 fn sets_share_nodes(a: const u8[:], b: const u8[:]) -> bool {
+    guard node_count() > 0 else { abort("sets_share_nodes: a mesh"); }
     let sa = find_set(a, false);
     let sb = find_set(b, false);
     guard sa >= 0 && sb >= 0 else { return false; }
