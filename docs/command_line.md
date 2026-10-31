@@ -505,8 +505,10 @@ those of Emil Kowalski and of the site. Every button of the report (`auto`,
 `fit`, `Open VTU`, the chips of the source) is a `.button`. The file input is
 hidden and its label is a `.button`. The selects, the number input, the range
 slider and the checkboxes take the rules of the site tool
-`public/play/neurons/style.css`: the `--chip` fill, the `--line` border, the
-44 px height, 16 px text, `accent-color` and the outline of 2 px in `--accent`.
+`public/play/goosestrike/style.css` (kowalski.css has no rule for them): the
+`--bg` fill, the `--line` border, the 44 px height, 16 px text, `accent-color:
+var(--ink)` and the outline of 2 px in `--accent`. The buttons of the controls
+have the 44 px height of the site tool buttons.
 
 The code colours are those of the code blocks of emilkowal.ski, which use the
 Shiki theme `github-light` (read from the computed styles of

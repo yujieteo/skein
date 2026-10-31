@@ -57,9 +57,11 @@ a.region, a.param { text-decoration-style: dotted; }
 /* inputs, as in public/play/neurons/style.css */
 a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 input, select { font: inherit; color: var(--ink); }
-select, input[type=number] { min-height: var(--tap); background: var(--chip); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 1rem; }
+/* as the box Set speed of public/play/goosestrike/style.css */
+select, input[type=number] { min-height: var(--tap); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; font-size: 1rem; font-variant-numeric: tabular-nums; }
+#controls button, #controls label.file { min-height: var(--tap); }
 input.num { width: 7rem; }
-input[type=range] { height: var(--tap); margin: 0; accent-color: var(--accent); }
+input[type=range] { height: var(--tap); margin: 0; accent-color: var(--ink); }
 input[type=checkbox] { accent-color: var(--ink); }
 /* the file input is hidden and its label is a .button */
 label.file { display: inline-block; }
