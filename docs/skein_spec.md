@@ -2084,13 +2084,12 @@ run.
 
 A machine has `H` hardware threads. A study runs at most `k` cases at a
 time. The default `k` is `min(H, number of cases)`, and `--jobs k` sets
-it. Each case that has not started has 1 thread when two of these
-cases can run at a time and the ledger (below) admits two of the
-largest of them, and `H` threads otherwise. A case on `H` threads runs alone. The runner applies this
-rule again each time its estimate changes: after the probe, and after
-each case ends. Reason: on sample 01, 16 threads took 25% more memory
-than 1 thread and the same time, so parallel cases scale better than
-parallel assembly in one case.
+it. When a case starts and no case runs, it has `H` threads if no
+second case can join it: there is no next case, `k` is 1, or the ledger
+(below) does not admit the next case beside it. Such a case runs alone.
+Each other case has 1 thread. Reason: on sample 01, 16 threads took 25%
+more memory than 1 thread and the same time, so parallel cases scale
+better than parallel assembly in one case.
 
 **Memory.** Each solve checks its memory after the sparsity pattern of
 its matrix and before the values (`src/solvers/memory.goose`). The
@@ -2112,11 +2111,9 @@ in the budget less the estimates of the running cases, or if no case
 runs. Reason: a case reaches its peak late, at the setup of its solver,
 so the free memory at its start does not show what the running cases
 take later. Before the first case, the runner probes the case with the
-most dofs: its program prints the estimate of its first solve, on 1
-thread and on `H` threads, and stops. The estimate is the 1-thread
-estimate if the cases get 1 thread, and the `H`-thread estimate if not.
-The estimate of each case is the bytes for each dof of the probe times
-its dofs. When the model has more than one step, a later step can take
+most dofs: its program prints the estimate of its first solve on 1
+thread and stops. The estimate of each case is the bytes for each dof
+of the probe times its dofs. When the model has more than one step, a later step can take
 more memory than the first solve: then one case runs at a time until a
 case gives its measured peak. Each case writes its measured peak
 (`peak_mb`, from VmHWM, the `getrusage` peak of Linux) in its records,

@@ -285,21 +285,10 @@ thread_fn task_worker(job: CaseJob) {
     qput(e);
 }
 
-// The threads of each case of `jobs` that has not started, with at most
-// `limit` cases at a time (spec §20.5): 1 when two of them can run at a
-// time and the ledger admits two of the largest of them, and all hardware
-// threads otherwise.
-fn thread_rule(l: Ledger, jobs: CaseJob[:], dofs: i64[:], limit: i64) -> i64 {
-    var most = 0;
-    for j in jobs { most = max(most, dofs[j.case]); }
-    var two = l;
-    two.used = case_need(l, most);
-    return if min(limit, jobs.len) > 1 && admits(two, two.used, 1) { 1 } else { max(1, hardware_threads()) };
-}
-
 // Runs `jobs` in case order, at most `limit` at a time, each when the
-// ledger admits its estimate from `dofs[c]` (spec §20.5), on the threads
-// of thread_rule. A case on more than 1 thread runs alone. It writes the
+// ledger admits its estimate from `dofs[c]` (spec §20.5). A case that
+// starts when no case runs, and that no second case can join, has all
+// hardware threads and runs alone. Each other case has 1 thread. It writes the
 // ledger on stderr, learns from the peak of each case, and gives the end
 // of each case, in case order. It appends the outputs to `outs`.
 fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[>..] {
@@ -313,20 +302,26 @@ fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[
     var next = 0;
     var running = 0;
     var ended = 0;
-    var threads = thread_rule(l, jobs, dofs, limit);
+    var wide = false;   // a case on more than 1 thread runs
     loop {
-        while next < jobs.len && running < limit {
+        while next < jobs.len && running < limit && !wide {
             let c = jobs[next].case;
             let n = case_need(l, dofs[c]);
-            guard running == 0 || threads == 1 && admits(l, n, running) else { break; };
+            guard running == 0 || admits(l, n, running) else { break; };
+            var job = jobs[next];
+            job.threads = 1;
+            var two = l;
+            two.used += n;
+            if running == 0 && (next + 1 == jobs.len || limit < 2 || !admits(two, case_need(l, dofs[jobs[next + 1].case]), 1)) {
+                job.threads = max(1, hardware_threads());
+                wide = true;
+            }
             need[next] = n;
             l.used += n;
             running++;
             l.most = max(l.most, running);
-            write_stderr(str("skein run: case ", c + 1, " starts (threads: ", threads, "): about ", mb(n), " MB, ", mb(l.used), " of ", mb(l.budget),
+            write_stderr(str("skein run: case ", c + 1, " starts (threads: ", job.threads, "): about ", mb(n), " MB, ", mb(l.used), " of ", mb(l.budget),
                              " MB of the budget in use\n"));
-            var job = jobs[next];
-            job.threads = threads;
             ids.push(thread_spawn(task_worker, job));
             next++;
         }
@@ -336,7 +331,7 @@ fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[
         running--;
         l.used -= need[i];
         learn(l, e.case, dofs[e.case], e.peak);
-        threads = thread_rule(l, jobs[next..], dofs, limit);
+        wide = false;
         write_stderr(str("skein run: case ", e.case + 1, " ended: peak ", mb(e.peak), " MB\n"));
         if e.ended { ended++; } else {
             ends[i].ended = false;
@@ -357,17 +352,16 @@ fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[
 fn mb(bytes: f64) -> i64 { return round(bytes / 1.0e6) as! i64; }
 
 // Builds the program of `job` and runs it with SKEIN_MEMORY_PROBE, so that
-// it prints the estimate of its first solve and stops. It gives the
-// estimates in bytes on 1 thread and on all hardware threads, or 0. The
-// job then needs no build.
-fn probe_case(job: CaseJob&) -> f64, f64 {
-    guard shell(job.build) == 0 else { return 0.0, 0.0; };
+// it prints the estimate of its first solve on 1 thread and stops. It
+// gives the estimate in bytes, or 0. The job then needs no build.
+fn probe_case(job: CaseJob&) -> f64 {
+    guard shell(job.build) == 0 else { return 0.0; };
     set4096(job.build, "true");
     let probe = str(job.out, ".probe");
-    guard shell(case_command(job, "SKEIN_MEMORY_PROBE=1 ", probe)) == 0 else { return 0.0, 0.0; };
+    guard shell(case_command(job, "SKEIN_MEMORY_PROBE=1 ", probe)) == 0 else { return 0.0; };
     var out: u8[>..] = [];
     read_file(probe, out);
-    return max(0.0, toon_number(out, "one_thread_bytes:")), max(0.0, toon_number(out, "estimate_bytes:"));
+    return max(0.0, toon_number(out, "estimate_bytes:"));
 }
 
 fn set4096(into: u8[..4096]&, s: u8[:]) {
@@ -449,29 +443,25 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         case_jobs.push(job);
     }
     // At most min(H, number of cases) cases at a time, or --jobs, and each
-    // when the ledger admits it, on the threads of thread_rule (spec
-    // §20.5). Reason: on sample 01, 16 threads took 25% more memory than 1
-    // thread, and the same time.
+    // when the ledger admits it (spec §20.5). A case has 1 thread when a
+    // second case can run beside it. Reason: on sample 01, 16 threads took
+    // 25% more memory than 1 thread, and the same time.
     let h = max(1, hardware_threads());
     let limit = min(if jobs > 0 { jobs } else { h }, case_count);
     let free = solvers::free_bytes();
     var l = new_ledger(solvers::BUDGET_SHARE * free);
     l.partial = most_steps > 1;
-    for &job in case_jobs {
-        job.threads = h;
-        job.budget = l.budget as! i64;
-    }
+    for &job in case_jobs { job.budget = l.budget as! i64; }
     outs.clear();
     var first = if share.stages > 0 { 1 } else { 0 };
     if l.budget > 0.0 && limit > 1 && first == 0 {
         // The case with the most dofs, which reads no stage of case 1.
         var big = 0;
         for d, c in dofs { if d > dofs[big] { big = c; } }
-        let one, many = probe_case(case_jobs[big]);
-        if one > 0.0 {
-            l.per_dof = one / dofs[big];
+        let estimate = probe_case(case_jobs[big]);
+        if estimate > 0.0 {
+            l.per_dof = estimate / dofs[big];
             l.source = big;
-            if thread_rule(l, case_jobs, dofs, limit) > 1 { l.per_dof = many / dofs[big]; }
         }
     }
     if l.budget > 0.0 {
