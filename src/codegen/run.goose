@@ -286,12 +286,15 @@ thread_fn task_worker(job: CaseJob) {
 }
 
 // The threads of each case of `jobs` that has not started, with at most
-// `limit` cases at a time (spec §20.5): 1 when the ledger admits two of
-// the largest of them at a time, and all hardware threads otherwise.
+// `limit` cases at a time (spec §20.5): 1 when two of them can run at a
+// time and the ledger admits two of the largest of them, and all hardware
+// threads otherwise.
 fn thread_rule(l: Ledger, jobs: CaseJob[:], dofs: i64[:], limit: i64) -> i64 {
     var most = 0;
     for j in jobs { most = max(most, dofs[j.case]); }
-    return if limit > 1 && (l.budget <= 0.0 || l.budget >= 2.0 * case_need(l, most)) { 1 } else { max(1, hardware_threads()) };
+    var two = l;
+    two.used = case_need(l, most);
+    return if min(limit, jobs.len) > 1 && admits(two, two.used, 1) { 1 } else { max(1, hardware_threads()) };
 }
 
 // Runs `jobs` in case order, at most `limit` at a time, each when the

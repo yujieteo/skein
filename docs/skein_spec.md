@@ -2084,9 +2084,9 @@ run.
 
 A machine has `H` hardware threads. A study runs at most `k` cases at a
 time. The default `k` is `min(H, number of cases)`, and `--jobs k` sets
-it. Each case that has not started has 1 thread when the ledger (below)
-admits two of the largest of these cases at a time, and `H` threads
-otherwise. A case on `H` threads runs alone. The runner applies this
+it. Each case that has not started has 1 thread when two of these
+cases can run at a time and the ledger (below) admits two of the
+largest of them, and `H` threads otherwise. A case on `H` threads runs alone. The runner applies this
 rule again each time its estimate changes: after the probe, and after
 each case ends. Reason: on sample 01, 16 threads took 25% more memory
 than 1 thread and the same time, so parallel cases scale better than
