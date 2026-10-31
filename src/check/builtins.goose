@@ -393,6 +393,25 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(LENGTH, 1);
     }
+    if name == "when" {
+        // when(f, value): the first time at which the scalar `f` gets to `value` (spec §14.5).
+        guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) else { return any_ty(); }
+        if is_num(t0) && t0.rank != 0 {
+            error(tok, "rank_mismatch", str("when takes a scalar, not ", ty_str(t0)), "take when of a scalar, for example norm(u)");
+            return any_ty();
+        }
+        sum_ty(first_tok(a.node[1]), t0, t1, ",");
+        if t1.varying {
+            error(first_tok(a.node[1]), "not_constant", "the value of when must be a constant, but it varies in space or time",
+                  "use a value that does not depend on x, y, z, t or a field");
+        }
+        let proc = if in_expect { last_proc } else { cur_proc };
+        if proc != "transient" || (!in_expect && !in_report) {
+            error(tok, "when_step", "when needs a transient step",
+                  "use when in a report of a transient step, or in an expect after one");
+        }
+        return num_ty(TIME, 0);
+    }
     // Complex parts (gap G7).
     if name == "re" || name == "imag" || name == "arg" || name == "conj" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }

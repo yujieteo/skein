@@ -390,6 +390,8 @@ in the order of the file.
 `re`, `imag`, `abs`, `arg` and `conj` take the parts of a `Complex` value.
 `eigenvalue(k)` is the natural frequency f = ω/(2π) in Hz of mode `k` of a
 `modal` step, or the load factor of a `buckling` step.
+`when(f, value)` is the first time at which the scalar `f` gets to `value`
+in a `transient` step.
 
 Spec: [§14](skein_spec.md#14-steps).
 

@@ -1445,7 +1445,7 @@ writes the solver, the iterations and the restart to stderr.
 file at the end of the step, or each `every k` time steps. `report e` prints
 a scalar or a vector to the run log in TOON. Functions for `report`:
 `reaction(r)`, `max(f, r)`, `min(f, r)`, `argmax(f, r)`, `integral(f, r)`,
-`mean(f, r)`, `eigenvalue(k)`.
+`mean(f, r)`, `eigenvalue(k)`, `when(f, value)`.
 
 `argmax(f, r)` is the point of `r` where the scalar `f` has its largest
 value, a `Vector<Length>` [`rank_mismatch`]. If `r` comes from a `pattern`
@@ -1462,6 +1462,22 @@ report. In an `expect`, the step is the last `modal` or `buckling` step. A
 use in another place, or with no such step, is an error
 [`eigenvalue_step`]. A `k` outside `1..count` of the step is also an error
 [`eigenvalue_step`].
+
+`when(f, value)` is the first time at which the scalar `f` gets to
+`value`, a `Time` [`rank_mismatch`]. `value` has the dimension of `f`
+[`unit_mismatch`], and it must be a constant [`not_constant`]. The run
+finds the first time step at which `f` crosses `value`, and interpolates
+linearly in that time step. If `f` never gets to `value`, an `expect` of it
+fails. `when` is valid only in a `report` of a `transient` step, or in an
+`expect` whose last step is `transient` [`when_step`].
+
+```skein
+let front: Length = max(x + u.x, column)
+expect z2: when(front, 2.11*a) - when(front, 1.44*a) == 0.2 s within 7%
+```
+
+Reason: a dam break test gives the times at which the front of the water
+gets to positions on the floor (femahoy gap G11).
 
 `report cd = expr` gives the value a name. A study (§20) uses the name as
 the column of its results table. A report with no name gets its source
@@ -2205,7 +2221,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
-| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)` | reports (§14.5) |
+| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)` | reports (§14.5) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 
