@@ -264,7 +264,9 @@ A case that fails gets the status `failed` and the diagnostic
 
 The `skein build` command and its options below are planned.
 Current `skein run` writes `.skein/build/<model>/main.goose` and calls
-Goose to build a native executable. Set `GOOSE` to select the compiler.
+Goose to build a native executable. A run with `--set` builds in
+`.skein/build/<model>/set/<words>/`, so that runs with other values do
+not share the program. Set `GOOSE` to select the compiler.
 `./build.sh` builds the Skein compiler itself.
 
 ```
