@@ -605,6 +605,18 @@ unit. Each row must have one value for each column [`table_row_width`].
 the column type is expected in `expect`, `output`, `report` and in the
 point of an `at`. The statement then applies to each row (§15.3).
 
+`sum(expr)` is the sum of the scalar or tensor expression `expr` over the
+rows of a table. It has the type of `expr`, and it is one value, not a
+list. `expr` must use a column of a table [`sum_no_column`], and
+all its columns must come from one table [`sum_mixed_tables`].
+
+```skein
+let sxy: Real = sum(obs.x*obs.y)
+```
+
+Reason: a least squares fit states its normal equations with sums over
+the rows of the data (femahoy gap G5).
+
 ### 5.7 Assignability
 
 A value of type `A` may initialize a declaration of type `B` only when `A`
@@ -2186,6 +2198,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `hooke(E, nu, eps)` | isotropic linear elastic stress |
 | `elasticity(E, nu)` | the isotropic elasticity tensor, a `Tensor4` |
 | `interp(xs, ys, x)` | piecewise linear function from two table columns |
+| `sum(expr)` | the sum of `expr` over the rows of a table (§5.6) |
 | `von_mises(sigma)`, `tresca(sigma)`, `principal(sigma)` | stress measures |
 | `fourier(k, T)` | heat flux `−k grad(T)` |
 | `abs`, `sqrt`, `exp`, `ln`, `sin`, `cos`, `tan`, `tanh`, `atan`, `atan2(y, x)`, `min`, `max`, `pi` | scalar math |

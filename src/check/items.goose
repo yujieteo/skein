@@ -210,6 +210,7 @@ fn check_value_decl(n: i64, kind: i64) -> i64 {
     if is_any(ty) || (ty.kind == K_RESULTS && val.kind == K_RESULTS) { ty = val; }
     ty.varying = val.varying;
     ty.list = val.list;
+    ty.table = val.table;
     use_dim(decl);
     let s = declare(kind, k.tok, n, ty);
     let v, ok = const_value(value);

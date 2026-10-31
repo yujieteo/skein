@@ -16,7 +16,7 @@ import .typeexpr;
 // them [`duplicate_name`].
 let BUILTIN_FNS = [
     "sym", "skew", "tr", "det", "inv", "transpose", "dev", "dot", "cross", "outer", "norm",
-    "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "von_mises", "tresca",
+    "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "sum", "von_mises", "tresca",
     "principal", "fourier", "abs", "sqrt", "exp", "ln", "sin", "cos", "tan", "tanh", "atan",
     "atan2", "min", "max", "diff", "reaction", "integral", "mean", "results", "boundary",
     "grad", "div", "curl", "lap", "ddt", "ddt2", "re", "imag", "arg", "conj", "eigenvalue",
@@ -543,6 +543,7 @@ fn member_ty(tok: i64, obj: i64, t: Ty) -> Ty {
                 if syntax::nodes[c].kind == syntax::N_COLUMN && tok_text(syntax::nodes[c].tok) == name {
                     var ct = type_of(syntax::nodes[c].first, false);
                     ct.list = true;
+                    ct.table = s;
                     return ct;
                 }
                 c = syntax::nodes[c].next;
@@ -596,7 +597,7 @@ fn user_call_ty(tok: i64, s: i64, a: Args) -> Ty {
     }
     var r = syms[s].ty;
     r.varying = args_varying(a);
-    for i in min(a.count, MAX_ARGS) { r.list = r.list || a.ty[i].list; }
+    for i in min(a.count, MAX_ARGS) { r.list = r.list || a.ty[i].list; r.table = rows(r.table, a.ty[i].table); }
     return r;
 }
 
@@ -764,6 +765,7 @@ fn at_ty(tok: i64, f: Ty, p: Ty) -> Ty {
     var r = f;
     r.varying = false;
     r.list = f.list || p.list;
+    r.table = rows(f.table, p.table);
     return r;
 }
 
@@ -773,6 +775,7 @@ fn bare_in_unit(t: Ty, unit: i64) -> Ty {
     let ut, s = unit_ty(unit);
     var r = ut;
     r.list = t.list;
+    r.table = t.table;
     return r;
 }
 

@@ -40,13 +40,16 @@ struct Ty {
     aux: i64,         // the results index of a K_RESULTS, else -1
     zero: bool,       // the literal 0 with no unit (spec §5.7, exception 1)
     list: bool,       // a table column, or an expression of one (spec §5.6)
+    table: i64,       // the symbol of the table of a list, -1 for none, MIXED for more than one
     varying: bool,    // depends on x, y, z, t or a field (spec §7.6)
     percent: bool,    // a percent literal
 }
 
+let MIXED = -2;
+
 fn any_ty() -> Ty {
     return Ty { kind: K_ANY, dim: NO_DIM, rank: 0, num: NS_REAL, base: B_REAL, geo: 0, aux: -1,
-                zero: false, list: false, varying: false, percent: false };
+                zero: false, list: false, table: -1, varying: false, percent: false };
 }
 
 fn kind_ty(kind: i64) -> Ty {
@@ -134,7 +137,15 @@ fn joined(t: Ty, a: Ty, b: Ty) -> Ty {
     var r = t;
     r.varying = a.varying || b.varying;
     r.list = a.list || b.list;
+    r.table = rows(a.table, b.table);
     return r;
+}
+
+// The table of a value that uses the columns of tables `a` and `b`.
+fn rows(a: i64, b: i64) -> i64 {
+    if a == -1 || a == b { return b; }
+    if b == -1 { return a; }
+    return MIXED;
 }
 
 fn rank_name(rank: i64) -> const u8[:] {

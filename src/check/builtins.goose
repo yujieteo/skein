@@ -113,7 +113,7 @@ fn same(t: Ty, varying: bool) -> Ty {
 fn real_scalar(a: Args) -> Ty {
     var r = base_ty(B_REAL);
     r.varying = args_varying(a);
-    for i in min(a.count, MAX_ARGS) { r.list = r.list || a.ty[i].list; }
+    for i in min(a.count, MAX_ARGS) { r.list = r.list || a.ty[i].list; r.table = rows(r.table, a.ty[i].table); }
     return r;
 }
 
@@ -123,10 +123,15 @@ fn builtin_ty(tok: i64, name: u8[:], a: Args) -> Ty {
     let t0 = if a.count > 0 { a.ty[0] } else { any_ty() };
     let t1 = if a.count > 1 { a.ty[1] } else { any_ty() };
     var listed = false;
-    for i in min(a.count, MAX_ARGS) { listed = listed || a.ty[i].list; }
+    var table = -1;
+    for i in min(a.count, MAX_ARGS) { listed = listed || a.ty[i].list; table = rows(table, a.ty[i].table); }
     var r = builtin_ty_inner(tok, name, a, t0, t1, v);
-    // laminate sums over the plies of its layup column (spec §4.3).
-    if is_num(r) && name != "laminate" { r.list = r.list || listed; }
+    // laminate sums over the plies of its layup column (spec §4.3), sum
+    // over the rows of a table (§5.6), and interp reads its columns at x.
+    if is_num(r) && name != "laminate" && name != "sum" && name != "interp" {
+        r.list = r.list || listed;
+        r.table = rows(r.table, table);
+    }
     return r;
 }
 
@@ -214,7 +219,8 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     if name == "interp" {
         guard arity(tok, name, a, 3, 3) && !is_any(t1) else { return any_ty(); }
         var r = same(t1, v);
-        r.list = false;
+        r.list = a.ty[2].list;
+        r.table = a.ty[2].table;
         r.varying = a.ty[2].varying;
         let x = a.ty[0];
         if is_num(x) && is_num(a.ty[2]) && !a.ty[2].zero && x.dim != a.ty[2].dim {
@@ -222,6 +228,21 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
                   str("interp reads x of dimension ", dim_str(a.ty[2].dim), " in a column of ", dim_str(x.dim)),
                   "give x the dimension of the first column");
         }
+        return r;
+    }
+    if name == "sum" {
+        guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }
+        guard t0.list else {
+            error(tok, "sum_no_column", "sum takes an expression of a table column", "use a column, for example sum(t.col)");
+            return any_ty();
+        }
+        guard t0.table != MIXED else {
+            error(tok, "sum_mixed_tables", "sum takes the columns of one table", "sum over each table on its own");
+            return any_ty();
+        }
+        var r = same(t0, v);
+        r.list = false;
+        r.table = -1;
         return r;
     }
     if name == "fourier" {
