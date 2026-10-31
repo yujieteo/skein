@@ -108,6 +108,7 @@ golden files again and read the diff:
 | `src/shells/` | shell, beam and laminate solver routines, plus code generation for cylindrical shells |
 | `src/transient/` | transient heat solver routines |
 | `src/flow/` | stabilized Stokes and Navier-Stokes solver routines, plus code generation for 2D flow |
+| `src/meshless/` | point clouds, `rkpm` and `gfd` for one scalar unknown and 2D elasticity, and their direct solve |
 
 ## Why Skein
 

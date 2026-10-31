@@ -233,8 +233,9 @@ two finest levels. It does not give the order of a `report` yet. The
 expected order is `order + 1` for `dg`, 1 for `fv` with `flux: upwind`
 and advection, and 2 for the other `fv` models, for `rkpm` with
 `basis: linear` and for `gfd`. A level of `rkpm` or `gfd` halves the
-`spacing` of the points. The tool stops with an error when the solve of a level does not
-converge. It writes `.skein/build/<model>/convergence/<level>/` and prints:
+`spacing` of the points. The tool stops with an error when the solve of a
+level does not converge. It writes
+`.skein/build/<model>/convergence/<level>/` and prints:
 
 ```
 convergence[3]{expect,level,cells,error,order}:
