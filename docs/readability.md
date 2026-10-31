@@ -390,6 +390,8 @@ The output folder gets the answer, the checker output and the `skein run`
 output of each round, and
 `results-skein.toon` or `results-inp.toon`.
 `--request plate` picks the other request of [llm_test.md §3](llm_test.md#3-the-requests).
+With `--request`, the results file is `results-<path>-<request>.toon`,
+for example `results-skein-plate.toon`.
 
 ### 4.1 Results
 
