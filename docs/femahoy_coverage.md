@@ -104,6 +104,18 @@ gives the roadmap phase that closes the gap:
   `crack_tip`, and the mesh of
   [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)
   uses it.
+- Phase 2 closes G24. Spec [§8.1](skein_spec.md#81-distance-functions)
+  states `fill`, the region inside a `spline` and the line from its last
+  point to its first. The airfoils of
+  [naca0012_ladson.skn](../examples/femahoy/naca0012_ladson.skn) and
+  [naca23012_flap.skn](../examples/femahoy/naca23012_flap.skn) and the
+  hole of
+  [shape_hole_biaxial.skn](../examples/femahoy/shape_hole_biaxial.skn) use
+  it.
+- Phase 2 closes G25. Spec [§20.2](skein_spec.md#202-study) gives
+  `minimize` the arguments `xtol` and `step`, and the study of
+  [shape_hole_biaxial.skn](../examples/femahoy/shape_hole_biaxial.skn)
+  uses them.
 - Phase 2 closes G19. Spec [§9.1](skein_spec.md#91-mesh) and
   [§9.2](skein_spec.md#92-mesh-generation) allow `hex` and `quad` on a
   union of boxes or rects, with a grid plane on each face of each box or
@@ -186,8 +198,8 @@ result, or the mesh or the solve is less efficient.
 | G21 | The stable increment of an explicit step, chosen by the solver. | `validation/cases/dynamics-bar-step/job.inp:14` | `transient` needs `dt` (§14.2). The model gives a `dt` below the stable limit. | Accept `dt: stable` with an explicit scheme. | 2, closed by [§14.2](skein_spec.md#142-procedures) |
 | G22 | Finite-strain J2 plasticity with a multiplicative split (plastic strain up to 3.24). | `validation/cases/taylor-bar-impact/job.inp:12` | §10.6 states `plastic` with an additive plastic strain. Under `finite_strain` this is a different law at large strain. | One rule in §10.6: under `finite_strain`, the `strain` state is `Fp`, the elastic part is `defgrad(u)*inv(Fp)`, and the return map is the exponential map. | 5 |
 | G23 | The stick stiffness of penalty friction. It changes the reference traction by 0.34 % to 3.4 %. | `validation/cases/contact-cattaneo/job.inp:15` | `contact` has only `friction`, `enforce` and `stiffness` (§12.4). | A `contact` setting `stick_stiffness`. | 5 |
-| G24 | Smooth closed shapes from points or parameters: the airfoil splines, a superellipse hole. | `validation/cases/naca0012-ladson/a4.04/system/blockMeshDict:67`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:9` | `spline` gives a `Curve`, and no function makes a `Surface` from a closed curve (§8.1). The models use polygons. | A geometry function `fill(c: Curve)` for a closed curve. | 2 |
-| G25 | The stop rule and the first simplex of Nelder-Mead. The case tolerance comes from the stop rule. | `validation/cases/shape-hole-biaxial/derivation.md:50` | `minimize` has only `objective`, `method` and `max_cases` (§20.2). | `minimize` arguments `xtol` and `step`. | 2 |
+| G24 | Smooth closed shapes from points or parameters: the airfoil splines, a superellipse hole. | `validation/cases/naca0012-ladson/a4.04/system/blockMeshDict:67`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:9` | `spline` gives a `Curve`, and no function makes a `Surface` from a closed curve (§8.1). The models use polygons. | A geometry function `fill(c: Curve)` for a closed curve. | 2, closed by [§8.1](skein_spec.md#81-distance-functions) |
+| G25 | The stop rule and the first simplex of Nelder-Mead. The case tolerance comes from the stop rule. | `validation/cases/shape-hole-biaxial/derivation.md:50` | `minimize` has only `objective`, `method` and `max_cases` (§20.2). | `minimize` arguments `xtol` and `step`. | 2, closed by [§20.2](skein_spec.md#202-study) |
 | G26 | An open boundary: a PML, or a map of a shell to infinity. | `validation/cases/team7-eddy-current/50hz/case.pro:50`, `validation/cases/dipole-king-middleton/omega12.5/openems.py:39`, `validation/cases/optics-mie-cylinder/res40/meep_case.py:38` | §8 and §13 have no absorbing layer and no infinite map. The models put a first-order absorbing `bc`, or a zero field, on a far boundary. | A method setting `pml: { region, thickness }`. | 4 |
 | G27 | A tree gauge for edge elements in a region with no conductor. | `validation/cases/team7-eddy-current/50hz/case.pro:36` | `family: nedelec` has no gauge setting (§13). | A method setting `gauge: tree`. | 5 |
 | G28 | A material property that is a function of the unknown of the physics that uses it: a conductivity of T. | `validation/cases/grid-radiating-fin-ccx/fin/grid.toml:9` | §10.2 allows a property of a temperature field, but §3.1 needs each name before its use, and the `material` comes before the `physics` that declares `T`. The model puts the property in a physics `let`. | In §3.1, let a material property name an unknown of a physics that assigns the material. | 2, closed by [§3.1](skein_spec.md#31-order-of-items) |
@@ -261,7 +273,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Node sets, element sets and surfaces (`*NSET`, `*ELSET`, `*SURFACE`), face sets of the grid solver | each case | `boundary(g, s)` with a condition of `x`, `y`, `z`, or with a shape | [§8.2](skein_spec.md#82-regions) |
 | A point (a node set of 1 node, a probe) | grid-lame-cylinder, warpage-2p5d-frame, grid-heated-block-stress-ccx | `point(p)` of type `Point` | [§8.3](skein_spec.md#83-lower-dimension-entities) |
 | A curved shell surface | scordelis-lo-roof | `boundary(cylinder(...), ...)` of type `Surface` | [§8.3](skein_spec.md#83-lower-dimension-entities), [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
-| Spline airfoils, a superellipse hole | naca0012-ladson, naca23012-flap, shape-hole-biaxial | `polygon` through the points | gap [G24](#gaps-that-change-the-discretization-or-the-physics) |
+| Spline airfoils, a superellipse hole | naca0012-ladson, naca23012-flap, shape-hole-biaxial | `fill(spline(...))` of type `Surface`, closed by a line | [§8.1](skein_spec.md#81-distance-functions) |
 | A solid from a density field | topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
 
 ### Elements and meshes
@@ -340,7 +352,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Fluid-structure coupling (preCICE) | turek-hron-fsi1 | `interface fsi: wet_fluid, wet_solid { mesh_motion: harmonic }` | [§10.7](skein_spec.md#107-fsi-interfaces) |
 | Conjugate heat transfer of 2 regions | cht-heated-channel | 2 physics and `bc` lines on the shared boundary | [§10.4](skein_spec.md#104-coupling), [§12.1](skein_spec.md#121-form) |
 | Case folders for each parameter value | cavity-devahldavis, naca0012-ladson, naca23012-flap, dipole-king-middleton, optics-mie-cylinder | `param`, and `study s: grid` with an `expect` for each case | [§20.1](skein_spec.md#201-param), [§20.2](skein_spec.md#202-study), [§15.3](skein_spec.md#153-expect) |
-| Shape optimization (Nelder-Mead) | shape-hole-biaxial | `study s: minimize(objective, method: nelder_mead, max_cases)` | [§20.2](skein_spec.md#202-study), gap [G25](#gaps-that-change-the-discretization-or-the-physics) |
+| Shape optimization (Nelder-Mead) | shape-hole-biaxial | `study s: minimize(objective, method: nelder_mead, max_cases, xtol, step)` | [§20.2](skein_spec.md#202-study) |
 | Topology optimization (SIMP) | topology-mbb-beam, topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
 | A least-squares curve fit | fit-nist-pontius | the normal equations: `sum(expr)` over the rows of a table, and a physics of global unknowns | [§5.6](skein_spec.md#56-tables), [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
 

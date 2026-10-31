@@ -509,6 +509,16 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         for i in min(a.count, MAX_ARGS) { want_point(name, a.ty[i], a.node[i], i); }
         return geom_ty(2);
     }
+    if name == "fill" {
+        space_2d(tok, name);
+        guard arity(tok, name, a, 1, 1) && want_geom(tok, name, a, 0) else { return any_ty(); }
+        if !is_any(t0) && t0.geo != 1 {
+            error(first_tok(a.node[0]), "type_mismatch", str("argument 1 of fill is ", ty_str(t0), ", not a Curve"),
+                  "fill a closed Curve, for example spline(p1, p2, p3, p1)");
+            return any_ty();
+        }
+        return geom_ty(2);
+    }
     if name == "extrude" || name == "revolve" || name == "sweep" || name == "loft" {
         space_3d(tok, name);
         let lo = if name == "loft" { 3 } else { 2 };

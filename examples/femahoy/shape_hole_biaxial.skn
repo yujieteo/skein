@@ -1,5 +1,4 @@
 // femahoy: validation/cases/shape-hole-biaxial/L40/optimize.toml
-// blocked-by: G24 G25
 // The hole of least stress concentration in a plate under the remote stresses sx = 1 and
 // sy = 0.5, no units. A Nelder-Mead study changes the ratio and the power of a superellipse
 // hole. Reference: the ellipse a/b = 2 (power 2), with the peak von Mises stress 1.5.
@@ -21,71 +20,73 @@ let dth: Real = pi/120
 /// Point k of the superellipse |x/ha|^power + |y/hb|^power = 1, at the angle k*dth.
 fn rim(k: Real) -> Vector<Real> = (ha*cos(k*dth)^(2/power), hb*sin(k*dth)^(2/power))
 
-// gap G24: no smooth implicit or spline region. The hole is a polygon through the 61 points of mesh.geo.
-let hole: Surface = polygon(
-    (0, 0),
-    rim(0),
-    rim(1),
-    rim(2),
-    rim(3),
-    rim(4),
-    rim(5),
-    rim(6),
-    rim(7),
-    rim(8),
-    rim(9),
-    rim(10),
-    rim(11),
-    rim(12),
-    rim(13),
-    rim(14),
-    rim(15),
-    rim(16),
-    rim(17),
-    rim(18),
-    rim(19),
-    rim(20),
-    rim(21),
-    rim(22),
-    rim(23),
-    rim(24),
-    rim(25),
-    rim(26),
-    rim(27),
-    rim(28),
-    rim(29),
-    rim(30),
-    rim(31),
-    rim(32),
-    rim(33),
-    rim(34),
-    rim(35),
-    rim(36),
-    rim(37),
-    rim(38),
-    rim(39),
-    rim(40),
-    rim(41),
-    rim(42),
-    rim(43),
-    rim(44),
-    rim(45),
-    rim(46),
-    rim(47),
-    rim(48),
-    rim(49),
-    rim(50),
-    rim(51),
-    rim(52),
-    rim(53),
-    rim(54),
-    rim(55),
-    rim(56),
-    rim(57),
-    rim(58),
-    rim(59),
-    rim(60),
-)
+// The hole edge is a spline through the 61 points of mesh.geo. The triangle fills the
+// quarter between the spline and the lines of symmetry.
+let hole: Surface = fill(
+    spline(
+        rim(0),
+        rim(1),
+        rim(2),
+        rim(3),
+        rim(4),
+        rim(5),
+        rim(6),
+        rim(7),
+        rim(8),
+        rim(9),
+        rim(10),
+        rim(11),
+        rim(12),
+        rim(13),
+        rim(14),
+        rim(15),
+        rim(16),
+        rim(17),
+        rim(18),
+        rim(19),
+        rim(20),
+        rim(21),
+        rim(22),
+        rim(23),
+        rim(24),
+        rim(25),
+        rim(26),
+        rim(27),
+        rim(28),
+        rim(29),
+        rim(30),
+        rim(31),
+        rim(32),
+        rim(33),
+        rim(34),
+        rim(35),
+        rim(36),
+        rim(37),
+        rim(38),
+        rim(39),
+        rim(40),
+        rim(41),
+        rim(42),
+        rim(43),
+        rim(44),
+        rim(45),
+        rim(46),
+        rim(47),
+        rim(48),
+        rim(49),
+        rim(50),
+        rim(51),
+        rim(52),
+        rim(53),
+        rim(54),
+        rim(55),
+        rim(56),
+        rim(57),
+        rim(58),
+        rim(59),
+        rim(60),
+    ),
+) | polygon((0, 0), rim(0), rim(60))
 let plate: Surface = rect((0, 0), (Lp, Lp)) - hole
 let edge: Curve = boundary(plate, hole)
 let xsym: Curve = boundary(plate, x == 0)
@@ -122,8 +123,15 @@ step load: static {
     report peak = max(von_mises(sigma), edge)
 }
 
-// gap G25: no stop rule and no first simplex step for minimize (fh: 0.001 and 0.1 of each range).
-study shape: minimize(objective: peak, method: nelder_mead, max_cases: 200) {
+// The first simplex has steps of 0.1 of each range. The study stops when each point of the
+// simplex is in 0.001 of the range from the best point.
+study shape: minimize(
+    objective: peak,
+    method: nelder_mead,
+    max_cases: 200,
+    xtol: 0.001,
+    step: 0.1,
+) {
     ratio: 1.0..4.0
     power: 1.6..4.0
     // Checked at the best case.

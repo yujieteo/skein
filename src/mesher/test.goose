@@ -169,6 +169,60 @@ fn expect_lint_command(what: u8[:], words: const u8[:][:], want: u8[:]) {
     if status != 0 || got != want { fail(str("skein lint ", what, ": the exit status is ", status, ", the ids [", got, "]")); }
 }
 
+// The area inside fill node g, by the Green theorem: the integral of x dy
+// on each cubic span and on the closing line.
+fn fill_area(g: i64) -> f64 {
+    let n = mesher::shapes[g].b;
+    var area = 0.0;
+    for i in n - 1 {
+        let c = mesher::span(g, i);
+        for a in 4 {
+            for b in 1..4 { area += c[a] * b * c[4 + b] / (a + b); }
+        }
+    }
+    let p = mesher::fill_point(g, n - 1);
+    let q = mesher::fill_point(g, 0);
+    return area + 0.5 * (p[0] + q[0]) * (q[1] - p[1]);
+}
+
+// fill (spec §8.1): a half disc of radius 10, a spline through 13 points
+// of its arc and the line of its diameter, and a plate of 4 by 4 less a
+// quarter ellipse with the semi-axes sqrt(2) and 1/sqrt(2), a spline
+// through the 61 points of shape_hole_biaxial.skn at power 2.
+fn test_fill() {
+    var arc: f64[>..] = [];
+    for k in 13 {
+        let a = PI * (k / 12.0 - 0.5);
+        arc.push(10.0 * cos(a));
+        arc.push(10.0 * sin(a));
+    }
+    let half = mesher::fill(arc[..]);
+    // The spline passes through each point, is inside the disc between
+    // the points, and the line closes it.
+    for k in 13 {
+        if abs(mesher::phi(half, arc[2 * k], arc[2 * k + 1], 0.0)) > 1.0e-9 { fail(str("fill: point ", k, " is not on the boundary")); }
+    }
+    if !(mesher::phi(half, 5.0, 0.0, 0.0) < -4.9 && mesher::phi(half, -1.0, 0.0, 0.0) > 0.99 && mesher::phi(half, 11.0, 0.0, 0.0) > 0.99) {
+        fail("fill: the sign of phi of the half disc");
+    }
+    // The end spans differ most from the arc: 5e-3 of the radius. Each
+    // boundary edge of length h is a chord, and cuts off h^3 / (12 r) of
+    // the arc of length h: h^2 / (12 r) in all on each unit of length. The
+    // tolerance is 2 times that on the arc of length pi r.
+    let span_area = fill_area(half);
+    if abs(span_area / (0.5 * PI * 100.0) - 1.0) > 2.0e-3 { fail(str("fill: the area of the spline is ", span_area)); }
+    mesh_case("fill of a half disc", half, 0.5, span_area, 2.0 * PI * 10.0 * 0.25 / 120.0 / span_area);
+    var quarter: f64[>..] = [];
+    for k in 61 {
+        let t = 0.5 * PI * k / 60.0;
+        quarter.push(sqrt(2.0) * cos(t));
+        quarter.push(sin(t) / sqrt(2.0));
+    }
+    let hole = mesher::union(mesher::fill(quarter[..]), mesher::polygon([0.0, 0.0, sqrt(2.0), 0.0, 0.0, 1.0 / sqrt(2.0)]));
+    mesh_case("plate less a quarter ellipse", mesher::subtract(mesher::rect(0.0, 0.0, 4.0, 4.0), hole), 0.05, 16.0 - 0.25 * PI,
+              1.0e-4);
+}
+
 // The lint rules that need the mesh (docs/checks.md §3) on a strip of
 // 1 m by 50 mm, in plane stress, with a load on its tip.
 fn test_lint() {
@@ -184,6 +238,11 @@ fn test_lint() {
     expect_mesh_lints("bending_lock", strip("", "1"), "bending_lock\n");
     expect_mesh_lints("order 2 does not lock", strip("", "2"), "");
     expect_mesh_lints("mesh_feature_small", strip(" - circle((0.5, 0.025) m, 5 mm)", "2"), "mesh_feature_small\n");
+    // The reader fills a spline, and the last point equal to the first
+    // closes it. It has no fill of another Curve.
+    expect_mesh_lints("fill of a spline", strip(" - fill(spline((0.4, 0.015) m, (0.5, 0.01) m, (0.6, 0.025) m, (0.5, 0.04) m, (0.4, 0.015) m))", "2"), "");
+    expect_mesh_lints("fill of a line", strip(" - fill(line((0.5, 0.01) m, (0.52, 0.04) m))", "2"), "verify_unsupported\n");
+    expect_mesh_lints("fill of 2 points", strip(" - fill(spline((0.5, 0.01) m, (0.52, 0.04) m, (0.5, 0.01) m))", "2"), "verify_unsupported\n");
     // The copy of a pattern is a feature. The reader needs a whole copy
     // count of 1 or more, and has no pattern_polar of a 2D shape.
     expect_mesh_lints("mesh_feature_small of a pattern", strip(" - pattern(circle((0.2, 0.025) m, 5 mm), (0.2, 0) m, 3)", "2"), "mesh_feature_small\n");
@@ -511,6 +570,8 @@ fn main() {
     let holes_area = 400.0 - 4.0 * PI * 4.0;
     mesh_case("2D plate with a row of 4 holes", holes, 0.5, holes_area,
               (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
+
+    test_fill();
 
     test_grid();
     test_lint();

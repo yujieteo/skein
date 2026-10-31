@@ -2,7 +2,7 @@
 // (1995) and Shewchuk (2002), on a boundary sampled from the CSG tree.
 //
 // 1. Each boundary curve of a primitive (a line of a rect or a polygon, a
-//    circle) is sampled. A sample is on the boundary of the whole shape
+//    circle, a span of the spline of a fill) is sampled. A sample is on the boundary of the whole shape
 //    when φ changes sign across the curve there. The ends of each piece on
 //    the boundary are found by bisection, then moved to the nearest true
 //    intersection with another curve; they are the corners and stay
@@ -30,9 +30,11 @@ let MIN_ANGLE = 25.0;     // degrees; Ruppert's proof needs at most 20.7
 
 let LINE = 0;
 let ARC = 1;
+let SPAN = 2;
 
 // A boundary curve of a primitive. A line goes from (p0, p1) to (p2, p3).
 // An arc is a full circle of centre (p0, p1) and radius p2, from angle 0.
+// A span is span p3 of fill node p2, moved by (p0, p1).
 struct Curve {
     kind: i64,
     p: f64[4],
@@ -101,6 +103,13 @@ recursive fn collect_curves(g: i64, tx: f64, ty: f64) -> bool {
         }
         return true;
     }
+    if s.kind == FILL {
+        for i in s.b - 1 { curves.push(Curve { kind: SPAN, p: [tx, ty, g, i] }); }
+        let a = fill_point(g, s.b - 1);
+        let b = fill_point(g, 0);
+        line(a[0], a[1], b[0], b[1]);
+        return true;
+    }
     if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT {
         return collect_curves(s.a, tx, ty) && collect_curves(s.b, tx, ty);
     }
@@ -113,26 +122,52 @@ recursive fn collect_curves(g: i64, tx: f64, ty: f64) -> bool {
     return false;
 }
 
+// The cubics of span curve c (geometry.goose).
+fn span_of(c: i64) -> f64[8] { span(curves[c].p[2] as i64, curves[c].p[3] as i64) }
+
 fn curve_point(c: i64, t: f64) -> f64, f64 {
     let p = curves[c].p;
     if curves[c].kind == LINE { return p[0] + t * (p[2] - p[0]), p[1] + t * (p[3] - p[1]); }
+    if curves[c].kind == SPAN {
+        let e = span_of(c);
+        let x, dx, ddx = cubic(e, 0, t);
+        let y, dy, ddy = cubic(e, 1, t);
+        return p[0] + x, p[1] + y;
+    }
     return p[0] + p[2] * cos(TAU * t), p[1] + p[2] * sin(TAU * t);
 }
 
+// The length of curve c. A span has the length of 16 chords.
 fn curve_length(c: i64) -> f64 {
     let p = curves[c].p;
     if curves[c].kind == LINE { return sqrt((p[2] - p[0]) * (p[2] - p[0]) + (p[3] - p[1]) * (p[3] - p[1])); }
+    if curves[c].kind == SPAN {
+        var l = 0.0;
+        var x0, y0 = curve_point(c, 0.0);
+        for k in 16 {
+            let x1, y1 = curve_point(c, (k + 1) / 16.0);
+            l += sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+            x0 = x1;
+            y0 = y1;
+        }
+        return l;
+    }
     return TAU * p[2];
 }
 
 // True if an earlier curve holds the point of curve c at t: a line on the
-// same line, or the same circle. That curve then has the boundary there.
+// same line, the same circle, or the same span. That curve then has the
+// boundary there.
 fn covered(c: i64, t: f64, eps: f64) -> bool {
     let x, y = curve_point(c, t);
     let p = curves[c].p;
     for e in c {
         guard curves[e].kind == curves[c].kind else { continue; }
         let q = curves[e].p;
+        if curves[c].kind == SPAN {
+            if q[2] == p[2] && q[3] == p[3] && abs(q[0] - p[0]) <= eps && abs(q[1] - p[1]) <= eps { return true; }
+            continue;
+        }
         if curves[c].kind == ARC {
             if abs(q[0] - p[0]) <= eps && abs(q[1] - p[1]) <= eps && abs(q[2] - p[2]) <= eps { return true; }
             continue;
@@ -160,6 +195,13 @@ fn on_boundary(g: i64, c: i64, t: f64, eps: f64) -> bool {
         let l = curve_length(c);
         nx = (p[3] - p[1]) / l;
         ny = (p[0] - p[2]) / l;
+    } else if curves[c].kind == SPAN {
+        let e = span_of(c);
+        let x0, dx, ddx = cubic(e, 0, t);
+        let y0, dy, ddy = cubic(e, 1, t);
+        let l = sqrt(dx * dx + dy * dy);
+        nx = dy / l;
+        ny = -dx / l;
     } else {
         nx = cos(TAU * t);
         ny = sin(TAU * t);
@@ -184,13 +226,14 @@ fn line_circle(x0: f64, y0: f64, ux: f64, uy: f64, cx: f64, cy: f64, r: f64, eps
 // The parameter of curve c at the intersection with another curve that is
 // nearest to the point at t, or t if no intersection is within `reach`.
 // The ends of a piece from the bisection of on_boundary are only near the
-// true corner: up to eps / tan(angle), or sqrt(eps r) at a tangent.
+// true corner: up to eps / tan(angle), or sqrt(eps r) at a tangent. A span
+// has no intersection here: the end from the bisection stays.
 fn snap_end(c: i64, t: f64, eps: f64, reach: f64) -> f64 {
     let x, y = curve_point(c, t);
     let p = curves[c].p;
     var points: f64[>..] = [];
     for e in curves.len {
-        guard e != c else { continue; }
+        guard e != c && curves[c].kind != SPAN && curves[e].kind != SPAN else { continue; }
         let q = curves[e].p;
         if curves[c].kind == LINE && curves[e].kind == LINE {
             let dx = p[2] - p[0];
@@ -283,7 +326,7 @@ fn sample_boundary(g: i64, size: f64, diameter: f64) {
             }
             return snap_end(c, 0.5 * (lo + hi), eps, reach);
         }
-        if curves[c].kind == LINE {
+        if curves[c].kind != ARC {
             var i = 0;
             while i < m {
                 if !on[i] { i++; continue; }

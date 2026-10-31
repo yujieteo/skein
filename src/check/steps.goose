@@ -400,6 +400,8 @@ fn check_study(n: i64) {
         let v = syntax::nodes[a].first;
         if pname == "minimize" && syntax::nodes[a].aux < 0 && syntax::nodes[v].kind == syntax::N_NAME {
             objectives.push(syntax::nodes[v].tok);
+        } else if pname == "minimize" && syntax::nodes[a].aux >= 0 && (tok_text(syntax::nodes[a].aux) == "xtol" || tok_text(syntax::nodes[a].aux) == "step") {
+            fraction_arg(tok_text(syntax::nodes[a].aux), v);
         } else {
             setting_ty(v);
         }
@@ -411,6 +413,17 @@ fn check_study(n: i64) {
         if s.kind == syntax::N_SETTING { study_entry(s.tok, s.first); }
         if s.kind == syntax::N_EXPECT { check_expect(c, study_case_count(pname, b)); }
         c = s.next;
+    }
+}
+
+// The argument `xtol` or `step` of minimize: a fraction of each range, a
+// Real above 0 and at most 1 (femahoy gap G25).
+fn fraction_arg(name: u8[:], v: i64) {
+    let t = setting_ty(v);
+    let x, known = const_value(v);
+    if !(is_any(t) || (is_dimless_scalar(t) && (!known || (x > 0.0 && x <= 1.0)))) {
+        error(first_tok(v), "procedure_args", str(name, " of minimize is a fraction of each range, above 0 and at most 1"),
+              str("write ", name, ": ", if name == "xtol" { "0.001" } else { "0.1" }));
     }
 }
 

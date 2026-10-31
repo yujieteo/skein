@@ -27,7 +27,7 @@ material clay {
     rho: Density = 1900 kg/m^3
 }
 
-material fill {
+material backfill {
     E: Pressure = 25 MPa
     nu: Real = 0.3
     rho: Density = 1800 kg/m^3
@@ -40,7 +40,7 @@ mesh m on body {
 }
 
 physics soil on body: linear_elastic(b: rho*(0, -g)) solves u: Vector<Length> {
-    material clay on ground, fill on lift1 | lift2 | lift3 | berm
+    material clay on ground, backfill on lift1 | lift2 | lift3 | berm
     assume plane_strain
 }
 

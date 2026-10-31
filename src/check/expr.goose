@@ -20,7 +20,7 @@ let BUILTIN_FNS = [
     "principal", "fourier", "abs", "sqrt", "exp", "ln", "sin", "cos", "tan", "tanh", "atan",
     "atan2", "min", "max", "diff", "reaction", "integral", "mean", "results", "boundary",
     "grad", "div", "curl", "lap", "ddt", "ddt2", "re", "imag", "arg", "conj", "eigenvalue",
-    "box", "cylinder", "sphere", "rect", "circle", "polygon", "extrude",
+    "box", "cylinder", "sphere", "rect", "circle", "polygon", "fill", "extrude",
     "revolve", "sweep", "line", "arc", "spline", "point", "shell", "loft", "pattern",
     "pattern_polar", "fillet", "move", "rotate", "scale",
     // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
