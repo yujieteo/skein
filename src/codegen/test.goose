@@ -127,7 +127,7 @@ fn test_grid_cantilever() {
         "face(runtime::traction(\"x1\", 0.0, 0.0, -1.0), \"tip\");",
         "largest = max(largest, 1.0 * runtime::face_area(\"x1\"));",
         "equilibrium(rx, ry, rz, largest, \"N\");",
-        "solve(\"load\", \"cg\", \"jacobi\");",
+        "solve(\"load\", \"cg\", \"amg\");",
         "let x, y, z = runtime::reaction(\"x0\");",
         "report(\"load\", \"reaction(root)\", vector(x, y, z, \"N\"));",
         "output(\"RESULTS/load.vtu\");",
@@ -329,7 +329,7 @@ fn test_dispatch() {
                  "error unsupported 16:9 the template heat has no generator in this build");
     expect_error("a transient step", replace(model(MM, str(MESH, STEP)), "load: static", "load: transient"),
                  "error unsupported 19:12 the procedure transient has no generator in this build");
-    // The linear solver of a step: cg with jacobi, or a pair of the solvers lane.
+    // The linear solver of a step: cg with amg (the default), cg with jacobi, or a pair of the solvers lane.
     let solve = "    solve { linear: cg, precond: jacobi }\n";
     expect_lines("cg with jacobi", model(MM, str(MESH, replace(STEP, "    output u\n", solve))),
                  ["solve(\"load\", \"cg\", \"jacobi\");"]);

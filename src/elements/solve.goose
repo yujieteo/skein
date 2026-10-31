@@ -13,6 +13,7 @@ import os;
 namespace elements;
 import .mesh;
 import .assemble;
+import .stages;
 import solvers from "../solvers";
 
 var last_iterations = 0;
@@ -54,6 +55,7 @@ fn solve_system() -> bool {
     guard physics >= 0 && dofs_sized() else { abort("solve_system: a physics and the arrays of the dofs"); }
     let start = clock();
     assemble();
+    hold_dead_nodes();
     let n = sol.len;
     var r = zeros(n);
     var z = zeros(n);

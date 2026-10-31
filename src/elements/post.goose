@@ -10,6 +10,7 @@ namespace elements;
 import .shape;
 import .mesh;
 import .assemble;
+import .stages;
 
 let FIELD_VALUE = 0;    // component comp of u, or T
 let FIELD_STRESS = 1;   // sigma at comp = 3 i + j
@@ -54,6 +55,7 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
 fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 && ncomp <= 3 && sol.len == dof_total() else { abort("cell_field: a field, 0 <= comp < 9 and a solution of each dof"); }
     cell_geometry(c, xi);
+    use_law(c);
     if what == FIELD_VALUE {
         var v = 0.0;
         if comp < ncomp {
@@ -62,11 +64,14 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
         return v;
     }
     // du[3 a + t] = du_a / dx_t
+    // A born cell is strain-free at its birth (stages.goose).
+    let b = born.len > 0 && born[c] != 0;
     var du: f64[9] = [0.0; 9];
     for l in per_cell {
         let n = cell_node(c, l);
         for a in ncomp {
-            for t in dim { du[3 * a + t] += sol[ncomp * n + a] * grad[3 * l + t]; }
+            let v = sol[ncomp * n + a] - (if b { birth_u[(per_cell * c + l) * ncomp + a] } else { 0.0 });
+            for t in dim { du[3 * a + t] += v * grad[3 * l + t]; }
         }
     }
     if what == FIELD_FLUX { return if comp < dim { -conductivity * du[comp] } else { 0.0 }; }

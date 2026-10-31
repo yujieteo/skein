@@ -967,7 +967,7 @@ fn step(n: i64) {
                    first_bc: 0, bc_count: 0, first_report: reports.len, report_count: 0, output: false };
     set64(s.name, name(n));
     set64(s.solver, "cg");
-    set64(s.preconditioner, "jacobi");
+    set64(s.preconditioner, "amg");   // spec §14.4
     // A procedure of a lane goes to its generator (dispatch.goose).
     let p = procedure_lane(name(proc));
     if p > CORE {
@@ -1014,7 +1014,7 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-let SOLVE_FIX = "write solve { linear: cg, precond: jacobi }";
+let SOLVE_FIX = "write solve { linear: cg, precond: amg }, or precond: jacobi";
 
 // `solve { linear: <solver>, precond: <preconditioner> }`. A pair other
 // than cg with jacobi goes to the solvers lane (lane_solvers.goose).

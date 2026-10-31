@@ -29,6 +29,7 @@ import .solve;
 import .post;
 import .csg;
 import .source;
+import .stages;
 
 let X = 0;
 let Y = 1;
@@ -135,6 +136,23 @@ fn body_force(bx: f64, by: f64, bz: f64) {
     volume_force = [bx, by, bz];
 }
 
+// Gives the cells in the shape g of src/mesher/ the elastic material of E
+// and nu, with the body force per volume (bx, by, bz), after `elastic` and
+// `body_force` set the material of the other cells. False if g holds no
+// cell.
+fn material_in(g: i64, E: f64, nu: f64, bx: f64, by: f64, bz: f64) -> bool {
+    return add_law(g, E, nu, [bx, by, bz]) > 0;
+}
+
+// Removes the cells in the shape g from the live set, for the next solves
+// (spec §14.3). False if g holds no cell.
+fn kill(g: i64) -> bool { return kill_cells(g) > 0; }
+
+// Adds the dead cells in the shape g to the live set, strain-free on the
+// solution of the last step. Call it after `clear_bcs`. False if g holds
+// no cell.
+fn birth(g: i64) -> bool { return birth_cells(g) > 0; }
+
 // Steady heat conduction with conductivity k and a uniform source q per
 // volume. In 2D, t is the thickness.
 fn heat(k: f64, q: f64, t: f64) { set_heat(k, q, t); }
@@ -197,7 +215,8 @@ fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 
 // Removes the fixed values, the loads and the solution, for the next
-// step. The mesh and the physics stay.
+// step. The mesh, the physics and the live set stay. The solution stays as
+// the value of the nodes that no live cell holds.
 fn clear_bcs() { clear_conditions(); }
 
 // Assembles and solves by CG with an AMG preconditioner. Returns false

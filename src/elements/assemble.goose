@@ -12,6 +12,7 @@ import .shape;
 import .mesh;
 import .kernels;   // cell_matrix
 import .csg;
+import .stages;
 
 let ELASTIC = 0;
 let HEAT = 1;
@@ -60,6 +61,7 @@ fn start_physics(kind: i64, comps: i64) {
     guard per_cell > 0 && (kind == ELASTIC || kind == HEAT) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
     physics = kind;
     ncomp = comps;
+    clear_stages();
     fixed.clear();
     prescribed.clear();
     load.clear();
@@ -216,7 +218,17 @@ fn assemble() {
     for d in dof_total() { assembled_source.push(0.0); }
     let m = per_cell * ncomp;
     for c in cell_count() {
+        if !is_live(c) { continue; }
+        use_law(c);
         cell_matrix(c);
+        // A born cell: K_e u_b on its nodes (stages.goose).
+        if born.len > 0 && born[c] != 0 {
+            for r in m {
+                var s = 0.0;
+                for k in m { s += ke[m * r + k] * birth_u[m * c + k]; }
+                fe[r] += s;
+            }
+        }
         for i in per_cell {
             let ni = cell_node(c, i);
             for p in ncomp { assembled_source[ncomp * ni + p] += fe[ncomp * i + p]; }
@@ -229,6 +241,7 @@ fn assemble() {
             }
         }
     }
+    use_law_0();
 }
 
 // --- boundary regions --------------------------------------------------------
@@ -335,6 +348,8 @@ fn add_region_load(gv: f64[3]) {
 }
 
 fn clear_conditions() {
+    held.clear();
+    held.append(sol);
     for &v in fixed { v = 0; }
     for &v in prescribed { v = 0.0; }
     for &v in load { v = 0.0; }
@@ -354,7 +369,7 @@ fn region_reaction() -> f64[3] {
         if !on_region(n) { continue; }
         for p in ncomp {
             let d = ncomp * n + p;
-            if fixed[d] == 0 { continue; }
+            if fixed[d] != 1 { continue; }
             var ku = 0.0;
             for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
             sum[p] += ku - load[d] - assembled_source[d];
@@ -369,7 +384,7 @@ fn all_reaction() -> f64[3] {
     var sum: f64[3] = [0.0, 0.0, 0.0];
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
-        if fixed[d] == 0 { continue; }
+        if fixed[d] != 1 { continue; }
         var ku = 0.0;
         for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
@@ -391,7 +406,7 @@ fn load_magnitude() -> f64 {
     guard row_start.len > 0 else { return sum; }
     var terms = 0.0;
     for d in sol.len {
-        if fixed[d] == 0 { continue; }
+        if fixed[d] != 1 { continue; }
         var ku = 0.0;
         for e in row_start[d]..row_start[d + 1] {
             ku += val[e] * sol[col[e]];

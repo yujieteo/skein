@@ -194,6 +194,8 @@ fn test_cantilever() {
     let cg_its, cg_tip = solve_cantilever("cg", "jacobi");
     let gm_its, gm_tip = solve_cantilever("gmres", "ilu0");
     if gm_its >= cg_its { fail(str("cantilever: GMRES+ILU(0) takes ", gm_its, " iterations, CG+Jacobi ", cg_its)); }
+    let amg_its, amg_tip = solve_cantilever("cg", "amg");
+    if amg_its * 3 >= cg_its { fail(str("cantilever: CG+AMG takes ", amg_its, " iterations, CG+Jacobi ", cg_its)); }
 }
 
 fn main() {

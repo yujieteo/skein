@@ -506,6 +506,66 @@ fn test_submodel() {
     }
 }
 
+// --- materials, birth and death ---------------------------------------------------
+
+// Two blocks side by side, the left [0, 1] x [0, 1] and the right
+// [1, 2] x [0, 1], with nu = 0, stretched by u.y = 0.1 at y = 1 and held at
+// y = 0. Step 1 has the right block dead. Step 2 gives birth to it on the
+// stretched shape: the nearest live node of each new node is on x = 1, so
+// u_b = 0.1 y, and the right block has no stress. Step 3 kills the left
+// block: the right block alone then carries no force. A last case gives the
+// right block E2: the force is then 0.1 (E + E2).
+fn test_stages() {
+    let E = 1000.0;
+    let E2 = 3000.0;
+    mesher::clear_shapes();
+    let right = mesher::rect(1.0, 0.0, 2.0, 1.0);
+    let left = mesher::rect(0.0, 0.0, 1.0, 1.0);
+    fn stretch() {
+        elements::clear_bcs();
+        elements::plane(elements::Y, 0.0);
+        elements::fix(elements::ALL, 0.0);
+        elements::plane(elements::Y, 1.0);
+        elements::fix(elements::Y, 0.1);
+    }
+    fn top_force(what: u8[:], want: f64) {
+        if !elements::solve() {
+            failures++;
+            print("FAIL stages ", what, ": no solve");
+            return;
+        }
+        elements::plane(elements::Y, 1.0);
+        let rx, ry, rz = elements::reaction();
+        let tx, ty, tz = elements::total_reaction();
+        let fx, fy, fz = elements::applied_load();
+        let sl, found_l = elements::stress_at(elements::Y, elements::Y, 0.5, 0.5, 0.0);
+        let sr, found_r = elements::stress_at(elements::Y, elements::Y, 1.5, 0.5, 0.0);
+        print("stages ", what, ": force at y = 1 ", ry, ", sigma_yy left ", sl, ", right ", sr, ", out of balance ", ty + fy);
+        if abs(ry - want) > 1.0e-8 * E || abs(ty + fy) > 1.0e-8 * E {
+            failures++;
+            print("FAIL stages ", what, ": the force at y = 1 is ", ry, ", not ", want, ", or the reactions and loads do not balance");
+        }
+    }
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 4, 2, 1);
+    elements::elastic_plane_strain(E, 0.0, 1.0);
+    if !elements::kill(right) { failures++; print("FAIL stages: kill finds no cell"); }
+    stretch();
+    top_force("step 1, the left block", 0.1 * E);
+    stretch();
+    if !elements::birth(right) { failures++; print("FAIL stages: birth finds no cell"); }
+    top_force("step 2, the right block born strain-free", 0.1 * E);
+    let sr, found = elements::stress_at(elements::Y, elements::Y, 1.5, 0.5, 0.0);
+    if abs(sr) > 1.0e-8 * E { failures++; print("FAIL stages: the born block has the stress ", sr); }
+    stretch();
+    elements::kill(left);
+    top_force("step 3, the left block dead", 0.0);
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 4, 2, 1);
+    elements::elastic_plane_strain(E, 0.0, 1.0);
+    if !elements::material_in(right, E2, 0.0, 0.0, 0.0, 0.0) { failures++; print("FAIL stages: material_in finds no cell"); }
+    stretch();
+    top_force("two materials", 0.1 * (E + E2));
+}
+
 fn main() {
     test_patches();
     test_kirsch();
@@ -513,6 +573,7 @@ fn main() {
     test_body_force();
     test_equilibrium_scale();
     test_submodel();
+    test_stages();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");
