@@ -1167,7 +1167,6 @@ fn bc(n: i64) -> i64 {
     } else if physics == WAVE && (t == unknown_name || t == str("dot(grad(", unknown_name, "), n)")) {
         b.kind = if t == unknown_name { BC_FIX } else { BC_LOAD };
         b.node = v;
-        cval(v);
     } else if physics == WAVE {
         unsupported(tok(target), str("the bc target '", t, "' is not in this generator"),
                     str("write bc inlet: ", unknown_name, " = 1 Pa, or bc wall: dot(grad(", unknown_name, "), n) = 0 Pa/m"));
