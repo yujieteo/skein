@@ -16261,7 +16261,7 @@ static uint8_t elements_write_vtu_file_g8(void *path_g_data, int64_t path_g_len,
     {
         t2.data = ((uint8_t *)gs_str112); t2.len = 38;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file14, 151);
+        gs_abort_msg(t3.data, t3.len, gs_file14, 154);
     }
     L0:;
     uint8_t *t80 = GS(gs_sp + 0)->top;
@@ -16347,7 +16347,7 @@ static uint8_t elements_write_vtu_file_g8(void *path_g_data, int64_t path_g_len,
             int64_t t32 = gs_fmt_i64(t80, (int64_t)(t33));
             t80 += t32;
             out_g.len += t32;
-            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file14, 166))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
+            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file14, 169))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
                 t36.data = ((uint8_t *)gs_str9); t36.len = 1;
                 t35 = t36;
             } else {
@@ -16367,7 +16367,7 @@ static uint8_t elements_write_vtu_file_g8(void *path_g_data, int64_t path_g_len,
     out_g.len += t39;
     int64_t t40 = cells_g;
     for (int64_t c_g_2 = 0; c_g_2 < t40; c_g_2++) {
-        int64_t t43 = gs_fmt_i64(t80, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file14, 169), gs_file14, 169)));
+        int64_t t43 = gs_fmt_i64(t80, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file14, 172), gs_file14, 172)));
         t80 += t43;
         out_g.len += t43;
         int64_t t44 = 1;
@@ -16443,15 +16443,15 @@ static uint8_t elements_write_vtu_file_g8(void *path_g_data, int64_t path_g_len,
         for (int64_t a_g = 0; a_g < t63; a_g++) {
             double v_g;
             if ((uint8_t)((int64_t)((int64_t)(a_g)) < (int64_t)(GS_GL->elements_ncomp_g8))) {
-                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g_2, gs_file14, 178)), a_g, gs_file14, 178);
-                v_g = (((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t66), (GS_GL->elements_sol_g8.len), gs_file14, 178)]);
+                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g_2, gs_file14, 181)), a_g, gs_file14, 181);
+                v_g = (((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t66), (GS_GL->elements_sol_g8.len), gs_file14, 181)]);
             } else {
                 v_g = 0.0;
             }
             int64_t t67 = gs_fmt_f64(t80, (double)(v_g));
             t80 += t67;
             out_g.len += t67;
-            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(a_g), 1, gs_file14, 179))) < (int64_t)(comps_g))) {
+            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(a_g), 1, gs_file14, 182))) < (int64_t)(comps_g))) {
                 t70.data = ((uint8_t *)gs_str9); t70.len = 1;
                 t69 = t70;
             } else {
@@ -16480,7 +16480,7 @@ static uint8_t elements_write_vtu_file_g8(void *path_g_data, int64_t path_g_len,
     return t74;
     GS(gs_sp + 0)->top = t80;
     GS(gs_sp + 0)->top = out_g.base;
-    GS_UNREACHABLE(gs_file14, 150);
+    GS_UNREACHABLE(gs_file14, 153);
     uint8_t t79 = {0};
     return t79;
 }
@@ -16502,11 +16502,11 @@ static double elements_field_at_g8(int64_t what_g, int64_t comp_g, double x_g, d
     a3_f64 t9;
     a3_f64 p_g;
     a4_f64 l_g;
-    a4_f64 t14;
-    a3_f64 t22;
+    a4_f64 t17;
+    a3_f64 t25;
     a4_f64 l_g_2;
-    a4_f64 t26;
-    a3_f64 t28;
+    a4_f64 t31;
+    a3_f64 t33;
     if (!((uint8_t)((int64_t)((int64_t)(what_g)) >= (int64_t)(0)))) goto L1;
     if (!((uint8_t)((int64_t)((int64_t)(what_g)) <= (int64_t)(2)))) goto L1;
     if (!((uint8_t)((int64_t)((int64_t)(comp_g)) >= (int64_t)(0)))) goto L1;
@@ -16552,62 +16552,83 @@ static double elements_field_at_g8(int64_t what_g, int64_t comp_g, double x_g, d
     }
     int64_t t11 = t10;
     for (int64_t c_g = 0; c_g < t11; c_g++) {
-        t14 = elements_barycentric_g8(c_g, p_g, gs_sp + 0);
-        l_g = t14;
+        int64_t c_g_2 = c_g;
+        {
+            if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_dead_g8.len)))) == (int64_t)(0))) goto L14;
+            int64_t t16 = c_g_2;
+            if ((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_dead_g8.base) + GS_IDX((int64_t)(t16), (GS_GL->elements_dead_g8.len), gs_file8, 78) * 1))))) == (uint8_t)(0))) goto L14;
+            goto L15;
+        }
+        L15:;
+        {
+            goto L13;
+        }
+        L14:;
+        t17 = elements_barycentric_g8(c_g, p_g, gs_sp + 0);
+        l_g = t17;
         double lowest_g = l_g.e[0];
-        int64_t t15 = 1;
-        int64_t t16 = gs_add_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file14, 106);
-        for (int64_t a_g = t15; a_g < t16; a_g++) {
+        int64_t t18 = 1;
+        int64_t t19 = gs_add_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file14, 107);
+        for (int64_t a_g = t18; a_g < t19; a_g++) {
             double a_g_2 = lowest_g;
-            int64_t t19 = a_g;
-            double b_g = l_g.e[GS_IDX((int64_t)(t19), 4, gs_file14, 106)];
+            int64_t t22 = a_g;
+            double b_g = l_g.e[GS_IDX((int64_t)(t22), 4, gs_file14, 107)];
             {
                 if ((uint8_t)((double)((double)(b_g)) < (double)(a_g_2))) {
                     lowest_g = b_g;
-                    goto L20;
+                    goto L23;
                 }
                 lowest_g = a_g_2;
-                goto L20;
+                goto L23;
             }
-            L20:;
+            L23:;
         }
         if ((uint8_t)((double)((double)(lowest_g)) > (double)(best_l_g))) {
             best_l_g = lowest_g;
             best_g = c_g;
         }
         if ((uint8_t)((double)((double)(lowest_g)) >= (double)(-1e-09))) {
-            double t21 = sum_g;
-            t22.e[0] = l_g.e[1];
-            t22.e[1] = l_g.e[2];
-            t22.e[2] = l_g.e[3];
-            double t23 = elements_cell_field_g8(c_g, t22, what_g, comp_g, gs_sp + 0);
-            sum_g = (t21 + (t23));
-            count_g = gs_add_i64(count_g, 1, gs_file14, 113);
+            double t24 = sum_g;
+            t25.e[0] = l_g.e[1];
+            t25.e[1] = l_g.e[2];
+            t25.e[2] = l_g.e[3];
+            double t26 = elements_cell_field_g8(c_g, t25, what_g, comp_g, gs_sp + 0);
+            sum_g = (t24 + (t26));
+            count_g = gs_add_i64(count_g, 1, gs_file14, 114);
         }
+        L13:;
     }
     if ((uint8_t)((int64_t)((int64_t)(count_g)) > (int64_t)(0))) {
-        double t24;
-        t24 = ((double)((double)(sum_g)) / (double)((double)(count_g)));
-        uint8_t t25;
-        t25 = 1;
-        *gs_r1 = t25;
-        return t24;
+        double t27;
+        t27 = ((double)((double)(sum_g)) / (double)((double)(count_g)));
+        uint8_t t28;
+        t28 = 1;
+        *gs_r1 = t28;
+        return t27;
     }
-    t26 = elements_barycentric_g8(best_g, p_g, gs_sp + 0);
-    l_g_2 = t26;
-    double t27;
-    t28.e[0] = l_g_2.e[1];
-    t28.e[1] = l_g_2.e[2];
-    t28.e[2] = l_g_2.e[3];
-    double t29 = elements_cell_field_g8(best_g, t28, what_g, comp_g, gs_sp + 0);
-    t27 = t29;
-    uint8_t t30;
-    t30 = (uint8_t)((double)((double)(best_l_g)) >= (double)(-0.1));
-    *gs_r1 = t30;
-    return t27;
+    if (!((uint8_t)((int64_t)((int64_t)(best_g)) >= (int64_t)(0)))) {
+        double t29;
+        t29 = 0.0;
+        uint8_t t30;
+        t30 = 0;
+        *gs_r1 = t30;
+        return t29;
+    }
+    t31 = elements_barycentric_g8(best_g, p_g, gs_sp + 0);
+    l_g_2 = t31;
+    double t32;
+    t33.e[0] = l_g_2.e[1];
+    t33.e[1] = l_g_2.e[2];
+    t33.e[2] = l_g_2.e[3];
+    double t34 = elements_cell_field_g8(best_g, t33, what_g, comp_g, gs_sp + 0);
+    t32 = t34;
+    uint8_t t35;
+    t35 = (uint8_t)((double)((double)(best_l_g)) >= (double)(-0.1));
+    *gs_r1 = t35;
+    return t32;
     GS_UNREACHABLE(gs_file14, 94);
-    double t31 = {0};
-    return t31;
+    double t36 = {0};
+    return t36;
 }
 
 static a4_f64 elements_barycentric_g8(int64_t c_g, a3_f64 p_g, int64_t gs_sp) {
