@@ -646,15 +646,16 @@ fn test_study_run() {
 }
 
 // The threads of a case (spec §20.5): a run of a model on 1 thread and on
-// 4 threads gives the same reports and the same VTU files. The sed removes
-// the seconds of each solve. One model of the runtime and one of the
-// package elements.
+// 4 threads gives the same reports and the same result files. The sed removes
+// the seconds of each solve. One model of the runtime, one of the package
+// elements and one of the package flow.
 fn test_case_threads() {
-    for m in [["examples/femahoy/grid_cantilever.skn", "grid_cantilever"], ["examples/elements/kirsch_plate_tri.skn", "kirsch_plate_tri"]] {
+    for m in [["examples/femahoy/grid_cantilever.skn", "grid_cantilever"], ["examples/elements/kirsch_plate_tri.skn", "kirsch_plate_tri"],
+              ["examples/flow/cavity_coarse.skn", "cavity_coarse"]] {
         var c: u8[>..] = [];
         format(c, "cd build && for t in 1 4; do rm -rf .skein/results/", m[1], " && SKEIN_THREADS=$t ./skein run ../", m[0],
                " 2>/dev/null | sed 's/,[0-9.e+-]*,yes$//' > threads$t.out && cat .skein/results/", m[1],
-               "/*.vtu >> threads$t.out || exit 1; done && cmp -s threads1.out threads4.out");
+               "/* >> threads$t.out || exit 1; done && cmp -s threads1.out threads4.out");
         c.push(0);
         if system(c[0]) != 0 {
             failures++;

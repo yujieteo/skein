@@ -155,14 +155,14 @@ A sparse matrix is CSR in three arrays. The solvers use no other storage.
 | Newton | with a backtracking line search and the load ramp of `static(ramp:)` |
 | LOBPCG | for `modal` and `buckling` |
 | AMG | smoothed aggregation |
-| threads | assembly and the matrix-vector product of CG run in Goose workers (`src/solvers/pool.goose`) |
+| threads | assembly and the matrix-vector products of CG and of the flow GMRES(m) run in Goose workers (`src/solvers/pool.goose`) |
 
 Goose threads share no memory. A worker gets a range of cells as a flat
 job, computes the cell matrices, and returns them in a flat result. The main
 program adds them into the matrix in cell order. This costs one copy for
-each cell matrix, and it needs no locks and no colouring. For CG, each
-worker holds a block of the rows of the matrix, and computes those rows of
-each product.
+each cell matrix, and it needs no locks and no colouring. For CG and for
+the GMRES(m) of flow, each worker holds a block of the rows of the matrix,
+and computes those rows of each product.
 
 The package `flow` in `src/flow/` solves steady incompressible flow in 2D
 (spec §17.2). Its notes:
@@ -185,7 +185,7 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
 One work-stealing task pool runs the cases of a study (spec §20.5). Each
 worker has a queue of cases. An idle worker takes a case from the queue of
 another worker. A case is a separate program, so each case has its own
-pool for its assembly and its CG products.
+pool for its assembly and its matrix products.
 
 ---
 

@@ -103,17 +103,8 @@ fn fix_pressure(value: f64) {
 // The assembled residual of u in r, before the boundary conditions.
 fn assemble_residual(u: f64[:], r: f64[:]) {
     guard u.len == dof_count() && r.len == u.len else { abort("assemble_residual: u and r have one entry for each dof"); }
-    var dofs: i64[15] = [0; 15];
-    var ul: f64[15] = [0.0; 15];
-    var rl: f64[15] = [0.0; 15];
-    let k = cell_dof_count();
     for d in r.len { r[d] = 0.0; }
-    for c in cell_count() {
-        cell_dofs(c, dofs);
-        for a in k { ul[a] = u[dofs[a]]; }
-        cell_residual(c, ul, rl);
-        for a in k { r[dofs[a]] += rl[a]; }
-    }
+    assemble_cells(u, false, r);
 }
 
 // F(u): the residual with the boundary conditions.
@@ -127,24 +118,89 @@ fn residual(u: f64[:], r: f64[:]) {
 // The Jacobian of F at u, on the pattern of mesh.goose.
 fn jacobian(u: f64[:], v: f64[:]) {
     guard u.len == dof_count() && v.len == col.len else { abort("jacobian: u has one entry for each dof, v one for each entry of the pattern"); }
+    for e in v.len { v[e] = 0.0; }
+    assemble_cells(u, true, v);
+    for d in u.len {
+        if fixed[d] != 0 { v[solvers::entry(row_start, col, d, d)] = 1.0; }
+    }
+}
+
+// The u and the kind of an assembly, as the argument of the spawn of a
+// worker: the residual, or with jac the Jacobian.
+struct Assembly { jac: bool, u: f64[] }
+
+// Adds the residual (out has one entry for each dof) or with jac the
+// Jacobian (out has one entry for each entry of the pattern) of each cell
+// at u into out, in cell order. It runs on the pool of the threads of the
+// case (src/solvers/pool.goose) if it has more than one thread.
+fn assemble_cells(u: f64[:], jac: bool, out: f64[:]) {
+    let k = cell_dof_count();
+    let size = if jac { k * k } else { k };
+    let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
+    if workers < 2 {
+        var d: f64[>..] = [];
+        for c in cell_count() {
+            d.clear();
+            cell_values(c, u, jac, d);
+            add_cell(c, d[..], jac, out);
+        }
+        return;
+    }
+    var ids: i64[>..] = [];
+    for w in workers { ids.push(thread_spawn(cell_worker, Assembly { jac: jac, u: u })); }
+    solvers::gather_cells(cell_count(), workers, size) { lo, hi, d =>
+        for c in lo..hi { add_cell(c, d[(c - lo) * size..(c - lo + 1) * size], jac, out); }
+    };
+    for id in ids { thread_wait(id); }
+}
+
+// A worker of the assembly: the values of each cell of each task, one
+// cell after the other. Its copy of the mesh is the copy of the globals
+// at its spawn.
+thread_fn cell_worker(a: Assembly) {
+    var data: f64[>..] = [];
+    loop {
+        let job = qget<solvers::CellJob>();
+        guard job.lo >= 0 else { break; };
+        data.clear();
+        for c in job.lo..job.hi { cell_values(c, a.u, a.jac, data); }
+        qput(solvers::CellData { lo: job.lo, bad: -1, data: data[..] });
+    }
+}
+
+// Appends to d the residual of cell c at u, or with jac its Jacobian, row
+// by row: cell_dof_count() or cell_dof_count() squared values.
+fn cell_values(c: i64, u: f64[:], jac: bool, d: f64[>..]&) {
     var dofs: i64[15] = [0; 15];
     var ul: f64[15] = [0.0; 15];
     var rl: f64[15] = [0.0; 15];
     var kl: f64[225] = [0.0; 225];
     let k = cell_dof_count();
-    for e in v.len { v[e] = 0.0; }
-    for c in cell_count() {
-        cell_dofs(c, dofs);
-        for a in k { ul[a] = u[dofs[a]]; }
-        cell_jacobian(c, ul, rl, kl);
-        for a in k {
-            let row = dofs[a];
-            if fixed[row] != 0 { continue; }
-            for b in k { v[solvers::entry(row_start, col, row, dofs[b])] += kl[15 * a + b]; }
-        }
+    cell_dofs(c, dofs);
+    for a in k { ul[a] = u[dofs[a]]; }
+    if !jac {
+        cell_residual(c, ul, rl);
+        d.append(rl[..k]);
+        return;
     }
-    for d in u.len {
-        if fixed[d] != 0 { v[solvers::entry(row_start, col, d, d)] = 1.0; }
+    cell_jacobian(c, ul, rl, kl);
+    for a in k { d.append(kl[15 * a..15 * a + k]); }
+}
+
+// Adds the values of cell c (cell_values) into out. The Jacobian skips
+// the rows of the fixed dofs.
+fn add_cell(c: i64, d: f64[:], jac: bool, out: f64[:]) {
+    var dofs: i64[15] = [0; 15];
+    let k = cell_dof_count();
+    cell_dofs(c, dofs);
+    for a in k {
+        let row = dofs[a];
+        if !jac {
+            out[row] += d[a];
+            continue;
+        }
+        if fixed[row] != 0 { continue; }
+        for b in k { out[solvers::entry(row_start, col, row, dofs[b])] += d[k * a + b]; }
     }
 }
 
@@ -191,9 +247,11 @@ fn newton_step(f: f64[:], du: f64[:], trial: f64[:]) -> bool {
         f[d] = -f[d];
         du[d] = 0.0;
     }
+    solvers::rows_start(row_start, col, val);
     let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
         solvers::ilu0_apply(row_start, col, lu, diag, r, z);
     };
+    solvers::rows_stop();
     linear_iterations += its;
     if !solved { return false; }
     var lambda = 1.0;

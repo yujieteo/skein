@@ -2071,7 +2071,7 @@ run.
 ### 20.5 Threads for a case and threads for a study
 
 A machine has `H` hardware threads. A study with `k` workers gives each case
-`max(1, H / k)` threads for assembly and CG solves. The default `k` is
+`max(1, H / k)` threads for assembly and solves. The default `k` is
 `min(H, number of cases)`. `--jobs k` sets it. Reason: cases are
 independent, so parallel cases scale better than parallel assembly in one
 case. But a study with fewer cases than threads still uses all threads.
@@ -2103,11 +2103,12 @@ copy of the data that it uses:
 - Assembly: a task is a block of 16 cells. A free worker takes the next
   task from one queue, and gives the cell matrices of its cells. A worker
   copies the mesh when it starts.
-- A CG solve: each worker holds a block of the rows of the matrix, so the
-  workers together hold one more copy of the matrix. For each product of
-  the matrix and a vector, the thread of the case sends the vector to each
-  worker, and each worker gives the product of its rows. GMRES(m) and the
-  other solvers run on one thread.
+- A CG solve, and a GMRES(m) solve of flow: each worker holds a block of
+  the rows of the matrix, so the workers together hold one more copy of
+  the matrix. For each product of the matrix and a vector, the thread of
+  the case sends the vector to each worker, and each worker gives the
+  product of its rows. The preconditioners and the other solvers run on
+  the thread of the case.
 
 The thread of the case adds the cell matrices in cell order. Each row of
 a product is the same sum on each number of threads. Thus the results do

@@ -5,14 +5,16 @@
 //         solvers::ilu0_apply(row_start, col, lu, diag, r, z);
 //     };
 //
-// It starts from the x that it gets, and stops when the norm of the
-// residual b - A x is at most rtol times the norm of b. It returns the
-// number of iterations (matrix-vector products in the loop) and true if
-// it converged.
+// Its products run on the workers of rows_start (pool.goose) if the
+// caller started them for this matrix. It starts from the x that it gets,
+// and stops when the norm of the residual b - A x is at most rtol times
+// the norm of b. It returns the number of iterations (matrix-vector
+// products in the loop) and true if it converged.
 import std;
 import math;
 namespace solvers;
 import .sparse;
+import .pool;
 
 // Applies the rotations 0..k to column k of the Hessenberg matrix,
 // `hk` = its rows 0..k + 1, makes rotation k that sets row k + 1 to zero,
@@ -81,7 +83,7 @@ fn gmres<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
     let target = rtol * norm(b);
     var it = 0;
     while true {
-        multiply(row_start, col, val, x, r);
+        rows_multiply(row_start, col, val, x, r);
         for d in n { r[d] = b[d] - r[d]; }
         let beta = norm(r);
         if beta <= target { return it, true; }
@@ -95,7 +97,7 @@ fn gmres<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
             let vk = basis[k * n..(k + 1) * n];
             let w = basis[(k + 1) * n..(k + 2) * n];
             P(vk, z[..]);
-            multiply(row_start, col, val, z, w);
+            rows_multiply(row_start, col, val, z, w);
             let hk = (m + 1) * k;
             for i in k + 1 {
                 let vi = basis[i * n..(i + 1) * n];
