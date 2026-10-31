@@ -12,7 +12,6 @@ import os;
 import math;
 namespace mesher;
 import syntax from "../syntax";
-import fmt.fmt;
 import check from "../check";
 import .geometry;
 import .mesh;
@@ -225,6 +224,7 @@ struct MeshRecord {
     name: u8[..64],
     cell: u8[..4],
     size: f64,
+    g: i64,      // the shape of the region
     q: Quality,
 }
 
@@ -277,31 +277,16 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     }
     let done = if dim == 3 { mesh_3d(g.g, size) } else { mesh_2d(g.g, size) };
     if !done { reader_fault(syntax::nodes[n].tok, "the mesher did not finish in its budget of points", "give a larger size"); }
-    var r = MeshRecord { name: [], cell: [], size: size, q: mesh_quality() };
+    var r = MeshRecord { name: [], cell: [], size: size, g: g.g, q: mesh_quality() };
     r.name.append(node_text(n));
     r.cell.append(cell);
     records.push(r);
     return done;
 }
 
-fn verify(args: u8[:][:]) -> i64 {
-    guard args.len == 3 && args[2].len > 0 && args[2][0] != '-' else {
-        write_stderr(str("skein verify: give one model file\n", VERIFY_USAGE));
-        return 2;
-    }
-    let status = check::command(args);
-    if status != 0 { return status; }
-    let path = args[2];
-    var text: u8[>..] = [];
-    guard read_file(path, text) else {
-        write_stderr(str("skein verify: cannot read '", path, "'\n"));
-        return 1;
-    }
-    let prog = syntax::parse_model(path, text);
-    guard prog >= 0 else {
-        fmt::write_errors();
-        return 1;
-    }
+// Reads the header and the `let` items of program `prog` for the reader of
+// the geometry. The result is the dimension, 2 or 3.
+fn read_geometry(prog: i64) -> i64 {
     clear_shapes();
     let_names.clear();
     let_values.clear();
@@ -329,15 +314,37 @@ fn verify(args: u8[:][:]) -> i64 {
         }
         item = syntax::nodes[item].next;
     }
+    return dim;
+}
+
+fn verify(args: u8[:][:]) -> i64 {
+    guard args.len == 3 && args[2].len > 0 && args[2][0] != '-' else {
+        write_stderr(str("skein verify: give one model file\n", VERIFY_USAGE));
+        return 2;
+    }
+    let status = check::command(args);
+    if status != 0 { return status; }
+    let path = args[2];
+    var text: u8[>..] = [];
+    guard read_file(path, text) else {
+        write_stderr(str("skein verify: cannot read '", path, "'\n"));
+        return 1;
+    }
+    let prog = syntax::parse_model(path, text);
+    guard prog >= 0 else {
+        check::take_syntax_errors();
+        return check::finish(false);
+    }
+    let dim = read_geometry(prog);
     var records: MeshRecord[>..] = [];
-    item = syntax::nodes[prog].first;
+    var item = syntax::nodes[prog].first;
     while item >= 0 {
         if syntax::nodes[item].kind == syntax::N_MESH && !mesh_block(item, dim, records) { break; }
         item = syntax::nodes[item].next;
     }
     if syntax::errors.len > 0 {
-        fmt::write_errors();
-        return 1;
+        check::take_syntax_errors();
+        return check::finish(false);
     }
     let unit = length_name;
     var out: u8[>..] = [];

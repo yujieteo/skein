@@ -17,7 +17,6 @@ let hole: Surface = circle((0, 0) m, D/2)
 let fluid_dom: Surface = chan - hole
 let cyl: Curve = boundary(fluid_dom, hole)
 let inlet: Curve = boundary(chan, x == -2 m)
-let outlet: Curve = boundary(chan, x == 6 m)
 let sides: Curve = boundary(chan, abs(y) == 2 m)
 
 material fluid {

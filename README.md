@@ -37,8 +37,10 @@ step load: static {
 ```
 
 **Status:** this repository holds the specification and the start of the
-compiler. `skein check` parses and type-checks a model. `skein fmt` rewrites
-a file in the standard layout. The [roadmap](docs/roadmap.md) gives the phases.
+compiler. `skein check` parses and type-checks a model. `skein lint` checks
+it and gives the lint warnings, and with `--mesh` the warnings that need the
+mesh. `skein fmt` rewrites a file in the standard
+layout. The [roadmap](docs/roadmap.md) gives the phases.
 Phase 1 is the front end: the parser, the type and unit checker,
 `skein fmt` and `skein check`.
 
@@ -88,7 +90,7 @@ golden files again and read the diff:
 | `src/cli/` | the language card of `skein help --llm` (`card.goose`) |
 | `src/codegen/` | `skein run` for one linear static box or quarter of a tube: the Goose code generator (`codegen.goose`), the template and procedure dispatch tables (`dispatch.goose`) with one registration file for each phase 2 lane (`lane_*.goose`), and the build and run (`run.goose`). It needs the runtime in `src/runtime/`. |
 | `src/elements/` | `skein run` for a simplex model (`gen.goose`): P1 and P2 triangles and tetrahedra (`shape.goose`, `mesh.goose`) for the `linear_elastic` and `heat` templates, with assembly (`assemble.goose`), CG with Jacobi (`solve.goose`) and output (`post.goose`) |
-| `src/check/` | the type and unit checker and `skein check` (`check.goose`) |
+| `src/check/` | the type and unit checker, `skein check` (`check.goose`) and the lint rules of `skein lint` that need no mesh (`lint.goose`). The rules that need the mesh are in `src/mesher/lint.goose`. |
 | `src/shells/` | the shell, beam and laminate solver (roadmap lane 5): the MITC4 shell (`mitc4.goose`), the Timoshenko beam with offsets (`beam.goose`), laminate sections (`laminate.goose`), a cylinder mesher (`mesh.goose`) and a skyline LDLᵀ solve (`solve.goose`), the `skein run` generator for a cylindrical shell (`gen.goose`) and a VTU writer (`vtu.goose`) |
 
 ## Why Skein

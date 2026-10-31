@@ -13,7 +13,6 @@ scales a, sqrt(g*a), 998 kg/m^3
 
 let tank: Surface = rect((0, 0) m, (5*a, 2.5*a))
 let walls: Curve = boundary(tank, y < 2.5*a)
-let top: Curve = boundary(tank, y == 2.5*a)
 
 // Step functions for the start field: 1 in the column 0 <= x <= a, 0 <= y <= 2a, else 0.
 // The repeated row at the edge of the column makes the jump.

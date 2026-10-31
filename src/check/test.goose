@@ -313,7 +313,74 @@ fn test_output() {
     }
 }
 
-// Each model passes `check`, except a femahoy model with a `// blocked-by:` mark.
+// The ids of the diagnostics of `skein lint` on `src`, one per line.
+fn lint_ids(src: u8[:]) -> u8[>..] {
+    check::lint_text("t.skn", src);
+    var out: u8[>..] = [];
+    for d in check::diags {
+        out.append(d.id);
+        out.push('\n');
+    }
+    return out;
+}
+
+// `skein lint` on `src` gives exactly the ids `want`, one per line.
+fn expect_lints(what: u8[:], src: u8[:], want: u8[:]) {
+    let got = lint_ids(src);
+    if got == want { return; }
+    failures++;
+    print("FAIL lint ", what, ": got [", got, "]");
+}
+
+fn test_lint() {
+    let elastic = str(H, SOLID, "\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n");
+    let fixed = str(elastic, "step go: static {\n    bc f: u = 0\n    output u\n}\n");
+    expect_lints("a clean model", fixed, "");
+    expect_lints("unused_let", str(fixed, "let a: Length = 1 m\n"), "unused_let\n");
+    expect_lints("unused_let in a physics", str(H, SOLID, "\nphysics s on b solves T: Temperature {\n    material steel\n    let q: Vector<HeatFlux> = fourier(1 W/(m*K), T)\n    eq div(-fourier(1 W/(m*K), T)) = 0\n}\nstep go: static {\n    bc f: T = 300 K\n    output T\n}\n"), "unused_let\n");
+    expect_lints("allow", str(fixed, "let a: Length = 1 m\nallow unused_let: \"a is for the reader\"\n"), "");
+    expect_lints("unused_material", str(H, SOLID), "unused_let\nunused_material\n");
+    expect_lints("unused_field", str(elastic, "step go: static {\n    bc f: u = 0\n}\n"), "unused_field\n");
+    expect_lints("a field in a report", str(elastic, "step go: static {\n    bc f: u = 0\n    report max(von_mises(sigma), b)\n}\n"), "");
+    // A load on a region before its birth, and after its death.
+    let staged = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet top: Solid = box((0, 0, 1) m, (1, 1, 2) m)\nlet all: Solid = b | top\nlet f: Surface = boundary(b, z == 0 m)\nlet lid: Surface = boundary(top, z == 2 m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n}\nmesh m1 on all { size: 0.1 m }\nphysics s on all: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nbc f: u = 0\n");
+    expect_lints("load_no_cells before the birth", str(staged, "step one: static {\n    bc lid: sigma*n = (0, 0, -1) MPa\n    output u\n}\nstep two: static {\n    birth top\n}\n"), "load_no_cells\n");
+    expect_lints("a load after the birth", str(staged, "step one: static {\n    output u\n}\nstep two: static {\n    birth top\n    bc lid: sigma*n = (0, 0, -1) MPa\n}\n"), "");
+    expect_lints("load_no_cells after the death", str(staged, "bc lid: sigma*n = (0, 0, -1) MPa\nstep one: static {\n    output u\n}\nstep two: static {\n    death top\n}\n"), "load_no_cells\n");
+    let soft = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial rubber {\n    E: Pressure = 10 MPa\n    nu: Real = 0.499\n}\nmesh m1 on b { size: 0.1 m }\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material rubber\n}\nbc f: u = 0\nstep go: static {\n    output u\n}\n");
+    expect_lints("volumetric_lock", str(soft, "method s: cg { mesh: m1, order: 1 }\n"), "volumetric_lock\n");
+    expect_lints("order 2 does not lock", str(soft, "method s: cg { mesh: m1, order: 2 }\n"), "");
+    let impact = str(elastic, "bc f: u = 0\nstep go: transient(end: 1 s, dt: ");
+    expect_lints("dt_unstable", str(impact, "1 ms, scheme: ssprk3) {\n    output u\n}\n"), "dt_unstable\n");
+    expect_lints("a stable dt", str(impact, "1 us, scheme: ssprk3) {\n    output u\n}\n"), "");
+    expect_lints("an implicit scheme", str(impact, "1 ms, scheme: bdf2) {\n    output u\n}\n"), "");
+    let flow = str("model m: 2d, SI\nscales 1 m, 1 m/s, 1 kg/m^3\n", FLOW, "\nmethod flow: cg {\n    mesh: m1\n    order: { v: 2, p: 1 }\n    stabilize: ");
+    let steady = "\n}\nstep go: static {\n    bc lid: v = (1, 0) m/s\n    output v\n}\n";
+    expect_lints("stabilization_missing", str(flow, "none", steady), "stabilization_missing\n");
+    expect_lints("supg", str(flow, "supg", steady), "");
+    // An error stops the lint rules.
+    expect_lints("an error first", str(H, "let a: Length = 1 s\n"), "unit_mismatch\n");
+}
+
+// The lint output: the class `lint`, and the count in the summary (command_line.md §6.1).
+fn test_lint_output() {
+    let src = str(H, "let a: Length = 1 m\n");
+    check::lint_text("t.skn", src);
+    var toon: u8[>..] = [];
+    check::write_toon(toon);
+    var json: u8[>..] = [];
+    check::write_json(json);
+    if find(toon[..], "  lint,unused_let,t.skn,3,5,") < 0 || find(toon[..], "summary: errors=0 lints=1\n") < 0 {
+        failures++;
+        print("FAIL lint TOON: got [", toon, "]");
+    }
+    if find(json[..], "{\"class\":\"lint\",\"id\":\"unused_let\"") < 0 || find(json[..], "\"summary\":{\"errors\":0,\"lints\":1}") < 0 {
+        failures++;
+        print("FAIL lint JSON: got [", json, "]");
+    }
+}
+
+// Each model passes `check` and `lint`, except a femahoy model with a `// blocked-by:` mark.
 fn test_corpus(dir: u8[:]) {
     var names: u8[>..] = [];
     guard list_dir(dir, names) else { return; }
@@ -327,7 +394,7 @@ fn test_corpus(dir: u8[:]) {
             continue;
         }
         if find(src[..], "// blocked-by:") >= 0 { continue; }
-        check::check_text(path, src);
+        check::lint_text(path, src);
         for d in check::diags {
             failures++;
             print("FAIL ", path, ":", d.line, ":", d.col, ": ", d.id, ": ", d.msg);
@@ -357,6 +424,8 @@ fn main() {
     test_shells();
     test_studies();
     test_output();
+    test_lint();
+    test_lint_output();
     test_corpus("samples");
     test_corpus("examples");
     test_corpus("examples/femahoy");

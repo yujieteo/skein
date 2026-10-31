@@ -1,6 +1,6 @@
-// `skein check` (docs/command_line.md §2, §6): parses a model, applies the
-// rules of spec §19 and prints the diagnostics and the free boundary
-// report in TOON or JSON.
+// `skein check` and `skein lint` (docs/command_line.md §2, §4, §6): parses
+// a model, applies the rules of spec §19 and prints the diagnostics and the
+// free boundary report in TOON or JSON.
 import std;
 import os;
 import dictionary;
@@ -14,6 +14,7 @@ import .items;
 import .physics;
 import .steps;
 import .templates;
+import .lint;
 
 // Checks the model `text` from the file `path`. The result is in `diags`
 // and `free`.
@@ -26,14 +27,9 @@ fn check_text(path: u8[:], text: u8[:]) {
     let f = syntax::add_file(path, text);
     syntax::lex(f);
     let prog = syntax::parse(f);
+    model_prog = prog;
     syntax::read_uses(prog);
-    for e in syntax::errors {
-        let k = syntax::tokens[e.tok];
-        var d = Diag { id: e.id, file: [], fnum: k.file, line: k.line, col: k.col, msg: e.msg, fix: e.fix };
-        let file = syntax::files[k.file].path;
-        d.file.append(file[..min(file.len, 256)]);
-        diags.push(d);
-    }
+    take_syntax_errors();
     // The other rules need a tree with no syntax errors (spec §19).
     if diags.len > 0 { return; }
     let s = syntax::add_file(STD_PATH, STD_SOURCE);
@@ -53,6 +49,26 @@ fn check_text(path: u8[:], text: u8[:]) {
     objectives_end();
     method_missing();
     free_boundary();
+    sort_diags();
+}
+
+// Adds each error of `syntax::errors` to `diags`.
+fn take_syntax_errors() {
+    for e in syntax::errors {
+        let k = syntax::tokens[e.tok];
+        var d = Diag { id: e.id, file: [], fnum: k.file, line: k.line, col: k.col, msg: e.msg, fix: e.fix };
+        let file = syntax::files[k.file].path;
+        d.file.append(file[..min(file.len, 256)]);
+        diags.push(d);
+    }
+}
+
+// `skein lint`: checks the model `text`, then applies the lint rules when
+// it has no error. The result is in `diags`.
+fn lint_text(path: u8[:], text: u8[:]) {
+    check_text(path, text);
+    if diags.len > 0 { return; }
+    lint_rules();
     sort_diags();
 }
 
@@ -142,11 +158,20 @@ fn toon_value(out: u8[>..]&, s: u8[:]) {
     if plain { out.append(s); } else { quoted(out, s); }
 }
 
+// The number of diagnostics that are errors, not lint warnings.
+fn error_count() -> i64 {
+    var n = 0;
+    for d in diags {
+        if !d.lint { n++; }
+    }
+    return n;
+}
+
 fn write_toon(out: u8[>..]&) {
     if nondim { out.append("units: nondim\n"); }
     format(out, "diagnostics[", diags.len, "]{class,id,file,line,col,msg,fix}:\n");
     for d in diags {
-        out.append("  error,");
+        out.append(if d.lint { "  lint," } else { "  error," });
         out.append(d.id);
         out.push(',');
         toon_value(out, d.file);
@@ -156,8 +181,9 @@ fn write_toon(out: u8[>..]&) {
         quoted(out, d.fix);
         out.push('\n');
     }
-    format(out, "summary: errors=", diags.len, " lints=0\n");
-    if diags.len > 0 { return; }
+    let errors = error_count();
+    format(out, "summary: errors=", errors, " lints=", diags.len - errors, "\n");
+    if errors > 0 { return; }
     format(out, "free_boundary[", free.len, "]{physics,field,region,condition}:\n");
     for f in free {
         out.append("  ");
@@ -178,7 +204,7 @@ fn write_json(out: u8[>..]&) {
     out.append("\"diagnostics\":[");
     for d, i in diags {
         if i > 0 { out.push(','); }
-        out.append("{\"class\":\"error\",\"id\":");
+        out.append(if d.lint { "{\"class\":\"lint\",\"id\":" } else { "{\"class\":\"error\",\"id\":" });
         quoted(out, d.id);
         out.append(",\"file\":");
         quoted(out, d.file);
@@ -188,8 +214,9 @@ fn write_json(out: u8[>..]&) {
         quoted(out, d.fix);
         out.push('}');
     }
-    format(out, "],\"summary\":{\"errors\":", diags.len, ",\"lints\":0}");
-    if diags.len == 0 {
+    let errors = error_count();
+    format(out, "],\"summary\":{\"errors\":", errors, ",\"lints\":", diags.len - errors, "}");
+    if errors == 0 {
         out.append(",\"free_boundary\":[");
         for f, i in free {
             if i > 0 { out.push(','); }
@@ -208,12 +235,24 @@ fn write_json(out: u8[>..]&) {
     out.append("}\n");
 }
 
-let CHECK_USAGE = "usage: skein check [--format toon|json] model.skn\n";
-
-// `skein check`. `args[1]` is "check". The result is the exit status
-// (command_line.md §10).
+// `skein check`, and `skein lint` with no mesh. `args[1]` is the command.
+// The result is the exit status (command_line.md §10): a lint warning
+// alone gives 0.
 fn command(args: u8[:][:]) -> i64 {
+    let status, json, mesh = start(args);
+    if status >= 0 { return status; }
+    return finish(json);
+}
+
+// Reads the options of `args` and the model, then checks it, or lints it
+// when `args[1]` is "lint". The result is an exit status, or -1 when the
+// command continues, then true for `--format json` and for `--mesh`. Only
+// `lint` has `--mesh`.
+fn start(args: u8[:][:]) -> i64, bool, bool {
+    let lint = args[1] == "lint";
+    let usage = str("usage: skein ", args[1], if lint { " [--mesh]" } else { "" }, " [--format toon|json] model.skn\n");
     var json = false;
+    var mesh = false;
     var at = -1;
     var i = 2;
     while i < args.len {
@@ -222,32 +261,43 @@ fn command(args: u8[:][:]) -> i64 {
             if args[i + 1] == "json" {
                 json = true;
             } else if args[i + 1] != "toon" {
-                write_stderr(CHECK_USAGE);
-                return 2;
+                write_stderr(usage);
+                return 2, json, mesh;
             }
             i += 2;
             continue;
         }
+        if a == "--mesh" && lint {
+            mesh = true;
+            i++;
+            continue;
+        }
         if (a.len > 0 && a[0] == '-') || at >= 0 {
-            write_stderr(CHECK_USAGE);
-            return 2;
+            write_stderr(usage);
+            return 2, json, mesh;
         }
         at = i;
         i++;
     }
     guard at >= 0 else {
-        write_stderr(CHECK_USAGE);
-        return 2;
+        write_stderr(usage);
+        return 2, json, mesh;
     };
     let path = args[at];
     var text: u8[>..] = [];
     guard read_file(path, text) else {
         write_stderr(str("skein: cannot read '", path, "'\n"));
-        return 2;
+        return 2, json, mesh;
     };
-    check_text(path, text);
+    if lint { lint_text(path, text); } else { check_text(path, text); }
+    return -1, json, mesh;
+}
+
+// Prints the diagnostics, in JSON when `json` is true. The result is the
+// exit status.
+fn finish(json: bool) -> i64 {
     var out: u8[>..] = [];
     if json { write_json(out); } else { write_toon(out); }
     write_stdout(out);
-    return if diags.len > 0 { 1 } else { 0 };
+    return if error_count() > 0 { 1 } else { 0 };
 }

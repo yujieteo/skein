@@ -10,6 +10,7 @@ import codegen.run;
 import check from "./check";
 import md from "./md";
 import mesher.verify;   // mesher lane: skein verify
+import mesher.lint;     // skein lint, with the rules that need the mesh
 import runtime from "./runtime";   // mesher lane: the mesh type of the mesher
 import solvers from "./solvers";   // the runtime imports it
 
@@ -20,6 +21,7 @@ let USAGE = """
       check   parse and type-check a model
       fmt     rewrite files in the standard layout
       help    print this text
+      lint    check a model, then give the lint warnings
       run     build and run a model (linear static or steady heat: a box, a quarter of a tube, a plate with a hole or a cylindrical shell)
       md      write a model as a Markdown document
       verify  check a model, mesh it and report mesh_quality
@@ -51,6 +53,7 @@ fn main() {
         exit(codegen::run(rest));
     }
     if command == "check" { exit(check::command(args)); }
+    if command == "lint" { exit(mesher::lint(args)); }
     if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
     if command == "md" {
         var rest: const u8[:][>..] = [];
