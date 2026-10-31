@@ -409,7 +409,10 @@ physics solid on beam: linear_elastic solves u: Vector<Length> {
 ```
 
 The model names the unknowns, and their types must equal the types in the
-template [`type_mismatch`]. The `let` names of the template, here `sigma`,
+template [`type_mismatch`]. An unknown may also be `Complex` of the type in
+the template, for example `Vector<Complex<Length>>` for `linear_elastic`:
+the template then solves its equations in complex numbers, for a
+`harmonic` step (§14.2). The `let` names of the template, here `sigma`,
 enter the namespace of the model. The block of the model may add `material`,
 `assume` and `let` statements. It may not add `eq` [`template_eq`]. Only
 the standard library declares templates in this version.
@@ -420,7 +423,7 @@ the standard library declares templates in this version.
 | `heat(q_v)` | `T` |
 | `stokes(f)`, `navier_stokes(f)` | `v`, `p` |
 | `reissner_mindlin(layup, mirror, axis, top, q)` (shell), `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` (beam), §4.3 | `w`, `theta` |
-| `k_omega_sst` (turbulence) | `k`, `omega` |
+| `k_omega_sst` (turbulence) | `k`, `w` (the specific dissipation rate ω: `omega` is the built-in of §14.2) |
 
 The [roadmap](roadmap.md) gives the phase of each template.
 
@@ -1408,7 +1411,7 @@ The kinds:
 
 | Kind | Settings | Notes |
 |---|---|---|
-| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple` | continuous Galerkin FEM. `nedelec` is H(curl) and `raviart_thomas` is H(div). |
+| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple`, `pml` (`{ region, thickness }`) | continuous Galerkin FEM. `nedelec` is H(curl) and `raviart_thomas` is H(div). |
 | `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty` | interior penalty for second-order terms |
 | `fv` | `mesh`, `gradient` (`green_gauss`, `least_squares`), `flux` (`upwind`, `linear_upwind`, `central`), `limiter` (`none`, `minmod`, `van_leer`, `venkatakrishnan`), `pv_coupling` (`rhie_chow`) | cell-centred finite volume |
 | `rkpm` | `points`, `basis` (`linear`, `quadratic`), `support` (Real, times the spacing), `integrate` (`scni`, `gauss`), `bc` (`nitsche`) | Galerkin meshless |
@@ -1441,6 +1444,22 @@ on a mesh with `cell: quad` or `cell: hex`. `incompatible` needs `full`
 quadrature, because the gradients of its modes are 0 at the one centre
 point. Another combination is an error [`family_cell`]. A word that is not a
 value of `family` or `quadrature` is an error [`method_setting`].
+
+The setting `pml: { region: layer, thickness: 1 um }` of `cg` makes
+`region` a perfectly matched layer (PML) of an open boundary (Bérenger
+1994). The layer is the part of the body within `thickness` of its outer
+faces. In the layer, the solver stretches each coordinate axis along
+which the point is past the rest of the body by the complex factor
+s = 1 - im·σ, with σ = (3 ln(10⁶)/(2 k h))·(d/h)². Here d is the depth of
+the point past the rest of the body along the axis, h is `thickness`, and
+k is the wave number in the layer: the square root of the coefficient of
+the unknown in the equation. An outgoing wave decays in the layer, and the
+reflection of the layer at normal incidence is 10⁻⁶ before the
+discretization. The outer faces of the layer keep their own conditions.
+`region` and `thickness` are both required, and the physics needs a
+`Complex` unknown [`method_setting`]. Reason: the antenna, the eddy current
+and the optics models of femahoy need an open boundary (gap G26), and a
+first-order absorbing condition reflects a wave that is not normal to it.
 
 A setting that does not belong to the kind is an error
 [`method_setting`]. The checker tests the method against the physics:
@@ -1479,9 +1498,28 @@ physics thermal on part solves T: Temperature = 293 K { … }
 |---|---|---|
 | `static` | `ramp` (Int, default 1) | `ddt` = 0. Nonlinear problems take `ramp` load increments. |
 | `transient` | `end`, `dt`, `scheme` | time stepping from the end time of the step before |
-| `harmonic` | `freq` (a list of `Frequency`) | steady response to loads of the form `F·exp(im·ω·t)`. The unknowns and loads are `Complex` (§5.1). |
+| `harmonic` | `freq` (a list of `Frequency`), `damping` (Real, default 0) | steady response to loads of the form `F·exp(im·ω·t)`, at each frequency of the list. The unknowns and loads are `Complex` (§5.1). |
 | `modal` | `count`, `shift` | the `count` lowest eigenpairs of the linearized operator about the current state |
 | `buckling` | `count` | eigenpairs of the stiffness and the geometric stiffness of the current state |
+
+In a `harmonic` step, `ddt` is im·ω and `ddt2` is -ω². As in a `modal`
+step, `linear_elastic` takes its inertia from the density `rho` of the
+material. `damping: ζ` of `harmonic` is the damping ratio of each mode.
+The solver multiplies the stiffness (the terms of the equations with no
+`ddt`, `ddt2` or `omega`) by 1 + 2·im·ζ: structural damping, which gives
+the damping ratio ζ at each resonance. Reason: the random vibration model of femahoy gives a
+damping ratio for each mode (gap G2). On its cantilever, the RMS
+response with this damping is 0.005 % from the one of viscous modal
+damping.
+
+The built-in constant `omega` is the angular frequency of the step: 2π
+times the frequency that a `harmonic` step solves, and ω of the mode that
+a `modal` step solves. In an `expect` after the steps, it is that of the
+last frequency of the last `harmonic` step. In the other steps it is 0.
+A load, an impedance or a coefficient that depends on the frequency uses
+it, for example the surface impedance `(1 + im)*sqrt(omega*mu0/(2*sigma))`.
+Reason: femahoy has a base acceleration and a wall impedance that depend
+on the frequency (gap G8).
 
 Time schemes:
 
@@ -1574,7 +1612,7 @@ writes the solver, the iterations and the restart to stderr.
 file at the end of the step, or each `every k` time steps. `report e` prints
 a scalar or a vector to the run log in TOON. Functions for `report`:
 `reaction(r)`, `max(f, r)`, `min(f, r)`, `argmax(f, r)`, `integral(f, r)`,
-`mean(f, r)`, `eigenvalue(k)`, `when(f, value)`.
+`mean(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)`.
 
 `argmax(f, r)` is the point of `r` where the scalar `f` has its largest
 value, a `Vector<Length>` [`rank_mismatch`]. If `r` comes from a `pattern`
@@ -1608,6 +1646,25 @@ expect z2: when(front, 2.11*a) - when(front, 1.44*a) == 0.2 s within 7%
 
 Reason: a dam break test gives the times at which the front of the water
 gets to positions on the floor (femahoy gap G11).
+
+`rms(f, psd)` is the root mean square of a random response: the square
+root of the integral of |f|²·psd over the frequencies of a `harmonic`
+step, by the trapezoidal rule on the list `freq`. `f` is the scalar
+response to a load of unit amplitude, at a point or reduced over a region,
+and it can be `Complex`. `psd` is the power spectral density of the load,
+a scalar that can use `omega`. Both must be scalars that do not vary in
+space [`rank_mismatch`]. The result has the dimension of
+f·sqrt(psd·Frequency): with a load of amplitude `g` and a PSD in g²/Hz,
+`psd` is the PSD divided by g², per `Frequency`. `rms` is valid only in a
+`report` or an `expect` of a `harmonic` step, or in another `expect`
+whose last step is `harmonic` [`rms_step`].
+
+```skein
+expect a_rms: rms(g - omega^2*mean(u.z, tip), 0.04/(1 Hz)) == 400925.4 mm/s^2 within 0.5%
+```
+
+Reason: the random vibration model of femahoy checks the RMS acceleration
+of the tip of a cantilever for the PSD of a base acceleration (gap G2).
 
 `report cd = expr` gives the value a name. A study (§20) uses the name as
 the column of its results table. A report with no name gets its source
@@ -2322,14 +2379,14 @@ project of its own size, and Skein is a simulation language first. See the
 | `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
-| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
+| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
 | `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 
 ### Constants
 
-`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `tau` (the unit tangent of a `Curve`), `im` (imaginary unit).
+`I` (identity), `pi`, `x`, `y`, `z`, `t`, `n`, `tau` (the unit tangent of a `Curve`), `im` (imaginary unit), `omega` (the angular frequency of the step, §14.2).
 
 ### Standard library
 
@@ -2344,6 +2401,7 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Arnold, D. N., Brezzi, F., Cockburn, B., Marini, L. D. (2002). Unified analysis of discontinuous Galerkin methods for elliptic problems. SIAM J. Numer. Anal. 39(5).
 - Barsoum, R. S. (1976). On the use of isoparametric finite elements in linear fracture mechanics. IJNME 10(1).
 - Bazilevs, Y., Calo, V. M., Cottrell, J. A., Hughes, T. J. R., Reali, A., Scovazzi, G. (2007). Variational multiscale residual-based turbulence modeling for large eddy simulation of incompressible flows. CMAME 197.
+- Bérenger, J.-P. (1994). A perfectly matched layer for the absorption of electromagnetic waves. J. Comput. Phys. 114(2).
 - Benito, J. J., Ureña, F., Gavete, L. (2001). Influence of several factors in the generalized finite difference method. Appl. Math. Model. 25.
 - Bridson, R. (2007). Fast Poisson disk sampling in arbitrary dimensions. SIGGRAPH sketches.
 - Chen, J. S., Pan, C., Wu, C. T., Liu, W. K. (1996). Reproducing kernel particle methods for large deformation analysis of non-linear structures. CMAME 139.

@@ -1,5 +1,5 @@
 // femahoy: validation/cases/dipole-king-middleton/omega12.5/openems.py
-// blocked-by: G13 G26
+// blocked-by: G13
 // A centre-fed strip dipole in free space, half length 77.7 mm, width 1.2 mm (equivalent
 // radius 0.3 mm, Omega = 12.5), with a delta-gap feed. Time-harmonic Maxwell equations for E.
 // Reference: King and Middleton, X = -185.7 ohm at beta*h = 1.2, R = 71.02 ohm at 1.5.
@@ -15,17 +15,16 @@ let w_s: Length = 1.2 mm
 let g_f: Length = 0.6 mm
 let v0: Mass*Length^2/(Time^3*Current) = 1 V
 let f0: Frequency = bh*c0/(2*pi*hl)
-let omega: Frequency = 2*pi*f0
-let kw: Length^-1 = omega/c0
 let ex: Vector<Real> = (1, 0, 0)
 let ey: Vector<Real> = (0, 1, 0)
 let ez: Vector<Real> = (0, 0, 1)
 
 scales hl, c0, 1 V/m, 1 A
 
-// 100 mm of air on each side of the dipole.
+// 100 mm of air on each side of the dipole, then a PML of 8 cells of 5 mm, as in femahoy.
 let air: Solid = box((-100.6, -100, -177.7) mm, (100.6, 100, 177.7) mm)
-let outer_face: Surface = boundary(air)
+let world: Solid = box((-140.6, -140, -217.7) mm, (140.6, 140, 217.7) mm)
+let layer: Solid = world - air
 // The strip is in the plane y = 0, on the top face of the lower half of the air.
 let lower: Solid = box((-100.6, -100, -177.7) mm, (100.6, 0, 177.7) mm)
 let strip: Surface = boundary(lower, y == 0 mm && abs(x) <= w_s/2 && abs(z) >= g_f/2 && abs(z) <= hl)
@@ -41,7 +40,7 @@ material vacuum {
     eps: Current^2*Time^4/(Mass*Length^3) = eps0
 }
 
-mesh m on air {
+mesh m on world {
     size: 5 mm
     cell: tet
     refine strip | feed: 0.3 mm
@@ -49,7 +48,7 @@ mesh m on air {
 
 // curl(hc) is written as div(th): th*w = cross(w, hc) for each vector w. Thus th*n is the
 // natural condition cross(n, hc) on the outer faces.
-physics em on air solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
+physics em on world solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
     material vacuum
     let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu
     let th: Tensor2<Complex<Current/(Time*Length)>> = outer(cross(ex, hc), ex) + outer(cross(ey, hc), ey) + outer(cross(ez, hc), ez)
@@ -60,6 +59,7 @@ method em: cg {
     mesh: m
     order: 2
     family: nedelec
+    pml: { region: layer, thickness: 40 mm }
 }
 
 step tone: harmonic(freq: [f0]) {
@@ -69,9 +69,7 @@ step tone: harmonic(freq: [f0]) {
     // The delta gap: the voltage v0 across the gap drives the current along +z.
     bc feed: ef.x = 0
     bc feed: ef.z = -v0/g_f
-    // gap G26: no PML. A first-order absorbing condition for the outgoing wave stands for
-    // the PML of 8 cells of femahoy.
-    bc outer_face: th*n = -im*kw/mu0*cross(n, cross(n, ef))
+    // Behind the PML, the default natural condition th*n = 0.
     output ef
     // H = curl(ef)/(-im*omega*mu0) = im*hc/omega. The current is the loop integral of H.
     report z_in = v0/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) - integral(hc.x, lp_n) - integral(hc.y, lp_w)))
@@ -82,7 +80,8 @@ study band: grid {
 }
 
 // The reference gives Im(z_in) at bh = 1.2 and Re(z_in) at bh = 1.5 only, so each has a study
-// of one case. z_in is in V/A (ohm).
+// of one case. z_in is in V/A (ohm). omega after the steps is 2*pi*f0, the frequency of the
+// last harmonic step.
 study reactance: grid {
     bh: [1.2]
     expect x_in: imag(v0/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) -

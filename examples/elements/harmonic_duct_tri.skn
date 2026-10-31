@@ -1,0 +1,42 @@
+// A duct of air of 1.1 x 0.1 m at two frequencies, on P2 triangles. The
+// pressure is 1 Pa at x = 0 and im*1 Pa at x = L. The closed form of the
+// Helmholtz equation p'' + k^2*p = 0 with k = omega/c is
+// p = (sin(k*(L - x)) + im*sin(k*x))/sin(k*L) Pa. At 1372 Hz, k = 8*pi/m,
+// so at x = 0.37 m, re(p) = -0.819610 Pa and imag(p) = 0.213234 Pa.
+
+model harmonic_duct_tri: 2d, SI
+
+let L: Length = 1.1 m
+let p0: Pressure = 1 Pa
+
+scales L, 343 m/s, 1.2 kg/m^3
+
+let duct: Surface = rect((0, 0) m, (L, 0.1 m))
+let inlet: Curve = boundary(duct, x == 0 m)
+let outlet: Curve = boundary(duct, x == L)
+
+material air {
+    c: Velocity = 343 m/s
+}
+
+mesh m on duct {
+    size: 12.5 mm
+    cell: tri
+}
+
+physics sound on duct solves p: Complex<Pressure> {
+    material air
+    eq div(grad(p)) + (omega/c)^2*p = 0
+}
+
+method sound: cg { mesh: m, order: 2 }
+
+bc inlet: p = p0
+bc outlet: p = im*p0
+
+step tones: harmonic(freq: [686, 1372] Hz) {
+    output p
+    report re(p at (0.37, 0.05) m), imag(p at (0.37, 0.05) m)
+    expect real_part: re(p at (0.37, 0.05) m) == -0.819610 Pa within 0.5%
+    expect imag_part: imag(p at (0.37, 0.05) m) == 0.213234 Pa within 0.5%
+}

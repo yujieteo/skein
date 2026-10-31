@@ -43,7 +43,7 @@ set of models. `skein check` parses and type-checks a model. `skein lint` checks
 it and reports lint diagnostics. With `--mesh`, it also applies the rules
 that need a mesh. `skein verify` creates the mesh and checks its quality.
 `skein md` writes a model as a Markdown document. `skein fmt` rewrites a
-file in the standard layout. `skein export --format stl` writes the surface of a shape as STL.
+file in the standard layout. `skein export` writes the surface of a shape as STL or as tessellated STEP AP242.
 `skein run --study` runs each case of a `grid`, `zip` or `sample`
 study on parallel workers, and prints the table of the cases. `skein
 report` writes one HTML file with the source, the solver tables and a
@@ -101,8 +101,8 @@ golden files again and read the diff:
 | `src/codegen/` | native code generation and study execution |
 | `src/runtime/` | hexahedron meshes, solid elements, solvers and VTU output |
 | `src/solvers/` | sparse matrices, ILU(0), GMRES and Newton |
-| `src/elements/` | triangle and tetrahedron elements for elasticity and heat |
-| `src/mesher/` | geometry meshes, mesh checks and STL export |
+| `src/elements/` | triangle and tetrahedron elements for elasticity, heat and the complex wave equation of `harmonic` steps |
+| `src/mesher/` | geometry meshes, mesh checks, and STL and STEP export |
 | `src/shells/` | shell, beam and laminate solver routines, plus code generation for cylindrical shells |
 | `src/transient/` | transient heat solver routines |
 | `src/flow/` | stabilized Stokes and Navier-Stokes solver routines, plus code generation for 2D flow |

@@ -61,8 +61,9 @@ Rules that follow from the ranking:
 - The LLM-native goal (rank 3) is protected because it is the reason for
   the language, but it does not overrule correctness: units stay strict
   (rank 2) even when they cost tokens (G0.3).
-- If the schedule is late, cut the tessellated STEP export (rank 7) first.
-  STL export stays. Rank 6 costs almost nothing, so
+- The tessellated STEP export (rank 7) is done, so it is no longer a cut
+  candidate. The next cut if the schedule is late is not decided. The
+  captain decides it. STL export stays. Rank 6 costs almost nothing, so
   it stays.
 
 ---

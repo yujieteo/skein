@@ -38,7 +38,7 @@ models. It reports the verification checks that its solver implements.
 | `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Planned |
 | `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex models only |
 | `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
-| `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current: STL only |
+| `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current |
 | `skein view model.skn` | opens the results in the WebGL viewer | Planned |
 | `skein report model.skn` | runs the model, then writes one HTML file with the source, the solver tables and a WebGL viewer of the results (§12) | Current |
 | `skein md model.skn` | `check`, then writes the model as a Markdown document (§11) | Current |
@@ -338,9 +338,9 @@ The planned `build --target native` writes the executable of `run`.
 skein export samples/01_cantilever.skn --geometry beam --format stl
 ```
 
-`export` writes one `let` shape as an STL file (spec §22). It needs
+`export` writes one `let` shape as an STL file, or as a tessellated STEP AP242 file with `--format step` (spec §22). It needs
 no solve. It checks the model, meshes the `let` shape that `--geometry`
-names, and writes the STL to standard output:
+names, and writes the file to standard output:
 
 ```
 skein export samples/01_cantilever.skn --geometry beam > beam.stl
@@ -355,7 +355,7 @@ error.
 | Option | Meaning |
 |---|---|
 | `--geometry <name>` | the geometry to write. Required. |
-| `--format stl` | current format, and the default. STEP remains planned work. |
+| `--format stl\|step` | `stl` is the default. `step` writes STEP AP242 with tessellated geometry: one `TESSELLATED_SHELL` with the same triangles as the STL, in the length unit of the header. |
 | `--size length` | the size of the triangles, for example `--size 2mm`. Default: the `size` of the first `mesh` block on the geometry, else of the first `mesh` block. |
 
 `export` writes geometry only. Skein does not import a mesh or a CAD file

@@ -17,6 +17,7 @@ import solvers from "../solvers";
 
 let ELASTIC = 0;
 let HEAT = 1;
+let WAVE = 2;      // the complex scalar wave of wave.goose
 
 // The plane assumption of an elastic 2D model.
 let SOLID_3D = 0;
@@ -59,7 +60,7 @@ fn clear_matrix() {
 }
 
 fn start_physics(kind: i64, comps: i64) {
-    guard per_cell > 0 && (kind == ELASTIC || kind == HEAT) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
+    guard per_cell > 0 && (kind == ELASTIC || kind == HEAT || kind == WAVE) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
     physics = kind;
     ncomp = comps;
     clear_stages();

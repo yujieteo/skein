@@ -420,7 +420,10 @@ fn check_uses(uses: i64, eqs: i64&) {
         if j < p.count {
             let ms = syms[p.first + j];
             let mt = type_of(syntax::nodes[ms.node].first, false);
-            if mt.kind != tt.kind || mt.dim != tt.dim || mt.rank != tt.rank || mt.num != tt.num {
+            // A Complex unknown of the type of the template solves the same equations in complex
+            // numbers, for a harmonic step (spec §4.2).
+            let complex = mt.num == NS_COMPLEX && tt.num == NS_REAL;
+            if mt.kind != tt.kind || mt.dim != tt.dim || mt.rank != tt.rank || mt.num != tt.num && !complex {
                 error(ms.tok, "type_mismatch",
                       str("the unknown '", tok_text(ms.tok), "' is ", ty_str(mt), ", but the template solves ", ty_str(tt)),
                       str("declare it as ", ty_str(tt)));
@@ -804,7 +807,7 @@ fn free_boundary() {
 // --- methods (spec §13) --------------------------------------------------------------------
 
 let METHOD_KINDS = ["cg", "dg", "fv", "rkpm", "gfd", "ode"];
-let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple"];
+let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple", "pml"];
 let DG_SETTINGS = ["mesh", "order", "flux", "penalty", "couple"];
 let FV_SETTINGS = ["mesh", "gradient", "flux", "limiter", "pv_coupling", "couple"];
 let RKPM_SETTINGS = ["points", "basis", "support", "integrate", "bc", "couple"];
@@ -855,6 +858,44 @@ fn check_method(n: i64) {
     if p >= 0 && kind == "cg" && physics[p].incompressible { inf_sup(p, b, k.aux); }
     if p >= 0 && kind == "cg" { order_too_low(p, b); }
     if kind == "cg" { family_cell(b); }
+    if kind == "cg" { pml_setting(p, b); }
+}
+
+// `pml: { region: layer, thickness: 1 um }`: the absorbing layer of an
+// open boundary (spec §13, gap G26). Its stretch is complex, so the
+// physics needs a `Complex` unknown.
+fn pml_setting(p: i64, b: i64) {
+    let v = setting(b, "pml");
+    guard v >= 0 else { return; };
+    let fix = "write pml: { region: layer, thickness: 1 um }";
+    guard syntax::nodes[v].kind == syntax::N_RECORD else {
+        error(first_tok(v), "method_setting", "pml is a record of region and thickness", fix);
+        return;
+    };
+    var have = 0;
+    var c = syntax::nodes[v].first;
+    while c >= 0 {
+        let f = syntax::nodes[c];
+        let field = if f.aux >= 0 { tok_text(f.aux) } else { "" };
+        if field == "region" {
+            region_ty(f.first);
+            have++;
+        } else if field == "thickness" {
+            assign(first_tok(f.first), num_ty(LENGTH, 0), setting_ty(f.first), "the thickness of the pml");
+            have++;
+        } else {
+            error(f.tok, "method_setting", str("'", field, "' is not a field of pml"), fix);
+        }
+        c = f.next;
+    }
+    if have != 2 { error(first_tok(v), "method_setting", "pml needs region and thickness", fix); }
+    guard p >= 0 else { return; };
+    var complex = false;
+    for j in physics[p].count { if syms[physics[p].first + j].ty.num == NS_COMPLEX { complex = true; } }
+    if !complex {
+        error(first_tok(v), "method_setting", "pml stretches the coordinates by a complex factor, so it needs a Complex unknown",
+              "give the physics a Complex unknown and a harmonic step, or remove pml");
+    }
 }
 
 // The word of setting `name` in block `b`, or `default` when the block does
