@@ -1724,14 +1724,13 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     }
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
+    // After the clear: clear_bcs keeps the solution of the last step,
+    // which a birth reads.
+    out.append("    elements::clear_bcs();\n");
+    for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
     if share.stages >= 2 && share.reads {
-        for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
         codegen::emit_share(out, "", "elements::read_solution", share, s.name);
     } else {
-        // After the clear: clear_bcs keeps the solution of the last step,
-        // which a birth reads.
-        out.append("    elements::clear_bcs();\n");
-        for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
         // The fixed values first: a load on a node that a later fix holds
         // still counts in the reaction.
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }

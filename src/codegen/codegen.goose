@@ -485,8 +485,11 @@ fn shell_quoted(s: u8[:]) -> u8[>..] {
 // words are joined by ',', with no spaces and with '_' for '/'. So a run
 // with other values does not write over the results of the model, and a
 // submodel finds the state of the case that it needs (spec §15.1).
-fn results_path(model: u8[:], sets: const u8[:][:]) -> u8[>..] {
-    var p = str(".skein/results/", model);
+fn results_path(model: u8[:], sets: const u8[:][:]) -> u8[>..] { return set_path(".skein/results/", model, sets); }
+
+// The directory `root`<model>, and with --set, set/<words> in it.
+fn set_path(root: u8[:], model: u8[:], sets: const u8[:][:]) -> u8[>..] {
+    var p = str(root, model);
     for w, i in sets {
         p.append(if i == 0 { "/set/" } else { "," });
         for c in w {

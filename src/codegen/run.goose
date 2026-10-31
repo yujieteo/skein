@@ -6,6 +6,7 @@
 //     .skein/build/<model>/main.goose    the generated program
 //     .skein/build/<model>/<model>       the executable
 //     .skein/results/<model>/<step>.vtu  the results of each step
+//     .skein/build/<model>/set/<words>/  the program of a run with --set
 //     .skein/results/<model>/set/<words>/ the results of a run with --set
 import std;
 import os;
@@ -167,7 +168,7 @@ fn run(args: const u8[:][:]) -> i64 {
         fmt::write_errors();
         return 1;
     }
-    let build_dir = str(".skein/build/", model_name);
+    let build_dir = set_path(".skein/build/", model_name, sets);
     let results_dir = results_path(model_name, sets);
     if !make_dirs(build_dir) || !make_dirs(results_dir) {
         write_stderr("skein run: cannot make the directory .skein\n");

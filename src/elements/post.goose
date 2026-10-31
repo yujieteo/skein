@@ -88,9 +88,9 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     return s;
 }
 
-// The field at point (x, y, z), and whether a cell holds the point. A point
+// The field at point (x, y, z), and whether a live cell holds the point. A point
 // a little outside the mesh, as on the arc of a hole between two nodes,
-// takes the nearest cell.
+// takes the nearest live cell.
 fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 else { abort("field_at: a field and 0 <= comp < 9"); }
     guard cell_count() > 0 && sol.len > 0 else { return 0.0, false; }
@@ -101,6 +101,7 @@ fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     var best = -1;
     var best_l = -1.0e300;
     for c in cell_count() {
+        if !is_live(c) { continue; }
         let l = barycentric(c, p);
         var lowest = l[0];
         for a in 1..dim + 1 { lowest = min(lowest, l[a]); }
@@ -114,16 +115,18 @@ fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
         }
     }
     if count > 0 { return sum / count, true; }
+    guard best >= 0 else { return 0.0, false; };
     let l = barycentric(best, p);
     return cell_field(best, [l[1], l[2], l[3]], what, comp), best_l >= -0.1;
 }
 
 // The largest von Mises stress at the nodes of the region, from the
-// stress of each cell at the node. 0 if the region holds no node.
+// stress of each live cell at the node. 0 if the region holds no node.
 fn region_max_von_mises() -> f64 {
     guard physics == ELASTIC && sol.len == dof_total() else { abort("region_max_von_mises: an elastic model and a solution"); }
     var most = 0.0;
     for c in cell_count() {
+        if !is_live(c) { continue; }
         for l in per_cell {
             let n = cell_node(c, l);
             if !on_region(n) { continue; }
