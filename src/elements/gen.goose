@@ -248,12 +248,19 @@ struct Step {
     first_change: i64,
     change_count: i64,
     output: bool,
+    procedure: i64,     // STATIC, MODAL or BUCKLING
+    count: i64,         // the modes of a modal or buckling step
 }
+
+let STATIC = 0;
+let MODAL = 1;
+let BUCKLING = 2;
 
 // What a point field samples (api.goose: value_at, stress_at, flux_at).
 let FIELD_VALUE = 0;
 let FIELD_STRESS = 1;
 let FIELD_FLUX = 2;
+let FIELD_EIGEN = 3;    // eigenvalue(comp + 1)
 
 struct Expect {
     name: u8[..64],
@@ -265,6 +272,7 @@ struct Expect {
     relative: bool,
     label: u8[..256],
     step: i64,      // the step that checks it at its end, or -1 for an item
+    modal: bool,    // an eigenvalue of a modal step: a frequency
 }
 
 var geometry_names: u8[..64][>..];
@@ -312,8 +320,12 @@ var source = 0.0;
 var source_node = -1;           // the right side of the eq, or -1 for 0
 var body_node = -1;             // the argument b of linear_elastic, or -1
 var body_force: f64[3] = [0.0; 3];
+var density = 0.0;
+var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0, report_count: 0,
+                      first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0 };   // the step that step() reads
 
 fn reset() {
+    density = 0.0;
     codegen::reset();
     dim = 3;
     geometry_names.clear();
@@ -734,8 +746,10 @@ fn read_law() {
     if physics == ELASTIC {
         let e = property("E");
         let nu = property("nu");
+        let rho = property("rho");
         if e >= 0 { young = scalar_value(e); }
         if nu >= 0 { poisson = scalar_value(nu); }
+        if rho >= 0 { density = scalar_value(rho); }
         if young <= 0.0 || poisson <= -1.0 || poisson >= 0.5 {
             unsupported(tok(material_node), "the material needs E > 0 and -1 < nu < 0.5",
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
@@ -1027,12 +1041,12 @@ fn bc(n: i64) -> i64 {
 
 fn step(n: i64) {
     let proc = child(n, 0);
-    if name(proc) != "static" || first(proc) >= 0 {
-        unsupported(tok(proc), "this generator has only static steps with no arguments", "write step load: static { ... }");
-    }
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                   first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false };
+                   first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false,
+                   procedure: STATIC, count: 0 };
     set64(s.name, name(n));
+    procedure(proc, s);
+    step_now = s;
     var c = next(proc);
     while c >= 0 {
         let k = kind(c);
@@ -1078,6 +1092,60 @@ fn step(n: i64) {
 
 let REPORT_FIX = "write report reaction(root), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
 
+// The procedure of a step: static with no arguments, or modal or buckling
+// with count, on an elastic model.
+fn procedure(proc: i64, s: Step&) {
+    let p = name(proc);
+    guard p == "modal" || p == "buckling" else {
+        if p != "static" || first(proc) >= 0 {
+            unsupported(tok(proc), "this generator has static steps with no arguments, and modal and buckling steps with count",
+                        "write step load: static { ... } or step modes: modal(count: 6) { ... }");
+        }
+        return;
+    };
+    s.procedure = if p == "modal" { MODAL } else { BUCKLING };
+    var a = first(proc);
+    while a >= 0 {
+        let named = syntax::nodes[a].aux;
+        if named >= 0 && syntax::text(named) == "count" {
+            s.count = scalar_value(first(a)) as! i64;
+        } else {
+            unsupported(tok(a), str("the argument of ", p, " is not in this generator"), str("write ", p, "(count: 6)"));
+        }
+        a = next(a);
+    }
+    if s.count < 1 { unsupported(tok(proc), str("a ", p, " step needs count >= 1"), str("write ", p, "(count: 6)")); }
+    if physics != ELASTIC { unsupported(tok(proc), str("a ", p, " step needs the linear_elastic template"), PHYSICS_FIX); }
+    if s.procedure == MODAL && (density <= 0.0 || region_laws.len > 0) {
+        unsupported(tok(proc), "a modal step needs the density rho of one material", "give rho: Density = 7850 kg/m^3 in the material");
+    }
+    if s.procedure == BUCKLING && steps.len == 0 {
+        unsupported(tok(proc), "a buckling step needs a static step before it: its stress", "add step preload: static { ... } before it");
+    }
+}
+
+// The step of an eigenvalue(k): with `own`, the step `step_now` that step()
+// reads, else the last modal or buckling step that read() has read.
+fn eigen_step(own: bool) -> Step {
+    var at = if own { step_now } else { Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0,
+                                               report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0 } };
+    if !own { for st in steps { if st.procedure != STATIC { at = st; } } }
+    return at;
+}
+
+// eigenvalue(k) of eigen_step(own): k - 1, or -1 if it is not a mode of it.
+fn eigen_index(e: i64, own: bool) -> i64 {
+    guard is_call(e, "eigenvalue") && syntax::child_count(e) == 2 else { return -1; }
+    let count = if eigen_step(own).procedure != STATIC { eigen_step(own).count } else { 0 };
+    let k = scalar_value(arg(e, 0)) as! i64;
+    if k < 1 || k > count {
+        unsupported(tok(e), str("eigenvalue(", k, ") is not a mode of the modal or buckling step"), str("give 1 <= k <= ", count));
+    }
+    return if k >= 1 && k <= count { k - 1 } else { -1 };
+}
+
+fn freq_unit() -> const u8[:] { return if codegen::system.t == 1.0 { "Hz" } else { "kHz" }; }
+
 // `max(von_mises(sigma), r)` of an elastic model, with r a boundary that a
 // let names.
 fn max_von_mises(e: i64) -> bool {
@@ -1099,6 +1167,8 @@ fn report(item: i64) {
     } else if kind(e) == syntax::N_AT {
         let what, comp = point_field(e, true);
         if what < 0 { return; }
+    } else if is_call(e, "eigenvalue") {
+        if eigen_index(e, true) < 0 { return; }
     } else if !max_von_mises(e) {
         unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"), REPORT_FIX);
         return;
@@ -1159,6 +1229,9 @@ fn expect(n: i64, step: i64) {
     var comp = -1;
     if kind(left) == syntax::N_AT {
         what, comp = point_field(left, false);
+    } else if is_call(left, "eigenvalue") {
+        comp = eigen_index(left, step >= 0);
+        what = if comp >= 0 { FIELD_EIGEN } else { -1 };
     }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
@@ -1168,8 +1241,9 @@ fn expect(n: i64, step: i64) {
         skipped.push(s);
         return;
     }
-    var x = Expect { name: [], what: what, comp: comp, at: value(child(left, 1)).v, want: scalar_value(right),
-                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step };
+    var x = Expect { name: [], what: what, comp: comp, at: if what == FIELD_EIGEN { [0.0; 3] } else { value(child(left, 1)).v }, want: scalar_value(right),
+                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
+                     modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL };
     // A tolerance of a temperature is a difference, not a degC value.
     if kind(within) == syntax::N_NUMBER && first(within) >= 0 && source_of(first(within)) == "degC" {
         x.within -= 273.15;
@@ -1412,6 +1486,25 @@ let PRELUDE = """
         if !converged { failed = true; }
     }
 
+    // A modal (or buckling) step: the count lowest modes, by LOBPCG.
+    fn eigen(step: u8[:], count: i64, modal: bool) {
+        converged = if modal { elements::modal(count) } else { elements::buckling(count) };
+        format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
+               elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        if !converged { failed = true; }
+    }
+
+    fn mode(path: u8[:], field: u8[:], k: i64) {
+        if !elements::write_mode(path, field, k) {
+            write_stderr(str("skein run: cannot write '", path, "'\n"));
+            failed = true;
+            return;
+        }
+        format(results, "  ", path, "\n");
+        result_count++;
+    }
+
     // The sum of the reactions and the applied loads is 0 (checks.md,
     // `equilibrium`), to 1e-6 of elements::load_scale(): the larger of the
     // sum of the sizes of the nodal loads and reactions, and of the terms
@@ -1595,8 +1688,40 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     }
 }
 
+// A modal or buckling step: the bcs that fix, then LOBPCG. It writes a
+// file for each mode. The stages of a study share no mode.
+fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
+    let s = steps[si];
+    let modal = s.procedure == MODAL;
+    format(out, "// step ", s.name, ": ", if modal { "modal" } else { "buckling" }, "\nfn step_", s.name, "() {\n");
+    out.append("    elements::clear_bcs();\n");
+    for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
+    for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
+    out.append("    eigen(");
+    quoted(out, s.name);
+    format(out, ", ", s.count, ", ", if modal { "true" } else { "false" }, ");\n");
+    for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s, r); }
+    for x in expects { if x.step == si { emit_expect(out, x); } }
+    if s.output {
+        for k in 1..s.count + 1 {
+            var path: u8[>..] = [];
+            format(path, results_dir, "/", s.name, "_mode", k, ".vtu");
+            out.append("    mode(");
+            quoted(out, path);
+            out.append(", ");
+            quoted(out, unknown_name);
+            format(out, ", ", k, ");\n");
+        }
+    }
+    out.append("}\n\n");
+}
+
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) {
     let s = steps[si];
+    if s.procedure != STATIC {
+        emit_eigen_step(out, si, results_dir);
+        return;
+    }
     format(out, "// step ", s.name, ": static\n");
     format(out, "fn step_", s.name, "() {\n");
     if share.stages >= 2 && share.reads {
@@ -1630,7 +1755,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             format(out, "    cut_check(\"", reaction_unit(), "\");\n");
         }
     }
-    for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s.name, r); }
+    for r in reports[s.first_report..s.first_report + s.report_count] { emit_report(out, s, r); }
     for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
         var path: u8[>..] = [];
@@ -1656,15 +1781,22 @@ fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3])
     if what == FIELD_VALUE { format(out, "value_at(", comp, ", "); }
     if what == FIELD_FLUX { format(out, "flux_at(", AXES[comp], ", "); }
     if what == FIELD_STRESS { format(out, "stress_at(", AXES[comp / 3], ", ", AXES[comp % 3], ", "); }
+    if what == FIELD_EIGEN {
+        format(out, "eigenvalue(", comp + 1, "), true;\n");
+        return;
+    }
     lits(out, at);
     out.append(");\n");
 }
 
-fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
+fn emit_report(out: u8[>..]&, step: Step, r: Report) {
     format(out, "    // report ", r.label, "\n    {\n");
     let e = r.expr;
     var v: u8[>..] = [];
-    if max_von_mises(e) {
+    if is_call(e, "eigenvalue") {
+        format(out, "        let x = elements::eigenvalue(", scalar_value(arg(e, 0)) as! i64, ");\n");
+        format(v, "quantity(x, \"", if step.procedure == MODAL { freq_unit() } else { "" }, "\")");
+    } else if max_von_mises(e) {
         out.append("    ");
         emit_region(out, find_surf(name(arg(e, 1))));
         out.append("        let x = elements::max_von_mises();\n");
@@ -1696,7 +1828,7 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
         }
     }
     out.append("        report(");
-    quoted(out, step);
+    quoted(out, step.name);
     out.append(", ");
     quoted(out, r.label);
     format(out, ", ", v, ");\n    }\n");
@@ -1713,7 +1845,8 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", field_unit(x.what), "\", ");
+    let unit = if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
 }
@@ -1861,6 +1994,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         if body_node >= 0 {
             out.append("    elements::body_force(");
             lits(out, body_force);
+            out.append(");\n");
+        }
+        if density > 0.0 {
+            out.append("    elements::set_density(");
+            lit(out, density);
             out.append(");\n");
         }
         for w in region_laws {

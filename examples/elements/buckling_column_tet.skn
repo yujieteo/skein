@@ -1,0 +1,49 @@
+// A steel column of 10 x 10 x 200 mm, fixed at the base and free at the
+// top, with a load of 1 N on the top face, on P2 tetrahedra. Linear
+// buckling: the geometric stiffness of the stress of the static step,
+// then LOBPCG. The reference is Timoshenko and Gere (1961), Art. 2.1:
+// P = pi^2*E*I/(4*L^2) = 10794.88 N, within 1 %. The femahoy model is
+// examples/femahoy/buckling_column.skn.
+
+model buckling_column_tet: 3d, mm_N_MPa_s
+
+let B: Length = 10 mm
+let L: Length = 200 mm
+let q: Pressure = 0.01 MPa
+
+scales B, 210000 MPa
+
+let column: Solid = box((0, 0, 0) mm, (B, B, L))
+let base: Surface = boundary(column, z == 0 mm)
+let top: Surface = boundary(column, z == L)
+
+material steel {
+    E: Pressure = 210000 MPa
+    nu: Real = 0.3
+}
+
+mesh m on column {
+    size: 5 mm
+    cell: tet
+}
+
+physics solid on column: linear_elastic solves u: Vector<Length> {
+    material steel
+}
+
+method solid: cg { mesh: m, order: 2 }
+
+bc base: u = 0
+
+// 0.01 MPa on 10 x 10 mm is 1 N in -z. Thus the load factor is the force in N.
+step preload: static {
+    bc top: sigma*n = (0, 0, -q)
+}
+
+step buckle: buckling(count: 2) {
+    output u
+    report eigenvalue(1)
+}
+
+// The load factor is pi^2*E*(B^4/12)/(4*L^2)/(1 N).
+expect p1: eigenvalue(1) == 10794.88 within 1%
