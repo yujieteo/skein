@@ -691,6 +691,9 @@ fn read(prog: i64) -> bool {
     if (method == RKPM || method == GFD) && (ct != 0.0 || initial_node >= 0) {
         unsupported(at, "rkpm and gfd have static steps only", "remove ddt(u) and the transient steps");
     }
+    if (method == RKPM || method == GFD) && lap == 0.0 {
+        unsupported(at, "rkpm and gfd need a div(grad(u)) term", PHYSICS_FIX);
+    }
     return ok();
 }
 
