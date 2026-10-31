@@ -532,52 +532,35 @@ fn test_study_table() {
     expect_text("the columns of the expects", names, "r es e ec ");
 }
 
-// The workers of a study (spec §20.5): k cases that fit in the memory, and
-// max(1, H / k) threads for each.
-fn test_study_workers() {
-    let runs = [
-        [4.0, 16.0, 1.0e6, 1.0e9, 4.0, 4.0],    // the memory holds 1000 cases
-        [4.0, 16.0, 3.0e8, 1.0e9, 3.0, 5.0],    // the memory holds 3 cases
-        [4.0, 16.0, 2.0e9, 1.0e9, 1.0, 16.0],   // one case is larger than the memory
-        [8.0, 4.0, 0.0, 1.0e9, 8.0, 1.0],       // --jobs 8 on 4 threads
-    ];
-    for r in runs {
-        let k, threads = codegen::study_workers(r[0] as! i64, r[1] as! i64, r[2], r[3]);
-        if k != r[4] as! i64 || threads != r[5] as! i64 {
-            failures++;
-            print("FAIL study_workers(", r[0], ", ", r[1], ", ", r[2], ", ", r[3], "): ", k, " and ", threads, ", not ", r[4], " and ", r[5]);
-        }
-    }
-}
-
-// The work-stealing pool (spec §20.5): 10 tasks on 3 workers start as the
-// blocks 0-2, 3-5 and 6-9. Worker 1 ends its block first and takes the
-// tail of the longest other queue. Each task runs once.
-fn test_pool() {
-    var p = codegen::new_pool(10, 3);
-    var got: i64[>..] = [];
-    for w in [1, 1, 1, 1, 0, 1] { got.push(codegen::take_task(p, w)); }
-    var text: u8[>..] = [];
-    for t in got { format(text, t, " "); }
-    expect_text("the tasks of the pool", text, "3 4 5 9 0 8 ");
-    var seen: bool[>..] = [];
-    for t in 10 { seen.push(false); }
-    for t in got { seen[t] = true; }
-    loop {
-        let t = codegen::take_task(p, 2);
-        guard t >= 0 else { break; };
-        if seen[t] {
-            failures++;
-            print("FAIL the pool gives task ", t, " twice");
-        }
-        seen[t] = true;
-    }
-    for t in 10 {
-        if !seen[t] {
-            failures++;
-            print("FAIL the pool does not give task ", t);
-        }
-    }
+// The memory ledger of a study (spec §20.5): a case starts only if its
+// estimate fits beside the running cases, or if no case runs. A measured
+// peak takes the place of a smaller estimate.
+fn test_ledger() {
+    var l = codegen::new_ledger(1.0e9);
+    var got: u8[>..] = [];
+    // no case known: one at a time
+    format(got, codegen::admits(l, codegen::case_need(l, 1000), 0), " ");
+    l.used = codegen::case_need(l, 1000);
+    format(got, codegen::admits(l, codegen::case_need(l, 1000), 1), " ");
+    l.per_dof = 1.0e5;   // 100 MB for 1000 dofs
+    l.used = 8.0e8;
+    format(got, codegen::admits(l, codegen::case_need(l, 2000), 3), " ", codegen::admits(l, codegen::case_need(l, 3000), 3), " ");
+    format(got, codegen::admits(l, codegen::case_need(l, 20000), 0), " ");
+    codegen::learn(l, 4, 1000, 5.0e7);   // a smaller peak does not replace the estimate
+    codegen::learn(l, 5, 1000, 2.0e8);   // a larger peak does
+    format(got, l.per_dof, " ", l.source, " ");
+    l.budget = 0.0;   // no budget: --jobs only
+    format(got, codegen::admits(l, 1.0e12, 7), " ");
+    // more than one solve step: one case at a time until a measured peak
+    var m = codegen::new_ledger(1.0e9);
+    m.partial = true;
+    m.per_dof = 1.0e3;
+    format(got, codegen::admits(m, codegen::case_need(m, 1000), 1), " ", codegen::admits(m, codegen::case_need(m, 1000), 0), " ");
+    codegen::learn(m, 0, 1000, 2.0e6);
+    format(got, codegen::admits(m, codegen::case_need(m, 1000), 1));
+    expect_text("the ledger", got, "true false true false true 200000.0 5 true false true true");
+    let toon = "solve[0]:\nestimate_mb: 12\npeak_mb: 34.5\n";
+    expect_text("peak_mb", str(codegen::toon_number(toon, "peak_mb:"), " ", codegen::toon_number(toon, "none:")), "34.5 -1.0");
 }
 
 // `skein run --study` of an example, and the command line errors. `./build.sh
@@ -652,16 +635,67 @@ fn test_study_run() {
     }
 }
 
+// A study of a model with a static step and a buckling step (spec §20.5):
+// the probe gives the estimate of the static step only, so the second case
+// starts only after a case ends. The length reaches the mesh, so the cases
+// share no stage.
+fn test_two_step_study() {
+    var c: u8[>..] = [];
+    format(c, "cd build && sed 's/^let L: Length/param L: Length/' ../examples/elements/buckling_column_tet.skn > two_steps.skn && ",
+           "printf '\nstudy lengths: grid {\n    L: [200, 190] mm\n}\n' >> two_steps.skn && ",
+           "./skein run two_steps.skn --study lengths --jobs 2 >/dev/null 2>two_steps.err; ",
+           "grep -q 'case 2 starts' two_steps.err && grep -E 'starts|ended' two_steps.err | sed -n 2p | grep -q ended");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL a study of a static and a buckling step starts its second case before a case ends");
+    }
+}
+
+// A run that does not fit in the memory budget (spec §20.5) stops before
+// its assembly, with exit status 1 and the estimate and the budget. A run
+// that fits only on 1 thread goes on with 1 thread.
+fn test_memory_stop() {
+    var c: u8[>..] = [];
+    format(c, "cd build && SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err; ",
+           "test $? = 1 && grep -q 'MB of memory, and 1 MB is free for it (from SKEIN_MEMORY_BUDGET)' memory.err");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL skein run with SKEIN_MEMORY_BUDGET=1000000 does not stop with the memory message");
+    }
+    // The stop gives the 1-thread estimate, the least that the solve needs:
+    // the message on 16 threads is the same as on 1 thread.
+    c.clear();
+    format(c, "cd build && for t in 1 16; do SKEIN_THREADS=$t SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory$t.err; ",
+           "test $? = 1 || exit 1; done && cmp -s memory1.err memory16.err");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL skein run on 16 threads that does not fit does not stop with the 1-thread estimate");
+    }
+    // 40 MB holds the solve on 1 thread (about 25 MB) and not on 16 threads
+    // (about 53 MB): the run goes on with 1 thread.
+    c.clear();
+    format(c, "cd build && SKEIN_THREADS=16 SKEIN_MEMORY_BUDGET=40000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err && ",
+           "grep -q 'the solve runs on 1 thread, since 16 threads need about' memory.err");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL skein run on 16 threads with a budget for 1 thread does not go on with 1 thread");
+    }
+}
+
 // The threads of a case (spec §20.5): a run of a model on 1 thread and on
 // 4 threads gives the same reports and the same result files. The sed removes
-// the seconds of each solve. One model of the runtime, one of the package
+// the seconds of each solve and the memory of the run. One model of the runtime, one of the package
 // elements and one of the package flow.
 fn test_case_threads() {
     for m in [["examples/femahoy/grid_cantilever.skn", "grid_cantilever"], ["examples/elements/kirsch_plate_tri.skn", "kirsch_plate_tri"],
               ["examples/flow/cavity_coarse.skn", "cavity_coarse"]] {
         var c: u8[>..] = [];
         format(c, "cd build && for t in 1 4; do rm -rf .skein/results/", m[1], " && SKEIN_THREADS=$t ./skein run ../", m[0],
-               " 2>/dev/null | sed 's/,[0-9.e+-]*,yes$//' > threads$t.out && cat .skein/results/", m[1],
+               " 2>/dev/null | sed '/^estimate_mb: /d; /^peak_mb: /d; s/,[0-9.e+-]*,yes$//' > threads$t.out && cat .skein/results/", m[1],
                "/* >> threads$t.out || exit 1; done && cmp -s threads1.out threads4.out");
         c.push(0);
         if system(c[0]) != 0 {
@@ -906,8 +940,9 @@ fn main() {
     test_wave_values();
     test_study_cases();
     test_study_table();
-    test_study_workers();
-    test_pool();
+    test_ledger();
+    test_memory_stop();
+    test_two_step_study();
     test_study_run();
     test_case_threads();
     test_split();

@@ -214,10 +214,13 @@ fn entry(r: i64, c: i64) -> i64 {
 var assembled_source: f64[>..] = [];
 
 // The matrix and the source vector, on the pool of the threads of the
-// case (src/solvers/pool.goose) if it has more than one thread.
-fn assemble() {
+// case (src/solvers/pool.goose) if it has more than one thread. `path` and
+// `vectors` are the solution path and the vectors of its solver, for the
+// memory check after the pattern (solvers::memory_check).
+fn assemble(path: u8[:], vectors: i64) {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
+    solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), "");
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     let m = per_cell * ncomp;
@@ -235,6 +238,11 @@ fn assemble() {
     for w in workers { ids.push(thread_spawn(cell_worker)); }
     solvers::gather_cells(cell_count(), workers, m * m + m, add_cells);
     for id in ids { thread_wait(id); }
+}
+
+// The bytes of the globals that each cell_worker copies at its spawn.
+fn worker_mesh_bytes() -> i64 {
+    return 8 * (coords.len + conn.len + cell_law.len + birth_u.len) + dead.len + born.len;
 }
 
 // The matrix ke and the source fe of cell c, with the law of its region.

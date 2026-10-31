@@ -250,6 +250,7 @@ var ke: f64[>..] = [];
 fn assemble() -> bool {
     guard cell_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("assemble: a mesh and its dofs"); }
     build_pattern();
+    check_memory(col.len);
     let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
     var bad = -1;
     if workers < 2 {

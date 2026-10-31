@@ -409,59 +409,65 @@ fn set_source(path: u8[:], text: u8[:], sets: const u8[:][:], out: u8[>..]&) -> 
     return true;
 }
 
-// --- the workers (spec §20.5) --------------------------------------------------
+// --- the memory ledger (spec §20.5) -------------------------------------------
 
-// The number k of cases that run at the same time, and the threads of each
-// case: k is `want`, but at most the cases of `case_bytes` each that fit
-// in `memory` bytes, and each case gets max(1, h / k) of the `h` hardware
-// threads.
-fn study_workers(want: i64, h: i64, case_bytes: f64, memory: f64) -> i64, i64 {
-    var k = want;
-    if case_bytes > 0.0 && memory > 0.0 { k = min(k, max(1, (memory / case_bytes) as! i64)); }
-    return k, max(1, h / k);
+// The ledger of the study runner. The runner reads the budget once, at the
+// start of the study. A case starts only if its estimate fits in the
+// budget less the estimates of the cases that run, or if no case runs:
+// then the case checks itself before its assembly, and stops with a
+// message if it does not fit (solvers::memory_check). Reason: a case
+// reaches its peak late, at the setup of its solver, so the free memory at
+// its start does not show what the running cases take later. When the
+// program has more than one solve step, the estimate is that of its first
+// solve, and a later step can take more: then one case runs at a time
+// until a case gives its measured peak.
+struct Ledger {
+    budget: f64,    // the bytes for all cases, or 0 if they are not known
+    per_dof: f64,   // the bytes of a case for each dof of its mesh, or 0 if they are not known
+    source: i64,    // the case of per_dof, or -1
+    measured: bool, // per_dof is a measured peak, not an estimate
+    partial: bool,  // the estimate is that of the first of more than one solve step
+    used: f64,      // the sum of the estimates of the cases that run
+    most: i64,      // the most cases that ran at a time
 }
 
-// The work-stealing task pool (spec §20.5). Goose threads share no memory
-// and have no atomics or locks, so the thread that runs the pool owns the
-// queue of each worker, and a worker gets its task as the argument of its
-// spawn. Worker w starts with the block of tasks q[2 w] <= t < q[2 w + 1].
-// It takes the task at the head of its own queue. A worker with an empty
-// queue takes the task at the tail of the longest other queue.
-struct Pool {
-    q: i64[>..],
+fn new_ledger(budget: f64) -> Ledger {
+    return Ledger { budget: budget, per_dof: 0.0, source: -1, measured: false, partial: false, used: 0.0, most: 0 };
 }
 
-// The pool of the tasks 0 to `tasks` - 1 on `workers` workers.
-fn new_pool(tasks: i64, workers: i64) -> Pool {
-    var p = Pool { q: [] };
-    for w in workers {
-        p.q.push(tasks * w / workers);
-        p.q.push(tasks * (w + 1) / workers);
+// The estimate in bytes of a case with `dofs` dofs: the whole budget while
+// the ledger knows no case.
+fn case_need(l: Ledger, dofs: i64) -> f64 {
+    return if l.per_dof > 0.0 { l.per_dof * dofs } else { l.budget };
+}
+
+// Whether a case of `need` bytes may start while `running` cases run.
+fn admits(l: Ledger, need: f64, running: i64) -> bool {
+    return running == 0 || l.budget <= 0.0 || (l.measured || !l.partial) && l.used + need <= l.budget;
+}
+
+// Learns from case c of `dofs` dofs, which ended with the measured peak
+// `peak`. A larger peak for each dof takes the place of the estimate or of
+// a smaller peak. Reason: the bytes for each dof change with the dofs, so a
+// smaller peak of one case is not a bound for the other cases.
+fn learn(l: Ledger&, c: i64, dofs: i64, peak: f64) {
+    guard peak > 0.0 && dofs > 0 else { return; };
+    l.measured = true;
+    let per = peak / dofs;
+    if per <= l.per_dof { return; }
+    l.per_dof = per;
+    l.source = c;
+}
+
+// The value of the line "key: value" of the TOON `text`, or -1.
+fn toon_number(text: u8[:], key: u8[:]) -> f64 {
+    for line in split(text, '\n') {
+        if !starts_with(line, key) { continue; }
+        let v, good = parse_flt(trim(line[key.len..]));
+        return if good { v } else { -1.0 };
     }
-    return p;
+    return -1.0;
 }
-
-// The next task of worker w, or -1 if no queue has a task.
-fn take_task(p: Pool&, w: i64) -> i64 {
-    if p.q[2 * w] < p.q[2 * w + 1] {
-        p.q[2 * w]++;
-        return p.q[2 * w] - 1;
-    }
-    var victim = -1;
-    var most = 0;
-    for v in p.q.len / 2 {
-        let left = p.q[2 * v + 1] - p.q[2 * v];
-        if left > most {
-            victim = v;
-            most = left;
-        }
-    }
-    guard victim >= 0 else { return -1; };
-    p.q[2 * victim + 1]--;
-    return p.q[2 * victim + 1];
-}
-
-// --- the table (spec §20.6) ----------------------------------------------------
 
 fn set1024(into: u8[..1024]&, s: u8[:]) {
     into = [];

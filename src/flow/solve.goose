@@ -67,6 +67,10 @@ fn clear_bcs() {
         sol.push(0.0);
         raw.push(0.0);
     }
+    // The matrices and the solve of solve_steady: the basis of GMRES, f, du,
+    // trial, r, z and the `where` of ILU(0). Each worker of the assembly
+    // copies the mesh and u.
+    solvers::memory_check("flow newton gmres ilu0", col.len, n, LINEAR_RESTART + 7, 8 * (coords.len + conn.len + first_dof.len + n), "");
     val.clear();
     lu.clear();
     pre.clear();

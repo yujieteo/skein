@@ -10,6 +10,11 @@
 # which is the same C that the build of skein run compiles. Then
 # scripts/power_of_ten.sh checks each program and the runtime that it imports.
 #
+# Each solve of a model must check its memory first (src/solvers/memory.goose):
+# its records must hold at least as many memory_checks as solves. With the
+# abort of memory_check on a path that has no memory model, a new solution
+# path cannot skip the model, if a model here runs it.
+#
 # Goose writes the absolute path of each imported file into the C. This
 # script removes the repository directory from these paths. That is the only
 # change to the C. The C is then the same on each machine with the Goose
@@ -72,11 +77,17 @@ for model in $models; do
     # skein run names the build directory after the `model <name>:` line.
     name=$(sed -n 's/^model \([A-Za-z0-9_]*\):.*/\1/p' "$root/$model" | head -n 1)
     committed="$root/${model%.skn}.c"
-    if ! (cd "$work" && "$root/build/skein" run "$root/$model" >/dev/null 2>"$work/run.err"); then
+    if ! (cd "$work" && "$root/build/skein" run "$root/$model" >"$work/run.toon" 2>"$work/run.err"); then
         cat "$work/run.err"
         echo "FAIL $model: skein run fails"
         status=1
         continue
+    fi
+    solves=$(sed -n 's/^solve\[\([0-9]*\)\].*/\1/p' "$work/run.toon")
+    checks=$(sed -n 's/^memory_checks: //p' "$work/run.toon")
+    if [ -z "$checks" ] || [ "$checks" -lt "${solves:-0}" ]; then
+        echo "FAIL $model: ${solves:-0} solves, and ${checks:-no} memory checks (src/solvers/memory.goose)"
+        status=1
     fi
     programs="$programs $work/.skein/build/$name/main.goose"
     (cd "$work" && "$goose" -q -o "$work/$name.c" ".skein/build/$name/main.goose")

@@ -15,6 +15,7 @@ import .laminate;
 import .model;
 import .mitc4;
 import .beam;
+import solvers from "../solvers";
 
 var top: i64[>..] = [];
 var start: i64[>..] = [];      // the index in sky of the entry (top[j], j)
@@ -54,6 +55,7 @@ fn profile() {
         start.push(s);
         s += j - top[j] + 1;
     }
+    solvers::memory_check("shell skyline ldlt", s, n, 1, 0, "");
     sky.clear();
     for i in s { sky.push(0.0); }
 }

@@ -2139,28 +2139,60 @@ run.
 
 ### 20.5 Threads for a case and threads for a study
 
-A machine has `H` hardware threads. A study with `k` workers gives each case
-`max(1, H / k)` threads for assembly and matrix products. The default `k` is
-`min(H, number of cases)`. `--jobs k` sets it. Reason: cases are
-independent, so parallel cases scale better than parallel assembly in one
-case. But a study with fewer cases than threads still uses all threads.
+A machine has `H` hardware threads. A study runs at most `k` cases at a
+time. The default `k` is `min(H, number of cases)`, and `--jobs k` sets
+it. When a case starts and no case runs, it has `H` threads if no
+second case can join it: there is no next case, `k` is 1, or the ledger
+(below) does not admit the next case beside it. Such a case runs alone.
+Each other case has 1 thread. Reason: on sample 01, 16 threads took 25%
+more memory than 1 thread and the same time, so parallel cases scale
+better than parallel assembly in one case.
 
-The memory of one case times `k` must fit in half of the available memory
-of the target. The runner estimates
-the memory of a case from the mesh size before it starts the workers, and
-lowers `k` if necessary. It reports the value that it chose.
+**Memory.** Each solve checks its memory after the sparsity pattern of
+its matrix and before the values (`src/solvers/memory.goose`). The
+estimate is the resident memory at the check, plus a measured number of
+bytes for each entry of the pattern and for each dof for its solution
+path, plus the vectors of its solver. On more than 1 thread, it adds two
+copies of the mesh for each thread: each worker of the assembly holds its
+spawn argument and its globals. The pattern is what the program really builds, so
+the estimate needs no table of cell types or physics. If the estimate
+on the threads of the case does not fit but the estimate on 1 thread
+fits, the solve goes on with 1 thread. If the estimate on 1 thread
+does not fit in the budget, the program stops before the assembly with
+the estimate on 1 thread and the free memory. Each case also sets its
+`oom_score_adj` to 1000, so that the kernel kills a case first and not
+another program.
 
-**The work-stealing task pool.** The runner runs the cases on one task
-pool in the style of the Go scheduler. Each of the `k` workers has its own
-queue of cases. At the start, the queue of a worker holds a block of the
-cases, in case order. A worker that ends a case starts the next case of
-its queue. A worker with an empty queue takes the last case of the longest
-other queue. Thus a slow case does not stop the start of the other cases.
+The budget is 0.9 × min(MemAvailable, memory.max − memory.current of
+each cgroup of the process), read once. Linux only: on another OS there
+is no budget, and only `k` limits a study.
+
+The study runner keeps a ledger: a case starts only if its estimate fits
+in the budget less the estimates of the running cases, or if no case
+runs. Reason: a case reaches its peak late, at the setup of its solver,
+so the free memory at its start does not show what the running cases
+take later. Before the first case, the runner probes the cases with the
+fewest and the most dofs: each program prints the estimate of its first
+solve on 1 thread and stops. The estimate of each case is the larger
+bytes for each dof of the two probes times its dofs. Reason: the bytes
+for each dof go down with the dofs on some paths (the RSS before the
+solve, the GMRES restart of a wave solve) and up on others (the skyline
+profile of a shell). When the model has more than one step, a later step can take
+more memory than the first solve: then one case runs at a time until a
+case gives its measured peak. Each case writes its measured peak
+(`peak_mb`, from VmHWM, the `getrusage` peak of Linux) in its records,
+and a measured peak for each dof that is larger than the estimate then
+takes its place. When case 1 writes the stages that the other cases read, it runs
+first and alone on `H` threads, and its peak is the first estimate.
+
+**The task pool.** The thread of the runner starts the cases in case
+order, each when the ledger admits it, and starts the next case when a
+case ends. Thus a slow case does not stop the start of the other cases.
 
 Goose threads share no memory, and Goose has no atomics or locks. Thus the
-thread of the runner owns all the queues, and a worker gets its case as the
-argument of its spawn. The table is in case order, so the order of the
-runs does not change the results.
+thread of the runner owns the queue and the ledger, and a worker gets its
+case as the argument of its spawn. The table is in case order, so the
+order of the runs does not change the results.
 
 On the native target, a case is a separate program. Thus a task of the
 pool is one whole case.
@@ -2204,7 +2236,7 @@ cases[3]{case,Re,status,verify,cd,time_s}:
   3,40,ok,pass,1.54,5.1
 ```
 
-`jobs` is the number of cases that ran at the same time (§20.5). One
+`jobs` is the most cases that ran at the same time (§20.5). One
 column for each varied parameter, each named report and each `expect`.
 `verify` is `pass` when each verification check of the case passes.
 `--format json` gives the same records as JSON.

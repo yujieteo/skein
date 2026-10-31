@@ -155,12 +155,12 @@ skein run samples/06_cylinder_sweep.skn --study re_sweep --jobs 3
 | Option | Commands | Meaning |
 |---|---|---|
 | `--target wasm` | `build` | the page that solves in the browser (§7) |
-| `--threads n` | `run` | worker threads for assembly and matrix products. Default: all hardware threads. With `--study`, the default is `max(1, H / k)` for `H` hardware threads and `k` jobs (spec §20.5). |
+| `--threads n` | `run` | worker threads for assembly and matrix products. Default: all hardware threads. With `--study`, a case has all threads when no second case can run beside it, and 1 thread otherwise (spec §20.5). |
 | `--levels n` | `verify convergence` | number of meshes. Default 3. |
 | `--mesh` | `lint`, `verify` | make the mesh and run the checks that need it |
 | `--study <name>` | `run` | run each case of the study (spec §20) |
 | `--set name=value` | `run`, `verify`, `build` | give a `param` a value for this command |
-| `--jobs k` | `run --study` | cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. The runner lowers `k` when `k` cases do not fit in half of the available memory (`MemAvailable` of `/proc/meminfo`), and the table gives the `k` that it used (spec §20.5). |
+| `--jobs k` | `run --study` | the most cases that run at the same time. Default: `min(H, number of cases)` for `H` hardware threads. A case starts only when its memory estimate fits in the budget beside the running cases, and the table gives the most cases that ran at a time (spec §20.5). |
 | `-o dir` | `run`, `build` | the output directory. Default `.skein/`. |
 
 Current `run` writes VTU results under `.skein/results/<model>/`.
@@ -183,6 +183,9 @@ case. The generated program reads the mesh from these files.
 Each case gets its threads in the environment variable `SKEIN_THREADS`.
 The program of a model reads it for its assembly and its matrix products. Without
 it, the program uses all hardware threads.
+Each case also gets the memory budget of the study in bytes in
+`SKEIN_MEMORY_BUDGET`, in place of the budget that the program reads
+itself (spec §20.5).
 
 ---
 
@@ -258,6 +261,20 @@ cases[3]{case,Re,status,verify,cd,time_s}:
 
 A case that fails gets the status `failed` and the diagnostic
 [`case_failed`](checks.md). The other cases continue.
+
+### 6.6 Memory
+
+`run` ends its records with the memory of the run (spec §20.5): the
+number of memory checks (one before the assembly of each solve), the
+largest estimate, and the measured peak, in MB. When a check finds that
+the solve fits only on 1 thread, the run goes on with 1 thread and
+writes one line on stderr.
+
+```toon
+memory_checks: 1
+estimate_mb: 1688
+peak_mb: 1611
+```
 
 ---
 

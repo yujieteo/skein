@@ -97,3 +97,15 @@ fn rigid_setup(a: f64[:]) -> bool {
     }
     return solvers::amg_setup_modes(row_start, col, a, 3, modes, 6);
 }
+
+// The memory check of a solve with solver_name and preconditioner_name,
+// after the pattern of `entries` entries (solvers::memory_check). The
+// vectors: r, z, p, q, b and inv_diag of cg, and the basis of gmres with
+// rhs, r, z, b, inv_diag and the i64 diag and `where` of ILU(0).
+fn check_memory(entries: i64) {
+    let vectors = if solver_name == "gmres" { GMRES_RESTART + 8 } else { 6 };
+    let fix = if preconditioner_name == "jacobi" { "" } else { ", or write solve { linear: cg, precond: jacobi } in the step: it needs less memory, but it can need many more iterations" };
+    // The mesh that each cell_worker copies at its spawn.
+    let mesh = 8 * (coords.len + cell_start.len + cell_nodes.len + cell_young.len + cell_poisson.len) + cell_type.len;
+    solvers::memory_check(str("box ", solver_name, " ", preconditioner_name), entries, dof_total(), vectors, mesh, fix);
+}
