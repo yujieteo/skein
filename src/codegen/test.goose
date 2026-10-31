@@ -8,6 +8,7 @@ import .study;
 import .split;
 import .status;
 import .kernels;
+import .slots;
 import check from "../check";   // study.goose writes TOON with it
 
 extern "libc.so.6" {
@@ -790,6 +791,39 @@ fn test_kernels(write: bool) {
     }
 }
 
+// The literals of a program, and its slots for the page of skein build
+// --target wasm (slots.goose).
+fn test_slots() {
+    let base = "fn f() {\n    // 9 in a comment\n    g(200.0, -2.5, x-1, \"3\", '4', a2, 7);\n}\n";
+    let ls = codegen::literals(base);
+    var words: u8[>..] = [];
+    for l in ls { format(words, base[l.lo..l.hi], if l.float { "f " } else { "i " }); }
+    if words != "200.0f -2.5f 1i 7i " {
+        failures++;
+        print("FAIL slots: the literals are '", words, "'");
+    }
+    let slots = codegen::parse_slots("0,1,3");
+    let program = codegen::slot_program(base, slots);
+    if find(program, "g(web_f[0], web_f[1], x-1, \"3\", '4', a2, web_i[0]);") < 0 {
+        failures++;
+        print("FAIL slots: the program of the page is\n", program);
+    }
+    var f: f64[>..] = [];
+    var i: i64[>..] = [];
+    let other = "fn f() {\n    // 9 in a comment\n    g(127.5, 3.0, x-1, \"3\", '4', a2, 12);\n}\n";
+    if !codegen::slot_values(base, slots, other, f, i) || f.len != 2 || f[0] != 127.5 || f[1] != 3.0 || i.len != 1 || i[0] != 12 {
+        failures++;
+        print("FAIL slots: the values of the slots");
+    }
+    // A change of a literal that is not a slot, or of the text, stops the run.
+    let fixed = "fn f() {\n    // 9 in a comment\n    g(127.5, 3.0, x-2, \"3\", '4', a2, 12);\n}\n";
+    let text = "fn f() {\n    // 9 in a comment\n    h(127.5, 3.0, x-1, \"3\", '4', a2, 12);\n}\n";
+    if codegen::slot_values(base, slots, fixed, f, i) || codegen::slot_values(base, slots, text, f, i) {
+        failures++;
+        print("FAIL slots: a change out of the slots is not refused");
+    }
+}
+
 // A thermal strain on a union of boxes of 2 materials, with a support at a
 // Point (spec §10.4), a material value from a table, and a report of a
 // difference of values at Points.
@@ -842,6 +876,7 @@ fn main() {
     test_case_threads();
     test_split();
     test_unchecked_status();
+    test_slots();
     if failures > 0 {
         print(failures, " codegen tests failed");
         exit(1);

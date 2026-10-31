@@ -7,6 +7,7 @@ import syntax from "./syntax";
 import fmt.fmt;
 import cli.card;
 import codegen.run;
+import codegen.build;
 import check from "./check";
 import md from "./md";
 import report from "./report";   // skein report
@@ -21,6 +22,7 @@ let USAGE = """
     usage: skein <command> [options] [files]
 
     commands:
+      build   build the page of a model that meshes and solves in the browser (--target wasm)
       check   parse and type-check a model
       export  write a let shape as an STL surface on standard output
       fmt     rewrite files in the standard layout
@@ -60,6 +62,11 @@ fn main() {
         var rest: const u8[:][>..] = [];
         for a in args[2..] { rest.push(a); }
         exit(codegen::run(rest));
+    }
+    if command == "build" {
+        var rest: const u8[:][>..] = [];
+        for a in args[2..] { rest.push(a); }
+        exit(codegen::build(rest));
     }
     if command == "check" { exit(check::command(args)); }
     if command == "lint" { exit(mesher::lint(args)); }
