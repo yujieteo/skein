@@ -1,5 +1,5 @@
 // femahoy: validation/cases/fracture-centre-crack/job.inp
-// blocked-by: G14 G20
+// blocked-by: G20
 // 1/4 of a steel plate of 100 x 300 mm with a centre crack of 50 mm, under a
 // tension of 100 MPa. Plane strain, quadratic triangles. K_I comes from the
 // crack opening at r = L/4 and r = L (Shih et al. 1976). The reference is
@@ -50,8 +50,6 @@ step pull: static {
     output u, sigma
 }
 
-// gap G14: K_I has the dimension Pressure*Length^(1/2). The check divides it
-// by S*sqrt(pi*a) and compares the shape factor F(a/b) of Tada (1971).
-let ab: Real = a/b
-let f_tada: Real = (1 - 0.025*ab^2 + 0.06*ab^4)*sqrt(1/cos(pi*a/(2*b)))
-expect k_i: E_p/4*(4*(u.y at (a - L_q/4, 0 mm)) - u.y at (a - L_q, 0 mm))*sqrt(2/(L_q*a))/S == f_tada within 0.5%
+// K_I has the dimension Pressure*Length^0.5.
+expect k_i: E_p/4*(4*(u.y at (a - L_q/4, 0 mm)) - u.y at (a - L_q, 0 mm))*sqrt(2*pi/L_q) ==
+    1051.27 MPa*mm^0.5 within 0.5%

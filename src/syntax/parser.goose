@@ -128,13 +128,18 @@ fn unit_follows() -> bool {
     return at(TK_LPAREN) && kind_at(1) == TK_IDENT && is_unit_name(text(ptoks[pos + 1]));
 }
 
-// The exponent after `^`: an optional `-` and digits.
+// The exponent after `^`: an optional `-` and a multiple of 0.5, as a
+// count of halves (spec §6.1).
 fn exponent() -> i64 {
     let neg = accept(TK_MINUS);
-    let t = expect(TK_NUMBER, "an integer exponent");
-    let v, ok = parse_int(text(t));
-    if !ok { fail(str("the exponent '", text(t), "' is not an integer"), "write a whole number"); }
-    return if neg { -v } else { v };
+    let t = expect(TK_NUMBER, "an exponent");
+    let v, ok = parse_flt(text(t));
+    let h = v * 2.0;
+    if !ok || h != (h as i64) || h > 128.0 {
+        fail(str("the exponent '", text(t), "' is not a multiple of 0.5"), "write a whole number or a half, for example 2 or 0.5");
+    }
+    let n = h as i64;
+    return if neg { -n } else { n };
 }
 
 recursive fn unit_factor() -> i64 {

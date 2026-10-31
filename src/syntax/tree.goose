@@ -246,14 +246,14 @@ let N_TYPE_NAME = 70;    // tok: name, for example `Real`, `Solid` or `Length`
 let N_TYPE_APPLY = 71;   // tok: `Vector`, `Tensor2`, `Tensor4`, `Complex`, `Quaternion` or `Dual`. type
 let N_DIM_MUL = 72;      // tok: `*`. left, right
 let N_DIM_DIV = 73;      // tok: `/`. left, right
-let N_DIM_POW = 74;      // tok: `^`, aux: the exponent. base
+let N_DIM_POW = 74;      // tok: `^`, aux: the exponent in halves. base
 
 // Units (spec §6.3). N_UNIT wraps the unit expression of a literal.
 let N_UNIT = 80;         // tok: first token. N_UNIT_NAME, N_UNIT_MUL, N_UNIT_DIV or N_UNIT_POW
 let N_UNIT_NAME = 81;    // tok: name, for example `mm` or `GPa`
 let N_UNIT_MUL = 82;     // tok: `*`. left, right
 let N_UNIT_DIV = 83;     // tok: `/`. left, right
-let N_UNIT_POW = 84;     // tok: `^`, aux: the exponent. base
+let N_UNIT_POW = 84;     // tok: `^`, aux: the exponent in halves. base
 
 // Expressions (spec §3, `expr`). Parentheses make no node.
 let N_NUMBER = 90;       // tok: TK_NUMBER, aux: the `-` of a negative `degC` literal or -1. [N_UNIT]
@@ -288,6 +288,13 @@ let NODE_NAMES = [
 fn kind_name(kind: i64) -> const u8[:] {
     if kind < 0 || kind >= NODE_NAMES.len { return "?"; }
     return NODE_NAMES[kind];
+}
+
+// Writes an exponent of `h` halves: `2`, `-1` or `0.5`.
+fn format_halves(out: u8[>..]&, h: i64) {
+    if h % 2 == 0 { format(out, h / 2); return; }
+    if h < 0 { out.push('-'); }
+    format(out, abs(h) / 2, ".5");
 }
 
 // --- the tables ----------------------------------------------------------------
@@ -400,7 +407,7 @@ recursive fn dump(n: i64, out: u8[>..]&) {
         out.append(text(k.aux));
         out.push('"');
     }
-    if k.kind == N_DIM_POW || k.kind == N_UNIT_POW { format(out, " ", k.aux); }
+    if k.kind == N_DIM_POW || k.kind == N_UNIT_POW { out.push(' '); format_halves(out, k.aux); }
     var c = k.first;
     while c >= 0 {
         out.push(' ');

@@ -205,7 +205,6 @@ fn test_types() {
     expect_id("unit_mismatch", str(H, "let a: Pressure = 1 GPa + 1 kg/m^3\n"));
     expect_id("rank_mismatch", str(H, "let a: Length = (1, 2, 3) m + 1 m\n"));
     expect_id("ambiguous_product", str(H, "let a: Vector<Length> = (1, 2, 3) m\nlet c: Real = a*a\n"));
-    expect_id("unit_fractional", str(H, "let a: Pressure = 1 Pa\nlet c: Real = sqrt(a)\n"));
     expect_id("unit_transcendental", str(H, "let a: Temperature = 300 K\nlet c: Real = exp(a)\n"));
     expect_id("unit_affine", str(H, "let k: ThermalConductivity = 1.2 W/(m*degC)\n"));
     expect_id("not_constant", str(H, "param a: Length = x\n"));
@@ -231,6 +230,12 @@ fn test_types() {
     expect_clean("G29 a negative degC", str(H, "let a: Temperature = -5 degC\n"));
     expect_clean("a vector with a unit, a number and a name", str(H, "let h: Length = 1 m\nlet p: Vector<Length> = (0.5, h, 0) m\n"));
     expect_clean("G30 a real exponent", str(H, "param q: Real = 3.0\nlet a: Real = 0.5^(2/q)\n"));
+    // Gap G14: exponents in halves (spec §6.1).
+    expect_clean("G14 exponents in halves", str(H, "let a: Length = 25 mm\nlet k: Pressure*Length^0.5 = 1 MPa*sqrt(a)\n",
+                                                 "let j: Pressure*Length^0.5 = 1051.27 MPa*mm^0.5\nlet c: Length^-1.5 = 1/a^1.5\n"));
+    expect_id("unit_fractional", str(H, "let a: Length = 1 m\nlet c: Real = sqrt(sqrt(a))\n"));
+    expect_id("unit_fractional", str(H, "let a: Length = 1 m\nlet c: Real = a^0.25\n"));
+    expect_id("unit_fractional", str(H, "let a: Length = 1 m\nlet c: Real = sqrt(a)^0.5\n"));
 }
 
 fn test_physics() {

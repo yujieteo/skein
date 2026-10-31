@@ -46,6 +46,10 @@ gives the roadmap phase that closes the gap:
   [dam_break_vof.skn](../examples/femahoy/dam_break_vof.skn) and
   [dam_break_martin_moyce.skn](../examples/femahoy/dam_break_martin_moyce.skn)
   use it.
+- Phase 2 closes G14. Spec [§6.1](skein_spec.md#61-dimensions) allows
+  exponents in halves, and the expectation of
+  [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)
+  compares `K_I` in `MPa*mm^0.5`.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -88,7 +92,7 @@ comment.
 | G11 | The time at which a value gets to a level: the front of a dam break. | `validation/cases/dam-break-vof/check.toml:19`, `validation/cases/dam-break-martin-moyce/check.toml:17` | Reports give values at the end of a step only (§14.5, §15.3). | A report function `when(expr, value)`: the first time at which `expr` gets to `value`. | 2, closed by [§14.5](skein_spec.md#145-output-and-report) |
 | G12 | An angle from a ratio: the shock angle. | `validation/cases/wedge-oblique-shock/check.toml:19` | Appendix A has `tan` but no inverse. The model checks `tan(beta)`. | Add `atan` and `atan2` to Appendix A. | 1 |
 | G13 | The directivity and the efficiency of an antenna from a near-to-far-field transform. | `validation/cases/dipole-king-middleton/omega12.5/openems.py:65` | Report functions act on regions of the mesh only (§14.5). | A report function `far_field(E, H, surface, direction)`. | 5 |
-| G14 | A stress intensity factor in MPa·mm^0.5. | `validation/cases/fracture-centre-crack/check.toml:7` | A dimension has integer exponents, and `sqrt` needs even exponents (§6.1). The model checks the shape factor `K_I/(S*sqrt(pi*a))`, with the same tolerance. | Allow exponents in halves (§6.1). | 2 |
+| G14 | A stress intensity factor in MPa·mm^0.5. | `validation/cases/fracture-centre-crack/check.toml:7` | A dimension has integer exponents, and `sqrt` needs even exponents (§6.1). The model checks the shape factor `K_I/(S*sqrt(pi*a))`, with the same tolerance. | Allow exponents in halves (§6.1). | 2, closed by [§6.1](skein_spec.md#61-dimensions) |
 | G15 | The effective Young's modulus of a periodic cell under a mean stress. | `validation/cases/grid-fibre-composite-cell/check.toml:31` | The mean strain must be a global unknown that a mean stress fixes, but `mean` is valid only in `output`, `report` and `expect` (§14.5). | Allow `mean(f, r)` and `integral(f, r)` in the `eq` of a global unknown (§10.5). | 2 |
 | G16 | A concentrated force on a node (`*CLOAD`). | `validation/cases/topology-mbb-beam/60x20/job.inp:2517`, `fixtures/results/cantilever-2step/cantilever-2step.inp` | §8.3 says that a `Point` can be the region of a point load, but §12.1 gives no left side for a force at a point: `n` has no value there. `cantilever_2step.skn` uses a traction with the same resultant. | On a `Point` region, read a natural condition `F*n = P` as the force `P`, with the dimension of `F` times area. | 1 |
 | G17 | A rigid constraint of a boundary (`*EQUATION`): the face stays straight and can turn. | `validation/cases/contact-cattaneo/mesh.inp:13915` | §12 has only essential and natural conditions. The model puts tractions with the same force and moment on the face. | A built-in `rigid(p)` for the right side of an essential `bc`. A `bc` on the `Point` `p` takes the force and the moment. | 2 |
@@ -337,7 +341,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Lift, drag and moment coefficients (`forceCoeffs`) | naca0012-ladson, naca23012-flap, turek-hron-fsi1 | `report cl = integral(dot(sigma*n, e_l), wall)/...` | [§14.5](skein_spec.md#145-output-and-report) |
 | Nusselt number, peak velocities, mean temperatures | cavity-devahldavis, cht-heated-channel | `report` with `mean`, `max`, `integral` | [§14.5](skein_spec.md#145-output-and-report) |
 | A curvature from a fit of the top face | grid-bimetal-strip | `integral` moments of `u.z` | [§14.5](skein_spec.md#145-output-and-report) |
-| A stress intensity factor | fracture-centre-crack | a dimensionless shape factor | gap [G14](#gaps-that-remove-a-check) |
+| A stress intensity factor | fracture-centre-crack | `K_I` in `MPa*mm^0.5` | [§6.1](skein_spec.md#61-dimensions) |
 | The time at which a front gets to a position | dam-break-vof, dam-break-martin-moyce | `when(front, value)` in an `expect` | [§14.5](skein_spec.md#145-output-and-report) |
 | A shock angle | wedge-oblique-shock | `tan` of the angle | gap [G12](#gaps-that-remove-a-check) |
 | Directivity and efficiency of an antenna | dipole-king-middleton | none | gap [G13](#gaps-that-remove-a-check) |

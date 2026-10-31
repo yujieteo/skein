@@ -231,10 +231,13 @@ recursive fn unit_value(n: i64, affine: i64&) -> i64[7], f64 {
         },
         syntax::N_UNIT_POW => {
             let d, s = unit_value(k.first, affine);
+            // The base is a unit name with whole exponents, so each half power is valid.
+            let r, _ok = dim_pow_halves(d, k.aux);
             var f = 1.0;
-            for i in abs(k.aux) { f *= s; }
+            for i in abs(k.aux) / 2 { f *= s; }
+            if k.aux % 2 != 0 { f *= sqrt(s); }
             if k.aux < 0 { f = 1.0 / f; }
-            return dim_pow(d, k.aux), f;
+            return r, f;
         },
         _ => { return NO_DIM, 1.0; },
     }
@@ -442,16 +445,15 @@ fn pow_ty(tok: i64, a: Ty, b: Ty, e: i64) -> Ty {
         return joined(r, a, b);
     }
     let v, ok = const_value(e);
-    var k = 0;
-    var whole = ok && v == floor(v) && abs(v) < 64.0;
-    if whole { k = v as i64; }
-    if !whole {
+    let whole = ok && 2.0 * v == floor(2.0 * v) && abs(v) < 64.0;
+    let d, halves = dim_pow_halves(a.dim, if whole { (2.0 * v) as i64 } else { 0 });
+    if !whole || !halves {
         error(tok, "unit_fractional",
-              str("a quantity of dimension ", dim_str(a.dim), " has an exponent that is not an integer constant"),
-              "use an integer constant exponent, or divide the base by a reference value");
+              str("a quantity of dimension ", dim_str(a.dim), " needs a constant exponent that gives exponents in halves"),
+              "use a constant exponent such as 2 or 0.5, or divide the base by a reference value");
         return joined(any_ty(), a, b);
     }
-    var r = num_ty(dim_pow(a.dim, k), 0);
+    var r = num_ty(d, 0);
     r.num = a.num;
     return joined(r, a, b);
 }

@@ -260,15 +260,14 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     }
     if name == "sqrt" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }
-        for e in t0.dim {
-            if e % 2 != 0 {
-                error(tok, "unit_fractional", str("sqrt of ", dim_str(t0.dim), " has a fractional exponent"),
-                      "the exponents of the argument must be even");
-                return any_ty();
-            }
+        let d, ok = dim_pow_halves(t0.dim, 1);
+        if !ok {
+            error(tok, "unit_fractional", str("sqrt of ", dim_str(t0.dim), " gives an exponent that is not a multiple of 1/2"),
+                  "the exponents of the argument must be whole numbers");
+            return any_ty();
         }
         var r = same(t0, v);
-        for i in 7 { r.dim[i] = t0.dim[i] / 2; }
+        r.dim = d;
         r.base = B_REAL;
         return r;
     }

@@ -54,7 +54,9 @@ recursive fn type_of(n: i64, report: bool) -> Ty {
         syntax::N_DIM_POW => {
             let a = type_of(k.first, report);
             guard a.kind == K_NUM else { return any_ty(); }
-            return num_ty(dim_pow(a.dim, k.aux), 0);
+            // The base is a named type with whole exponents, so each half power is valid.
+            let d, _ok = dim_pow_halves(a.dim, k.aux);
+            return num_ty(d, 0);
         },
         _ => { return any_ty(); },
     }

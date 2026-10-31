@@ -146,7 +146,9 @@ let T_sink: Temperature = -5 degC  // 268.15 K
 ```
 
 Units have SI prefixes: `mm`, `kN`, `MPa`, `GPa`, `ms`. `degC` is valid only
-alone on a temperature. A bare number with no `.` and no exponent is `Int`.
+alone on a temperature. An exponent in a type or a unit is a multiple of
+0.5: `Pressure*Length^0.5`, `MPa*mm^0.5`. A bare number with no `.` and no
+exponent is `Int`.
 Each other bare number is `Real`. `Real` accepts `Int`. `0` is zero of any
 type.
 

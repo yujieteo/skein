@@ -1,7 +1,10 @@
-// Dimensions and units (spec §6). A dimension is a vector of seven integer
-// exponents over M, L, T, Θ, I, N and J (spec §6.1).
+// Dimensions and units (spec §6). A dimension is a vector of seven
+// exponents over M, L, T, Θ, I, N and J (spec §6.1). Each exponent is a
+// multiple of 1/2, so a dimension stores the count of halves. The tables
+// below give whole exponents. named_dim and find_unit double them.
 import std;
 namespace check;
+import syntax from "../syntax";
 
 let BASE_DIMS = ["M", "L", "T", "Θ", "I", "N", "J"];
 
@@ -26,14 +29,14 @@ let DIM_VALUES: i64[7][24] = [
 let NO_DIM: i64[7] = [0, 0, 0, 0, 0, 0, 0];
 // In a `nondim` model each quantity is `Real` (spec §6.5): set_nondim
 // makes these dimensions empty.
-var LENGTH: i64[7] = [0, 1, 0, 0, 0, 0, 0];
-var TIME: i64[7] = [0, 0, 1, 0, 0, 0, 0];
-var FORCE: i64[7] = [1, 1, -2, 0, 0, 0, 0];
+var LENGTH: i64[7] = [0, 2, 0, 0, 0, 0, 0];
+var TIME: i64[7] = [0, 0, 2, 0, 0, 0, 0];
+var FORCE: i64[7] = [2, 2, -4, 0, 0, 0, 0];
 
 fn set_nondim(on: bool) {
-    LENGTH = if on { NO_DIM } else { [0, 1, 0, 0, 0, 0, 0] };
-    TIME = if on { NO_DIM } else { [0, 0, 1, 0, 0, 0, 0] };
-    FORCE = if on { NO_DIM } else { [1, 1, -2, 0, 0, 0, 0] };
+    LENGTH = if on { NO_DIM } else { [0, 2, 0, 0, 0, 0, 0] };
+    TIME = if on { NO_DIM } else { [0, 0, 2, 0, 0, 0, 0] };
+    FORCE = if on { NO_DIM } else { [2, 2, -4, 0, 0, 0, 0] };
 }
 
 fn is_dimless(d: i64[7]) -> bool { d == NO_DIM }
@@ -41,7 +44,7 @@ fn is_dimless(d: i64[7]) -> bool { d == NO_DIM }
 // The dimension of a named dimension type, and true, or false.
 fn named_dim(name: u8[:]) -> i64[7], bool {
     for n, i in DIM_NAMES {
-        if n == name { return DIM_VALUES[i], true; }
+        if n == name { return dim_pow(DIM_VALUES[i], 2), true; }
     }
     return NO_DIM, false;
 }
@@ -52,11 +55,22 @@ fn dim_pow(d: i64[7], k: i64) -> i64[7] {
     return r;
 }
 
+// `d` to the power of `h` halves, and true, or false when an exponent is
+// not a multiple of 1/2.
+fn dim_pow_halves(d: i64[7], h: i64) -> i64[7], bool {
+    var r = d;
+    for i in 7 {
+        if d[i] * h % 2 != 0 { return NO_DIM, false; }
+        r[i] = d[i] * h / 2;
+    }
+    return r, true;
+}
+
 // Writes a dimension: its name when it has one, else a product of base
-// dimensions such as `M L^-1 T^-1`, or `1`.
+// dimensions such as `M L^-1 T^-1` or `M L^-0.5 T^-2`, or `1`.
 fn format_dim(out: u8[>..]&, d: i64[7]) {
     for n, i in DIM_NAMES {
-        if DIM_VALUES[i] == d { out.append(n); return; }
+        if dim_pow(DIM_VALUES[i], 2) == d { out.append(n); return; }
     }
     if is_dimless(d) { out.append("1"); return; }
     var first = true;
@@ -65,7 +79,7 @@ fn format_dim(out: u8[>..]&, d: i64[7]) {
         if !first { out.push(' '); }
         first = false;
         out.append(BASE_DIMS[i]);
-        if d[i] != 1 { format(out, "^", d[i]); }
+        if d[i] != 2 { out.push('^'); syntax::format_halves(out, d[i]); }
     }
 }
 
@@ -92,7 +106,7 @@ let PREFIX_CHARS = "numckMG";
 let PREFIX_SCALES: f64[7] = [1e-9, 1e-6, 1e-3, 1e-2, 1e3, 1e6, 1e9];
 
 struct Unit {
-    dim: i64[7],
+    dim: i64[7],    // in halves
     scale: f64,     // the factor to SI
     angle: bool,    // `rad` or `deg`
     affine: bool,   // `degC`
@@ -102,7 +116,7 @@ struct Unit {
 fn find_unit(name: u8[:]) -> Unit, bool {
     for u, i in UNIT_NAMES {
         if u == name {
-            return Unit { dim: UNIT_DIMS[i], scale: UNIT_SCALES[i], angle: u == "rad" || u == "deg",
+            return Unit { dim: dim_pow(UNIT_DIMS[i], 2), scale: UNIT_SCALES[i], angle: u == "rad" || u == "deg",
                           affine: u == "degC" }, true;
         }
     }
@@ -113,7 +127,7 @@ fn find_unit(name: u8[:]) -> Unit, bool {
     guard contains_name(PREFIXED_UNITS, name[1..]) else { return none, false; }
     for u, i in UNIT_NAMES {
         if u == name[1..] {
-            return Unit { dim: UNIT_DIMS[i], scale: UNIT_SCALES[i] * PREFIX_SCALES[p],
+            return Unit { dim: dim_pow(UNIT_DIMS[i], 2), scale: UNIT_SCALES[i] * PREFIX_SCALES[p],
                           angle: false, affine: false }, true;
         }
     }

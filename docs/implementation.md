@@ -69,10 +69,10 @@ result again, and compares the two.
 
 ### 3.1 Dimensions
 
-A dimension is seven `i8` exponents. A quantity type is a dimension and a
-rank. The checker computes the type of each expression bottom up and
-compares it with the declared type at each declaration and on both sides of
-each equation. The checker does no inference: an expression has one type,
+A dimension is seven exponents, each stored as a count of halves (spec
+§6.1). A quantity type is a dimension and a rank. The checker computes the
+type of each expression bottom up and compares it with the declared type at
+each declaration and on both sides of each equation. The checker does no inference: an expression has one type,
 from its parts.
 
 A unit is a dimension and an `f64` scale. The checker converts each literal
