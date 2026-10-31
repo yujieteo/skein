@@ -70,6 +70,13 @@ fn elastic(E: f64, nu: f64) { set_elastic(E, nu, SOLID_3D, 1.0); }
 fn elastic_plane_stress(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRESS, t); }
 fn elastic_plane_strain(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRAIN, t); }
 
+// Sets a uniform body force per volume (bx, by, bz) on the elastic
+// physics of the last `elastic` call, for example rho*g.
+fn body_force(bx: f64, by: f64, bz: f64) {
+    assert(physics == ELASTIC);
+    volume_force = [bx, by, bz];
+}
+
 // Steady heat conduction with conductivity k and a uniform source q per
 // volume. In 2D, t is the thickness.
 fn heat(k: f64, q: f64, t: f64) { set_heat(k, q, t); }

@@ -85,7 +85,9 @@ let CARD = """
       `box` or a quarter of a tube only), `refine region: size`.
     - `linear_elastic` is a standard template: small strain, isotropic. It
       needs the material properties `E` and `nu`. It defines the stress
-      `sigma` for use in `bc`, `output` and `report`. Its body force is 0.
+      `sigma` for use in `bc`, `output` and `report`. Its body force is 0
+      unless the model gives `b`, for example `linear_elastic(b: rho*(0, 0, -g))`
+      on `tet` cells. `skein help std` prints the source of the templates.
     - The default method is continuous Galerkin of order 2 on the one mesh of
       the region. Write it only to change it:
       `method solid: cg { mesh: m, order: 2 }`.

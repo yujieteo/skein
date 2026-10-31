@@ -4,7 +4,7 @@
 // It takes the models that the box slice of src/codegen/ does not: a 2d
 // model, a mesh of `tri` or `tet` cells, or a physics with a scalar
 // unknown. The physics block decides the equations: the template
-// `linear_elastic` or `heat(q_v)`, or the same statements written out
+// `linear_elastic(b)` or `heat(q_v)`, or the same statements written out
 // (`hooke(E, nu, strain(u))` with `div(sigma) = 0`, `-k*grad(T)` or
 // `fourier(k, T)` with `div(q) = q_v`). The geometry is a box or a rect,
 // less a cylinder or a circle on its corner (lo.x, lo.y): the quarter
@@ -94,13 +94,26 @@ recursive fn value(n: i64) -> Vec {
         }
     }
     if k == syntax::N_NAME {
-        let v = codegen::find_value(name(n));
+        var v = codegen::find_value(name(n));
+        if v < 0 { v = property(name(n)); }
         if v >= 0 && codegen::depth < 100 {
             codegen::depth++;
             let r = value(v);
             codegen::depth--;
             return r;
         }
+    }
+    if k == syntax::N_BINARY && (syntax::text(tok(n)) == "*" || syntax::text(tok(n)) == "/") {
+        let a = value(child(n, 0));
+        let b = value(child(n, 1));
+        if b.n != 1 && (syntax::text(tok(n)) == "/" || a.n != 1) {
+            unsupported(tok(n), "a product of two vectors, or a scalar divided by a vector", "multiply or divide a vector by a scalar");
+            return a;
+        }
+        var r = if a.n == 1 { b } else { a };
+        let f = if a.n == 1 { a.v[0] } else { b.v[0] };
+        for j in 3 { r.v[j] = if syntax::text(tok(n)) == "/" { a.v[j] / f } else { r.v[j] * f }; }
+        return r;
     }
     if k == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
         var r = value(first(n));
@@ -240,6 +253,8 @@ var poisson = -1.0;
 var conductivity = 0.0;
 var source = 0.0;
 var source_node = -1;           // the right side of the eq, or -1 for 0
+var body_node = -1;             // the argument b of linear_elastic, or -1
+var body_force: f64[3] = [0.0; 3];
 
 fn reset() {
     codegen::reset();
@@ -277,6 +292,8 @@ fn reset() {
     conductivity = 0.0;
     source = 0.0;
     source_node = -1;
+    body_node = -1;
+    body_force = [0.0; 3];
 }
 
 fn set64(into: u8[..64]&, s: u8[:]) { codegen::set64(into, s); }
@@ -583,17 +600,18 @@ fn physics_item(n: i64) {
         if k == syntax::N_ON {
             body(first(c));
         } else if k == syntax::N_USES {
-            if name(c) == "linear_elastic" && first(c) < 0 {
+            if name(c) == "linear_elastic" && syntax::child_count(c) <= 1 {
                 physics = ELASTIC;
                 uses_template = true;
                 set64(flux_name, "sigma");
+                if first(c) >= 0 { body_node = first(first(c)); }
             } else if name(c) == "heat" && syntax::child_count(c) <= 1 {
                 physics = HEAT;
                 uses_template = true;
                 set64(flux_name, "q");
                 if first(c) >= 0 { source_node = first(first(c)); }
             } else {
-                unsupported(tok(c), "this generator has the templates linear_elastic and heat(q_v)", PHYSICS_FIX);
+                unsupported(tok(c), "this generator has the templates linear_elastic(b) and heat(q_v)", PHYSICS_FIX);
             }
         } else if k == syntax::N_UNKNOWN {
             if unknown_name.len > 0 { unsupported(tok(c), "a second unknown", PHYSICS_FIX); }
@@ -676,6 +694,19 @@ fn heat_source() {
         return;
     }
     source = scalar_value(source_node);
+}
+
+// The body force b of linear_elastic: a vector, for example rho*(0, 0, -g)
+// with rho of the material.
+fn body_force_arg() {
+    guard body_node >= 0 else { return; }
+    let v = value(body_node);
+    if v.n != dim {
+        unsupported(tok(body_node), str("the body force b of this ", dim, "d model is a vector of ", dim, " components"),
+                    if dim == 2 { "write b: rho*(0, -g)" } else { "write b: rho*(0, 0, -g)" });
+        return;
+    }
+    body_force = v.v;
 }
 
 fn method(n: i64) {
@@ -904,6 +935,7 @@ fn read(prog: i64) -> bool {
     if material_node < 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     read_material();
     heat_source();
+    body_force_arg();
     if mesh_node < 0 { unsupported(at, "the model has no mesh", "add mesh m on plate { size: 5 mm }"); } else { mesh(mesh_node); }
     for m in methods { method(m); }
     if !ok() { return false; }
@@ -1336,6 +1368,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
             lit(out, thickness);
         }
         out.append(");\n");
+        if body_node >= 0 {
+            out.append("    elements::body_force(");
+            lits(out, body_force);
+            out.append(");\n");
+        }
     }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { emit_expect(out, x); }

@@ -64,3 +64,11 @@ let STD_SOURCE = """
         eq along(M_b) + cross(tau, F_b) = 0
     }
     """;
+
+// The text of `skein help std`: STD_SOURCE with no model line.
+fn std_text() -> const u8[:] {
+    var i = 0;
+    while i < STD_SOURCE.len && STD_SOURCE[i] != '\n' { i++; }
+    while i < STD_SOURCE.len && STD_SOURCE[i] == '\n' { i++; }
+    return STD_SOURCE[i..];
+}

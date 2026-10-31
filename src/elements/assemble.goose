@@ -28,6 +28,7 @@ var lame_3d = 0.0;      // lambda of the 3D law, for sigma_zz in plane strain
 var shear = 0.0;        // mu
 var conductivity = 0.0;
 var source = 0.0;       // the heat source per volume
+var volume_force: f64[3] = [0.0; 3];   // the elastic body force per volume
 
 var fixed: u8[>..] = [];
 var prescribed: f64[>..] = [];
@@ -70,6 +71,7 @@ fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
     shear = E / (2.0 * (1.0 + nu));
     lame_3d = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     lame = if plane == PLANE_STRESS { E * nu / (1.0 - nu * nu) } else { lame_3d };
+    volume_force = [0.0; 3];
 }
 
 fn set_heat(k: f64, q: f64, t: f64) {
@@ -140,7 +142,7 @@ var fe: f64[30];
 
 // The stiffness or the conductivity of cell c, and its source vector:
 // elastic K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV,
-// heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.
+// f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.
 fn cell_matrix(c: i64) {
     let m = per_cell * ncomp;
     for &v in ke { v = 0.0; }
@@ -150,6 +152,9 @@ fn cell_matrix(c: i64) {
         let dv = w * cell_geometry(c, xi) * thickness;
         for i in per_cell {
             if physics == HEAT { fe[i] += source * shp[i] * dv; }
+            if physics == ELASTIC {
+                for p in dim { fe[ncomp * i + p] += volume_force[p] * shp[i] * dv; }
+            }
             for j in per_cell {
                 var dot = 0.0;
                 for t in dim { dot += grad[3 * i + t] * grad[3 * j + t]; }
