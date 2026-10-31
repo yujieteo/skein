@@ -123,7 +123,7 @@ The language design has these goals:
   finite volume, and meshless methods (RKPM, generalized finite
   differences).
 - **Advanced analysis from the start.** Element birth and death, submodels,
-  CFD stabilization, restarts, coupled physics, modal and buckling steps.
+  CFD stabilization, coupled physics, modal and buckling steps.
 - **Verification by default.** Each run checks the rigid-body modes, the
   mesh quality, the residual, the equilibrium, the energy balance and the
   conservation of mass, and prints the result.
