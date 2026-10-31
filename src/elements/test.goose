@@ -566,6 +566,48 @@ fn test_stages() {
     top_force("two materials", 0.1 * (E + E2));
 }
 
+// LOBPCG (eigen.goose). A steel cantilever of 100 x 10 x 5 mm, clamped
+// at x = 0: its first natural frequency is 417.758 Hz (Blevins 1979, Table
+// 8-1). A steel column of 10 x 10 x 200 mm, fixed at the base, with 1 N on
+// the top: its first load factor is pi^2 E I / (4 L^2) = 10794.88
+// (Timoshenko and Gere 1961, Art. 2.1). Each within 1 %.
+fn test_eigen() {
+    let E = 210000.0;
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 1);
+    elements::elastic(E, 0.3);
+    elements::set_density(7.85e-9);
+    elements::clear_bcs();
+    elements::plane(elements::X, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    let modal = elements::modal(3);
+    let f1 = elements::eigenvalue(1);
+    print("modal: ", elements::dof_count(), " dofs, ", elements::cg_iterations(), " LOBPCG iterations, ",
+          elements::solve_seconds(), " s, f1 ", f1, " Hz, f2 ", elements::eigenvalue(2), " Hz, f3 ", elements::eigenvalue(3), " Hz");
+    if !modal || abs(f1 - 417.758) > 0.01 * 417.758 {
+        failures++;
+        print("FAIL modal: f1 is ", f1, " Hz, not 417.758 Hz within 1 %, or LOBPCG did not converge");
+    }
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 10.0, 10.0, 200.0, 2, 2, 20);
+    elements::elastic(E, 0.3);
+    elements::clear_bcs();
+    elements::plane(elements::Z, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    elements::plane(elements::Z, 200.0);
+    elements::traction(0.0, 0.0, -0.01);
+    if !elements::solve() { failures++; print("FAIL buckling: the preload does not solve"); }
+    elements::clear_bcs();
+    elements::plane(elements::Z, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    let buckled = elements::buckling(2);
+    let p1 = elements::eigenvalue(1);
+    print("buckling: ", elements::dof_count(), " dofs, ", elements::cg_iterations(), " LOBPCG iterations, ",
+          elements::solve_seconds(), " s, load factors ", p1, ", ", elements::eigenvalue(2));
+    if !buckled || abs(p1 - 10794.88) > 0.01 * 10794.88 {
+        failures++;
+        print("FAIL buckling: the load factor is ", p1, ", not 10794.88 within 1 %, or LOBPCG did not converge");
+    }
+}
+
 fn main() {
     test_patches();
     test_kirsch();
@@ -574,6 +616,7 @@ fn main() {
     test_equilibrium_scale();
     test_submodel();
     test_stages();
+    test_eigen();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");

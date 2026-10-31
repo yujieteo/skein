@@ -52,8 +52,12 @@ fn precondition(r: f64[:], z: f64[:]) {
 }
 
 // The AMG levels of K with the rows and the columns of the fixed dofs cut
-// off. False if the last level is not positive definite.
-fn setup_preconditioner() -> bool {
+// off. With `rigid`, the near null space of an elastic K is the rigid-body
+// modes, 0 on the fixed dofs: LOBPCG (eigen.goose) needs it, 199 steps
+// fall to 36 on a cantilever. A static solve takes the constant of each
+// component: on sample 04 the rigid-body modes halve the CG iterations but
+// double the time of the setup.
+fn setup_preconditioner(rigid: bool) -> bool {
     var free_val: f64[>..] = [];
     free_val.append(val);
     for d in sol.len {
@@ -61,7 +65,27 @@ fn setup_preconditioner() -> bool {
             if col[e] != d && (fixed[d] != 0 || fixed[col[e]] != 0) { free_val[e] = 0.0; }
         }
     }
-    return solvers::amg_setup(row_start, col, free_val, ncomp);
+    guard rigid && physics == ELASTIC else { return solvers::amg_setup(row_start, col, free_val, ncomp); }
+    let nb = if dim == 3 { 6 } else { 3 };
+    var modes: f64[>..] = [];
+    for d in sol.len {
+        let n = d / ncomp;
+        let c = d % ncomp;
+        let x = node_x(n, 0);
+        let y = node_x(n, 1);
+        let z = node_x(n, 2);
+        // the translations, then the rotations about z, x and y
+        var m: f64[6] = [0.0; 6];
+        m[c] = 1.0;
+        if c == 0 { m[dim] = -y; }
+        if c == 1 { m[dim] = x; }
+        if dim == 3 && c == 1 { m[4] = -z; }
+        if dim == 3 && c == 2 { m[4] = y; }
+        if dim == 3 && c == 0 { m[5] = z; }
+        if dim == 3 && c == 2 { m[5] = -x; }
+        for k in nb { modes.push(if fixed[d] != 0 { 0.0 } else { m[k] }); }
+    }
+    return solvers::amg_setup_modes(row_start, col, free_val, ncomp, modes, nb);
 }
 
 fn solve_system() -> bool {
@@ -84,7 +108,7 @@ fn solve_system() -> bool {
         f2 += f * f;
         r[d] = f - q[d];
     }
-    guard setup_preconditioner() else {
+    guard setup_preconditioner(false) else {
         last_iterations = 0;
         last_seconds = clock() - start;
         return false;

@@ -30,6 +30,7 @@ import .post;
 import .csg;
 import .source;
 import .stages;
+import .eigen;
 
 let X = 0;
 let Y = 1;
@@ -288,6 +289,37 @@ fn load_scale() -> f64 { return load_magnitude(); }
 
 // Writes the mesh and the solution, with the name `field`, to a VTU file.
 fn write_vtu(path: const u8[:], field: const u8[:]) -> bool { return write_vtu_file(path, field); }
+
+// The density of the mass of a modal step.
+fn set_density(rho: f64) {
+    guard rho > 0.0 else { abort("set_density: rho > 0"); }
+    density = rho;
+}
+
+// The `count` lowest modes of K x = ω² M x on the free dofs (spec §14.2).
+// False if LOBPCG does not converge.
+fn modal(count: i64) -> bool { return eigen_solve(MASS, count); }
+
+// The `count` lowest load factors λ of (K + λ K_G) x = 0, with K_G of the
+// stress of the solution of the last step. False if LOBPCG does not
+// converge.
+fn buckling(count: i64) -> bool { return eigen_solve(GEOMETRIC, count); }
+
+// eigenvalue(k) of the last modal or buckling step: a frequency in 1/s of
+// the time of the units, or a load factor.
+fn eigenvalue(k: i64) -> f64 { return mode_value(k); }
+
+// Writes mode k of the last modal or buckling step as the unknown.
+fn write_mode(path: const u8[:], field: const u8[:], k: i64) -> bool {
+    guard k >= 1 && modes.len >= k * sol.len else { abort("write_mode: 1 <= k <= the count of the last eigen step"); }
+    var keep: f64[>..] = [];
+    keep.append(sol);
+    let n = sol.len;
+    for d in n { sol[d] = modes[n * (k - 1) + d]; }
+    let done = write_vtu_file(path, field);
+    for d in n { sol[d] = keep[d]; }
+    return done;
+}
 
 // Facts about the mesh and the last solve, for the report.
 fn dof_count() -> i64 { return dof_total(); }

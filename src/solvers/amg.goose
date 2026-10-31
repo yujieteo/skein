@@ -16,9 +16,15 @@
 //    all free makes an aggregate with them; a free node joins the
 //    aggregate of a strong neighbour; a node still free makes an aggregate
 //    with its free strong neighbours.
-// 3. The tentative prolongator P0 takes component c of the aggregate to
-//    component c of each node of it: the near null space is the constant
-//    of each component.
+// 3. The tentative prolongator P0 holds the near null space B on each
+//    aggregate: B of the rows of the aggregate is Q R (Gram-Schmidt), the
+//    columns of Q are the columns of P0 for the aggregate, and R is B of
+//    the coarse level. Each coarse node has a block of nb dofs, one for
+//    each column of B. For elasticity B is the rigid-body modes (nb = 6 in
+//    3D, 3 in 2D); amg_setup takes the constant of each component
+//    (nb = bs). A column that Gram-Schmidt finds dependent on the others
+//    is zero: its coarse dof has an empty row, which the last level holds
+//    at 0.
 // 4. P = (I - ω D⁻¹ A) P0, with ω = 4 / (3 ρ) and ρ the largest eigenvalue
 //    of D⁻¹ A, from power steps. The next level is Pᵀ A P.
 //
@@ -272,6 +278,8 @@ fn factor_last() -> bool {
     for i in n * n { amg_chol.push(0.0); }
     for r in n {
         for e in rs[r]..rs[r + 1] { amg_chol[n * r + col[e]] += val[e]; }
+        // The empty row of a dependent column of P0 (tentative) holds its dof at 0.
+        if rs[r] == rs[r + 1] { amg_chol[n * r + r] = 1.0; }
     }
     for j in n {
         var d = amg_chol[n * j + j];
@@ -309,11 +317,26 @@ fn clear_levels() {
 }
 
 // Builds the levels for the matrix (row_start, col, val) with dofs in
-// blocks of `bs`. False if the last level is not positive definite.
+// blocks of `bs`, and the constant of each component as the near null
+// space. False if the last level is not positive definite.
 fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
-    guard bs >= 1 && row_start.len >= 2 && (row_start.len - 1) % bs == 0 && col.len == val.len else { abort("amg_setup: a CSR matrix with the dofs in blocks"); }
+    var modes: f64[>..] = [];
+    for r in row_start.len - 1 {
+        for c in bs { modes.push(if r % bs == c { 1.0 } else { 0.0 }); }
+    }
+    return amg_setup_modes(row_start, col, val, bs, modes, bs);
+}
+
+// The same with the near null space `modes`: nb values for each dof, by
+// rows.
+fn amg_setup_modes(row_start: i64[:], col: i32[:], val: f64[:], bs: i64, modes: f64[:], nb: i64) -> bool {
+    guard bs >= 1 && nb >= 1 && row_start.len >= 2 && (row_start.len - 1) % bs == 0 && col.len == val.len &&
+          modes.len == nb * (row_start.len - 1) else { abort("amg_setup_modes: a CSR matrix with the dofs in blocks, and nb modes of each dof"); }
     clear_levels();
     push_level(row_start.len - 1, row_start, col, val);
+    var ns: f64[>..] = [];
+    ns.append(modes);
+    var level_bs = bs;
     var p0rs: i64[>..] = [];
     var p0col: i32[>..] = [];
     var p0val: f64[>..] = [];
@@ -323,41 +346,23 @@ fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
     var trs: i64[>..] = [];
     var tcol: i32[>..] = [];
     var tval: f64[>..] = [];
-    var aprs: i64[>..] = [];
-    var apcol: i32[>..] = [];
-    var apval: f64[>..] = [];
     var crs: i64[>..] = [];
     var ccol: i32[>..] = [];
     var cval: f64[>..] = [];
     for l in AMG_MAX_LEVELS - 1 {
         let n = amg_n[l];
         guard n > AMG_COARSE else { break; }
-        let agg, count = aggregates(l, bs);
-        let nc = count * bs;
+        let agg, count = aggregates(l, level_bs);
+        let nc = count * nb;
         guard nc < n else { break; }
-        // P0, then P = P0 - ω D⁻¹ A P0.
-        p0rs.clear();
-        p0col.clear();
-        p0val.clear();
-        p0rs.push(0);
-        for r in n {
-            p0col.push((agg[r / bs] * bs + r % bs) as i32);
-            p0val.push(1.0);
-            p0rs.push(p0col.len);
-        }
-        let omega = 4.0 / (3.0 * spectral_radius(l));
-        spmm(level_rs(l), level_col(l), level_val(l), p0rs, p0col, p0val, nc, prs, pcol, pval);
-        let d = amg_diag[amg_v_at[l]..amg_v_at[l] + n];
-        for r in n {
-            for e in prs[r]..prs[r + 1] {
-                pval[e] *= -omega / d[r];
-                if pcol[e] == p0col[r] { pval[e] += 1.0; }
-            }
-        }
+        let coarse = tentative(agg, count, level_bs, nb, ns, p0rs, p0col, p0val);
+        ns.clear();
+        ns.append(coarse);
+        smooth(l, nc, p0rs, p0col, p0val, prs, pcol, pval);
         // The next level: Pᵀ (A P).
-        spmm(level_rs(l), level_col(l), level_val(l), prs, pcol, pval, nc, aprs, apcol, apval);
+        spmm(level_rs(l), level_col(l), level_val(l), prs, pcol, pval, nc, p0rs, p0col, p0val);
         transpose(prs, pcol, pval, nc, trs, tcol, tval);
-        spmm(trs, tcol, tval, aprs, apcol, apval, nc, crs, ccol, cval);
+        spmm(trs, tcol, tval, p0rs, p0col, p0val, nc, crs, ccol, cval);
         if amg_pe_at.len == 0 { amg_pe_at.push(0); }
         amg_prs_at.push(amg_prs.len);
         amg_prs.append(prs);
@@ -365,8 +370,90 @@ fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
         amg_pval.append(pval);
         amg_pe_at.push(amg_pcol.len);
         push_level(nc, crs, ccol, cval);
+        level_bs = nb;
     }
     return amg_n[amg_levels - 1] > 3000 || factor_last();
+}
+
+// P0 of the aggregates `agg` of the nodes of a level with blocks of bs
+// dofs and the near null space ns (nb values for each dof), into p0. It
+// gives the near null space of the coarse level.
+fn tentative(agg: i64[:], count: i64, bs: i64, nb: i64, ns: f64[:], p0rs: i64[>..]&, p0col: i32[>..]&, p0val: f64[>..]&) -> f64[>..] {
+    // The nodes of each aggregate: a counting sort.
+    var start: i64[>..] = [];
+    for a in count + 1 { start.push(0); }
+    for a in agg { start[a + 1]++; }
+    for a in count { start[a + 1] += start[a]; }
+    var fill: i64[>..] = [];
+    fill.append(start[..count]);
+    var nodes: i64[>..] = [];
+    for i in agg.len { nodes.push(0); }
+    for at, i in agg {
+        nodes[fill[at]] = i;
+        fill[at]++;
+    }
+    // q[nb r + k]: column k of Q at dof r.
+    var q: f64[>..] = [];
+    q.append(ns);
+    var coarse: f64[>..] = [];
+    for i in count * nb * nb { coarse.push(0.0); }
+    for a in count {
+        for k in nb {
+            var first = 0.0;
+            for i in nodes[start[a]..start[a + 1]] {
+                for c in bs { first += q[nb * (bs * i + c) + k] * q[nb * (bs * i + c) + k]; }
+            }
+            for j in k {
+                var r = 0.0;
+                for i in nodes[start[a]..start[a + 1]] {
+                    for c in bs { r += q[nb * (bs * i + c) + j] * q[nb * (bs * i + c) + k]; }
+                }
+                coarse[nb * (nb * a + j) + k] = r;
+                for i in nodes[start[a]..start[a + 1]] {
+                    for c in bs { q[nb * (bs * i + c) + k] -= r * q[nb * (bs * i + c) + j]; }
+                }
+            }
+            var norm = 0.0;
+            for i in nodes[start[a]..start[a + 1]] {
+                for c in bs { norm += q[nb * (bs * i + c) + k] * q[nb * (bs * i + c) + k]; }
+            }
+            let keep = norm > 1.0e-20 * first && norm > 0.0;
+            coarse[nb * (nb * a + k) + k] = if keep { sqrt(norm) } else { 0.0 };
+            for i in nodes[start[a]..start[a + 1]] {
+                for c in bs { q[nb * (bs * i + c) + k] = if keep { q[nb * (bs * i + c) + k] / sqrt(norm) } else { 0.0 }; }
+            }
+        }
+    }
+    p0rs.clear();
+    p0col.clear();
+    p0val.clear();
+    p0rs.push(0);
+    for r in agg.len * bs {
+        for k in nb {
+            if q[nb * r + k] == 0.0 { continue; }
+            p0col.push((nb * agg[r / bs] + k) as i32);
+            p0val.push(q[nb * r + k]);
+        }
+        p0rs.push(p0col.len);
+    }
+    return coarse;
+}
+
+// P = P0 - ω D⁻¹ A P0 of level l, with ω = 4 / (3 ρ(D⁻¹ A)).
+fn smooth(l: i64, nc: i64, p0rs: i64[:], p0col: i32[:], p0val: f64[:], prs: i64[>..]&, pcol: i32[>..]&, pval: f64[>..]&) {
+    let n = amg_n[l];
+    let omega = 4.0 / (3.0 * spectral_radius(l));
+    spmm(level_rs(l), level_col(l), level_val(l), p0rs, p0col, p0val, nc, prs, pcol, pval);
+    let d = amg_diag[amg_v_at[l]..amg_v_at[l] + n];
+    for r in n {
+        for e in prs[r]..prs[r + 1] { pval[e] *= -omega / d[r]; }
+        // The columns of P0 are in the row of A P0: A has its diagonal.
+        for f in p0rs[r]..p0rs[r + 1] {
+            for e in prs[r]..prs[r + 1] {
+                if pcol[e] == p0col[f] { pval[e] += p0val[f]; }
+            }
+        }
+    }
 }
 
 // One Gauss-Seidel sweep on level l, forward or backward.
