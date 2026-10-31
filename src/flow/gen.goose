@@ -514,8 +514,7 @@ fn material(n: i64) {
 let PHYSICS_FIX = "write physics flow on dom: navier_stokes solves v: Vector<Velocity>, p: Pressure { material fluid }";
 
 // The statements of a physics written out: `let sigma = -p*I + 2*mu*sym(grad(v))`,
-// `eq rho*grad(v)*v - div(sigma) = 0` (or `-div(sigma) = 0` for Stokes) and
-// `eq div(v) = 0`.
+// `eq rho*grad(v)*v - div(sigma) = 0` and `eq div(v) = 0`.
 fn written_out(c: i64, eqs: i64&) {
     let k = kind(c);
     let v = velocity;
@@ -538,12 +537,7 @@ fn written_out(c: i64, eqs: i64&) {
     let s = stress;
     eqs++;
     if left == str("div(", v, ")") && right == "0" { return; }
-    let ns = left == str("rho*grad(", v, ")*", v, "-div(", s, ")") || left == str("rho*(ddt(", v, ")+grad(", v, ")*", v, ")-div(", s, ")");
-    let st = left == str("-div(", s, ")") || left == str("rho*ddt(", v, ")-div(", s, ")");
-    if (ns || st) && right == "0" {
-        convective = ns;
-        return;
-    }
+    if left == str("rho*grad(", v, ")*", v, "-div(", s, ")") && right == "0" { return; }
     unsupported(tok(c), "the eq is not an equation of the flow generator",
                 str("write eq rho*grad(", v, ")*", v, " - div(", s, ") = 0 and eq div(", v, ") = 0"));
 }
@@ -831,7 +825,7 @@ let REPORT_FIX = "write v.x at (x, y), p at (x, y), integral((sigma*n).x, wall),
 
 fn report(item: i64) {
     let e = first(item);
-    if !result_ok(e) { return; }
+    if !whole_vector(e) && !result_ok(e) { return; }
     var r = Report { expr: e, label: [] };
     codegen::set256(r.label, source_of(item));
     reports.push(r);
@@ -846,6 +840,14 @@ fn point_field(e: i64) -> i64, i64 {
     if f == str(velocity, ".y") { return 1, -1; }
     if f == pressure { return 2, -1; }
     return -1, -1;
+}
+
+// Whether `e` is `v at p`, the velocity vector at a point. Only a report
+// shows it: an expect or a + - * / uses one component.
+fn whole_vector(e: i64) -> bool {
+    guard kind(e) == syntax::N_AT else { return false; }
+    let what, other = point_field(e);
+    return other >= 0;
 }
 
 // `integral((sigma*n).x, wall)`: the component, or -1.
@@ -863,7 +865,8 @@ recursive fn result_ok(e: i64) -> bool {
     if k == syntax::N_AT {
         let what, other = point_field(e);
         if what < 0 { unsupported(tok(e), str("'", source_of(child(e, 0)), "' at a point is not in the flow generator"), REPORT_FIX); }
-        return what >= 0;
+        if other >= 0 { unsupported(tok(e), str("the vector '", source_of(child(e, 0)), "' at a point is only in a report, not in an expect or a + - * /"), REPORT_FIX); }
+        return what >= 0 && other < 0;
     }
     if is_call(e, "integral") {
         if traction_integral(e) >= 0 { use_region(named_of(arg(e, 1), BOUNDARY)); }
@@ -1519,12 +1522,7 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
     quoted(out, step);
     out.append(", name, ");
     let e = r.expr;
-    var other = -1;
-    if kind(e) == syntax::N_AT {
-        let what, o = point_field(e);
-        other = o;
-    }
-    if other >= 0 {
+    if whole_vector(e) {
         // The velocity vector at a point.
         var x: u8[>..] = [];
         vector_comp = 0;

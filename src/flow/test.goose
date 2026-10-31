@@ -7,8 +7,9 @@
 // so Stokes and Navier-Stokes have the same solution. P2 velocity holds it
 // exactly. The force of each wall on the flow is -G H L / 2 along x.
 //
-// The gate of phase 3 is the lid-driven cavity of samples/02_cavity.skn
-// against Ghia et al. (1982): scripts/generated_c.sh runs it.
+// The gate of phase 3 is samples/02_cavity.skn, with an expect for each
+// row of Ghia et al. (1982), and samples/06_cylinder_sweep.skn.
+// scripts/generated_c.sh runs the two samples.
 import std;
 import math;
 import flow from "../flow";

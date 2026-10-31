@@ -51,8 +51,8 @@ Phase 3 is in three tasks: flow, solid, and the mesher with the task pool.
 | the `stokes` and `navier_stokes` templates | done |
 | birth and death, submodels, AMG, LOBPCG, the task pool | open |
 
-Gate: samples 02 and 06 run. Sample 02 passes each `expect` against Ghia
-et al.: the largest difference is 0.005 m/s, and the limit is 0.02 m/s.
+Gate: `scripts/generated_c.sh` runs samples 02 and 06. Sample 02 passes
+each `expect` against Ghia et al. within the limit of 0.02 m/s.
 Samples 03 and 04 and the gap G36 are open.
 
 ## Risks
