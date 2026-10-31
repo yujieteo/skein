@@ -834,14 +834,32 @@ function, so that the mesher can find sharp edges (§9.2).
 | `rect(p0, p1)` | `Surface` | 2D only |
 | `circle(c, r)` | `Surface` | 2D only |
 | `polygon(p1, p2, …)` | `Surface` | 2D only, counter-clockwise or clockwise |
+| `fill(c)` | `Surface` | 2D only. The region inside the `Curve` `c` and the line from its last point to its first point |
 | `extrude(s, h)` | `Solid` | `s` is a 2D `Surface` in the x-y plane |
 | `revolve(s, angle)` | `Solid` | about the y axis |
 | `sweep(s, path)` | `Solid` | `path` is a `Curve` |
-| `line(p0, p1)`, `arc(c, r, a0, a1)`, `spline(p…)` | `Curve` | |
+| `line(p0, p1)`, `arc(c, r, a0, a1)`, `spline(p…)` | `Curve` | `spline` passes through the points in order |
 | `point(p)` | `Point` | |
 | `shell(a, t)` | same as `a` | a wall of constant thickness `t` inside the surface of `a`: `max(φa, −φa − t)` |
 | `loft(s1, s2, h)` | `Solid` | from 2D section `s1` at z = 0 to `s2` at z = `h` |
 | `pattern(a, v, n)`, `pattern_polar(a, axis, n)` | same as `a` | `n` copies of `a`, along `v` or about `axis` |
+
+`spline(p1, …, pn)` is the centripetal Catmull-Rom spline through the
+points (Yuksel et al. 2011). It has no cusp and no loop between two points.
+At each end, it continues to a point that is the reflection of the second
+point, for example `2*p1 - p2` before `p1`. A point equal to the point
+before it adds nothing. `fill(spline(p1, …, pn))` closes the spline with a
+line from `pn` to `p1`. Thus the ends make a corner, for example the sharp
+trailing edge of an airfoil when `pn` equals `p1`, or the straight edges of
+a quarter hole on 2 lines of symmetry:
+
+```skein
+let hole: Surface = fill(spline(rim(0), rim(1), rim(2), rim(3), rim(4))) | polygon((0, 0), rim(0), rim(4))
+```
+
+Reason: femahoy gap G24. The airfoils of naca0012-ladson and naca23012-flap
+and the superellipse hole of shape-hole-biaxial are splines through
+points. A polygon through the points has a different boundary.
 
 Operators and modifiers:
 
@@ -1971,7 +1989,7 @@ run is a **case**. The procedure after the colon makes the cases:
 | `grid` | a list for each parameter | the Cartesian product of the lists |
 | `zip` | lists of one length | case `i` takes value `i` of each list |
 | `sample(n: Int, method: lhs \| sobol, seed: Int)` | a range `lo..hi` for each parameter | `n` points in the box of the ranges |
-| `minimize(objective, method: nelder_mead \| bobyqa, max_cases: Int)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
+| `minimize(objective, method: nelder_mead \| bobyqa, max_cases: Int, xtol: Real, step: Real)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
 
 - Each entry names a `param` [`study_param`]. Each value has the type of the
   parameter [`type_mismatch`] and is in its range [`param_range`].
@@ -1981,6 +1999,14 @@ run is a **case**. The procedure after the colon makes the cases:
 - `minimize` is gradient-free. Gradients by adjoint are in the roadmap
   (phase 5). `objective` names a scalar `report` of the last step
   [`study_objective`].
+- `xtol` and `step` are fractions of the range of each parameter, above 0
+  and at most 1 [`procedure_args`]. The first simplex of `nelder_mead` is
+  the start and, for each parameter, the start moved by `step` of its
+  range. The study stops when each point of the simplex is within `xtol`
+  of the range from the best point, in each parameter, or after
+  `max_cases` cases. Reason: femahoy gap G25. The case shape-hole-biaxial
+  stops at 0.001 from a simplex of 0.1, and its tolerance comes from that
+  stop rule.
 - An entry can be an `expect` (§15.3). The cases of a `grid` are in the
   order of the Cartesian product, with the last entry the fastest.
 
@@ -2266,3 +2292,4 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Simo, J. C., Hughes, T. J. R. (1998). Computational Inelasticity. Springer.
 - Tezduyar, T. E. (1992). Stabilized finite element formulations for incompressible flow computations. Adv. Appl. Mech. 28.
 - Vaněk, P., Mandel, J., Brezina, M. (1996). Algebraic multigrid by smoothed aggregation for second and fourth order elliptic problems. Computing 56.
+- Yuksel, C., Schaefer, S., Keyser, J. (2011). Parameterization and applications of Catmull-Rom curves. Computer-Aided Design 43(7).

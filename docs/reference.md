@@ -182,7 +182,9 @@ Spec: [§7](skein_spec.md#7-expressions-and-operators).
 ## 7. Geometry
 
 Shapes: `box`, `cylinder`, `sphere`, `rect`, `circle`,
-`polygon`, `extrude`, `revolve`, `sweep`, `line`, `arc`, `spline`, `point`.
+`polygon`, `fill`, `extrude`, `revolve`, `sweep`, `line`, `arc`, `spline`,
+`point`. `fill(spline(p1, …, pn))` is the region inside a spline through
+the points and the line from `pn` to `p1`.
 Operators: `|` union, `&` intersection, `-` difference. Modifiers: `fillet`,
 `move`, `rotate`, `scale`.
 
@@ -267,7 +269,7 @@ for example `k: Conductivity = k0*(1 + beta*T)`.
 A physics block assigns materials to regions:
 
 ```skein
-material clay on ground, fill on lift1 | lift2
+material clay on ground, backfill on lift1 | lift2
 ```
 
 Spec: [§10.2](skein_spec.md#102-material).

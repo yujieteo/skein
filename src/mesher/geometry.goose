@@ -21,10 +21,11 @@ let SUBTRACT = 9;
 let LOFT = 10;
 let PATTERN = 11;
 let PATTERN_POLAR = 12;
+let FILL = 13;
 
 // `a` and `b` are child nodes, the first point and the point count of a
-// polygon, or the child node and the copy count of a pattern. `p` holds the
-// numbers of the primitive.
+// polygon or a fill, or the child node and the copy count of a pattern. `p`
+// holds the numbers of the primitive.
 struct Shape {
     kind: i64,
     a: i64,
@@ -33,7 +34,7 @@ struct Shape {
 }
 
 var shapes: Shape[>..] = [];
-var polygon_points: f64[>..] = [];    // x and y of each polygon point
+var polygon_points: f64[>..] = [];    // x and y of each point of a polygon or a fill
 
 fn add_shape(kind: i64, a: i64, b: i64, p: f64[8]) -> i64 {
     shapes.push(Shape { kind: kind, a: a, b: b, p: p });
@@ -71,6 +72,15 @@ fn polygon(xy: f64[:]) -> i64 {
     let first = polygon_points.len / 2;
     for v in xy { polygon_points.push(v); }
     return add_shape(POLYGON, first, xy.len / 2, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// The region inside the spline through the points of `xy` and the line
+// from the last point to the first (spec §8.1). Each point is apart from
+// the next.
+fn fill(xy: f64[:]) -> i64 {
+    let first = polygon_points.len / 2;
+    for v in xy { polygon_points.push(v); }
+    return add_shape(FILL, first, xy.len / 2, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
 // The 2D shape s, from z = 0 to z = h.
@@ -147,6 +157,160 @@ fn polygon_phi(first: i64, count: i64, x: f64, y: f64) -> f64 {
     return if inside { -sqrt(d2) } else { sqrt(d2) };
 }
 
+// Point k of fill node g. The points before the first and after the last
+// are reflections: 2 P(0) - P(1) and 2 P(n-1) - P(n-2).
+fn fill_point(g: i64, k: i64) -> f64[2] {
+    let s = shapes[g];
+    fn at(j: i64) -> f64[2] { [polygon_points[2 * (s.a + j)], polygon_points[2 * (s.a + j) + 1]] }
+    if k < 0 {
+        let a = at(0);
+        let b = at(1);
+        return [2.0 * a[0] - b[0], 2.0 * a[1] - b[1]];
+    }
+    if k >= s.b {
+        let a = at(s.b - 1);
+        let b = at(s.b - 2);
+        return [2.0 * a[0] - b[0], 2.0 * a[1] - b[1]];
+    }
+    return at(k);
+}
+
+// Span i of fill node g, from point i to point i + 1, as the cubics
+// x = c0 + c1 u + c2 u^2 + c3 u^3 (c[0..4]) and y (c[4..8]) for u in
+// [0, 1]. The spline is the centripetal Catmull-Rom spline (Yuksel et al.
+// 2011) in its Hermite form: it has no cusp and no loop in a span.
+fn span(g: i64, i: i64) -> f64[8] {
+    let p0 = fill_point(g, i - 1);
+    let p1 = fill_point(g, i);
+    let p2 = fill_point(g, i + 1);
+    let p3 = fill_point(g, i + 2);
+    fn knot(a: f64[2], b: f64[2]) -> f64 { sqrt(sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]))) }
+    let d0 = knot(p0, p1);
+    let d1 = knot(p1, p2);
+    let d2 = knot(p2, p3);
+    var c: f64[8] = default<f64[8]>();
+    for k in 2 {
+        let m1 = d1 * ((p1[k] - p0[k]) / d0 - (p2[k] - p0[k]) / (d0 + d1) + (p2[k] - p1[k]) / d1);
+        let m2 = d1 * ((p2[k] - p1[k]) / d1 - (p3[k] - p1[k]) / (d1 + d2) + (p3[k] - p2[k]) / d2);
+        c[4 * k] = p1[k];
+        c[4 * k + 1] = m1;
+        c[4 * k + 2] = 3.0 * (p2[k] - p1[k]) - 2.0 * m1 - m2;
+        c[4 * k + 3] = 2.0 * (p1[k] - p2[k]) + m1 + m2;
+    }
+    return c;
+}
+
+// The value of cubic j (0 is x, 1 is y) of span c at u, and its first and
+// second derivatives.
+fn cubic(c: f64[8], j: i64, u: f64) -> f64, f64, f64 {
+    let a = 4 * j;
+    return c[a] + u * (c[a + 1] + u * (c[a + 2] + u * c[a + 3])),
+           c[a + 1] + u * (2.0 * c[a + 2] + u * 3.0 * c[a + 3]),
+           2.0 * c[a + 2] + 6.0 * u * c[a + 3];
+}
+
+// The box x0, y0, x1, y1 of the Bézier points of span c. It holds the span.
+fn span_box(c: f64[8]) -> f64[4] {
+    var b: f64[4] = [1.0e300, 1.0e300, -1.0e300, -1.0e300];
+    for j in 2 {
+        let a = 4 * j;
+        let e: f64[4] = [c[a], c[a] + c[a + 1] / 3.0, c[a] + (2.0 * c[a + 1] + c[a + 2]) / 3.0,
+                         c[a] + c[a + 1] + c[a + 2] + c[a + 3]];
+        for v in e {
+            b[j] = min(b[j], v);
+            b[2 + j] = max(b[2 + j], v);
+        }
+    }
+    return b;
+}
+
+// The number of times span c crosses the ray from (x, y) along +x, with
+// the half-open rule of polygon_phi. Each piece between 2 zeros of dy/du
+// is monotone in y, so it crosses at most once.
+fn span_crossings(c: f64[8], x: f64, y: f64) -> i64 {
+    var cuts: f64[4] = [0.0, 1.0, 1.0, 1.0];
+    var count = 1;
+    // The zeros of c5 + 2 c6 u + 3 c7 u^2 in (0, 1).
+    let qa = 3.0 * c[7];
+    let qb = 2.0 * c[6];
+    let disc = qb * qb - 4.0 * qa * c[5];
+    if abs(qa) > 1.0e-300 && disc > 0.0 {
+        let r0 = (-qb - sqrt(disc)) / (2.0 * qa);
+        let r1 = (-qb + sqrt(disc)) / (2.0 * qa);
+        for r in [min(r0, r1), max(r0, r1)] {
+            if r > 0.0 && r < 1.0 { cuts[count] = r; count++; }
+        }
+    } else if abs(qa) <= 1.0e-300 && abs(qb) > 1.0e-300 {
+        let r = -c[5] / qb;
+        if r > 0.0 && r < 1.0 { cuts[count] = r; count++; }
+    }
+    cuts[count] = 1.0;
+    var n = 0;
+    for k in count {
+        var lo = cuts[k];
+        var hi = cuts[k + 1];
+        let ylo, _, _ = cubic(c, 1, lo);
+        let yhi, _, _ = cubic(c, 1, hi);
+        guard (ylo > y) != (yhi > y) else { continue; }
+        for m in 60 {
+            let mid = 0.5 * (lo + hi);
+            let ym, _, _ = cubic(c, 1, mid);
+            if (ym > y) == (ylo > y) { lo = mid; } else { hi = mid; }
+        }
+        let xr, _, _ = cubic(c, 0, 0.5 * (lo + hi));
+        if x < xr { n++; }
+    }
+    return n;
+}
+
+// The square of the distance from (x, y) to span c: the nearest of 9
+// samples, then Newton steps on (P(u) - q) . P'(u) = 0.
+fn span_distance2(c: f64[8], x: f64, y: f64) -> f64 {
+    fn d2(u: f64) -> f64 {
+        let px, _, _ = cubic(c, 0, u);
+        let py, _, _ = cubic(c, 1, u);
+        return (px - x) * (px - x) + (py - y) * (py - y);
+    }
+    var best = 1.0e300;
+    var u = 0.0;
+    for k in 9 {
+        let d = d2(k / 8.0);
+        if d < best { best = d; u = k / 8.0; }
+    }
+    for k in 6 {
+        let px, dx, ddx = cubic(c, 0, u);
+        let py, dy, ddy = cubic(c, 1, u);
+        let f = (px - x) * dx + (py - y) * dy;
+        let df = dx * dx + dy * dy + (px - x) * ddx + (py - y) * ddy;
+        guard df > 0.0 else { break; }
+        u = clamp(u - f / df, 0.0, 1.0);
+        best = min(best, d2(u));
+    }
+    return best;
+}
+
+// φ of fill node g: the distance to the nearest span or to the closing
+// line, with the sign of the crossing count of the ray along +x.
+fn fill_phi(g: i64, x: f64, y: f64) -> f64 {
+    let s = shapes[g];
+    let a = fill_point(g, s.b - 1);
+    let b = fill_point(g, 0);
+    let ex = b[0] - a[0];
+    let ey = b[1] - a[1];
+    let t = clamp(((x - a[0]) * ex + (y - a[1]) * ey) / max(ex * ex + ey * ey, 1.0e-300), 0.0, 1.0);
+    var d2 = (x - a[0] - t * ex) * (x - a[0] - t * ex) + (y - a[1] - t * ey) * (y - a[1] - t * ey);
+    var inside = (a[1] > y) != (b[1] > y) && x < a[0] + (y - a[1]) * ex / ey;
+    for i in s.b - 1 {
+        let c = span(g, i);
+        let box = span_box(c);
+        if y >= box[1] && y <= box[3] && x <= box[2] && span_crossings(c, x, y) % 2 == 1 { inside = !inside; }
+        let ox = max(max(box[0] - x, x - box[2]), 0.0);
+        let oy = max(max(box[1] - y, y - box[3]), 0.0);
+        if ox * ox + oy * oy < d2 { d2 = min(d2, span_distance2(c, x, y)); }
+    }
+    return if inside { -sqrt(d2) } else { sqrt(d2) };
+}
+
 // The angle wedge of a revolve: 0 <= atan2(-z, x) <= angle.
 fn wedge_phi(angle: f64, x: f64, z: f64) -> f64 {
     let low = z;    // the half-space atan2(-z, x) >= 0
@@ -183,6 +347,7 @@ recursive fn phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
         return sqrt((x - p[0]) * (x - p[0]) + (y - p[1]) * (y - p[1])) - p[2];
     }
     if s.kind == POLYGON { return polygon_phi(s.a, s.b, x, y); }
+    if s.kind == FILL { return fill_phi(g, x, y); }
     if s.kind == EXTRUDE { return slab(phi(s.a, x, y, 0.0), z, p[0]); }
     if s.kind == REVOLVE {
         let d = phi(s.a, sqrt(x * x + z * z), y, 0.0);
@@ -227,6 +392,17 @@ recursive fn bounds(g: i64) -> f64[6] {
                 let v = polygon_points[2 * (s.a + i) + c];
                 b[c] = min(b[c], v);
                 b[3 + c] = max(b[3 + c], v);
+            }
+        }
+        return b;
+    }
+    if s.kind == FILL {
+        var b: f64[6] = [1.0e300, 1.0e300, 0.0, -1.0e300, -1.0e300, 0.0];
+        for i in s.b - 1 {
+            let e = span_box(span(g, i));
+            for c in 2 {
+                b[c] = min(b[c], e[c]);
+                b[3 + c] = max(b[3 + c], e[2 + c]);
             }
         }
         return b;

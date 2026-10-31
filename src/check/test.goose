@@ -227,6 +227,10 @@ fn test_types() {
     expect_id("type_mismatch", str(H, "let s: Solid = loft(circle((0, 0) m, 2 m), 3 m)\n"));
     expect_id("type_mismatch", str(H, "let s: Solid = loft(circle((0, 0) m, 2 m), 1 m, 3 m)\n"));
     expect_id("type_mismatch", str(H, "let s: Solid = pattern(box((0, 0, 0) m, (1, 1, 1) m), (2, 0, 0) m)\n"));
+    // Gap G24: fill of a Curve is a 2D Surface, also as the profile of an extrude.
+    expect_clean("fill of a spline", str(H, "let s: Solid = extrude(fill(spline((0, 0) m, (1, 0) m, (1, 1) m, (0, 0) m)), 1 m)\n"));
+    expect_id("type_mismatch", str(H, "let s: Solid = extrude(fill(rect((0, 0) m, (1, 1) m)), 1 m)\n"));
+    expect_id("geometry_space", str(H, "let s: Surface = fill(spline((0, 0, 0) m, (1, 0, 0) m, (1, 1, 0) m))\n"));
     expect_id("nondim_unit", "model m: 2d, nondim\nlet a: Real = 1 m\n");
     // Gaps G7, G12, G29, G30: these are valid.
     expect_clean("G7 re, imag, arg, conj", str(H, "let w: Complex<Real> = 1 + 2*im\nlet a: Real = re(w) + imag(w) + abs(w)\nlet b: Angle = arg(conj(w))\n"));
@@ -406,6 +410,11 @@ fn test_studies() {
     expect_id("study_param", str(H, "let D: Length = 1 m\nstudy s: grid {\n    D: [0.1, 0.2] m\n}\n"));
     expect_clean("a study", str(H, "param D: Length = 1 m in 0.1 m..2 m\nstudy s: grid {\n    D: [0.1, 0.2] m\n}\n"));
     expect_id("study_objective", str(H, "param D: Length = 1 m\nstudy s: minimize(drag) {\n    D: 0.1 m..0.2 m\n}\n"));
+    // G25: the stop rule and the first simplex of minimize are fractions of each range.
+    let nm = "param D: Length = 1 m in 0.1 m..2 m\nstep go: static {\n    report r = D\n}\nstudy s: minimize(r, method: nelder_mead, max_cases: 50, ";
+    expect_clean("G25 xtol and step", str(H, nm, "xtol: 0.001, step: 0.1) {\n    D: 0.1 m..2 m\n}\n"));
+    expect_id("procedure_args", str(H, nm, "xtol: 1 mm) {\n    D: 0.1 m..2 m\n}\n"));
+    expect_id("procedure_args", str(H, nm, "step: 1.5) {\n    D: 0.1 m..2 m\n}\n"));
     // G10: an expect of a study, checked in each case, with a list of one
     // value for each case of a grid or a zip.
     let d = str(H, "param D: Length = 1 m in 0.1 m..2 m\nparam k: Real = 1\n");

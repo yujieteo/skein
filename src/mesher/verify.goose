@@ -4,8 +4,8 @@
 //
 // The reader evaluates the geometry of the model: numbers with a length
 // or an angle unit, vectors, + - * / and the names of `let` items, the
-// shapes box, cylinder, rect, circle, polygon, extrude, revolve, loft,
-// pattern and pattern_polar, and the operators |, & and -. Each length is
+// shapes box, cylinder, rect, circle, polygon, fill of a spline, extrude,
+// revolve, loft, pattern and pattern_polar, and the operators |, & and -. Each length is
 // in the length unit of the header (m for SI, mm for the mm systems), and
 // each angle is in radians.
 import std;
@@ -208,6 +208,37 @@ recursive fn shape_call(n: i64) -> Value {
         polygon_scratch.resize(mark);
         return shape(g);
     }
+    if name == "fill" && count == 1 {
+        let c = argument(n, 0);
+        guard syntax::nodes[c].kind == syntax::N_CALL && node_text(syntax::child(c, 0)) == "spline" else {
+            reader_fault(syntax::nodes[argument(n, 0)].tok, "fill of a Curve that is not a spline is not in the mesher",
+                         "fill a spline through the points");
+            return number_value(0.0);
+        }
+        let mark = polygon_scratch.len;
+        for i in syntax::child_count(c) - 1 {
+            let p = eval_value(argument(c, i));
+            if p.n != 2 { reader_fault(syntax::nodes[argument(c, i)].tok, str("argument ", i + 1, " of spline is not a vector of 2"), "write (x, y)"); }
+            let k = polygon_scratch.len;
+            // A point equal to the one before it is not a new point. The
+            // last point equal to the first gives a closing line of length 0.
+            let same = k > mark && p.v[0] == polygon_scratch[k - 2] && p.v[1] == polygon_scratch[k - 1];
+            if same { continue; }
+            polygon_scratch.push(p.v[0]);
+            polygon_scratch.push(p.v[1]);
+        }
+        let end = polygon_scratch.len;
+        let closed = end - mark > 2 && polygon_scratch[end - 2] == polygon_scratch[mark] && polygon_scratch[end - 1] == polygon_scratch[mark + 1];
+        let points = (end - mark) / 2 - (if closed { 1 } else { 0 });
+        guard points >= 3 && syntax::errors.len == 0 else {
+            reader_fault(syntax::nodes[c].tok, str("the spline of fill has ", points, " different points"), "give 3 or more points");
+            polygon_scratch.resize(mark);
+            return number_value(0.0);
+        }
+        let g = fill(polygon_scratch[mark..]);
+        polygon_scratch.resize(mark);
+        return shape(g);
+    }
     if name == "extrude" && count == 2 {
         let s = arg(0, 0);
         return shape(extrude(s.g, arg(1, 1).v[0]));
@@ -243,7 +274,7 @@ recursive fn shape_call(n: i64) -> Value {
         return shape(pattern_polar(a.g, v.v[0], v.v[1], v.v[2], copies as i64));
     }
     reader_fault(t, str("the shape '", name, "' with ", count, " arguments is not in the mesher"),
-                 "use box, cylinder, rect, circle, polygon, extrude, revolve, loft, pattern or pattern_polar, with |, & and -");
+                 "use box, cylinder, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -");
     return number_value(0.0);
 }
 
