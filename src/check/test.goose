@@ -390,6 +390,25 @@ fn test_steps() {
     expect_id("rank_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(norm(u), 1 mm)\n}\n"));
     expect_clean("when of a scalar reduced over a region", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(min(norm(u), b), 1 mm)\n}\n"));
     expect_id("not_constant", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(norm(u), b), x)\n}\n"));
+    // G2: a damping ratio and rms over the frequencies of a harmonic step (spec §14.2, §14.5).
+    let complex = str(H, SOLID, "\nphysics s on b: linear_elastic(rho*(0, 0, -9.81) m/s^2) solves u: Vector<Complex<Length>> {\n    material steel\n}\n");
+    let random = "step go: harmonic(freq: [10, 20, 30] Hz, damping: 0.02) {\n    bc f: u = 0\n    report a = rms(omega^2*u.z at (1, 0, 0) m, 0.04/(1 Hz))\n}\n";
+    expect_clean("G2 rms in a report of a harmonic step", str(complex, random));
+    expect_clean("G2 rms in an expect after a harmonic step", str(complex, random, "expect a: rms(omega^2*mean(u.z, f), 0.04/(1 Hz)) == 1 m/s^2 within 5%\n"));
+    expect_id("rms_step", str(complex, "step go: static {\n    bc f: u = 0\n    report rms(u.z at (1, 0, 0) m, 0.04/(1 Hz))\n}\n"));
+    expect_id("rms_step", str(complex, random, "step two: static {\n    bc f: u = 0\n}\nexpect a: rms(u.z at (1, 0, 0) m, 1 s) == 1 m within 5%\n"));
+    expect_id("rank_mismatch", str(complex, "step go: harmonic(freq: [10] Hz) {\n    bc f: u = 0\n    report rms(u.z, 1 s)\n}\n"));
+    expect_id("unit_mismatch", str(complex, "step go: harmonic(freq: [10] Hz, damping: 2 s) {\n    bc f: u = 0\n}\n"));
+    // G8: omega, the angular frequency of the step (spec §14.2).
+    expect_clean("G8 omega in a load", str(complex, "let e: Surface = boundary(b, x == 1 m)\nstep go: harmonic(freq: [10] Hz) {\n    bc f: u = 0\n    bc e: sigma*n = (0, 0, 1) Pa*omega*1 s\n}\n"));
+    expect_id("duplicate_name", str(H, "let omega: Frequency = 1 Hz\n"));
+    // G26: a PML (spec §13).
+    let wave = str(H2, "let d: Surface = rect((0, 0) m, (2, 1) m)\nlet layer: Surface = rect((1.5, 0) m, (2, 1) m)\nmaterial air {\n    c: Velocity = 340 m/s\n}\nmesh m1 on d { size: 0.05 m }\nphysics a on d solves p: ");
+    let wave_eq = " {\n    material air\n    eq div(grad(p)) + (omega/c)^2*p = 0\n}\n";
+    expect_clean("G26 a pml", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 0.5 m } }\n"));
+    expect_id("method_setting", str(wave, "Pressure", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 0.5 m } }\n"));
+    expect_id("method_setting", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer } }\n"));
+    expect_id("unit_mismatch", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 2 s } }\n"));
     expect_id("allow_reason", str(H, "allow rigid_body: \"\"\n"));
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"no_such_file.skn\", step: \"load\")\n"));

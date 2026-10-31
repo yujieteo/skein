@@ -1,5 +1,4 @@
 // femahoy: validation/cases/grid-cavity-te101/cavity/grid.toml
-// blocked-by: G8
 // The TE101 resonant mode of a closed rectangular cavity 22.86 x 10.16 x 25 mm with copper walls.
 // The reference frequency is f*(1 - 1/(2*Q)) = 8.884604442 GHz, within 3e-4 of the value.
 
@@ -10,13 +9,14 @@ let b: Length = 10.16 mm
 let d: Length = 25 mm
 let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
 let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+let sigma_cu: Current^2/(Power*Length) = 5.8e7 A/(V*m)
+// The surface impedance of the copper walls at the frequency of the mode.
+let zs: Complex<Power/Current^2> = (1 + im)*sqrt(omega*mu0/(2*sigma_cu))
 
 scales a, 1 V, 1 mA, 0.1 ns
 
 let cavity: Solid = box((0, 0, 0) mm, (a, b, d))
-let xwalls: Surface = boundary(cavity, x == 0 mm || x == a)
-let ywalls: Surface = boundary(cavity, y == 0 mm || y == b)
-let zwalls: Surface = boundary(cavity, z == 0 mm || z == d)
+let walls: Surface = boundary(cavity)
 
 material air {
     eps: Current^2*Time/(Power*Length) = eps0
@@ -29,28 +29,24 @@ mesh m on cavity {
 }
 
 // curl(curl(E)/mu) is written as div(Hs).
-physics wave on cavity solves E: Vector<Power/(Current*Length)> {
+physics wave on cavity solves E: Vector<Complex<Power/(Current*Length)>> {
     material air
-    let Hs: Tensor2<Current/(Length*Time)> = -2*skew(grad(E))/mu
+    let Hs: Tensor2<Complex<Current/(Length*Time)>> = -2*skew(grad(E))/mu
     eq div(Hs) + eps*ddt2(E) = 0
 }
 
 method wave: cg { mesh: m, order: 1, family: nedelec }
 
-// gap G8: no name for the frequency of a mode, so the copper walls (sigma 5.8e7 S/m, surface
-// impedance (1 + im)*sqrt(omega*mu0/(2*sigma))) cannot be stated. The walls here are perfect
-// conductors, which move the frequency by 6.4e-5, inside the tolerance.
-bc xwalls: E.y = 0
-bc xwalls: E.z = 0
-bc ywalls: E.x = 0
-bc ywalls: E.z = 0
-bc zwalls: E.x = 0
-bc zwalls: E.y = 0
+// The copper walls: the Leontovich condition cross(n, H) = -cross(n, cross(n, E))/zs, with n
+// out of the cavity. Hs*n = -im*omega*cross(n, H) for the time factor exp(im*omega*t). omega
+// is the angular frequency of the mode, so the eigenproblem is nonlinear in omega.
+bc walls: Hs*n = im*omega*cross(n, cross(n, E))/zs
 
 // The shift puts the mode search near 8 GHz, above the null space of the curl.
 step resonance: modal(count: 1, shift: 8 GHz) {
     output E
 }
 
-// 3e-4 of the value is 0.03%.
+// The walls make the frequency complex. eigenvalue(1) is its real part. 3e-4 of the value is
+// 0.03%.
 expect f1: eigenvalue(1) == 8.884604442 GHz within 0.03%

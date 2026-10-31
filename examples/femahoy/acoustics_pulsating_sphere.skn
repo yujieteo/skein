@@ -11,8 +11,6 @@ let u_s: Velocity = 1e-3 m/s
 let c_air: Velocity = 343 m/s
 let rho_air: Density = 1.2 kg/m^3
 let f0: Frequency = 500 Hz
-let omega: Frequency = 2*pi*f0
-let kw: Length^-1 = omega/c_air
 
 scales a_s, c_air, rho_air
 
@@ -42,10 +40,11 @@ method acoustic: cg {
     order: 2
 }
 
-// The time factor is exp(im*omega*t), as in femahoy. n points out of the air.
+// The time factor is exp(im*omega*t), as in femahoy, with the built-in omega = 2*pi*f0 of the
+// step. n points out of the air.
 step tone: harmonic(freq: [f0]) {
     bc src: dot(grad(p), n) = im*omega*rho_air*u_s
-    bc outer_face: dot(grad(p), n) = -(im*kw + 1/r_o)*p
+    bc outer_face: dot(grad(p), n) = -(im*omega/c_air + 1/r_o)*p
     // the 3 symmetry planes: the default natural condition dot(grad(p), n) = 0
     output p
     report z_ratio = mean(p, src)/(rho_air*c_air*u_s)

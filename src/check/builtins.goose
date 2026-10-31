@@ -418,6 +418,29 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(TIME, 0);
     }
+    if name == "rms" {
+        // rms(f, psd): the root of the sum of |f|^2 psd over the frequencies of a harmonic step (spec §14.5, gap G2).
+        guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) && is_num(t0) && is_num(t1) else { return any_ty(); }
+        if t0.rank != 0 || t0.varying || t1.rank != 0 || t1.varying {
+            error(tok, "rank_mismatch", "rms takes a scalar at a point or reduced over a region, and a scalar PSD",
+                  "write rms(u.z at (100, 5, 5) mm, 0.04/(1 Hz))");
+            return any_ty();
+        }
+        let d, ok = dim_pow_halves(t1.dim + dim_pow(TIME, -1), 1);
+        if !ok {
+            error(first_tok(a.node[1]), "unit_fractional", str("the PSD times a frequency is ", dim_str(t1.dim + dim_pow(TIME, -1)),
+                  ", and its square root has an exponent that is not a multiple of 1/2"), "give the PSD per frequency, for example 0.04/(1 Hz)");
+            return any_ty();
+        }
+        let proc = if in_expect && cur_step < 0 { last_proc } else { cur_proc };
+        if proc != "harmonic" || (!in_expect && !in_report) {
+            error(tok, "rms_step", "rms needs a harmonic step",
+                  "use rms in a report or an expect of a harmonic step, or in an expect after one");
+        }
+        var r = num_ty(t0.dim + d, 0);
+        r.base = t0.base;
+        return r;
+    }
     // Complex parts (gap G7).
     if name == "re" || name == "imag" || name == "arg" || name == "conj" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }

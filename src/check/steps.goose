@@ -18,7 +18,7 @@ import .physics;
 let STATIC_ARGS = ["ramp"];
 let TRANSIENT_ARGS = ["end", "dt", "scheme"];
 let EXPLICIT_SCHEMES = ["ssprk3", "central_difference"];
-let HARMONIC_ARGS = ["freq"];
+let HARMONIC_ARGS = ["freq", "damping"];
 let MODAL_ARGS = ["count", "shift"];
 let BUCKLING_ARGS = ["count"];
 let PROCEDURES = ["static", "transient", "harmonic", "modal", "buckling"];
@@ -101,6 +101,7 @@ fn proc_arg(name: u8[:], arg: u8[:], v: i64) {
     want_constant(v, t, str("the argument ", arg));
     if arg == "end" || arg == "dt" { assign(first_tok(v), num_ty(TIME, 0), t, str("the argument ", arg)); }
     if arg == "ramp" || arg == "count" { assign(first_tok(v), base_ty(B_INT), t, str("the argument ", arg)); }
+    if arg == "damping" { assign(first_tok(v), base_ty(B_REAL), t, str("the argument ", arg)); }
 }
 
 // --- steps (spec §14) ----------------------------------------------------------------------

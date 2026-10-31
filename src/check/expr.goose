@@ -25,8 +25,10 @@ let BUILTIN_FNS = [
     "pattern_polar", "fillet", "move", "rotate", "scale",
     // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
     "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
+    // rms of a harmonic step (§14.5, gap G2).
+    "rms",
 ];
-let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im"];
+let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "omega"];
 
 fn tok_text(t: i64) -> const u8[:] { syntax::text(t) }
 fn node_tok(n: i64) -> i64 { syntax::nodes[n].tok }

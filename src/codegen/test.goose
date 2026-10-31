@@ -857,6 +857,41 @@ fn test_thermal_union() {
     ]);
 }
 
+// A Complex value of a harmonic step that the generator cannot write
+// stops the model in read, not in the program with a wrong value. A value
+// that holds only at omega > 0 solves.
+fn test_wave_values() {
+    var text: u8[>..] = [];
+    read_file("examples/elements/pml_duct_tri.skn", text);
+    let eq = "eq div(grad(p)) + (omega/c)^2*p = 0";
+    let cases = [
+        [eq, "eq div(grad(p)) + (omega/c)^2*p = 1 Pa/m^2*exp(im*0.5)",
+         "wave_values.skn,27,51,"],
+        [eq, "eq div(grad(p)) + (omega/c)^2*(1 - im*0.1)^0.5*p = 0",
+         "wave_values.skn,27,47,"],
+        [eq, "eq div(grad(p)) + (0 - (omega/c)^2)*p = 0",
+         "wave_values.skn,33,10,"],
+        ["bc inlet: p = p0", "bc inlet: p = p0*(1 - im*omega*1 s)^0.5",
+         "wave_values.skn,36,36,"],
+        ["bc inlet: p = p0", "bc inlet: p = p0*(omega*1 s)^0.5",
+         "tone at 1372.0 Hz,30,186,"],
+    ];
+    for c in cases {
+        if !write_file("build/wave_values.skn", replace(replace(text, c[0], c[1]), "size: 12.5 mm", "size: 100 mm")) {
+            failures++;
+            print("FAIL wave values: cannot write build/wave_values.skn");
+            return;
+        }
+        var cmd: u8[>..] = [];
+        format(cmd, "cd build && ./skein run wave_values.skn 2>&1 | grep -qF '", c[2], "'");
+        cmd.push(0);
+        if system(cmd[0]) != 0 {
+            failures++;
+            print("FAIL wave values: the output of skein run has no: ", c[2]);
+        }
+    }
+}
+
 fn main() {
     test_kernels(args().len > 1 && args()[1] == "write");
     test_grid_cantilever();
@@ -868,6 +903,7 @@ fn main() {
     test_dispatch();
     test_unsupported();
     test_thermal_union();
+    test_wave_values();
     test_study_cases();
     test_study_table();
     test_study_workers();

@@ -1,0 +1,45 @@
+// A plane wave of 1372 Hz enters a duct of air of 1 x 0.1 m at x = 0 and
+// leaves it into a PML of 0.5 m, on P2 triangles. The layer absorbs the
+// wave, so p = exp(-im*k*x) Pa with k = 8*pi/m, and abs(p) = 1 Pa. A
+// reflection R would make abs(p) differ from 1 Pa by up to R.
+
+model pml_duct_tri: 2d, SI
+
+let p0: Pressure = 1 Pa
+
+scales 1 m, 343 m/s, 1.2 kg/m^3
+
+let duct: Surface = rect((0, 0) m, (1.5, 0.1) m)
+let layer: Surface = duct - rect((-1, -1) m, (1, 1) m)
+let inlet: Curve = boundary(duct, x == 0 m)
+
+material air {
+    c: Velocity = 343 m/s
+}
+
+mesh m on duct {
+    size: 12.5 mm
+    cell: tri
+}
+
+physics sound on duct solves p: Complex<Pressure> {
+    material air
+    eq div(grad(p)) + (omega/c)^2*p = 0
+}
+
+method sound: cg {
+    mesh: m
+    order: 2
+    pml: { region: layer, thickness: 0.5 m }
+}
+
+bc inlet: p = p0
+
+step tone: harmonic(freq: [1372] Hz) {
+    output p
+    report abs(p at (0.3, 0.05) m), abs(p at (0.6, 0.05) m), arg(p at (0.53125, 0.05) m)
+    expect amplitude_near: abs(p at (0.3, 0.05) m) == 1 Pa within 0.1%
+    expect amplitude_far: abs(p at (0.6, 0.05) m) == 1 Pa within 0.1%
+    // -k*x = -4.25*pi, which is -pi/4 in -pi..pi.
+    expect phase: arg(p at (0.53125, 0.05) m) == -0.785398 within 0.01
+}

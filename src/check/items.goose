@@ -45,6 +45,7 @@ fn add_builtins() {
         if name == "t" { t = num_ty(TIME, 0); t.varying = true; }
         if name == "n" || name == "tau" { t = num_ty(NO_DIM, 1); t.varying = true; }
         if name == "im" { t = base_ty(B_REAL); t.num = NS_COMPLEX; }
+        if name == "omega" { t = num_ty(dim_pow(TIME, -1), 0); }
         syms.push(Sym { kind: S_BUILTIN, tok: -1, node: -1, ty: t, has_val: false, val: 0.0, phys: -1 });
         visible.insert(key(name), syms.len - 1);
     }

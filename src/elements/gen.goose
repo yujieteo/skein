@@ -6,7 +6,9 @@
 // unknown. The physics block decides the equations: the template
 // `linear_elastic(b)` or `heat(q_v)`, or the same statements written out
 // (`hooke(E, nu, strain(u))` with `div(sigma) = 0`, `-k*grad(T)` or
-// `fourier(k, T)` with `div(q) = q_v`). A box or a rect, and one less a
+// `fourier(k, T)` with `div(q) = q_v`), or `div(grad(u)) + c*u = s` for a
+// `Complex` scalar unknown u in `harmonic` steps, with `pml` and `bloch`
+// (src/elements/wave.goose). A box or a rect, and one less a
 // cylinder or a circle on its corner (lo.x, lo.y) (the quarter model of a
 // plate with a hole), get the structured meshes of src/elements/mesh.goose.
 // Each other shape of the mesher reader (src/mesher/verify.goose) gets the
@@ -65,6 +67,7 @@ fn claims(prog: i64) -> bool {
             var u = first(c);
             while u >= 0 {
                 if kind(u) == syntax::N_UNKNOWN && kind(child(u, 0)) == syntax::N_TYPE_NAME { return true; }
+                if kind(u) == syntax::N_UNKNOWN && complex_scalar(child(u, 0)) { return true; }
                 if kind(u) == syntax::N_USES && name(u) == "heat" { return true; }
                 u = next(u);
             }
@@ -72,6 +75,11 @@ fn claims(prog: i64) -> bool {
         c = next(c);
     }
     return false;
+}
+
+// Whether type n is Complex<D> of a scalar D.
+fn complex_scalar(n: i64) -> bool {
+    return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Complex" && kind(first(n)) == syntax::N_TYPE_NAME;
 }
 
 // --- values --------------------------------------------------------------------
@@ -156,6 +164,60 @@ fn scalar_value(n: i64) -> f64 {
     return v.v[0];
 }
 
+fn cmul(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
+
+fn cdiv(a: f64[2], b: f64[2]) -> f64[2] {
+    let d = b[0] * b[0] + b[1] * b[1];
+    if d == 0.0 { return [0.0, 0.0]; }
+    return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d];
+}
+
+// A Complex constant: `im`, and `omega` of the frequency that the
+// generator writes, with +, -, *, / and integer powers, over the real
+// values of value().
+recursive fn cval(n: i64) -> f64[2] {
+    let k = kind(n);
+    let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
+    if k == syntax::N_NAME && name(n) == "im" { return [0.0, 1.0]; }
+    if k == syntax::N_NAME && name(n) == "omega" { return [omega_now, 0.0]; }
+    if k == syntax::N_NAME && codegen::find_value(name(n)) < 0 && property(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let r = cval(property(name(n)));
+        codegen::depth--;
+        return r;
+    }
+    if k == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let r = cval(codegen::find_value(name(n)));
+        codegen::depth--;
+        return r;
+    }
+    if op == "-" && k == syntax::N_UNARY {
+        let a = cval(first(n));
+        return [-a[0], -a[1]];
+    }
+    if op == "+" || op == "-" || op == "*" || op == "/" {
+        let a = cval(child(n, 0));
+        let b = cval(child(n, 1));
+        if op == "+" { return [a[0] + b[0], a[1] + b[1]]; }
+        if op == "-" { return [a[0] - b[0], a[1] - b[1]]; }
+        return if op == "*" { cmul(a, b) } else { cdiv(a, b) };
+    }
+    if op == "^" {
+        let a = cval(child(n, 0));
+        let e = scalar_value(child(n, 1));
+        if a[1] == 0.0 && a[0] > 0.0 { return [exp(e * log(a[0])), 0.0]; }
+        guard e == floor(e) && abs(e) <= 16.0 else {
+            unsupported(tok(n), "a power of a Complex value needs an integer exponent", "write z^2 or z*z");
+            return a;
+        };
+        var r: f64[2] = [1.0, 0.0];
+        for i in abs(e) as! i64 { r = cmul(r, a); }
+        return if e < 0.0 { cdiv([1.0, 0.0], r) } else { r };
+    }
+    return [scalar_value(n), 0.0];
+}
+
 // --- the model -------------------------------------------------------------------
 
 let GEO_BOX = 0;
@@ -164,6 +226,7 @@ let GEO_SHAPE = 2;
 
 let ELASTIC = 0;
 let HEAT = 1;
+let WAVE = 2;       // as in src/elements/assemble.goose
 
 let SOLID_3D = 0;
 let PLANE_STRESS = 1;
@@ -201,6 +264,7 @@ struct Bc {
     comp: i64,      // -1 for all components, or the index in `sources` of BC_SOURCE
     v: f64[3],
     tok: i64,
+    node: i64,      // the value of a bc of the wave physics: a Complex constant, which can hold omega
 }
 
 // A `results` of another model (spec §15.1): the let, the file, its model
@@ -248,19 +312,24 @@ struct Step {
     first_change: i64,
     change_count: i64,
     output: bool,
-    procedure: i64,     // STATIC, MODAL or BUCKLING
+    procedure: i64,     // STATIC, MODAL, BUCKLING or HARMONIC
     count: i64,         // the modes of a modal or buckling step
+    first_freq: i64,    // the frequencies of a harmonic step in `freqs`
+    freq_count: i64,
+    damping: f64,       // the damping ratio of a harmonic step
 }
 
 let STATIC = 0;
 let MODAL = 1;
 let BUCKLING = 2;
+let HARMONIC = 3;
 
 // What a point field samples (api.goose: value_at, stress_at, flux_at).
 let FIELD_VALUE = 0;
 let FIELD_STRESS = 1;
 let FIELD_FLUX = 2;
 let FIELD_EIGEN = 3;    // eigenvalue(comp + 1)
+let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PARTS
 
 struct Expect {
     name: u8[..64],
@@ -321,8 +390,22 @@ var source_node = -1;           // the right side of the eq, or -1 for 0
 var body_node = -1;             // the argument b of linear_elastic, or -1
 var body_force: f64[3] = [0.0; 3];
 var density = 0.0;
+var wave_c_node = -1;           // c of eq div(grad(u)) + c*u = s, or -1 for 0
+var wave_s_node = -1;           // s, or -1 for 0
+var omega_now = 0.0;            // omega of the frequency that the generator writes
+var freqs: f64[>..];            // the frequencies of the harmonic steps
+var pml_g = -1;                 // the shape of the pml layer, or -1
+var pml_tok = -1;
+var pml_lo: f64[3] = [0.0; 3];  // the box inside the layer
+var pml_hi: f64[3] = [0.0; 3];
+var pml_h = 0.0;
+var bloch_low = -1;             // the low and high boundaries of a bloch group, or -1
+var bloch_high = -1;
+var bloch_period: f64[3] = [0.0; 3];
+var bloch_theta = 0.0;          // dot(k, period)
 var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0, report_count: 0,
-                      first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0 };   // the step that step() reads
+                      first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0, first_freq: 0, freq_count: 0,
+                      damping: 0.0 };   // the step that step() reads
 
 fn reset() {
     density = 0.0;
@@ -371,6 +454,15 @@ fn reset() {
     source_node = -1;
     body_node = -1;
     body_force = [0.0; 3];
+    wave_c_node = -1;
+    wave_s_node = -1;
+    omega_now = 0.0;
+    freqs.clear();
+    pml_g = -1;
+    pml_tok = -1;
+    bloch_low = -1;
+    bloch_high = -1;
+    bloch_theta = 0.0;
 }
 
 fn set64(into: u8[..64]&, s: u8[:]) { codegen::set64(into, s); }
@@ -717,8 +809,8 @@ fn property(word: u8[:]) -> i64 {
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
-    if physics == HEAT && region_laws.len > 0 {
-        unsupported(tok(base), "a material on a region of a heat physics is not in this generator", "use one material");
+    if physics != ELASTIC && region_laws.len > 0 {
+        unsupported(tok(base), "a material on a region of a heat or wave physics is not in this generator", "use one material");
     }
     for &w in region_laws {
         material_node = w.item;
@@ -736,7 +828,8 @@ fn read_law() {
     var p = first(material_node);
     while p >= 0 {
         let w = name(p);
-        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { w == "k" || w == "q_v" };
+        // The eq of the wave physics names its properties.
+        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || w == "k" || w == "q_v" };
         if !known && w != "rho" {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -754,7 +847,7 @@ fn read_law() {
             unsupported(tok(material_node), "the material needs E > 0 and -1 < nu < 0.5",
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
         }
-    } else {
+    } else if physics == HEAT {
         let k = property("k");
         if k >= 0 { conductivity = scalar_value(k); }
         if conductivity <= 0.0 {
@@ -855,6 +948,7 @@ fn physics_item(n: i64) {
         } else if k == syntax::N_UNKNOWN {
             if unknown_name.len > 0 { unsupported(tok(c), "a second unknown", PHYSICS_FIX); }
             set64(unknown_name, name(c));
+            if complex_scalar(child(c, 0)) { physics = WAVE; }
         } else if k == syntax::N_MATASSIGN {
             // The first material is law 0. Each other one holds its region.
             var m = first(c);
@@ -885,6 +979,9 @@ fn physics_item(n: i64) {
                 physics = p;
                 set64(flux_name, name(c));
             }
+        } else if k == syntax::N_EQN && physics == WAVE {
+            eq_count++;
+            wave_eq(c);
         } else if k == syntax::N_EQN {
             eq_count++;
             let left = child(c, 0);
@@ -907,6 +1004,24 @@ fn physics_item(n: i64) {
     if dim == 2 && physics == ELASTIC && plane == SOLID_3D {
         unsupported(tok(n), "a 2d elastic physics needs plane_stress(t) or plane_strain", "add assume plane_stress(1 mm)");
     }
+}
+
+let WAVE_FIX = "write physics sound on duct solves p: Complex<Pressure>, with eq div(grad(p)) + (omega/c)^2*p = 0 in its block";
+
+// eq div(grad(u)) + c*u = s, or div(grad(u)) = s, of a Complex unknown u.
+fn wave_eq(n: i64) {
+    let left = child(n, 0);
+    let lap = str("div(grad(", unknown_name, "))");
+    var form = source_of(left) == lap;
+    if !form && kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "+" && source_of(child(left, 0)) == lap {
+        let t = child(left, 1);
+        if kind(t) == syntax::N_BINARY && syntax::text(tok(t)) == "*" && source_of(child(t, 1)) == unknown_name {
+            wave_c_node = child(t, 0);
+            form = true;
+        }
+    }
+    if !form { unsupported(tok(n), "this generator solves eq div(grad(u)) + c*u = s for a Complex scalar u", WAVE_FIX); }
+    if source_of(child(n, 1)) != "0" { wave_s_node = child(n, 1); }
 }
 
 fn assumptions(n: i64) {
@@ -979,11 +1094,47 @@ fn method(n: i64) {
         if kind(s) == syntax::N_SETTING && name(s) == "order" {
             order = scalar_value(first(s)) as! i64;
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
+        } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
+            pml_setting(first(s));
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
-            unsupported(tok(s), "the method setting is not in this generator", "use only mesh and order");
+            unsupported(tok(s), "the method setting is not in this generator", "use only mesh, order and the pml of a wave physics");
         }
         s = next(s);
     }
+}
+
+let PML_FIX = "write pml: { region: layer, thickness: 1 m }, with let layer: Surface = world - rect(a, b)";
+
+// pml: { region: layer, thickness: h }. The layer is the body less a box
+// (a rect in 2d): the stretch grows with the distance past that box.
+fn pml_setting(v: i64) {
+    pml_tok = tok(v);
+    var region = -1;
+    var c = first(v);
+    while c >= 0 {
+        let field = if syntax::nodes[c].aux >= 0 { syntax::text(syntax::nodes[c].aux) } else { "" };
+        if field == "region" { region = first(c); }
+        if field == "thickness" { pml_h = scalar_value(first(c)); }
+        c = next(c);
+    }
+    let n = if region >= 0 { geometry_call(region) } else { -1 };
+    let inner = if n >= 0 && kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "-" { geometry_call(child(n, 1)) } else { -1 };
+    guard inner >= 0 && is_call(inner, if dim == 3 { "box" } else { "rect" }) && syntax::child_count(inner) == 3 && pml_h > 0.0 else {
+        unsupported(pml_tok, "the pml region is not the body less a box, or its thickness is not > 0", PML_FIX);
+        return;
+    };
+    let a = corner(inner, 0);
+    let b = corner(inner, 1);
+    for j in 3 {
+        pml_lo[j] = min(a[j], b[j]);
+        pml_hi[j] = max(a[j], b[j]);
+    }
+    let g = mesher::eval_value(region);
+    guard ok() && g.n == 0 else {
+        unsupported(tok(region), "the pml region is not a shape", PML_FIX);
+        return;
+    };
+    pml_g = g.g;
 }
 
 let BC_FIX_TEXT = "write bc root: u = 0, bc sym: u.x = 0, bc tip: sigma*n = (0, 0, -1) MPa, bc wall: T = 20 degC or bc side: dot(q, n) = 1000 W/m^2";
@@ -998,7 +1149,7 @@ fn bc(n: i64) -> i64 {
         unsupported(tok(region), "the region of the bc is not a boundary that a let names", SURF_FIX);
         return -1;
     }
-    var b = Bc { surf: s, kind: BC_FIX, comp: -1, v: [0.0, 0.0, 0.0], tok: tok(n) };
+    var b = Bc { surf: s, kind: BC_FIX, comp: -1, v: [0.0, 0.0, 0.0], tok: tok(n), node: -1 };
     let t = source_of(target);
     let member = kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
         name(first(target)) == unknown_name;
@@ -1013,6 +1164,13 @@ fn bc(n: i64) -> i64 {
         cut_source = from;
         b.kind = BC_SOURCE;
         b.comp = from;
+    } else if physics == WAVE && (t == unknown_name || t == str("dot(grad(", unknown_name, "), n)")) {
+        b.kind = if t == unknown_name { BC_FIX } else { BC_LOAD };
+        b.node = v;
+    } else if physics == WAVE {
+        unsupported(tok(target), str("the bc target '", t, "' is not in this generator"),
+                    str("write bc inlet: ", unknown_name, " = 1 Pa, or bc wall: dot(grad(", unknown_name, "), n) = 0 Pa/m"));
+        return -1;
     } else if t == unknown_name {
         let x = value(v);
         if physics == ELASTIC && x.n == 1 && x.v[0] != 0.0 {
@@ -1043,7 +1201,7 @@ fn step(n: i64) {
     let proc = child(n, 0);
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
                    first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false,
-                   procedure: STATIC, count: 0 };
+                   procedure: STATIC, count: 0, first_freq: 0, freq_count: 0, damping: 0.0 };
     set64(s.name, name(n));
     procedure(proc, s);
     step_now = s;
@@ -1093,9 +1251,13 @@ fn step(n: i64) {
 let REPORT_FIX = "write report reaction(root), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
 
 // The procedure of a step: static with no arguments, or modal or buckling
-// with count, on an elastic model.
+// with count, on an elastic model, or harmonic on a wave physics.
 fn procedure(proc: i64, s: Step&) {
     let p = name(proc);
+    if p == "harmonic" || physics == WAVE {
+        harmonic(proc, s);
+        return;
+    }
     guard p == "modal" || p == "buckling" else {
         if p != "static" || first(proc) >= 0 {
             unsupported(tok(proc), "this generator has static steps with no arguments, and modal and buckling steps with count",
@@ -1124,11 +1286,51 @@ fn procedure(proc: i64, s: Step&) {
     }
 }
 
+// A number with no unit, which takes the unit of its list.
+fn bare(n: i64) -> bool {
+    let m = if kind(n) == syntax::N_UNARY { first(n) } else { n };
+    return kind(m) == syntax::N_NUMBER && syntax::child_of_kind(m, syntax::N_UNIT) < 0;
+}
+
+// harmonic(freq: [f1, f2, ...], damping: z) of the wave physics.
+fn harmonic(proc: i64, s: Step&) {
+    let fix = "write step sweep: harmonic(freq: [100, 200] Hz) { ... }, with a Complex unknown";
+    if physics != WAVE || name(proc) != "harmonic" {
+        unsupported(tok(proc), "this generator has harmonic steps of a Complex unknown, and no other step of it", fix);
+        return;
+    }
+    s.procedure = HARMONIC;
+    s.first_freq = freqs.len;
+    var a = first(proc);
+    while a >= 0 {
+        let named = syntax::nodes[a].aux;
+        let w = if named >= 0 { syntax::text(named) } else { "" };
+        if w == "freq" && kind(first(a)) == syntax::N_LIST {
+            let unit = syntax::child_of_kind(first(a), syntax::N_UNIT);
+            let f = if unit >= 0 { codegen::to_system(unit) } else { 1.0 };
+            var c = first(first(a));
+            while c >= 0 {
+                if kind(c) != syntax::N_UNIT { freqs.push(scalar_value(c) * (if unit >= 0 && bare(c) { f } else { 1.0 })); }
+                c = next(c);
+            }
+        } else if w == "damping" {
+            s.damping = scalar_value(first(a));
+        } else {
+            unsupported(tok(a), "the argument of harmonic is not in this generator", fix);
+        }
+        a = next(a);
+    }
+    s.freq_count = freqs.len - s.first_freq;
+    for f in freqs[s.first_freq..] { if !(f > 0.0) { unsupported(tok(proc), "a harmonic step needs frequencies > 0", fix); } }
+    if s.freq_count == 0 || s.damping < 0.0 { unsupported(tok(proc), "a harmonic step needs a frequency and damping >= 0", fix); }
+}
+
 // The step of an eigenvalue(k): with `own`, the step `step_now` that step()
 // reads, else the last modal or buckling step that read() has read.
 fn eigen_step(own: bool) -> Step {
     var at = if own { step_now } else { Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0,
-                                               report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0 } };
+                                               report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0,
+                                               first_freq: 0, freq_count: 0, damping: 0.0 } };
     if !own { for st in steps { if st.procedure != STATIC { at = st; } } }
     return at;
 }
@@ -1156,9 +1358,27 @@ fn max_von_mises(e: i64) -> bool {
            kind(r) == syntax::N_NAME && find_surf(name(r)) >= 0;
 }
 
+// The parts of a Complex value that a report or an expect takes at a point.
+let PARTS = ["re", "imag", "abs", "arg"];
+
+// The index in PARTS of `re(u at p)` and the others, or -1.
+fn wave_part(e: i64) -> i64 {
+    guard physics == WAVE && kind(e) == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME else { return -1; }
+    let f = arg(e, 0);
+    guard kind(f) == syntax::N_AT && kind(child(f, 0)) == syntax::N_NAME && name(child(f, 0)) == unknown_name else { return -1; }
+    for w, i in PARTS { if name(child(e, 0)) == w { return i; } }
+    return -1;
+}
+
 fn report(item: i64) {
     let e = first(item);
-    if is_call(e, "reaction") && syntax::child_count(e) == 2 {
+    if physics == WAVE {
+        if wave_part(e) < 0 {
+            unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"),
+                        str("write report re(", unknown_name, " at (1, 0) m), or imag, abs or arg of it"));
+            return;
+        }
+    } else if is_call(e, "reaction") && syntax::child_count(e) == 2 {
         let r = arg(e, 0);
         if kind(r) != syntax::N_NAME || find_surf(name(r)) < 0 {
             unsupported(tok(r), "reaction needs a boundary that a let names", REPORT_FIX);
@@ -1232,6 +1452,9 @@ fn expect(n: i64, step: i64) {
     } else if is_call(left, "eigenvalue") {
         comp = eigen_index(left, step >= 0);
         what = if comp >= 0 { FIELD_EIGEN } else { -1 };
+    } else if wave_part(left) >= 0 {
+        comp = wave_part(left);
+        what = FIELD_WAVE;
     }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
@@ -1241,7 +1464,8 @@ fn expect(n: i64, step: i64) {
         skipped.push(s);
         return;
     }
-    var x = Expect { name: [], what: what, comp: comp, at: if what == FIELD_EIGEN { [0.0; 3] } else { value(child(left, 1)).v }, want: scalar_value(right),
+    let point = if what == FIELD_WAVE { arg(left, 0) } else { left };
+    var x = Expect { name: [], what: what, comp: comp, at: if what == FIELD_EIGEN { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL };
     // A tolerance of a temperature is a difference, not a degC value.
@@ -1260,6 +1484,7 @@ fn read(prog: i64) -> bool {
     var physics_node = -1;
     var mesh_node = -1;
     var methods: i64[>..] = [];
+    var symmetries: i64[>..] = [];
     var c = first(prog);
     while c >= 0 {
         let k = kind(c);
@@ -1277,6 +1502,8 @@ fn read(prog: i64) -> bool {
             mesh_node = c;
         } else if k == syntax::N_METHOD {
             methods.push(c);
+        } else if k == syntax::N_SYMMETRY {
+            symmetries.push(c);
         } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this generator"),
                         "remove it: this generator runs one linear static or steady heat model");
@@ -1296,6 +1523,7 @@ fn read(prog: i64) -> bool {
     body_force_arg();
     if mesh_node < 0 { unsupported(at, "the model has no mesh", "add mesh m on plate { size: 5 mm }"); } else { mesh(mesh_node); }
     for m in methods { method(m); }
+    for y in symmetries { symmetry(y); }
     if !ok() { return false; }
     c = first(prog);
     while c >= 0 {
@@ -1312,8 +1540,36 @@ fn read(prog: i64) -> bool {
     }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
     if ok() { step_bcs(); }
+    if ok() { harmonic_values(); }
     if ok() { supports(); }
     return ok();
+}
+
+// symmetry cell: bloch { period: p, low: a, high: b, k: kv } of the wave
+// physics: the value on b is the value on a times exp(im*dot(kv, p)).
+fn symmetry(n: i64) {
+    let fix = "write symmetry cell: bloch { period: (1, 0) m, low: x0, high: x1, k: (3 m^-1, 0 m^-1) }";
+    if physics != WAVE || bloch_low >= 0 {
+        unsupported(tok(n), "this generator has one bloch group, of a Complex unknown", fix);
+        return;
+    }
+    var kv: f64[3] = [0.0; 3];
+    var s = first(syntax::nodes[child(n, 0)].next);
+    while s >= 0 {
+        let w = name(s);
+        let v = first(s);
+        if w == "period" { bloch_period = value(v).v; }
+        if w == "k" { kv = value(v).v; }
+        if w == "low" || w == "high" {
+            let at = if kind(v) == syntax::N_NAME { find_surf(name(v)) } else { -1 };
+            if at < 0 { unsupported(tok(v), "low and high are boundaries that a let names", fix); }
+            if w == "low" { bloch_low = at; } else { bloch_high = at; }
+        }
+        s = next(s);
+    }
+    if bloch_low < 0 || bloch_high < 0 { unsupported(tok(n), "bloch needs low and high", fix); }
+    bloch_theta = 0.0;
+    for j in 3 { bloch_theta += kv[j] * bloch_period[j]; }
 }
 
 // Puts `b` in `set`, in place of a bc on the same region and target.
@@ -1340,12 +1596,28 @@ fn step_bcs() {
     }
 }
 
+// The Complex values of each frequency of each harmonic step: c, s and the
+// bcs at its omega, so that a fault in them stops the model here.
+fn harmonic_values() {
+    for s in steps {
+        if s.procedure != HARMONIC { continue; }
+        for f in freqs[s.first_freq..s.first_freq + s.freq_count] {
+            omega_now = 2.0 * PI * f;
+            let c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
+            if wave_s_node >= 0 { cval(wave_s_node); }
+            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_SOURCE { cval(b.node); } }
+            if pml_g >= 0 && !(c[0] > 0.0) { unsupported(pml_tok, "the pml needs c > 0 in div(grad(u)) + c*u = s", PML_FIX); }
+            if !ok() { return; }
+        }
+    }
+}
+
 // Each step needs a fixed value, and each reaction report a fixed region.
 fn supports() {
     for s in steps {
         var fixes = 0;
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { fixes++; } }
-        if fixes == 0 {
+        if fixes == 0 && physics != WAVE {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
         }
@@ -1381,7 +1653,9 @@ fn lits(out: u8[>..]&, v: f64[3]) {
 fn quoted(out: u8[>..]&, s: u8[:]) { codegen::quoted(out, s); }
 
 // The unit of the unknown, of its reaction, and of the flux.
-fn value_unit() -> const u8[:] { if physics == HEAT { "K" } else { codegen::system.length } }
+// The wave physics prints its values with no unit: in the units of the
+// model.
+fn value_unit() -> const u8[:] { if physics == HEAT { "K" } else if physics == WAVE { "" } else { codegen::system.length } }
 
 fn reaction_unit() -> const u8[:] {
     guard physics == HEAT else { return codegen::system.force; }
@@ -1391,7 +1665,7 @@ fn reaction_unit() -> const u8[:] {
 }
 
 fn field_unit(what: i64) -> const u8[:] {
-    if what == FIELD_VALUE { return value_unit(); }
+    if what == FIELD_VALUE || what == FIELD_WAVE { return value_unit(); }
     if what == FIELD_STRESS { return codegen::system.pressure; }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
     if codegen::system.pressure == "MPa" { return "mW/mm^2"; }
@@ -1559,6 +1833,20 @@ let PRELUDE = """
 
     """;
 
+// The part of the program of a wave physics.
+let WAVE_PRELUDE = """
+    // Part `part` of the Complex unknown at a point: re, imag, abs or arg.
+    fn wave_at(part: i64, x: f64, y: f64, z: f64) -> f64, bool {
+        let re, found_re = elements::value_at(0, x, y, z);
+        let im, found_im = elements::value_at(1, x, y, z);
+        let found = found_re && found_im;
+        if part == 0 { return re, found; }
+        if part == 1 { return im, found; }
+        return if part == 2 { sqrt(re * re + im * im) } else { atan2(im, re) }, found;
+    }
+
+    """;
+
 // The part of the program of a submodel (spec §15.2).
 let SUBMODEL_PRELUDE = """
     extern "libc.so.6" {
@@ -1663,6 +1951,14 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     emit_region(out, b.surf);
     if b.kind == BC_SOURCE {
         format(out, "    cut_outside(elements::fix_state(), \"", s.name, "\");\n");
+    } else if physics == WAVE {
+        // The value at the omega of the frequency that the generator writes.
+        let z = cval(b.node);
+        out.append(if b.kind == BC_LOAD { "    elements::traction(" } else { "    elements::fix(0, " });
+        lit(out, z[0]);
+        out.append(if b.kind == BC_LOAD { ", " } else { ");\n    elements::fix(1, " });
+        lit(out, z[1]);
+        out.append(if b.kind == BC_LOAD { ", 0.0);\n" } else { ");\n" });
     } else if b.kind == BC_LOAD && physics == HEAT {
         out.append("    elements::flux(");
         lit(out, b.v[0]);
@@ -1718,6 +2014,10 @@ fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
 
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) {
     let s = steps[si];
+    if s.procedure == HARMONIC {
+        emit_harmonic_step(out, si, results_dir);
+        return;
+    }
     if s.procedure != STATIC {
         emit_eigen_step(out, si, results_dir);
         return;
@@ -1768,6 +2068,85 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     out.append("}\n\n");
 }
 
+// A harmonic step: a function for each frequency, which calls the next.
+fn emit_harmonic_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
+    let s = steps[si];
+    format(out, "// step ", s.name, ": harmonic, ", s.freq_count, " frequencies\nfn step_", s.name, "() { step_", s.name, "_1(); }\n\n");
+    for i in s.freq_count { emit_frequency(out, si, i, results_dir); }
+}
+
+// Frequency i of harmonic step si: the terms, the pml and the bcs at its
+// omega, the solve and the reports. The last frequency checks the expects
+// of the step and writes the output.
+fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
+    let s = steps[si];
+    let f = freqs[s.first_freq + i];
+    omega_now = 2.0 * PI * f;
+    let c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
+    let src = if wave_s_node >= 0 { cval(wave_s_node) } else { [0.0, 0.0] };
+    var label: u8[>..] = [];
+    format(label, s.name, " at ", f, " ", freq_unit());
+    format(out, "// step ", s.name, ", frequency ", i + 1, " of ", s.freq_count, "\nfn step_", s.name, "_", i + 1, "() {\n");
+    out.append("    elements::clear_bcs();\n    elements::wave_terms(");
+    for v in [c[0], c[1], src[0], src[1]] {
+        lit(out, v);
+        out.append(", ");
+    }
+    lit(out, s.damping);
+    out.append(");\n");
+    if pml_g >= 0 {
+        format(out, "    elements::pml(", pml_g, ", ");
+        lits(out, pml_lo);
+        out.append(", ");
+        lits(out, pml_hi);
+        out.append(", ");
+        lit(out, pml_h);
+        out.append(");\n");
+    }
+    for b in active[s.first_bc..s.first_bc + s.bc_count] { emit_bc(out, b); }
+    out.append("    solve(");
+    quoted(out, label);
+    out.append(");\n");
+    for r in reports[s.first_report..s.first_report + s.report_count] { emit_wave_report(out, label, r); }
+    let last = i == s.freq_count - 1;
+    if last { for x in expects { if x.step == si { emit_expect(out, x); } } }
+    if last && s.output {
+        out.append("    output(");
+        quoted(out, str(results_dir, "/", s.name, ".vtu"));
+        out.append(", ");
+        quoted(out, unknown_name);
+        out.append(");\n");
+    }
+    if !last { format(out, "    step_", s.name, "_", i + 2, "();\n"); }
+    out.append("}\n\n");
+}
+
+fn emit_wave_report(out: u8[>..]&, step_label: u8[:], r: Report) {
+    format(out, "    // report ", r.label, "\n    {\n");
+    emit_sample(out, "v", FIELD_WAVE, wave_part(r.expr), value(child(arg(r.expr, 0), 1)).v);
+    out.append("        point(found_v, ");
+    quoted(out, r.label);
+    out.append(");\n        report(");
+    quoted(out, step_label);
+    out.append(", ");
+    quoted(out, r.label);
+    format(out, ", quantity(v, \"", if wave_part(r.expr) == 3 { "rad" } else { value_unit() }, "\"));\n    }\n");
+}
+
+// The ties of the bloch group: the high boundary to the low one.
+fn emit_bloch(out: u8[>..]&) {
+    out.append("    // symmetry: bloch\n");
+    emit_region(out, bloch_low);
+    out.append("    elements::bloch_low();\n");
+    emit_region(out, bloch_high);
+    out.append("    if !elements::bloch(");
+    lits(out, bloch_period);
+    out.append(", ");
+    lit(out, bloch_theta);
+    out.append(") {\n        write_stderr(\"skein run: the period of the bloch group does not map low onto high\\n\");\n");
+    out.append("        failed = true;\n    }\n");
+}
+
 fn emit_change(out: u8[>..]&, ch: Change) {
     format(out, "    cells(elements::", if ch.birth { "birth(" } else { "kill(" }, ch.g, "), ");
     quoted(out, ch.label);
@@ -1776,6 +2155,12 @@ fn emit_change(out: u8[>..]&, ch: Change) {
 
 // `let v, found = <sample at p>;`
 fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3]) {
+    if what == FIELD_WAVE {
+        format(out, "        let ", var_name, ", found_", var_name, " = wave_at(", comp, ", ");
+        lits(out, at);
+        out.append(");\n");
+        return;
+    }
     format(out, "        let ", var_name, ", found_", var_name, " = elements::");
     if what == FIELD_VALUE { format(out, "value_at(", comp, ", "); }
     if what == FIELD_FLUX { format(out, "flux_at(", AXES[comp], ", "); }
@@ -1844,7 +2229,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    let unit = if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    let unit = if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
@@ -1863,7 +2248,7 @@ fn dof_estimate() -> i64 {
         let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
         let points = if done { mesher::point_count() } else { 0 };
         let nodes = if order == 2 { points * (if dim == 3 { 8 } else { 4 }) } else { points };
-        return if physics == HEAT { nodes } else { dim * nodes };
+        return nodes * per_node();
     }
     var cells: i64[3] = [1, 1, 1];
     if geo == GEO_HOLE {
@@ -1877,8 +2262,11 @@ fn dof_estimate() -> i64 {
     if dim == 3 { cells[2] = max(ceil((hi[2] - lo[2]) / mesh_size - 1.0e-9) as! i64, 1); }
     var nodes = 1;
     for j in dim { nodes *= order * cells[j] + 1; }
-    return if physics == HEAT { nodes } else { dim * nodes };
+    return nodes * per_node();
 }
+
+// The dofs of a node.
+fn per_node() -> i64 { return if physics == HEAT { 1 } else if physics == WAVE { 2 } else { dim }; }
 
 // The shapes of the mesher reader and the refine lines, again in the
 // program: mesh_shape meshes them, and a boundary can be the surface of one.
@@ -1929,10 +2317,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     out.append(";   // the runtime imports it\n");
     out.append(PRELUDE);
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
+    if physics == WAVE { out.append(WAVE_PRELUDE); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
-    if geo == GEO_SHAPE { emit_shapes(out); }
+    if geo == GEO_SHAPE || pml_g >= 0 { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
     } else {
@@ -1979,6 +2368,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         out.append(", ");
         lit(out, thickness);
         out.append(");\n");
+    } else if physics == WAVE {
+        out.append("    elements::wave(");
+        lit(out, thickness);
+        out.append(");\n");
+        if bloch_low >= 0 { emit_bloch(out); }
     } else {
         out.append(if plane == PLANE_STRESS { "    elements::elastic_plane_stress(" }
                    else if plane == PLANE_STRAIN { "    elements::elastic_plane_strain(" } else { "    elements::elastic(" });

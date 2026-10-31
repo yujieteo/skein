@@ -608,6 +608,80 @@ fn test_eigen() {
     }
 }
 
+// --- the frequency domain ---------------------------------------------------
+
+// The wave field at (x, 0.05): re and im.
+fn wave_at(x: f64) -> f64[2] {
+    let re, f1 = elements::value_at(0, x, 0.05, 0.0);
+    let im, f2 = elements::value_at(1, x, 0.05, 0.0);
+    return [re, im];
+}
+
+fn expect_wave(what: u8[:], got: f64[2], want: f64[2], tol: f64) {
+    let err = sqrt((got[0] - want[0]) * (got[0] - want[0]) + (got[1] - want[1]) * (got[1] - want[1]));
+    if !(err <= tol) {
+        failures++;
+        print("FAIL ", what, ": got ", got[0], " + ", got[1], "i, want ", want[0], " + ", want[1], "i within ", tol);
+    }
+}
+
+// The Helmholtz equation p'' + k^2 p = 0 on a strip of length L, with
+// p(0) = 1 and p(L) = i: p = (sin k(L - x) + i sin kx)/sin kL.
+fn test_harmonic() {
+    let L = 1.1;
+    let k = 2.0 * PI / 0.25;
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, L, 0.1, 0.0, 88, 4, 1);
+    elements::wave(1.0);
+    elements::wave_terms(k * k, 0.0, 0.0, 0.0, 0.0);
+    elements::plane(elements::X, 0.0);
+    elements::fix(0, 1.0);
+    elements::fix(1, 0.0);
+    elements::plane(elements::X, L);
+    elements::fix(0, 0.0);
+    elements::fix(1, 1.0);
+    if !elements::solve() { failures++; print("FAIL harmonic: GMRES does not converge"); }
+    let x = 0.37;
+    let s = sin(k * L);
+    expect_wave("harmonic strip", wave_at(x), [sin(k * (L - x)) / s, sin(k * x) / s], 1.0e-3);
+}
+
+// A plane wave exp(-ikx) from x = 0 into a PML from x = 1 to 1.5: the
+// reflected wave is small, so p stays near exp(-ikx).
+fn test_pml() {
+    let k = 2.0 * PI / 0.25;
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 1.5, 0.1, 0.0, 120, 2, 1);
+    elements::wave(1.0);
+    elements::wave_terms(k * k, 0.0, 0.0, 0.0, 0.0);
+    elements::pml(mesher::rect(1.0, -1.0, 2.0, 1.0), -10.0, -10.0, -10.0, 1.0, 10.0, 10.0, 0.5);
+    elements::plane(elements::X, 0.0);
+    elements::fix(0, 1.0);
+    elements::fix(1, 0.0);
+    if !elements::solve() { failures++; print("FAIL pml: GMRES does not converge"); }
+    for i in 9 {
+        let x = 0.1 + 0.1 * i as f64;
+        expect_wave("pml reflection", wave_at(x), [cos(k * x), -sin(k * x)], 2.0e-3);
+    }
+}
+
+// A Bloch cell: p'' + kap^2 p = 1 on 0..L, with p(L) = E p(0) and
+// p'(L) = E p'(0), E = e^{i theta}. With P = 1/kap^2, the closed form is
+// p = P + A cos(kap x) + B sin(kap x), where c = cos(kap L) - E,
+// A = (E - 1) P/(c + sin^2(kap L)/c) and B = A sin(kap L)/c.
+fn test_bloch() {
+    let L = 1.0;
+    let kap = 7.0;
+    let theta = 0.5 * PI;
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, L, 0.1, 0.0, 40, 2, 1);
+    elements::wave(1.0);
+    elements::wave_terms(kap * kap, 0.0, 1.0, 0.0, 0.0);
+    elements::plane(elements::X, 0.0);
+    elements::bloch_low();
+    elements::plane(elements::X, L);
+    if !elements::bloch(L, 0.0, 0.0, theta) { failures++; print("FAIL bloch: the high face does not tie to the low face"); }
+    if !elements::solve() { failures++; print("FAIL bloch: GMRES does not converge"); }
+    expect_wave("bloch cell", wave_at(0.3), [0.0247168, -0.0093576], 1.0e-5);
+}
+
 fn main() {
     test_patches();
     test_kirsch();
@@ -617,6 +691,9 @@ fn main() {
     test_submodel();
     test_stages();
     test_eigen();
+    test_harmonic();
+    test_pml();
+    test_bloch();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");
