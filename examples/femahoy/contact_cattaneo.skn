@@ -1,5 +1,5 @@
 // femahoy: validation/cases/contact-cattaneo/job.inp
-// blocked-by: G17 G18 G19 G23
+// blocked-by: G18 G19 G23
 // A cylindrical steel pad (R = 20 mm) on a steel block, plane strain, 1 mm thick, friction
 // 0.3. The pad gets P = 4500 N, then Q = 0.75*mu*P. The centre of the contact sticks and its
 // edges slip (Cattaneo 1938). References: p0 = 2874.69 MPa, q(0) = 431.203 MPa.
@@ -8,7 +8,6 @@ model contact_cattaneo: 2d, mm_N_MPa_s
 
 let R: Length = 20 mm
 let th: Length = 1 mm
-let w: Length = 24 mm
 let hp: Length = 20 mm
 let P: Force = 4500 N
 let mu_f: Real = 0.3
@@ -23,7 +22,7 @@ let pad: Surface = disk & rect((-12, 0) mm, (12, 20) mm)
 let parts: Surface = block | pad
 let bottom: Curve = boundary(parts, y == -20 mm)
 let top: Curve = boundary(parts, y == hp)
-let top_left: Point = point((-12, 20) mm)
+let c: Point = point((0 mm, hp))
 let block_face: Curve = boundary(block, y == 0 mm)
 let pad_face: Curve = boundary(pad, disk)
 let zone: Surface = rect((-1.4, -0.6) mm, (1.4, 0.6) mm)
@@ -60,17 +59,19 @@ step press: static {
     bc top: u = (0, -0.02) mm
 }
 
-// gap G17: no rigid constraint on the top (ccx *EQUATION). The loads are tractions with the same resultants.
+// The top stays straight and can turn about c (ccx *EQUATION). c takes the loads.
 step normal: static {
-    release top
-    bc top_left: u.x = 0
-    bc top: sigma*n = (0, -P/(w*th))
+    bc top: u = rigid(c)
+    bc c: u.x = 0
+    bc c: sigma*n = (0, -P)
 }
 
-// Q acts 20 mm above the contact. The linear part of the normal traction cancels its moment.
+// Q acts on the top, 20 mm above the contact. The moment hp*Q about c makes the resultant
+// pass through the centre of the contact, as in the theory.
 step slide: static(ramp: 20) {
-    release top_left
-    bc top: sigma*n = (Q/(w*th), -P/(w*th) + 12*hp*Q*x/(th*w^3))
+    release c
+    bc c: sigma*n = (Q, -P)
+    bc c: moment(sigma*n) = hp*Q
     output u, sigma
 }
 

@@ -444,20 +444,58 @@ fn flux_of(n: i64) -> i64 {
     return -1;
 }
 
+// For a call `name(a)` with one argument, the node of `a`, else -1.
+fn one_arg(n: i64, name: u8[:]) -> i64 {
+    let k = syntax::nodes[n];
+    guard k.kind == syntax::N_CALL && call_name(k.first) == name else { return -1; };
+    let a = syntax::nodes[k.first].next;
+    guard a >= 0 && syntax::nodes[a].next < 0 else { return -1; };
+    return syntax::nodes[a].first;
+}
+
+// A rigid face, `bc r: u = rigid(p)` (spec §12.1, gap G17): `u` is a whole
+// displacement, and `p` is a `Point`.
+fn check_rigid(rhs: i64, l: Ty, comp: u8[:], natural: bool) {
+    let p = one_arg(rhs, "rigid");
+    let pt = if p >= 0 { expr_ty(p) } else { any_ty() };
+    let point = p >= 0 && pt.kind == K_GEOM && pt.geo == 0;
+    if natural || comp.len > 0 || !point || !is_num(l) || l.rank != 1 || l.dim != LENGTH {
+        error(first_tok(rhs), "rigid_form", "rigid(p) needs a whole displacement on the left and a Point p",
+              "write bc face: u = rigid(p), where u is a Vector<Length> and p is a Point");
+        return;
+    }
+    var nm: u8[..64] = [];
+    let text = norm_text(p);
+    nm.append(text[..min(text.len, 64)]);
+    rigid_points.push(nm);
+}
+
+fn is_rigid_point(region: i64) -> bool {
+    let text = norm_text(region);
+    for p in rigid_points {
+        if p == text[..min(text.len, 64)] { return true; }
+    }
+    return false;
+}
+
 fn check_bc(n: i64) {
     let k = syntax::nodes[n];
     let region = k.first;
-    let lhs = syntax::nodes[region].next;
+    var lhs = syntax::nodes[region].next;
     let rhs = syntax::nodes[lhs].next;
     let rt = region_ty(region);
+    // `moment(F*n) = M` on the point of a rigid face is the moment M about it.
+    let moment = one_arg(lhs, "moment") >= 0;
+    if moment { lhs = one_arg(lhs, "moment"); }
     var unknown = unknown_of(lhs);
     var comp: Name = [];
     var natural = false;
-    if unknown < 0 && syntax::nodes[lhs].kind == syntax::N_MEMBER {
+    if unknown < 0 && !moment && syntax::nodes[lhs].kind == syntax::N_MEMBER {
         unknown = unknown_of(syntax::nodes[lhs].first);
         if unknown >= 0 { comp = key(tok_text(syntax::nodes[lhs].tok)); }
     }
-    if unknown < 0 {
+    if unknown < 0 || moment {
+        unknown = -1;
         let f = flux_of(lhs);
         if f >= 0 {
             unknown = flux_unknown(f);
@@ -475,16 +513,37 @@ fn check_bc(n: i64) {
     };
     cur_phys = syms[unknown].phys;
     let l = expr_ty(lhs);
-    let r = expr_ty(rhs);
-    if natural {
-        var lt = l;
-        if rt.kind == K_GEOM && rt.geo == 0 && is_num(lt) {
-            // Gap G16: on a Point, `F*n = P` is the force P.
-            lt.dim = lt.dim + dim_pow(LENGTH, space - 1 + depth());
-        }
-        sum_ty(k.tok, lt, r, "=");
+    let point = rt.kind == K_GEOM && rt.geo == 0;
+    if moment {
+        comp = key("moment");
+        guard point && is_rigid_point(region) else {
+            expr_ty(rhs);
+            cur_phys = -1;
+            error(first_tok(syntax::nodes[region].next), "rigid_form",
+                  str("moment needs a rigid(", node_text(region), ") before it"),
+                  str("write bc face: u = rigid(", node_text(region), ") before this bc, on the region of the point"));
+            return;
+        };
+    }
+    if one_arg(rhs, "rigid") >= 0 {
+        check_rigid(rhs, l, comp, natural);
     } else {
-        assign(first_tok(rhs), l, r, str("'", node_text(lhs), "'"));
+        let r = expr_ty(rhs);
+        if natural {
+            var lt = l;
+            if point && is_num(lt) {
+                // Gap G16: on a Point, `F*n = P` is the force P.
+                lt.dim = lt.dim + dim_pow(LENGTH, space - 1 + depth());
+                // Gap G17: the moment is a scalar in 2D, and a vector in 3D.
+                if moment {
+                    lt.dim = lt.dim + LENGTH;
+                    lt.rank = if space == 3 { 1 } else { 0 };
+                }
+            }
+            sum_ty(k.tok, lt, r, "=");
+        } else {
+            assign(first_tok(rhs), l, r, str("'", node_text(lhs), "'"));
+        }
     }
     cur_phys = -1;
     if rt.kind == K_GEOM && rt.geo > 0 && rt.geo >= space {
@@ -495,8 +554,16 @@ fn check_bc(n: i64) {
     for b in bcs {
         if b.step != cur_step || b.unknown != unknown || !same_region(b.region, region) { continue; }
         if b.comp.len > 0 && comp.len > 0 && b.comp != comp { continue; }
+        // A moment is on the turn of the point, not on its displacement.
+        if (b.comp == "moment") != (comp == "moment") { continue; }
         let other = syntax::nodes[b.node];
         let orhs = syntax::nodes[syntax::nodes[other.first].next].next;
+        // On a Point, a force with 0 in the component of an essential condition does not fight it.
+        if point && b.natural != natural {
+            let ec = if natural { b.comp } else { comp };
+            let v, ok = rhs_value(if natural { rhs } else { orhs }, ec);
+            if ec.len > 0 && ok && v == 0.0 { continue; }
+        }
         if b.natural != natural || (!natural && !same_value(orhs, b.comp, rhs, comp)) {
             error(k.tok, "bc_conflict",
                   str("this bc and the bc on line ", syntax::tokens[other.tok].line, " fight on '", node_text(region), "'"),

@@ -393,6 +393,12 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(LENGTH, 1);
     }
+    if name == "rigid" || name == "moment" {
+        // check_bc reads both forms. Other places cannot use them (spec §12.1, gap G17).
+        error(tok, "rigid_form", str(name, " stands only in a bc"),
+              "write bc face: u = rigid(p), and bc p: moment(sigma*n) = M");
+        return any_ty();
+    }
     if name == "when" {
         // when(f, value): the first time at which the scalar `f`, reduced over a region, gets to `value` (spec §14.5).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) else { return any_ty(); }
