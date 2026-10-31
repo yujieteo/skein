@@ -388,7 +388,7 @@ scripts/llm/workflow.py inp --out /tmp/llm-runs
 
 The output folder gets the answer, the checker output and the `skein run`
 output of each round, and
-`results-skein-cantilever.toon` or `results-inp-cantilever.toon`.
+`results-skein.toon` or `results-inp.toon`.
 `--request plate` picks the other request of [llm_test.md §3](llm_test.md#3-the-requests).
 
 ### 4.1 Results

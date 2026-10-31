@@ -30,9 +30,11 @@ For each request of §3, and for each path of `scripts/llm/workflow.py`
 | repair rounds | the number of rounds after the first, until the answer passes |
 | first-try pass rate | recorded, not part of the gate |
 
-An attempt passes when the run passes. For `skein`, the run is `skein
-check`, then `skein run`. For `inp`, the run is `fh run`, which gives the
-deck to ccx.
+An attempt passes when the run passes and the value is within 2 percent
+of the reference of §3. For `skein`, the run is `skein check`, then `skein
+run`. For `inp`, the run is `fh run`, which gives the deck to ccx. Reason
+for the value check: a deck with a wrong load or wrong dimensions also
+passes `fh run`.
 
 **Clearly better** means both of these:
 
@@ -82,8 +84,8 @@ Record the number of changed lines (added plus removed, from `git diff
 --numstat`) for each answer that passes. The [layout rules](skein_spec.md#32-layout-for-small-diffs)
 aim at 1 line for E1, at most 6 for E2 and at most 3 for E3. These numbers
 are a record, not a gate.
-[readability.md §2](readability.md#2-three-edit-tasks) gives the same tasks,
-written by a person, for Skein and CalculiX.
+[readability.md §2](readability.md#2-three-edit-tasks) gives similar tasks on
+a smaller cantilever, written by a person, for Skein and CalculiX.
 
 ---
 
@@ -100,7 +102,12 @@ and adds no information to the test.
 
 The requests are in `REQUESTS` in `scripts/llm/workflow.py`. Euler-Bernoulli
 gives 0.381 mm for the cantilever, and σL/E gives 0.0143 mm for the plate
-with E = 70 GPa. The driver records the value, but the gate does not use it.
+with E = 70 GPa. These references are in `REFERENCE_MM`. The gate compares
+the magnitude of the value with the reference, with a 2 percent tolerance.
+The driver converts a Skein value to mm. The units of a deck are unknown,
+so the driver accepts a deck value in mm or in m. If the run passes but the
+value is wrong, the driver tells the model that the result is wrong, and the
+rounds continue.
 
 ---
 
