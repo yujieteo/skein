@@ -354,6 +354,8 @@ Spec: [§12](skein_spec.md#12-boundary-conditions-and-loads).
 ```skein
 method solid: cg { mesh: m, order: 2 }
 method flow: cg { mesh: m, order: { v: 2, p: 1 } }
+method solid: cg { mesh: m, order: 1, family: incompatible }  // C3D8I
+method solid: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }  // C3D20R
 method flow: fv { mesh: m, gradient: least_squares, flux: linear_upwind, pv_coupling: rhie_chow }
 method wave: dg { mesh: m, order: 3, flux: upwind }
 method solid: rkpm { points: c, basis: linear, support: 2.5, integrate: scni, bc: nitsche }
@@ -364,6 +366,9 @@ A block may hold its settings on one line, with commas, or on separate
 lines. `stabilize` adds residual-based terms for flow: `supg`, `supg_pspg`,
 `supg_pspg_lsic` or `vms`. `limiter` (for `fv`) and `shock_capturing:
 entropy_viscosity` (for `dg`) capture shocks.
+`family: serendipity` (order 2) and `family: incompatible` (order 1) need
+`cell: quad` or `hex`. `quadrature: reduced` takes one Gauss point fewer
+along each axis.
 
 A physics with no `method` item gets `cg` on its mesh, `order: 2`,
 Taylor-Hood cells for incompressible flow, and `supg` when the equations

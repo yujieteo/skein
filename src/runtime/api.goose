@@ -49,7 +49,14 @@ let Z = 2;
 // the supports, the loads and the solution.
 fn mesh_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
             nx: i64, ny: i64, nz: i64) {
-    build_box(x0, y0, z0, x1, y1, z1, nx, ny, nz);
+    build_box(HEX27, x0, y0, z0, x1, y1, z1, nx, ny, nz);
+}
+
+// Meshes the box as mesh_box does, with 8-node hexahedra with incompatible
+// modes (C3D8I, hex8i.goose).
+fn mesh_box_incompatible(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
+                         nx: i64, ny: i64, nz: i64) {
+    build_box(HEX8I, x0, y0, z0, x1, y1, z1, nx, ny, nz);
 }
 
 // Meshes the sector r0 <= r <= r1, t0 <= θ <= t1, z0 <= z <= z1 of an

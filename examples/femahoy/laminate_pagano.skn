@@ -1,5 +1,4 @@
 // femahoy: validation/cases/laminate-pagano/job.inp
-// blocked-by: G18
 // The square [0/90/0] plates of Pagano (1970), simply supported, with the
 // load q0*sin(pi*x/a)*sin(pi*y/a) on the top face. 1/4 of each plate. The
 // thick plate (a/h = 4) has 3D layers of quadratic hexahedra. The thin plate
@@ -81,7 +80,7 @@ material thin_ply {
     h: Length = h_thin
 }
 
-// size h/9 puts 3 cells in each ply. gap G18: femahoy uses C3D20R.
+// size h/9 puts 3 cells in each ply.
 mesh m on plate {
     size: h/9
     cell: hex
@@ -111,12 +110,15 @@ physics solid on plate solves u: Vector<Length> {
     eq div(sigma) = 0
 }
 
+// The C3D20R of femahoy: serendipity cells with reduced integration.
+method solid: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }
+
 mesh m_thin on thin {
     size: 2.5 mm
     cell: quad
 }
 
-// gap G18: femahoy uses S8R. The bottom ply is at 0 deg, so Q_ply is in x, y.
+// The bottom ply is at 0 deg, so Q_ply is in x, y.
 physics plate_shell on thin: reissner_mindlin(
     layup: pagano.angle,
     top: (0, 0, 1),
@@ -127,7 +129,8 @@ physics plate_shell on thin: reissner_mindlin(
     let s_bot: Tensor2<Pressure> = ddot(Q_ply, eps_m - h_thin/2*kappa)
 }
 
-method plate_shell: cg { mesh: m_thin, order: 1 }
+// The S8R of femahoy: serendipity shell cells with reduced integration.
+method plate_shell: cg { mesh: m_thin, order: 2, family: serendipity, quadrature: reduced }
 
 step load: static {
     // Simple support of Pagano on x = 0 and y = 0, symmetry on x = a/2 and y = a/2.

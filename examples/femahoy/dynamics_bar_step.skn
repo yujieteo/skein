@@ -1,5 +1,5 @@
 // femahoy: validation/cases/dynamics-bar-step/job.inp
-// blocked-by: G18 G21
+// blocked-by: G21
 // A steel bar of 200 x 10 x 10 mm, fixed at one end. A step force of 1000 N
 // pulls the free end from t = 0. Explicit dynamics to t = 2L/c, 3D, linear
 // hexahedra. The reference is the 1D wave theory (Graff 1975): the end is
@@ -39,10 +39,11 @@ physics solid on bar solves u: Vector<Length> {
     eq rho*ddt2(u) - div(sigma) = 0
 }
 
-// gap G18: femahoy uses C3D8R (reduced integration).
+// The C3D8R of femahoy: linear cells with reduced integration.
 method solid: cg {
     mesh: m
     order: 1
+    quadrature: reduced
 }
 
 bc fixed: u = 0
