@@ -372,6 +372,7 @@ fn test_steps() {
     expect_id("eigenvalue_step", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n}\nlet f1: Frequency = eigenvalue(1)\n"));
     expect_id("eigenvalue_step", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n}\nexpect f1: eigenvalue(5) == 10 Hz within 1%\n"));
     expect_clean("an eigenvalue above the default of a param count", str(elastic, "param nm: Int = 4\nstep go: modal(count: nm) {\n    bc f: u = 0\n}\nstudy g: grid {\n    nm: [4, 8]\n    expect f6: eigenvalue(6) == 10 Hz within 1%\n}\n"));
+    expect_clean("a param mode number with a default above the count", str(elastic, "param m: Int = 6\nstep go: modal(count: 4) {\n    bc f: u = 0\n}\nstudy g: grid {\n    m: [1, 2, 3]\n    expect e: eigenvalue(m) == 10 Hz within 1%\n}\n"));
     expect_clean("an eigenvalue of the last buckling step, in an expect after a static step", str(elastic, "step go: buckling(count: 4) {\n    bc f: u = 0\n}\nstep two: static {\n    bc f: u = 0\n}\nexpect p1: eigenvalue(4) == 2 within 1%\n"));
     // when: the first time at which a value gets to a level (spec §14.5).
     let shake = "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report t1 = when(max(norm(u), b), 1 mm)\n}\n";

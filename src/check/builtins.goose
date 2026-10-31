@@ -456,7 +456,7 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
                   "use eigenvalue in a report or an expect of a modal or buckling step, or in an expect after one");
             return any_ty();
         };
-        let k, ok = const_value(a.node[0]);
+        let k, ok = literal_value(a.node[0]);
         if ok && count >= 0 && (k < 1.0 || k > count) {
             error(first_tok(a.node[0]), "eigenvalue_step", str("mode ", k as i64, " is outside 1..", count, " of the step"),
                   str("give a mode number from 1 to ", count, ", or raise the count of the step"));

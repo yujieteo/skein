@@ -191,14 +191,19 @@ fn proc_count(pr: i64) -> i64 {
     while a >= 0 {
         let k = syntax::nodes[a];
         if (k.aux >= 0 && tok_text(k.aux) == "count") || (k.aux < 0 && i == 0) {
-            guard syntax::nodes[k.first].kind == syntax::N_NUMBER else { return -1; }
-            let v, ok = const_value(k.first);
+            let v, ok = literal_value(k.first);
             return if ok { v as i64 } else { -1 };
         }
         i++;
         a = k.next;
     }
     return -1;
+}
+
+// The value of a literal number, which no param or --set can change.
+fn literal_value(n: i64) -> f64, bool {
+    guard syntax::nodes[n].kind == syntax::N_NUMBER else { return 0.0, false; }
+    return const_value(n);
 }
 
 // --- expect (spec §15.3) -------------------------------------------------------------------
