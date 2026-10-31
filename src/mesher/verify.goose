@@ -4,9 +4,10 @@
 //
 // The reader evaluates the geometry of the model: numbers with a length
 // or an angle unit, vectors, + - * / and the names of `let` items, the
-// shapes box, cylinder, rect, circle, polygon, extrude and revolve, and
-// the operators |, & and -. Each length is in the length unit of the
-// header (m for SI, mm for the mm systems), and each angle is in radians.
+// shapes box, cylinder, rect, circle, polygon, extrude, revolve, loft,
+// pattern and pattern_polar, and the operators |, & and -. Each length is
+// in the length unit of the header (m for SI, mm for the mm systems), and
+// each angle is in radians.
 import std;
 import os;
 import math;
@@ -214,8 +215,34 @@ recursive fn shape_call(n: i64) -> Value {
         let s = arg(0, 0);
         return shape(revolve(s.g, arg(1, 1).v[0]));
     }
+    if name == "loft" && count == 3 {
+        let s1 = arg(0, 0);
+        let s2 = arg(1, 0);
+        return shape(loft(s1.g, s2.g, arg(2, 1).v[0]));
+    }
+    if (name == "pattern" || name == "pattern_polar") && count == 3 {
+        let a = arg(0, 0);
+        let v = eval_value(argument(n, 1));
+        if v.n < 2 { reader_fault(syntax::nodes[argument(n, 1)].tok, str("argument 2 of ", name, " is not a vector"), "write (x, y) or (x, y, z)"); }
+        let copies = arg(2, 1).v[0];
+        guard copies >= 1.0 && copies == floor(copies) else {
+            reader_fault(syntax::nodes[argument(n, 2)].tok, str("the copy count of ", name, " is ", copies),
+                         "write a whole number of 1 or more");
+            return number_value(0.0);
+        }
+        guard syntax::errors.len == 0 else { return number_value(0.0); }
+        if name == "pattern" { return shape(pattern(a.g, v.v[0], v.v[1], v.v[2], copies as i64)); }
+        // The axis of a 2D shape has 2 components, with no direction out of
+        // the plane (the checker), so the mesher has no turn for it.
+        guard v.n == 3 else {
+            reader_fault(syntax::nodes[argument(n, 1)].tok, "pattern_polar of a 2D shape is not in the mesher",
+                         "turn a Solid: pattern_polar of the extrude, about (0, 0, 1)");
+            return number_value(0.0);
+        }
+        return shape(pattern_polar(a.g, v.v[0], v.v[1], v.v[2], copies as i64));
+    }
     reader_fault(t, str("the shape '", name, "' with ", count, " arguments is not in the mesher"),
-                 "use box, cylinder, rect, circle, polygon, extrude or revolve, with |, & and -");
+                 "use box, cylinder, rect, circle, polygon, extrude, revolve, loft, pattern or pattern_polar, with |, & and -");
     return number_value(0.0);
 }
 

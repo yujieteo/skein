@@ -183,6 +183,18 @@ fn test_lint() {
     expect_mesh_lints("bending_lock", strip("", "1"), "bending_lock\n");
     expect_mesh_lints("order 2 does not lock", strip("", "2"), "");
     expect_mesh_lints("mesh_feature_small", strip(" - circle((0.5, 0.025) m, 5 mm)", "2"), "mesh_feature_small\n");
+    // The copy of a pattern is a feature. The reader needs a whole copy
+    // count of 1 or more, and has no pattern_polar of a 2D shape.
+    expect_mesh_lints("mesh_feature_small of a pattern", strip(" - pattern(circle((0.2, 0.025) m, 5 mm), (0.2, 0) m, 3)", "2"), "mesh_feature_small\n");
+    expect_mesh_lints("a copy count of 2.5", strip(" - pattern(circle((0.2, 0.025) m, 5 mm), (0.2, 0) m, 2.5)", "2"), "verify_unsupported\n");
+    expect_mesh_lints("a 2D polar pattern", strip(" - pattern_polar(circle((0.5, 0.025) m, 5 mm), (0, 1), 2)", "2"), "verify_unsupported\n");
+    // In a 3d model: a loft from a circle to a square, with a polar
+    // pattern of pins.
+    fn solid(body: u8[:]) -> u8[>..] {
+        return str("model t: 3d, SI\nscales 1 m\nlet s: Solid = ", body, "\nmesh m on s {\n    size: 0.5 m\n    cell: tet\n}\n");
+    }
+    expect_mesh_lints("a loft and a polar pattern",
+                      solid("loft(circle((0, 0) m, 4 m), rect((-2, -2) m, (2, 2) m), 3 m) | pattern_polar(cylinder((4, 0, 0) m, (0, 0, 1), 1 m, 3 m), (0, 0, 1), 6)"), "");
     // `skein lint` applies the rules that need the mesh only with --mesh.
     let path = "build/mesh_lint_strip.skn";
     guard write_file(path, strip("", "1")) else {
@@ -310,6 +322,37 @@ fn main() {
     let quarter = mesher::revolve(section, 0.5 * PI);
     mesh_case("quarter tube", quarter, 1.0, 0.25 * tube_volume,
               tolerance(0.25 * TAU * 16.0 * 30.0, 6.0, 4.0 * 0.25 * TAU * 8.0 + 4.0 * 30.0 + 4.0 * 4.0, 1.0, 0.25 * tube_volume));
+
+    // A loft from a circle of radius 10 mm to one of 5 mm, 20 mm up: a
+    // frustum of a cone. A loft between 2 squares is a frustum of a
+    // pyramid, as φ of a square centred on the origin is max(|x|, |y|) - a.
+    let slant = sqrt(25.0 + 400.0);
+    let cone = mesher::loft(mesher::circle(0.0, 0.0, 10.0), mesher::circle(0.0, 0.0, 5.0), 20.0);
+    let cone_volume = PI * 20.0 / 3.0 * (100.0 + 50.0 + 25.0);
+    mesh_case("lofted circles", cone, 1.0, cone_volume,
+              tolerance(PI * 15.0 * slant, 5.0, TAU * 15.0, 1.0, cone_volume));
+    let pyramid = mesher::loft(mesher::rect(-5.0, -5.0, 5.0, 5.0), mesher::rect(-2.0, -2.0, 2.0, 2.0), 20.0);
+    let pyramid_volume = 20.0 / 3.0 * (100.0 + 16.0 + 40.0);
+    mesh_case("lofted squares", pyramid, 1.0, pyramid_volume,
+              tolerance(0.0, 0.0, 56.0 + 4.0 * sqrt(400.0 + 2.0 * 9.0), 1.0, pyramid_volume));
+
+    // Patterns: 3 cubes in a row, 6 cylinders about the z axis, and 4
+    // boxes about the y axis, each turned by 90 deg onto the next.
+    let row = mesher::pattern(mesher::box(0.0, 0.0, 0.0, 4.0, 4.0, 4.0), 6.0, 0.0, 0.0, 3);
+    mesh_case("pattern of 3 cubes", row, 1.0, 192.0, tolerance(0.0, 0.0, 144.0, 1.0, 192.0));
+    let pins = mesher::pattern_polar(mesher::cylinder(8.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 5.0), 0.0, 0.0, 1.0, 6);
+    let pins_volume = 6.0 * PI * 4.0 * 5.0;
+    mesh_case("polar pattern of 6 cylinders", pins, 0.5, pins_volume,
+              tolerance(6.0 * TAU * 2.0 * 5.0, 2.0, 6.0 * 2.0 * TAU * 2.0, 0.5, pins_volume));
+    let cross = mesher::pattern_polar(mesher::box(3.0, -1.0, -1.0, 5.0, 1.0, 1.0), 0.0, 1.0, 0.0, 4);
+    mesh_case("polar pattern of 4 boxes about y", cross, 0.5, 32.0, tolerance(0.0, 0.0, 4.0 * 24.0, 0.5, 32.0));
+
+    // 2D patterns: 4 squares in a row, and a plate less a row of 4 holes.
+    mesh_case("2D pattern of 4 squares", mesher::pattern(mesher::rect(0.0, 0.0, 2.0, 2.0), 3.0, 0.0, 0.0, 4), 1.0, 16.0, 1.0e-10);
+    let holes = mesher::subtract(mesher::rect(0.0, 0.0, 40.0, 10.0), mesher::pattern(mesher::circle(5.0, 5.0, 2.0), 10.0, 0.0, 0.0, 4));
+    let holes_area = 400.0 - 4.0 * PI * 4.0;
+    mesh_case("2D plate with a row of 4 holes", holes, 0.5, holes_area,
+              (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
 
     test_lint();
 
