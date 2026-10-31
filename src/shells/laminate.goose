@@ -70,6 +70,7 @@ fn laminate_clear() { plies.clear(); }
 // Adds a ply below the plies so far. The angle is in rad. G13 and G23 are
 // the transverse shear moduli.
 fn laminate_ply(angle: f64, t: f64, e1: f64, e2: f64, g12: f64, nu12: f64, g13: f64, g23: f64) {
+    assert(t > 0.0 && e1 > 0.0 && e2 > 0.0 && g12 > 0.0 && g13 > 0.0 && g23 > 0.0);
     plies.push(Ply { angle: angle, t: t, e1: e1, e2: e2, g12: g12, nu12: nu12, g13: g13, g23: g23 });
 }
 

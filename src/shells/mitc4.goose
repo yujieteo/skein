@@ -191,6 +191,7 @@ fn mat3_row(m: f64[9], r0: i64, j: i64) -> f64[3] {
 
 // The stiffness ke of shell cell c, by 2 × 2 Gauss points.
 fn shell_stiffness(c: i64) {
+    assert(c >= 0 && c < shells.len && shells[c].section >= 0 && shells[c].section < sections.len);
     load_cell(c);
     let s = sections[shells[c].section];
     let kd = DRILL * s.a[8];

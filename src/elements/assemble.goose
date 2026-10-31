@@ -65,6 +65,7 @@ fn start_physics(kind: i64, comps: i64) {
 }
 
 fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
+    assert(E > 0.0 && nu > -1.0 && nu < 0.5 && t > 0.0);
     start_physics(ELASTIC, dim);
     plane = if dim == 3 { SOLID_3D } else { assumption };
     thickness = if dim == 3 { 1.0 } else { t };
@@ -75,6 +76,7 @@ fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
 }
 
 fn set_heat(k: f64, q: f64, t: f64) {
+    assert(k > 0.0 && t > 0.0);
     start_physics(HEAT, 1);
     thickness = if dim == 3 { 1.0 } else { t };
     conductivity = k;
@@ -145,6 +147,7 @@ var fe: f64[30];
 // f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.
 fn cell_matrix(c: i64) {
     let m = per_cell * ncomp;
+    assert(c >= 0 && c < cell_count() && m <= fe.len);
     for &v in ke { v = 0.0; }
     for &v in fe { v = 0.0; }
     for qp in quad_count(dim) {
@@ -286,6 +289,7 @@ fn region_node_count() -> i64 {
 // Holds component `comp` (or all components if comp < 0) of each node of
 // the region at `v`.
 fn fix_region(comp: i64, v: f64) {
+    assert(comp < ncomp && fixed.len == dof_total() && prescribed.len == fixed.len);
     for n in node_count() {
         if !on_region(n) { continue; }
         for p in ncomp {

@@ -52,7 +52,7 @@ fn build_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, 
 }
 
 fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
-    assert(nx > 0 && ny > 0 && nz > 0);
+    assert(nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && hi[2] > lo[2]);
     let per = if t == HEX27 { 2 } else { 1 };   // lattice steps along a cell edge
     mesh_clear();
     var spacing: f64[3] = [0.0, 0.0, 0.0];   // the size of a cell in q

@@ -150,8 +150,10 @@ fn substitute() {
 fn solve() -> bool {
     let t0 = clock();
     assemble();
+    let sizes = state_sizes();
     let ok = factor();
     if ok { substitute(); }
+    assert(state_sizes() == sizes);
     last_seconds = clock() - t0;
     return ok;
 }
@@ -198,3 +200,10 @@ fn load_scale(r: f64[:]) -> f64 {
 }
 
 fn profile_size() -> i64 { return sky.len; }
+
+// The length of each array of the state of the package. A solve grows none
+// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
+fn state_sizes() -> i64[14] {
+    return [coords.len, directors.len, shells.len, beams.len, beam_sections.len, fixed.len, load.len,
+            disp.len, grids.len, sections.len, plies.len, top.len, start.len, sky.len];
+}

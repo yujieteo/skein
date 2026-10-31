@@ -81,6 +81,7 @@ fn bend(w: i64, t: i64, ei: f64, phi: f64, l: f64, sign: f64) {
 
 // The stiffness of beam b in global dofs: tbᵀ kb tb, into ke[0..144].
 fn beam_stiffness(b: i64, out: f64[:]) {
+    assert(b >= 0 && b < beams.len && out.len == 144);
     beam_local(b);
     var kt: f64[144] = [0.0; 144];
     for i in 12 {

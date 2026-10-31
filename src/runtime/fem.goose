@@ -205,6 +205,7 @@ fn cell_quadrature(t: i64, xi: f64[>..]&, w: f64[>..]&) -> bool {
 // dofs_per_node a + p). False if the cell type has no routine.
 fn cell_matrix(c: i64, ke: f64[>..]&) -> bool {
     let t = cell_type[c] as i64;
+    assert(cell_start[c + 1] - cell_start[c] == CELL_NODES[t]);
     if t == HEX27 { return solid_stiffness(c, ke); }
     if t == HEX8I { return hex8i_matrix(c, ke); }
     if t == QUAD4_SHELL || t == BEAM2 { return shells_matrix(c, ke); }

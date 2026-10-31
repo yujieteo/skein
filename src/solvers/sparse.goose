@@ -5,6 +5,7 @@ namespace solvers;
 
 // y = A x
 fn multiply(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[:]) {
+    assert(row_start.len == y.len + 1 && col.len == val.len && x.len == y.len);
     for r in y.len {
         var s = 0.0;
         for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
@@ -42,6 +43,7 @@ fn entry(row_start: i64[:], col: i32[:], r: i64, c: i64) -> i64 {
 // those of the identity, and b[d] becomes 0. The matrix stays symmetric
 // if it was, so that CG and GMRES solve the same system.
 fn constrain(row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:], b: f64[:]) {
+    assert(row_start.len == b.len + 1 && fixed.len == b.len && col.len == val.len);
     for r in b.len {
         for e in row_start[r]..row_start[r + 1] {
             let c = col[e];

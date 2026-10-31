@@ -93,6 +93,7 @@ fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
 
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
+    assert(length > 0.0 && size > 0.0);
     return max(ceil(length / size - 1.0e-9) as i64, 1);
 }
 

@@ -103,12 +103,14 @@ fn read_solution(dir: const u8[:], step: const u8[:]) -> bool {
 
 // The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 {
+    assert(length > 0.0 && size > 0.0);
     return max(ceil(length / size - 1.0e-9) as i64, 1);
 }
 
 // A linear isotropic material for all cells: Young's modulus E and
 // Poisson's ratio nu.
 fn material(E: f64, nu: f64) {
+    assert(E > 0.0 && nu > -1.0 && nu < 0.5);
     young = E;
     poisson = nu;
 }
@@ -154,6 +156,7 @@ fn face_area(set: const u8[:]) -> f64 {
 
 // Adds the force (fx, fy, fz) at the node nearest to (x, y, z).
 fn force_point(x: f64, y: f64, z: f64, fx: f64, fy: f64, fz: f64) {
+    assert(node_count() > 0);
     add_point_force(x, y, z, fx, fy, fz);
 }
 
@@ -183,12 +186,14 @@ fn solve_static() -> bool {
 // The displacement at (x, y, z), interpolated in the cell that holds the
 // point. A point outside the 3D cells gives 0, 0, 0.
 fn displacement_at(x: f64, y: f64, z: f64) -> f64, f64, f64 {
+    assert(disp.len == dof_total());
     return interpolate_u(x, y, z);
 }
 
 // The stress at (x, y, z) in the cell that holds the point: xx, yy, zz,
 // yz, xz and xy. A point outside the 3D cells gives 0.
 fn stress_at(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
+    assert(disp.len == dof_total());
     return stress_at_point(x, y, z);
 }
 

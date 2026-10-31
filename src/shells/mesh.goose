@@ -71,6 +71,7 @@ fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, 
 // node numbers run along the shorter side first, for a small profile.
 fn mesh_cylinder(r: f64, x0: f64, x1: f64, t0: f64, t1: f64, nx: i64, nt: i64,
                  section: i64, ax: f64, ay: f64, az: f64) -> i64 {
+    assert(r > 0.0 && x1 > x0 && t1 > t0 && nx > 0 && nt > 0 && section >= 0 && section < sections.len);
     grids.push(Grid { first_node: node_count(), first_cell: shells.len, nx: nx, nt: nt, x_fast: nx <= nt,
                       r: r, x0: x0, x1: x1, t0: t0, t1: t1 });
     let g = grids.len - 1;

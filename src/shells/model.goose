@@ -109,7 +109,10 @@ fn add_beam(n0: i64, n1: i64, section: i64, y: f64[3], o0: f64[3], o1: f64[3]) -
 
 // --- supports and loads ------------------------------------------------------
 
-fn fix(n: i64, dof: i64) { fixed[6 * n + dof] = 1; }
+fn fix(n: i64, dof: i64) {
+    assert(n >= 0 && n < node_count() && dof >= 0 && dof < 6 && fixed.len == 6 * node_count());
+    fixed[6 * n + dof] = 1;
+}
 
 fn force(n: i64, dof: i64, value: f64) { load[6 * n + dof] += value; }
 

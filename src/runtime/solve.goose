@@ -235,6 +235,7 @@ fn assemble() -> bool {
 
 // y = K x
 fn multiply(x: f64[:], y: f64[:]) {
+    assert(x.len == y.len && row_start.len == y.len + 1 && col.len == val.len);
     for r in y.len {
         var s = 0.0;
         for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
@@ -251,12 +252,9 @@ fn free_operator(x: f64[:], y: f64[:]) {
 var inv_diag: f64[>..] = [];
 
 // z = D⁻¹ r on the free dofs, with D the diagonal of K, and 0 on the
-// fixed dofs.
+// fixed dofs. solve_free sets inv_diag.
 fn jacobi(r: f64[:], z: f64[:]) {
-    if inv_diag.len != r.len {
-        inv_diag.clear();
-        for d in r.len { inv_diag.push(if fixed[d] == 0 { 1.0 / val[entry(d, d)] } else { 0.0 }); }
-    }
+    assert(inv_diag.len == r.len && z.len == r.len);
     for d in r.len { z[d] = inv_diag[d] * r[d]; }
 }
 
@@ -275,6 +273,7 @@ fn zeros(n: i64) -> f64[>..] {
 // The preconditioned conjugate gradient method, for a symmetric positive
 // definite operator.
 fn cg<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
+    assert(x.len == b.len);
     let n = b.len;
     var r = zeros(n);
     var z = zeros(n);
@@ -308,17 +307,20 @@ fn cg<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
 
 // Solves K x = b on the free dofs with the solver and the preconditioner
 // of solver_name and preconditioner_name. b must be 0 on the fixed dofs.
-// It sets last_iterations.
+// It sets last_iterations. It grows no array of the state (state_sizes).
 fn solve_free(b: f64[:], x: f64[>..]&) -> bool {
     inv_diag.clear();
+    for d in b.len { inv_diag.push(if fixed[d] == 0 { 1.0 / val[entry(d, d)] } else { 0.0 }); }
+    let sizes = state_sizes();
     let max_it = 10 * b.len;
     var converged = false;
+    var found = true;
     if solver_name == "cg" && preconditioner_name == "jacobi" {
         converged, last_iterations = cg(b, x, CG_TOLERANCE, max_it, free_operator, jacobi);
-        return converged;
+    } else {
+        found, converged, last_iterations = solvers_solve(solver_name, preconditioner_name, b, x, CG_TOLERANCE, max_it);
     }
-    var found = false;
-    found, converged, last_iterations = solvers_solve(solver_name, preconditioner_name, b, x, CG_TOLERANCE, max_it);
+    assert(state_sizes() == sizes);
     if !found {
         write_stderr(str("runtime: no linear solver ", solver_name, " with the preconditioner ",
                          preconditioner_name, "\n"));
@@ -326,9 +328,19 @@ fn solve_free(b: f64[:], x: f64[>..]&) -> bool {
     return found && converged;
 }
 
+// The length of each array of the state of the runtime. A solve grows none
+// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
+fn state_sizes() -> i64[30] {
+    return [coords.len, cell_type.len, cell_start.len, cell_nodes.len, point_fields.len, set_names.len,
+            set_is_face.len, set_start.len, set_items.len, fixed.len, load.len, disp.len, row_start.len,
+            col.len, val.len, face_w.len, ke.len, inv_diag.len, point_n.len, point_dn.len, quad_xi.len,
+            quad_w.len, shape_n.len, shape_dn.len, grad.len, centre_n.len, centre_dn.len, full.len,
+            condensed.len, mode_grad.len];
+}
+
 // Assembles the stiffness matrix and solves K u = f.
 fn solve_linear_static() -> bool {
-    assert(young > 0.0);
+    assert(young > 0.0 && cell_count() > 0);
     let start = clock();
     var converged = assemble();
     if converged {

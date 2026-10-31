@@ -58,7 +58,7 @@ fn combine(h: f64[:], g: f64[:], y: f64[:], basis: f64[:], r: f64[:], m: i64, k:
 // residual that it measures is the true residual b - A x.
 fn gmres<P>(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
             rtol: f64, m: i64, max_iterations: i64) -> i64, bool {
-    assert(m > 0);
+    assert(m > 0 && x.len == b.len && row_start.len == b.len + 1 && col.len == val.len);
     let n = b.len;
     var basis: f64[>..] = [];       // m + 1 vectors of n, one after the other
     zeros(basis, (m + 1) * n);

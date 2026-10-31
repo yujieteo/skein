@@ -22,6 +22,7 @@ let NEWTON_HALVINGS = 20;           // the most halvings of a step
 fn newton<R, J>(row_start: i64[:], col: i32[:], val: f64[:], u: f64[:], tol: f64,
                 max_steps: i64, linear_rtol: f64,
                 history: f64[>..]&) -> i64, bool {
+    assert(row_start.len == u.len + 1 && col.len == val.len && max_steps > 0);
     let n = u.len;
     var f: f64[>..] = [];
     var rhs: f64[>..] = [];

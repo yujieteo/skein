@@ -19,6 +19,7 @@ let CG_TOLERANCE = 1.0e-12;   // the residual relative to the larger of the load
 
 // y = K x
 fn multiply(x: f64[:], y: f64[:]) {
+    assert(x.len == y.len && row_start.len == y.len + 1 && col.len == val.len);
     for r in y.len {
         var s = 0.0;
         for e in row_start[r]..row_start[r + 1] { s += val[e] * x[col[e]]; }
@@ -48,6 +49,7 @@ fn solve_system() -> bool {
     var p = zeros(n);
     var q = zeros(n);
     var inv_diag = zeros(n);
+    let sizes = state_sizes();
     for d in n { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
     multiply(sol, q);
     var f2 = 0.0;
@@ -85,7 +87,15 @@ fn solve_system() -> bool {
         rz = rz_new;
         for d in n { p[d] = z[d] + beta * p[d]; }
     }
+    assert(state_sizes() == sizes);
     last_iterations = it;
     last_seconds = clock() - start;
     return converged;
+}
+
+// The length of each array of the state of the package. A solve grows none
+// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
+fn state_sizes() -> i64[11] {
+    return [coords.len, conn.len, radial.len, fixed.len, prescribed.len, load.len, sol.len, row_start.len,
+            col.len, val.len, assembled_source.len];
 }
