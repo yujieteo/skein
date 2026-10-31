@@ -179,10 +179,10 @@ fn run(args: const u8[:][:]) -> i64 {
 }
 
 // `skein run --study` (spec §20, command_line.md §5, §6.5): the study
-// runner, with cases first (spec §20.5). The model is checked once. The
-// generator writes one program for each case (study.goose), and contained
-// Goose workers build and run the cases, `--jobs` at a time. The collector
-// writes one table of the cases, in case order:
+// runner (spec §20.5). The model is checked once. The generator writes
+// one program for each case (study.goose), and contained Goose workers
+// build and run the cases on the work-stealing pool of `--jobs` workers.
+// The collector writes one table of the cases, in case order:
 //
 //     .skein/build/<model>/<study>/<case>/main.goose    the program of a case
 //     .skein/studies/<model>/<study>/<case>/             the results of a case
@@ -237,28 +237,46 @@ thread_fn case_worker(job: CaseJob) {
     qput(r);
 }
 
-// Runs `jobs` with `k` contained workers at a time, and gives the end of
-// each case, in case order. It appends the outputs to `outs`.
+// The end of a task of the pool: its worker, its case, and the abort
+// message of a contained worker that aborted.
+struct TaskEnd {
+    worker: i64,
+    case: i64,
+    ended: bool,
+    why: u8[..1024],
+}
+
+// Runs case_worker on `job` as a contained worker, and gives its end as a
+// task of worker w of the pool.
+thread_fn pool_worker(w: i64, job: CaseJob) {
+    var why: u8[>..] = [];
+    var e = TaskEnd { worker: w, case: job.case, ended: thread_wait(thread_spawn_contained(case_worker, job), why), why: [] };
+    set1024(e.why, why);
+    qput(e);
+}
+
+// Runs `jobs` on the work-stealing pool of `k` workers (spec §20.5), and
+// gives the end of each case, in case order. A worker starts its next case
+// when its case ends. It appends the outputs to `outs`.
 fn run_cases(jobs: CaseJob[:], k: i64) -> CaseEnd[>..] {
     var ends: CaseEnd[>..] = [];
+    for i in jobs.len { ends.push(CaseEnd { ended: true, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 }); }
+    let workers = min(k, jobs.len);
+    var p = new_pool(jobs.len, workers);
     var ids: i64[>..] = [];
-    var next = 0;
-    while next < jobs.len && next < k {
-        ids.push(thread_spawn_contained(case_worker, jobs[next]));
-        next++;
-    }
+    for w in workers { ids.push(thread_spawn(pool_worker, w, jobs[take_task(p, w)])); }
     var ended = 0;
-    for i in 0..jobs.len {
-        var e = CaseEnd { ended: true, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 };
-        var why: u8[>..] = [];
-        e.ended = thread_wait(ids[i], why);
-        if e.ended { ended++; } else { set1024(e.err, str("the worker stopped: ", why)); }
-        ends.push(e);
-        if next < jobs.len {
-            ids.push(thread_spawn_contained(case_worker, jobs[next]));
-            next++;
+    for i in jobs.len {
+        let e = qget<TaskEnd>();
+        let c = e.case - jobs[0].case;
+        if e.ended { ended++; } else {
+            ends[c].ended = false;
+            set1024(ends[c].err, str("the worker stopped: ", e.why));
         }
+        let t = take_task(p, e.worker);
+        if t >= 0 { ids.push(thread_spawn(pool_worker, e.worker, jobs[t])); }
     }
+    for id in ids { thread_wait(id); }
     for i in 0..ended {
         let r = qget<CaseResult>();
         var e = CaseEnd { ended: true, built: r.built, status: r.status, seconds: r.seconds, err: r.err, out_lo: outs.len, out_hi: 0 };

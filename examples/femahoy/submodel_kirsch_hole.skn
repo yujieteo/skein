@@ -1,5 +1,4 @@
 // femahoy: validation/cases/submodel-kirsch-hole/job.inp
-// blocked-by: G36
 // The submodel of submodel_kirsch_hole_global.skn: the ring 10 <= r <= 20 mm
 // about the hole, with a fine mesh. The cut r = 20 mm takes the displacement
 // of the global model. The reference is the Kirsch sxx at the integration
@@ -28,10 +27,10 @@ material steel {
     nu: Real = 0.3
 }
 
-// gap G36: femahoy uses CPE8R quads on the ring. The mesher makes quads only on a union of rects.
+// The CPE8R of femahoy: a grid in r and θ of serendipity quads with reduced integration.
 mesh m on ring {
     size: 1 mm
-    cell: tri
+    cell: quad
     refine hole: 0.25 mm
 }
 
@@ -39,6 +38,8 @@ physics solid on ring: linear_elastic solves u: Vector<Length> {
     material steel
     assume plane_strain(th)
 }
+
+method solid: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }
 
 step load: static {
     bc left: u.x = 0

@@ -2,9 +2,12 @@
 // minimum and the maximum angle of a triangle. In 3D, the minimum and the
 // maximum dihedral angle of a tetrahedron. The aspect ratio is the
 // longest edge over the inradius, scaled so that an equilateral cell has 1.
-// A quad or a hex cell of a grid (grid.goose) is an axis-aligned box: each
-// angle is 90 degrees, and the aspect ratio is its longest side over its
-// shortest side.
+// For a quad or a hex cell, the angles are the angles between the 2 or 3
+// edges at each corner, and the aspect ratio is its longest edge over its
+// shortest edge. A cell is inverted if the edges at a corner turn the
+// wrong way (a cross product in 2D, a triple product in 3D). The volume of
+// a hex is the integral of the Jacobian of its trilinear map, with 2 Gauss
+// points along each axis, which is exact.
 import std;
 import math;
 namespace mesher;
@@ -43,23 +46,7 @@ fn mesh_quality() -> Quality {
     for c in cell_count() {
         let t = runtime::cell_type[c] as i64;
         if t == runtime::QUAD4 || t == runtime::HEX8 {
-            // Node 2 or node 6 is the corner opposite node 0.
-            let lo = vertex(cell_node(c, 0));
-            let hi = vertex(cell_node(c, if t == runtime::QUAD4 { 2 } else { 6 }));
-            var measure = 1.0;
-            var longest = 0.0;
-            var shortest = 1.0e300;
-            for a in mesh_dim {
-                let side = hi[a] - lo[a];
-                measure *= side;
-                longest = max(longest, side);
-                shortest = min(shortest, side);
-            }
-            q.measure += measure;
-            if shortest <= 0.0 { q.inverted++; continue; }
-            q.min_angle = min(q.min_angle, 90.0);
-            q.max_angle = max(q.max_angle, 90.0);
-            q.max_aspect = max(q.max_aspect, longest / shortest);
+            grid_cell_quality(c, t == runtime::HEX8, q);
             continue;
         }
         var v: f64[3][4] = default<f64[3][4]>();
@@ -113,6 +100,85 @@ fn mesh_quality() -> Quality {
         }
     }
     return q;
+}
+
+// The 3 neighbours of each corner of a hex8 in VTK order, so that the edges
+// to them, in this order, make a positive triple product.
+let HEX_CORNERS: i64[3][8] = [[1, 3, 4], [2, 0, 5], [3, 1, 6], [0, 2, 7], [7, 5, 0], [4, 6, 1], [5, 7, 2], [6, 4, 3]];
+
+// Adds quad4 or hex8 cell c to q.
+fn grid_cell_quality(c: i64, hex: bool, q: Quality&) {
+    let k = if hex { 8 } else { 4 };
+    var v: f64[3][8] = default<f64[3][8]>();
+    for i in k { v[i] = vertex(cell_node(c, i)); }
+    var longest = 0.0;
+    var shortest = 1.0e300;
+    var inverted = false;
+    var measure = 0.0;
+    for i in k {
+        let a = sub3(v[if hex { HEX_CORNERS[i][0] } else { (i + 1) % 4 }], v[i]);
+        let b = sub3(v[if hex { HEX_CORNERS[i][1] } else { (i + 3) % 4 }], v[i]);
+        longest = max(longest, norm3(a));
+        shortest = min(shortest, norm3(a));
+        add_angle(q, a, b);
+        if hex {
+            let d = sub3(v[HEX_CORNERS[i][2]], v[i]);
+            if dot3(cross3(a, b), d) <= 0.0 { inverted = true; }
+            longest = max(longest, norm3(d));
+            shortest = min(shortest, norm3(d));
+            add_angle(q, b, d);
+            add_angle(q, d, a);
+        } else {
+            if cross3(a, b)[2] <= 0.0 { inverted = true; }
+            // The shoelace sum: each corner adds x_i y_{i+1} - x_{i+1} y_i.
+            measure += 0.5 * (v[i][0] * v[(i + 1) % 4][1] - v[(i + 1) % 4][0] * v[i][1]);
+        }
+    }
+    if hex { measure = hex_volume(v); }
+    q.measure += measure;
+    if inverted || shortest <= 0.0 {
+        q.inverted++;
+        return;
+    }
+    q.max_aspect = max(q.max_aspect, longest / shortest);
+}
+
+// Adds the angle between the edges a and b to q.
+fn add_angle(q: Quality&, a: f64[3], b: f64[3]) {
+    let angle = degrees(acos(clamp(dot3(a, b) / (norm3(a) * norm3(b)), -1.0, 1.0)));
+    q.min_angle = min(q.min_angle, angle);
+    q.max_angle = max(q.max_angle, angle);
+}
+
+// The corners of a hex8 in VTK order, in the unit cube.
+let HEX_UNIT: f64[3][8] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
+                           [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0]];
+
+// The volume of the trilinear hex with the corners v: the Jacobian at the
+// 2 × 2 × 2 Gauss points of the unit cube, each of weight 1/8.
+fn hex_volume(v: f64[3][8]) -> f64 {
+    let g = 0.5 / sqrt(3.0);
+    var volume = 0.0;
+    for p in 8 {
+        let x: f64[3] = [0.5 + (2.0 * HEX_UNIT[p][0] - 1.0) * g, 0.5 + (2.0 * HEX_UNIT[p][1] - 1.0) * g,
+                         0.5 + (2.0 * HEX_UNIT[p][2] - 1.0) * g];
+        // j[a] is the derivative of the map along axis a of the cube.
+        var j: f64[3][3] = default<f64[3][3]>();
+        for n in 8 {
+            var f: f64[3] = [0.0, 0.0, 0.0];
+            var d: f64[3] = [0.0, 0.0, 0.0];
+            for a in 3 {
+                f[a] = if HEX_UNIT[n][a] > 0.5 { x[a] } else { 1.0 - x[a] };
+                d[a] = if HEX_UNIT[n][a] > 0.5 { 1.0 } else { -1.0 };
+            }
+            for a in 3 {
+                let w = d[a] * f[(a + 1) % 3] * f[(a + 2) % 3];
+                for c in 3 { j[a][c] += v[n][c] * w; }
+            }
+        }
+        volume += dot3(j[0], cross3(j[1], j[2])) / 8.0;
+    }
+    return volume;
 }
 
 // The mesh_quality record, in the TOON form of the run report.

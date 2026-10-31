@@ -1,5 +1,4 @@
 // femahoy: validation/cases/turek-hron-fsi1/fsi1/precice-config.xml
-// blocked-by: G36
 // Turek and Hron FSI1: an elastic flag behind a cylinder in a laminar channel flow (Re = 20)
 // bends to a steady shape. One model holds the fluid, the flag and their interface.
 // References: drag 14.295 N/m, lift 0.7638 N/m, point A ux = 0.0227 mm, uy = 0.8209 mm.
@@ -41,11 +40,10 @@ mesh mf on fluid_dom {
     refine cyl_wall | wet_fluid: 0.005 m
 }
 
-// gap G36: the mesher makes quad cells only on a union of rects, so the flag uses
-// triangles. ccx uses C3D8I: order: 1 and family: incompatible on hex cells.
+// The C3D8I of ccx: quads with incompatible modes on the flag.
 mesh ms on bar {
     size: 0.005 m
-    cell: tri
+    cell: quad
 }
 
 physics flow on fluid_dom solves v: Vector<Velocity>, p: Pressure {
@@ -77,7 +75,8 @@ method flow: fv {
 
 method flag: cg {
     mesh: ms
-    order: 2
+    order: 1
+    family: incompatible
 }
 
 // FSI1 is steady. The outlet takes the default natural condition sigma_f*n = 0.

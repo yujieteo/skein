@@ -65,13 +65,21 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
         var extra: f64[>..] = [];
         if box_union(s, extra) { for p in extra { boxes.push(p); } }
     }
+    fill_lattice(g, dim, size, boxes[..], region[..]);
+    return true;
+}
+
+// The grid lines of the planes of `boxes` in the bounds of g, and a cell
+// of the lattice where its centre is in a box of `region`, or where φ of g
+// is negative at its centre if `region` is empty.
+fn fill_lattice(g: i64, dim: i64, size: f64, boxes: f64[:], region: f64[:]) {
     let b = bounds(g);
     var lx: f64[>..] = [];
     var ly: f64[>..] = [];
     var lz: f64[>..] = [0.0];
-    grid_lines(boxes[..], 0, b[0], b[3], size, lx);
-    grid_lines(boxes[..], 1, b[1], b[4], size, ly);
-    if dim == 3 { grid_lines(boxes[..], 2, b[2], b[5], size, lz); }
+    grid_lines(boxes, 0, b[0], b[3], size, lx);
+    grid_lines(boxes, 1, b[1], b[4], size, ly);
+    if dim == 3 { grid_lines(boxes, 2, b[2], b[5], size, lz); }
     let nx = lx.len;
     let ny = ly.len;
     let nz = lz.len;
@@ -84,6 +92,7 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
         return ids[at];
     }
     fn inside(x: f64[3]) -> bool {
+        if region.len == 0 { return phi(g, x[0], x[1], x[2]) < 0.0; }
         for r in region.len / 6 {
             var all = true;
             for a in dim {
@@ -111,5 +120,4 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
             }
         }
     }
-    return true;
 }

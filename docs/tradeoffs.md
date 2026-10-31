@@ -39,7 +39,7 @@ if it costs too much. The captain set this ranking in
 | 1 | Simulation core: strong-form physics, methods, mesher, solvers | protected | the base language | the largest part: lowering, methods, mesher, solvers | the most | none extra, it is the work | 2 to 5 |
 | 2 | Dimensions done right: strict units, static analysis and verification by default, with dimensional analysis and parameter sweeps where they count | protected | a type on each declaration, a unit on each literal, a `scales` line, `param` and `study` | the checker (about a third of the front end), the π basis, the scaled SIR, the study runner | small | the post-solve checks cost a few percent of a solve. Scaled solves are equal or faster. | 1 (checks, `param`, `check --groups`), 2 (verification, cases-first studies), 3 (scaled SIR) |
 | 3 | LLM- and AXI-native syntax and output, with small human-readable diffs | protected | it shapes all syntax: types only at declarations, TOON, ids with fixes, one item on each line, no alignment | small: the fix strategies, the TOON writer, the language card | none | none | 1 |
-| 4 | Concurrency: one work-stealing task pool | layered, high value | none | the task pool in the runtime | small | memory grows with the number of cases in flight | 3 |
+| 4 | Concurrency: one work-stealing task pool | layered, high value | none | the task pool of the study runner | small | memory grows with the number of cases in flight | 3 |
 | 5 | Web output: the tool chain and the viewer in the browser | layered | none | the browser shell and the viewer | a second target: Goose to C, then `emcc` | the browser limits memory | 4 |
 | 6 | Power of Ten reliability | layered, mostly free | none: most rules hold by construction | tests, emitter checks, the kernel splitter | small | none | 2 onwards, as tests |
 | 7 | Parametric parts and text-to-CAD | layered | `shell`, `loft`, `pattern` | the STL and tessellated STEP writers. No B-rep kernel. | small | none for simulation | 2 (STL), 4 (tessellated STEP) |
@@ -218,7 +218,7 @@ emitter.
 |---|---|---|
 | only `param` can change (§20.1) | a reviewer finds each input. The dependency analysis is exact. | a user must mark a value `param` before a study can vary it |
 | Go-style workers over typed queues (§20.3) | no shared memory, so no data races. A failed case does not stop the study. The same design works on native threads and Web Workers. | each worker holds its own copy of the shared mesh. Memory grows with the number of workers. §20.5 limits the workers by memory. |
-| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. The pool keeps each thread busy also when the cases are few and large, with no `--jobs` from the user. | each queue needs atomics, or a lock that costs time for each task (G3.2b). |
+| cases first in phase 2, one work-stealing task pool in phase 3 (§20.5) | cases scale almost perfectly. A slow case does not stop the start of the other cases. | Goose has no atomics or locks, so the thread of the runner owns the queues, and each task costs one spawn and one message (G3.2b). A case is a separate program, so the work in a case is not a task of the pool. |
 
 ---
 
