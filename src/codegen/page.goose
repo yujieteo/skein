@@ -170,8 +170,9 @@ fn base64(out: u8[>..]&, s: u8[:]) {
 // The solve of a page, for the page of `skein build` and for the report
 // of `skein report` (src/report): the module `glue` of the model `model`
 // in base64 (empty if the model is too large), the controls PARAMS of
-// `params`, and skeinSolve. It is two script elements.
-fn solve_html(model: u8[:], params: Control[:], glue: u8[:]) -> u8[>..] {
+// `params`, the memory MEMORY_MB of the run, `memory_mb`, and skeinSolve.
+// It is two script elements.
+fn solve_html(model: u8[:], params: Control[:], glue: u8[:], memory_mb: i64) -> u8[>..] {
     var out: u8[>..] = "<script id=\"skein-module\" type=\"application/octet-stream\">";
     base64(out, glue);
     out.append("</script>\n<script>\n\"use strict\";\nconst PARAMS = [");
@@ -185,22 +186,22 @@ fn solve_html(model: u8[:], params: Control[:], glue: u8[:]) -> u8[>..] {
     }
     out.append("];\nconst RESULTS = ");
     json_string(out, str(".skein/results/", model));
-    out.append(";\n");
+    format(out, ";\nconst MEMORY_MB = ", memory_mb, ";\nconst MAX_MEMORY_MB = ", MAX_MEMORY_MB, ";\n");
     out.append(SOLVE_JS);
     out.append("</script>\n");
     return out;
 }
 
-// The page of `model`, with its solve `solve` (solve_html), the native run
-// `native` of `seconds` and the memory of its regions.
-fn page_html(model: u8[:], solve: u8[:], native: u8[:], memory_mb: i64, seconds: f64) -> u8[>..] {
+// The page of `model`, with its solve `solve` (solve_html) and the native
+// run `native` of `seconds`.
+fn page_html(model: u8[:], solve: u8[:], native: u8[:], seconds: f64) -> u8[>..] {
     var out: u8[>..] = [];
     var data: u8[>..] = [];
     data.append("const MODEL = ");
     json_string(data, model);
     data.append(";\nconst NATIVE = ");
     json_string(data, native);
-    format(data, ";\nconst MEMORY_MB = ", memory_mb, ";\nconst MAX_MEMORY_MB = ", MAX_MEMORY_MB, ";\nconst NATIVE_SECONDS = ", seconds, ";\n");
+    format(data, ";\nconst NATIVE_SECONDS = ", seconds, ";\n");
     var at = 0;
     while at < PAGE_HTML.len {
         if PAGE_HTML.len - at >= 6 && PAGE_HTML[at..at + 6] == "@DATA@" {
@@ -227,6 +228,11 @@ fn page_html(model: u8[:], solve: u8[:], native: u8[:], memory_mb: i64, seconds:
 let SOLVE_JS = """
     // The loader of the module, in UTF-8 bytes.
     const MODULE = Uint8Array.from(atob(document.getElementById("skein-module").textContent.trim()), (c) => c.charCodeAt(0));
+
+    // The message of a model that is too large for the memory of the browser.
+    function tooLarge() {
+      return "This model is too large for the memory of the browser: it needs " + MEMORY_MB + " MB, and the page has " + MAX_MEMORY_MB + " MB.";
+    }
 
     // The files of the records `results[n]:` of a run.
     function resultPaths(toon) {
@@ -457,8 +463,7 @@ let PAGE_HTML = """
     const row = solveRow(NATIVE);
     if (!MODULE.length) {
       document.getElementById("solve").disabled = true;
-      document.getElementById("note").textContent = "This model is too large for the memory of the browser: it needs " +
-        MEMORY_MB + " MB, and the page has " + MAX_MEMORY_MB + " MB." + (row ? " The native run has " + row[1] + " cells and " + row[2] +
+      document.getElementById("note").textContent = tooLarge() + (row ? " The native run has " + row[1] + " cells and " + row[2] +
         " dofs, and took " + NATIVE_SECONDS.toFixed(1) + " s." : "") + " The page shows the native results.";
     } else {
       document.getElementById("note").textContent = "Each control meshes and solves the model again in the page (WebAssembly, one thread, up to " +

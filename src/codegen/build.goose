@@ -383,9 +383,9 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
     }
     var native: u8[>..] = [];
     read_file(str(dir, "/native.toon"), native);
-    let solve = solve_html(model, params, glue);
+    let solve = solve_html(model, params, glue, total);
     let page = str(dir, "/", model, ".html");
-    guard write_file(str(dir, "/solve.html"), solve) && write_file(page, page_html(model, solve, native, total, seconds)) else {
+    guard write_file(str(dir, "/solve.html"), solve) && write_file(page, page_html(model, solve, native, seconds)) else {
         write_stderr(str("skein build: cannot write '", page, "'\n"));
         return 1;
     };

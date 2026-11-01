@@ -1270,6 +1270,7 @@ function renderSliders() {
   const study = M.studies.find((x) => x.name === D.study);
   box.append(studyTable ? el('h2', {}, 'Study ', D.study, ' ', study ? lineLink(study.line) : null) : el('h2', {}, 'Params'));
   if (SOLVE) box.append(el('p', { class: 'note' }, 'A slider at the values of a stored case shows that case. A slider that stops at other values meshes and solves the model in the page.'));
+  else if (typeof tooLarge === 'function') box.append(el('p', { class: 'note' }, tooLarge() + ' The sliders move only between the stored cases.'));
   for (const p of names) {
     const seen = [];
     for (let i = 0; i < D.cases.length; i++) {
@@ -1323,7 +1324,7 @@ async function showValues(solve) {
   } else if (SOLVE && !inPage) {
     document.getElementById('note').textContent = 'no stored case has these values, and the page solves only with the default of ' + fixed.join(', ');
   } else if (!SOLVE) {
-    document.getElementById('note').textContent = 'no stored case has these values';
+    document.getElementById('note').textContent = 'no stored case has these values' + (typeof tooLarge === 'function' ? '. ' + tooLarge() : '');
   } else if (!solve) {
     document.getElementById('note').textContent = 'no stored case has these values: release the slider to solve them in the page';
   }

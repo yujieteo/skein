@@ -522,8 +522,10 @@ and the viewer and the tables show that run. A value near a stored value
 the params with a control. If a study param without a control is not at
 its default, the page does not solve. If `report` does not run `build`,
 if `build` fails, or if the model is too large for the browser, the
-sliders move only between the stored cases. Reason: the interposer study
-has 72 cases, and its sliders must reach each value of each range.
+sliders move only between the stored cases. For a model that is too
+large, the page gives the memory that the model needs, as the page of
+`build` does. Reason: the interposer study has 72 cases, and its sliders
+must reach each value of each range.
 
 The input "Open VTU" opens a VTU file of another solver in the same
 viewer, without source links.
