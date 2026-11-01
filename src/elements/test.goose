@@ -19,6 +19,8 @@ import solvers from "../solvers";   // the runtime imports it
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
+    fn setenv(name: const u8&, value: const u8&, overwrite: i32) -> i32;
+    fn unsetenv(name: const u8&) -> i32;
 }
 
 var failures = 0;
@@ -418,6 +420,51 @@ fn test_equilibrium_scale() {
             failures++;
             print("FAIL equilibrium scale: ", if moved { "a real imbalance passes" } else { "round-off fails" });
         }
+    }
+}
+
+// --- the warm start of a page ----------------------------------------------------
+
+// Two fixed temperatures and no source: the free load is 0. A second solve
+// of the model with the same key starts from the solution of the first
+// (SKEIN_WARM), so it is already converged: CG must stop at the target of
+// a cold run, not run to its limit.
+fn warm_bar() -> bool {
+    solvers::warm_solves = 0;
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, BAR_A, BAR_A, 0.25 * BAR_A, 8, 8, 2);
+    elements::heat(BAR_K, 0.0, 1.0);
+    assert(elements::plane(elements::X, 0.0));
+    elements::fix(0, 273.15);
+    assert(elements::plane(elements::X, BAR_A));
+    elements::fix(0, 373.15);
+    return elements::solve();
+}
+
+fn c_string(s: u8[:]) -> u8[>..] {
+    var c: u8[>..] = [];
+    c.append(s);
+    c.push(0);
+    return c;
+}
+
+fn test_warm_start() {
+    let name = c_string("SKEIN_WARM");
+    let dir = c_string("build/warm_elements");
+    let clean = c_string("rm -rf build/warm_elements");
+    let make = c_string("mkdir -p build/warm_elements");
+    system(clean[0]);
+    system(make[0]);
+    setenv(name[0], dir[0], 1);
+    let cold = warm_bar();
+    let cold_its = elements::cg_iterations();
+    let warm = warm_bar();
+    let warm_its = elements::cg_iterations();
+    unsetenv(name[0]);
+    system(clean[0]);
+    print("warm start: ", cold_its, " CG iterations cold, ", warm_its, " warm");
+    if !cold || !warm || warm_its > 2 {
+        failures++;
+        print("FAIL warm start: the warm solve of a model with no free load does not converge at once");
     }
 }
 
@@ -920,6 +967,7 @@ fn main() {
     test_edge();
     test_far_field();
     test_darcy();
+    test_warm_start();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");

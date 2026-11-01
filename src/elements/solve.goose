@@ -96,18 +96,22 @@ fn solve_system() -> bool {
 }
 
 // Scales the free dofs of sol, the last solution, by the factor with the
-// least energy, and r, the residual of sol, with it. z is scratch.
-fn warm_scale(r: f64[:], z: f64[:]) {
+// least energy, and r, the residual of sol, with it. z is scratch. Returns
+// the square of the residual of the start without the last solution, so
+// the target of CG is the target of a cold run.
+fn warm_scale(r: f64[:], z: f64[:]) -> f64 {
     let n = sol.len;
     var w = zeros(n);
     for d in n { if fixed[d] == 0 { w[d] = sol[d]; } }
     multiply(w, z);
     var wr = 0.0;
     var wkw = 0.0;
+    var cold = 0.0;
     for d in n {
         if fixed[d] != 0 { continue; }
         wr += w[d] * r[d];
         wkw += w[d] * z[d];
+        cold += (r[d] + z[d]) * (r[d] + z[d]);
     }
     let alpha = if wkw > 0.0 { (wr + wkw) / wkw } else { 0.0 };
     for d in n {
@@ -115,6 +119,7 @@ fn warm_scale(r: f64[:], z: f64[:]) {
         sol[d] = alpha * w[d];
         r[d] -= (alpha - 1.0) * z[d];
     }
+    return cold;
 }
 
 // CG on K du = f - K u from the u in sol, for the matrix and the loads of
@@ -140,13 +145,13 @@ fn cg_solve(start: f64, key: i64, warm: bool) -> bool {
         f2 += f * f;
         r[d] = f - q[d];
     }
-    if warm { warm_scale(r, z); }
+    let r2 = if warm { warm_scale(r, z) } else { dot(r, r) };
     guard key < 0 || setup_preconditioner(key) else {
         last_iterations = 0;
         last_seconds = clock() - start;
         return false;
     }
-    let target = CG_TOLERANCE * sqrt(max(f2, dot(r, r)));
+    let target = CG_TOLERANCE * sqrt(max(f2, r2));
     precondition(r, z);
     for d in n { p[d] = z[d]; }
     var rz = dot(r, z);
