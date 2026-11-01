@@ -16,6 +16,7 @@ import std;
 namespace runtime;
 import .solve;
 import .fem;
+import .mesh;
 import solvers from "../solvers";
 
 // m of GMRES(m). On the grid cantilever (src/solvers/test.goose) with
@@ -26,8 +27,13 @@ import solvers from "../solvers";
 // restart at 100 or 200 stalls.
 let GMRES_RESTART = 300;
 
+// Whether the next cg with amg solve takes the direct solve of a lattice
+// (check_memory).
+var direct = false;
+
 fn solvers_solve(solver: u8[:], preconditioner: u8[:], b: f64[:], x: f64[>..]&, tol: f64,
                  max_it: i64) -> bool, bool, i64 {
+    if solver == "cg" && preconditioner == "amg" && direct { return direct_solve(b, x); }
     if solver == "cg" && preconditioner == "amg" { return amg_solve(b, x, tol, max_it); }
     guard solver == "gmres" && preconditioner == "ilu0" else { return false, false, 0; }
     var a: f64[>..] = [];
@@ -89,6 +95,22 @@ fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 
     return true, converged, its;
 }
 
+// The direct solve of a mesh on a lattice (solvers/nested.goose), on the
+// plan of check_memory. A page run takes the factor of the last run if K
+// is the same (solvers/warm.goose): a change of the loads alone then needs
+// only the two triangular solves.
+fn direct_solve(b: f64[:], x: f64[>..]&) -> bool, bool, i64 {
+    let key = solvers::warm_key();
+    guard !solvers::nested_reuse(key, row_start, col, val, fixed, b, x) else { return true, true, 1; }
+    guard solvers::nested_factor(row_start, col, val, fixed) else {
+        write_stderr(str("runtime: the direct solve has a pivot with no stiffness at dof ", solvers::nested_singular(), "\n"));
+        return true, false, 0;
+    }
+    solvers::nested_keep(key, row_start, col, val, fixed);
+    solvers::nested_solve(b, x, fixed);
+    return true, true, 1;
+}
+
 // The AMG levels of the matrix a, with the near null space of the physics
 // (solvers/modes.goose): the rigid-body modes of a solid (3 dofs for each
 // node) and the bending modes of a thin solid, the constant of each
@@ -110,6 +132,13 @@ fn mode_kind() -> i64 { return if dofs_per_node == 3 { solvers::ELASTIC_MODES } 
 // the modes of the AMG and their copy, and the basis of gmres with rhs, r, z, b, inv_diag and the
 // i64 diag and `where` of ILU(0).
 fn check_memory(entries: i64) {
+    // A lattice mesh takes the direct solve when it pays (solvers::nested_pays).
+    direct = preconditioner_name == "amg" && solver_name == "cg" && node_place.len == node_count() &&
+             solvers::nested_plan(lattice, node_place, dofs_per_node, row_start, col) && solvers::nested_pays(2);
+    if direct {
+        solvers::memory_check("lattice ldlt", solvers::nested_entries(), dof_total(), 2, 0, "");
+        return;
+    }
     let modes = if preconditioner_name == "amg" { solvers::mode_count(mode_kind(), coords, 3, dofs_per_node) } else { 0 };
     let vectors = if solver_name == "gmres" { GMRES_RESTART + 8 } else { 7 + 2 * modes };
     // The coarse levels of 9 modes hold more for each entry than those of 6.

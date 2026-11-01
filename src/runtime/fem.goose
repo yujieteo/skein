@@ -45,6 +45,7 @@ var cell_type: u8[>..] = [];        // the cell type of each cell
 var cell_start: i64[>..] = [0];     // the nodes of cell c are cell_nodes[cell_start[c]..cell_start[c + 1]]
 var cell_nodes: i64[>..] = [];
 var dofs_per_node = 3;              // dof p of node a is dofs_per_node a + p
+var node_place: i64[>..] = [];      // the lattice point of each node of a lattice mesh (mesh.goose), else empty
 
 // A field of the VTU output: the dofs first .. first + count - 1 of each
 // node. mesh_clear sets the one field u, the dofs 0 to 2. A lane that
@@ -80,6 +81,7 @@ fn mesh_clear() {
     cell_start.clear();
     cell_start.push(0);
     cell_nodes.clear();
+    node_place.clear();
     set_names.clear();
     set_is_face.clear();
     set_start.clear();

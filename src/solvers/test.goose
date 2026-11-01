@@ -8,6 +8,8 @@
 //    src/runtime/test.goose: the same tip deflection in fewer iterations.
 // 3. The near null space of each physics (modes.goose), and the AMG levels
 //    that a page keeps from one run to the next (warm.goose).
+// 4. The nested dissection solve (nested.goose) on a lattice with holes
+//    and fixed dofs: the residual of its solution.
 import std;
 import math;
 import runtime from "../runtime";
@@ -196,8 +198,9 @@ fn test_cantilever() {
     let cg_its, cg_tip = solve_cantilever("cg", "jacobi");
     let gm_its, gm_tip = solve_cantilever("gmres", "ilu0");
     if gm_its >= cg_its { fail(str("cantilever: GMRES+ILU(0) takes ", gm_its, " iterations, CG+Jacobi ", cg_its)); }
+    // The box is a lattice: cg with amg takes the direct solve (nested.goose).
     let amg_its, amg_tip = solve_cantilever("cg", "amg");
-    if amg_its * 3 >= cg_its { fail(str("cantilever: CG+AMG takes ", amg_its, " iterations, CG+Jacobi ", cg_its)); }
+    if amg_its != 1 { fail(str("cantilever: cg with amg takes ", amg_its, " iterations, not the direct solve")); }
 }
 
 // The memory check (memory.goose): the /proc fields, and an estimate of the
@@ -298,12 +301,65 @@ fn test_warm() {
     if solvers::amg_reuse(key, lap_rs, moved, lap_val, free) { fail("warm: amg_reuse of another pattern"); }
 }
 
+// A 7-point operator with 2 dofs for each node on a 9 x 7 x 6 lattice
+// with no node at the points of a hole and with the first plane of x
+// fixed: nested_solve gives x with |K x - b| <= 1e-10 |b|.
+fn test_nested() {
+    let lat: i64[3] = [9, 7, 6];
+    var place: i64[>..] = [];
+    var node_of: i64[>..] = [];
+    for p in lat[0] * lat[1] * lat[2] {
+        let i = p % 9;
+        let j = p / 9 % 7;
+        let hole = i >= 3 && i <= 5 && j >= 2 && j <= 4;
+        node_of.push(if hole { -1 } else { place.len });
+        if !hole { place.push(p); }
+    }
+    var rs: i64[>..] = [0];
+    var cl: i32[>..] = [];
+    var vl: f64[>..] = [];
+    var fixed: u8[>..] = [];
+    var b: f64[>..] = [];
+    let steps = [-63, -9, -1, 0, 1, 9, 63];
+    for p in place {
+        for c in 2 {
+            for s in steps {
+                let q = p + s;
+                let i = p % 9;
+                if q < 0 || q >= node_of.len || node_of[q] < 0 || (s == 1 && i == 8) || (s == -1 && i == 0) || (abs(s) == 9 && q / 63 != p / 63) { continue; }
+                for c2 in 2 {
+                    cl.push((2 * node_of[q] + c2) as i32);
+                    vl.push(if s == 0 { if c2 == c { 7.0 + 0.1 * c } else { 0.5 } } else if c2 == c { -1.0 } else { 0.0 });
+                }
+            }
+            rs.push(cl.len);
+            fixed.push(if p % 9 == 0 { 1 } else { 0 });
+            b.push(if p % 9 == 0 { 0.0 } else { sin(0.3 * p + c) });
+        }
+    }
+    if !solvers::nested_plan(lat, place, 2, rs, cl) { fail("nested: nested_plan"); return; }
+    if !solvers::nested_factor(rs, cl, vl, fixed) { fail("nested: nested_factor"); return; }
+    var x: f64[>..] = [];
+    solvers::zeros(x, b.len);
+    solvers::nested_solve(b, x, fixed);
+    var worst = 0.0;
+    for r in b.len {
+        if fixed[r] != 0 { continue; }
+        var s = -b[r];
+        for e in rs[r]..rs[r + 1] { if fixed[cl[e]] == 0 { s += vl[e] * x[cl[e]]; } }
+        worst = max(worst, abs(s));
+    }
+    print("nested: ", place.len, " nodes, ", solvers::nd_fronts.len, " fronts, residual ", worst / solvers::norm(b));
+    if !(worst <= 1.0e-10 * solvers::norm(b)) { fail(str("nested: the residual is ", worst)); }
+}
+
 fn main() {
     test_newton();
     test_cantilever();
     test_memory();
     test_modes();
     test_warm();
+    test_nested();
     if failures > 0 { exit(1); }
     print("solvers: all tests pass");
 }

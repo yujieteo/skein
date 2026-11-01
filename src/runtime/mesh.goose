@@ -75,6 +75,7 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
                 } else {
                     add_node(a, b, c);
                 }
+                node_place.push(node_place.len);
             }
         }
     }
@@ -212,7 +213,10 @@ fn build_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
                 }
                 for l in 27 {
                     let at = node_at(2 * i + l % 3, 2 * j + l / 3 % 3, 2 * k + l / 9);
-                    if ids[at] < 0 { ids[at] = add_node(px[2 * i + l % 3], py[2 * j + l / 3 % 3], pz[2 * k + l / 9]); }
+                    if ids[at] < 0 {
+                        ids[at] = add_node(px[2 * i + l % 3], py[2 * j + l / 3 % 3], pz[2 * k + l / 9]);
+                        node_place.push(at);
+                    }
                     nodes[l] = ids[at];
                 }
                 grid.push(add_cell(HEX27, nodes));

@@ -155,6 +155,7 @@ A sparse matrix is CSR in three arrays. The solvers use no other storage.
 | Newton | with a backtracking line search and the load ramp of `static(ramp:)` |
 | LOBPCG | for `modal` and `buckling` |
 | AMG | smoothed aggregation, with the near null space of each physics (`src/solvers/modes.goose`): the constant of a scalar field, the rigid-body modes of a solid, and 3 plate bending modes more for a thin 3D solid |
+| direct, lattice | multifrontal LDLᵀ on a nested dissection of a lattice (`src/solvers/nested.goose`): a static solve of `cg` with `amg` on a mesh of a lattice (a box or a union of boxes of hexahedra, a box or a plate of simplices) takes it when its work is at most 1e12 multiplies and adds and it fits in the memory. Else CG with AMG. The pattern of K gives the planes that can cut, so it fits each physics and cell type. |
 | threads | assembly and the matrix-vector products of CG and of the flow GMRES(m) run in Goose workers (`src/solvers/pool.goose`) |
 
 Goose threads share no memory. A worker gets a range of cells as a flat
@@ -265,9 +266,10 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    place than a slot stops the run with an error. Thus the first run in
    the page gives the records and the VTU file of `skein run --set`, bit
    for bit. A later run starts each solve from the files that the last
-   run left in `/warm` (`src/solvers/warm.goose`): the solution, and the
-   AMG levels if the matrix has the same pattern. Its records agree within
-   the solver tolerance.
+   run left in `/warm` (`src/solvers/warm.goose`): the solution, the
+   AMG levels if the matrix has the same pattern, and the factor of a
+   direct solve if the matrix is the same. Its records agree within the
+   solver tolerance.
 3. It runs that program natively at the default values, at the corner
    of the ranges with the most dofs, and at the other end of each range
    with the other params at their defaults. Thus each end of each range

@@ -225,7 +225,7 @@ fn assemble(path: u8[:], vectors: i64) {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
     internal.clear();
-    solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), "");
+    if !plan_direct(path, vectors) { solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), ""); }
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     let m = per_cell * ncomp;
@@ -243,6 +243,21 @@ fn assemble(path: u8[:], vectors: i64) {
     for w in workers { ids.push(thread_spawn(cell_worker)); }
     solvers::gather_cells(cell_count(), workers, m * m + m, add_cells);
     for id in ids { thread_wait(id); }
+}
+
+// Whether the static solve of the pattern takes the direct solve of a
+// lattice (solvers/nested.goose): a solve on `path` of a static step, on a
+// mesh of build_lattice, when it pays (solvers::nested_pays). It makes the
+// memory check of the direct solve.
+var direct = false;
+
+fn plan_direct(path: u8[:], vectors: i64) -> bool {
+    var place: i64[>..] = [];
+    for n in node_count() { place.push(n); }
+    direct = (path == "simplex elastic cg amg" || path == "simplex cg amg") && on_lattice &&
+             solvers::nested_plan(lat, place, ncomp, row_start, col) && solvers::nested_pays(vectors);
+    if direct { solvers::memory_check("lattice ldlt", solvers::nested_entries(), dof_total(), vectors, worker_mesh_bytes(), ""); }
+    return direct;
 }
 
 // The bytes of the globals that each cell_worker copies at its spawn.

@@ -90,8 +90,8 @@ fn solve_system() -> bool {
     hold_dead_nodes();
     for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
     let key = solvers::warm_key();
-    let warm = solvers::warm_start(key, sol, fixed);
-    let converged = if rad_count() > 0 { radiation_solve(start, key, warm) } else { cg_solve(start, key, warm) };
+    let warm = !direct && solvers::warm_start(key, sol, fixed);
+    let converged = if rad_count() > 0 { radiation_solve(start, key, warm) } else { linear_solve(start, key, warm) };
     if converged { solvers::warm_keep(key, sol); }
     return converged;
 }
@@ -185,6 +185,39 @@ fn cg_solve(start: f64, key: i64, warm: bool) -> bool {
     return converged;
 }
 
+// The solve of K du = f - K u from the u in sol: the direct solve of a
+// lattice (plan_direct), or cg_solve.
+fn linear_solve(start: f64, key: i64, warm: bool) -> bool {
+    return if direct { direct_static(start, key) } else { cg_solve(start, key, warm) };
+}
+
+// The direct solve of K du = f - K u (solvers/nested.goose) on the plan
+// of plan_direct, as cg_solve. With a key > 0, a page run takes the factor
+// of the last run if K is the same (solvers/warm.goose), and keeps its own.
+fn direct_static(start: f64, key: i64) -> bool {
+    let n = sol.len;
+    var r = zeros(n);
+    var du = zeros(n);
+    let sizes = state_sizes();
+    solvers::multiply(row_start, col, val, sol, du);
+    for d in n { r[d] = if fixed[d] != 0 { 0.0 } else { load[d] + assembled_source[d] - du[d] }; }
+    var done = key > 0 && solvers::nested_reuse(key, row_start, col, val, fixed, r, du);
+    if !done {
+        done = solvers::nested_factor(row_start, col, val, fixed);
+        if done {
+            if key > 0 { solvers::nested_keep(key, row_start, col, val, fixed); }
+            solvers::nested_solve(r, du, fixed);
+        } else {
+            write_stderr(str("elements: the direct solve has a pivot with no stiffness at dof ", solvers::nested_singular(), "\n"));
+        }
+    }
+    if done { for d in n { if fixed[d] == 0 { sol[d] += du[d]; } } }
+    guard state_sizes() == sizes else { abort("direct_static: a solve grows no array of the state (rule 3)"); }
+    last_iterations = 1;
+    last_seconds = clock() - start;
+    return done;
+}
+
 // The Picard iteration of radiation.goose: each step solves
 // (K + D) T' = f - R(T) + D T with CG, from T. The AMG levels of the first
 // step stay the preconditioner of the next steps: only D changes. At the end `load` holds
@@ -213,7 +246,7 @@ fn radiation_solve(start: f64, key: i64, warm: bool) -> bool {
         // Reason: a step after the first keeps the AMG levels of step 0. On
         // radiation_annulus_tri, the CG iterations stay at 210, the time
         // falls from 1.46 s to 1.18 s, and the result agrees within 1e-10.
-        guard cg_solve(start, if rad_steps == 0 { key } else { -1 }, warm && rad_steps == 0) else { return false; }
+        guard linear_solve(start, if rad_steps == 0 { key } else { -1 }, warm && rad_steps == 0) else { return false; }
         its += last_iterations;
         rad_steps++;
         var change = 0.0;
