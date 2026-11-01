@@ -36,7 +36,7 @@ models. It reports the verification checks that its solver implements.
 | `skein lint model.skn` | `check`, then the lint rules | Current |
 | `skein verify model.skn` | `check`, the mesh, and the pre-solve verification. No solve. | Current: mesh quality only |
 | `skein verify convergence model.skn` | the convergence study (checks.md §4.3) | Current: `fv`, `dg`, and scalar `rkpm` and `gfd` models |
-| `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex models only |
+| `skein build model.skn --target wasm` | writes the page of the model, which meshes and solves it in the browser | Current: `--target wasm`, simplex and hex models |
 | `skein run model.skn` | builds and runs the model, with the checks of its solver | Current: limited models |
 | `skein export model.skn` | writes the geometry of a part to STL or STEP (§7.1) | Current |
 | `skein view model.skn` | opens the results in the WebGL viewer | Planned |
@@ -320,10 +320,10 @@ in the browser (implementation.md §8). The page has a control for each
 `param` with a range of literals, for example `param L: Length = 200 mm
 in 100 mm..400 mm`. When a control changes, the page meshes the model
 again, solves it with the new values, and shows the records of the run
-in TOON, the `mesh_quality` record and the deformed mesh. The run in the
-page gives the same records and VTU file as `skein run --set` with the
-same values, on the CPU. The page also shows the records of a native run
-at the default values.
+in TOON, the `mesh_quality` record of a `tri` or `tet` mesh and the
+deformed mesh. The run in the page gives the same records and VTU file
+as `skein run --set` with the same values, on the CPU. The page also
+shows the records of a native run at the default values.
 
 When the browser has WebGPU, the page uses the GPU (src/gpu/):
 
@@ -347,11 +347,13 @@ and 1e-6 for the implicit solve. The implicit GPU path is slow on stiff
 3D models: sample 01 did not end in 15 min (roadmap, phase 4.5).
 
 It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
-`emcc` on `PATH`. It runs the model natively twice: at the default values
-and at the corner of the param ranges with the most dofs. A native run
-that fails stops `build` with an error. The peak memory of these runs
-sets the memory limit of the page: the author sets nothing. The memory of
-a run starts at 64 MB and grows to that limit. If the browser cannot give
+`emcc` on `PATH`. It runs the model natively at the default values, at
+the corner of the param ranges with the most dofs, and at the other end
+of each range with the other params at their defaults. Thus each end of
+each range has a native run. A native run that fails stops `build` with
+an error. The peak memory of these runs sets the memory limit of the
+page: the author sets nothing. The memory of a run starts at 64 MB and
+grows to that limit. If the browser cannot give
 the memory, the run stops and the page shows an error with the limit. A
 model that needs more than 15 GB gets a page with the native results only,
 and the page gives the size of the model.
@@ -359,10 +361,11 @@ and the page gives the size of the model.
 Current limits:
 
 - only the models of the simplex generator (`tri` or `tet` cells) and
-  the `fv` and `dg` models on a `rect` grid.
-  Sample 01 (the cantilever) is the validated model of the page. The
-  Hisada interposer model (`examples/package/interposer_warpage.skn`,
-  `hex27` cells) does not run in the page yet;
+  of the hex generator (a box, a sector or a union of boxes, `hex`
+  cells), and the `fv` and `dg` models on a `rect` grid. Sample 01 (the
+  cantilever) and the Hisada interposer model
+  (`examples/package/interposer_warpage.skn`, `hex27` cells) are the
+  validated models of the page;
 - a value must not change the structure of the program, for example the
   number of steps or of shapes. `build` stops with an error for such a
   `param`;
@@ -503,15 +506,20 @@ A model with errors gives no document: `md` writes the diagnostics of
 skein report samples/01_cantilever.skn --study sizes -o cantilever.html
 ```
 
-`report` runs `check`, `verify` and `run` on the model, then writes one
-HTML file. The file opens offline in a browser with WebGL2: it holds the
-viewer, the source, the tables and the results. Without `-o`, the file is
+`report` runs `check`, `verify` and `run` on the model, and `build
+--target wasm` (§7), then writes one HTML file. `report` does not run
+`build` if the model has no `param` with a range, or if the model is a
+shell or flow model or a scalar rkpm or gfd model, because the
+page of `build` cannot change or solve it. The file opens offline in a browser with WebGL2: it holds
+the viewer, the source, the tables, the results and the solve of the page
+of `build`. Without `-o`, the file is
 `<model>.html`. Without `--study`, the report uses the first study of the
 model, or a single run if the model has no study. With `--no-run`,
-`report` uses the last run of the study in `.skein/studies/` and solves
-nothing. Reason: the interposer sweep of 72 cases runs for more than an
-hour. `skein run --study` writes a hash of the source of the model and of
-its `use` files in `.skein/studies/<model>/<study>.hash`. If the hash is
+`report` uses the last run of the study in `.skein/studies/` and does not
+run the study. Reason: the interposer sweep of 72 cases runs for more than an
+hour. `report --no-run` still runs `build`, because the page solve is part
+of the file. `skein run --study` writes a hash of the source of the model
+and of its `use` files in `.skein/studies/<model>/<study>.hash`. If the hash is
 missing or is not the hash of the current source, `report --no-run` stops
 with exit status 2 and tells you to run `report` without `--no-run`.
 
@@ -532,9 +540,19 @@ solve of each step (cells, dofs, iterations, time, convergence), the
 verification checks with their values, limits and results, the reports,
 and the study table. Each row links to its line of the source.
 
-With a study, each param of the grid has a slider. A slider moves
-between the stored cases. The page does not solve: it shows only the
-cases of the native run.
+Each param of the study grid has a slider, and so does each param that
+has a control in the page of `build` (§7). A slider at the values of a
+stored case shows that case at once. A slider that stops at other values
+meshes and solves the model in the page, as the page of `build` does,
+and the viewer and the tables show that run. A value near a stored value
+(1 % of the range) takes the stored value. The page solve changes only
+the params with a control. If a study param without a control is not at
+its default, the page does not solve. If `report` does not run `build`,
+if `build` fails, or if the model is too large for the browser, the
+sliders move only between the stored cases. For a model that is too
+large, the page gives the memory that the model needs, as the page of
+`build` does. Reason: the interposer study has 72 cases, and its sliders
+must reach each value of each range.
 
 The input "Open VTU" opens a VTU file of another solver in the same
 viewer, without source links.
@@ -551,6 +569,7 @@ the size in bytes and the number of cases:
 report: cantilever.html
 bytes: 9123456
 cases: 16
+solve_in_page: yes
 ```
 
 The exit status is that of `run` (§10).

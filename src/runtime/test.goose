@@ -301,7 +301,7 @@ fn test_registry() {
 // 27-node hexahedra hold.
 fn test_thermal_grid() {
     let s = 1.0e-3;
-    runtime::mesh_grid([0.0, 1.0, 2.0], [0.0, 1.0], [0.0, 0.5, 0.6], [0.0, 0.0, 0.0, 2.0, 1.0, 0.5, 0.0, 0.0, 0.5, 2.0, 1.0, 0.6]);
+    runtime::mesh_union([0.0, 0.0, 0.0, 2.0, 1.0, 0.5, 0.0, 0.0, 0.5, 2.0, 1.0, 0.6], [], 1.0);
     runtime::material(E, NU);
     let bottom = runtime::material_box(E, NU, s, 0.0, 0.0, 0.0, 2.0, 1.0, 0.5);
     let top = runtime::material_box(E / 3.0, 0.25, s, 0.0, 0.0, 0.5, 2.0, 1.0, 0.6);

@@ -7,17 +7,22 @@
 //     profile.c       main.c with the profile of the data stacks
 //     native.toon     the run of profile.c at the default values
 //     corner.toon     its run at the corner of the ranges with the most dofs
+//     end.toon        its run at the other end of each range, one at a time
 //     wasm.c          main.c with the regions of WebAssembly
-//     <model>.html    the page, with the module in it
+//     solve.html      the module and the solve of the page (skein report
+//                     puts it in its page)
+//     <model>.html    the page, with solve.html in it
 //
 // A Goose data stack is a region of reserved address space with a guard
 // gap behind it. WebAssembly memory has no reservation and no guard
 // pages, so each stack gets a fixed region of memory64. Its size is the
-// larger peak of the stack in two native runs, at the default values and
-// at the corner of the param ranges with the most dofs, times 1.5 (1 MB
-// at least). A canary gap behind each region stops the run with an error
-// if a stack overruns it. The memory of the module grows to the regions
-// and 1.5 times the larger heap peak of the two runs. A model that needs
+// largest peak of the stack in the native runs, times 1.5 (1 MB at least).
+// The runs are at the default values, at the corner of the param ranges
+// with the most dofs, and at the other end of each range with the other
+// params at their defaults, so that each end of each range has a run. A
+// canary gap behind each region stops the run with an error if a stack
+// overruns it. The memory of the module grows to the regions and 1.5
+// times the largest heap peak of the runs. A model that needs
 // more than the browser gives (MAX_MEMORY_MB) gets the page without the
 // module, with the native results and its size.
 import std;
@@ -33,6 +38,35 @@ import .web;
 import .page;
 
 let BUILD_USAGE = "usage: skein build <file.skn> --target wasm\n";
+
+// Whether the generator of program `prog` is one that the page has: not
+// the shell or flow generator, and of the grid generator only fv and dg,
+// not a scalar rkpm or gfd model.
+fn page_lane(prog: i64) -> bool {
+    guard !shells_gen::claims(prog) && !flow_gen::claims(prog) else { return false; };
+    guard grid_gen::claims(prog) else { return true; };
+    var c = syntax::nodes[prog].first;
+    while c >= 0 {
+        if kind(c) == syntax::N_METHOD {
+            let word = syntax::text(syntax::nodes[c].aux);
+            if word == "fv" || word == "dg" { return true; }
+        }
+        c = syntax::nodes[c].next;
+    }
+    return false;
+}
+
+// Whether the page can take program `prog`: a `param` with a range, and
+// page_lane. `skein report` runs `build` only then.
+fn page_takes(prog: i64) -> bool {
+    guard page_lane(prog) else { return false; };
+    var c = syntax::nodes[prog].first;
+    while c >= 0 {
+        if kind(c) == syntax::N_PARAM && syntax::child_of_kind(c, syntax::N_RANGE) >= 0 { return true; }
+        c = syntax::nodes[c].next;
+    }
+    return false;
+}
 
 // The controls of program `prog`: each `param` with a range of two
 // literals in the unit of its default value. False, with an error, for
@@ -65,9 +99,11 @@ fn set_word(k: Control, v: f64) -> u8[>..] { return str(k.name, "=", v, if k.uni
 // The literals of `base` that change at the ends of the ranges of
 // `params`, in `slots`, and the corner of the ranges with the most dofs,
 // as words of --set, in `corner`: the end of each range with more dofs
-// than the other end. False, with an error on stderr, if a value changes
-// the program in another place.
-fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: i64[>..]&, corner: u8[..256][>..]&) -> bool {
+// than the other end. The other end of each range goes to `others`.
+// False, with an error on stderr, if a value changes the program in
+// another place.
+fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: i64[>..]&, corner: u8[..256][>..]&,
+              others: u8[..256][>..]&) -> bool {
     let lb = literals(base);
     var changed: bool[>..] = [];
     for l in lb { changed.push(false); }
@@ -75,7 +111,8 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
     for k in params {
         var most = -1;
         var end: u8[..256] = [];
-        for v in [k.lo, k.hi] {
+        var at_hi = false;
+        for v, j in [k.lo, k.hi] {
             let word = set_word(k, v);
             var words: const u8[:][>..] = [];
             words.push(word);
@@ -84,6 +121,7 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
             if dofs >= most {
                 most = dofs;
                 set256(end, word);
+                at_hi = j == 1;
             }
             let lp = literals(program);
             guard same_text(base, lb, program, lp) else {
@@ -101,6 +139,9 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
             }
         }
         corner.push(end);
+        var other: u8[..256] = [];
+        set256(other, set_word(k, if at_hi { k.lo } else { k.hi }));
+        others.push(other);
     }
     slots.clear();
     for c, i in changed {
@@ -178,7 +219,7 @@ fn page_program(path: u8[:], text: u8[:], base: u8[:], slots: i64[:]) -> u8[>..]
         while end < body.len && body[end] != '\n' { end++; }
         let line = body[at..end];
         if line == "fn main() {" { out.append("fn web_run() {"); }
-        else if line == "    print_records();" { out.append("    print_records();\n    web_quality();"); }
+        else if line == "    print_records();" && (web_simplex || web_grid) { out.append("    print_records();\n    web_quality();"); }
         else if line.len > 12 && line[..8] == "fn step_" && line[line.len - 4..] == "() {" {
             format(out, line, "\n    gpu::step_name(\"", line[8..line.len - 4], "\");");
         } else if !(line.len > 7 && line[..7] == "import ") { out.append(gpu_line(line)); }
@@ -262,6 +303,11 @@ fn build(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein build: cannot read '", path, "'\n"));
         return 1;
     };
+    let prog = syntax::parse_model(path, text);
+    if prog >= 0 && !page_lane(prog) {
+        write_stderr("skein build: --target wasm takes no shell, flow, scalar rkpm or gfd model\n");
+        return 1;
+    }
     var base: u8[>..] = [];
     var none: const u8[:][>..] = [];
     guard web_program(path, text, none, base) else { return 1; };
@@ -274,7 +320,8 @@ fn build(args: const u8[:][:]) -> i64 {
     model.append(model_name);
     var slots: i64[>..] = [];
     var corner: u8[..256][>..] = [];
-    guard find_slots(path, text, base, params, slots, corner) else { return 1; };
+    var others: u8[..256][>..] = [];
+    guard find_slots(path, text, base, params, slots, corner, others) else { return 1; };
     let dir = str(".skein/build/", model, "/web");
     guard make_dirs(str(dir, "/.skein/results/", model)) else {
         write_stderr("skein build: cannot make the directory .skein\n");
@@ -284,7 +331,7 @@ fn build(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein build: cannot write '", dir, "/main.goose'\n"));
         return 1;
     };
-    return build_page(dir, model, params, corner);
+    return build_page(dir, model, params, corner, others);
 }
 
 // Links each part of the compiler in `dir`, beside main.goose: the program
@@ -328,10 +375,11 @@ fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> 
     return true, seconds, max(heap, 0);
 }
 
-// Builds main.goose of `dir` to C, runs the profile at the default values
-// and at `corner`, and writes the page. goose gets the absolute path of
-// main.goose, so that each link resolves to one path.
-fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]) -> i64 {
+// Builds main.goose of `dir` to C, runs the profile at the default values,
+// at `corner` and at each word of `others` alone, and writes the page.
+// goose gets the absolute path of main.goose, so that each link resolves
+// to one path.
+fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:], others: u8[..256][:]) -> i64 {
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
     let q = shell_quoted(dir);
@@ -348,23 +396,29 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
         return 1;
     };
     var peaks: i64[>..] = [];
-    var more: i64[>..] = [];
     let none: u8[..256][>..] = [];
-    let ran, seconds, heap = profile_run(dir, none, "native.toon", peaks);
-    var heap_corner = 0;
-    if ran && corner.len > 0 {
-        let corner_ran, _, h = profile_run(dir, corner, "corner.toon", more);
-        guard corner_ran else { return 1; };
-        heap_corner = h;
+    let ran, seconds, first_heap = profile_run(dir, none, "native.toon", peaks);
+    guard ran else { return 1; };
+    var heap = first_heap;
+    // The end runs: n = 0 at the corner, n > 0 at the word n - 1 of
+    // `others` alone.
+    for n in 0..if corner.len > 0 { others.len + 1 } else { 0 } {
+        var sets: u8[..256][>..] = [];
+        if n == 0 { sets.append(corner); } else { sets.push(others[n - 1]); }
+        var more: i64[>..] = [];
+        let end_ran, _, h = profile_run(dir, sets, if n == 0 { "corner.toon" } else { "end.toon" }, more);
+        guard end_ran && more.len == peaks.len else { return 1; };
+        heap = max(heap, h);
+        for p, i in more { peaks[i] = max(peaks[i], p); }
     }
-    guard ran && (more.len == 0 || more.len == peaks.len) else { return 1; };
     var table: u8[>..] = [];
-    // The memory of the module: the regions, 1.5 times the larger heap
-    // peak, and 64 MB for the loader and the files, in 64 MB steps.
-    var total = ceil(1.5 * max(heap, heap_corner)) as! i64 + 64;
+    // The memory of the module: the regions, 1.5 times the largest heap
+    // peak, and 64 MB for the loader, the C stack and the files, in 64 MB
+    // steps.
+    var total = ceil(1.5 * heap) as! i64 + 64;
     var largest = 1;
     for p, i in peaks {
-        let mb = max(1, ceil(1.5 * max(p, if more.len > 0 { more[i] } else { 0 })) as! i64);
+        let mb = max(1, ceil(1.5 * p) as! i64);
         format(table, if i > 0 { "," } else { "" }, mb);
         total += mb;
         largest = max(largest, mb);
@@ -382,8 +436,9 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
         write_stderr("skein build: internal fault: cannot read src/gpu/kernels.wgsl and src/gpu/gpu.js. Please report it.\n");
         return 3;
     };
+    let solve = solve_html(model, params, glue, total, wgsl, gpu_js);
     let page = str(dir, "/", model, ".html");
-    guard write_file(page, page_html(model, params, native, glue, total, seconds, wgsl, gpu_js)) else {
+    guard write_file(str(dir, "/solve.html"), solve) && write_file(page, page_html(model, solve, native, seconds)) else {
         write_stderr(str("skein build: cannot write '", page, "'\n"));
         return 1;
     };
@@ -395,10 +450,11 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
 // WebAssembly module and its loader, one file of JavaScript, in `glue`.
 // The memory of the module starts at 64 MB and grows to `memory_mb` at
 // most. A growth that the browser cannot give stops the run with an error.
-// The C stack is 8 MB, as natively. Reason: the default of 64 KB overflowed
-// in the run of mms_fv_transient and broke the data with no error. JSPI
-// suspends the module while the GPU read-back waits. Reason: Asyncify
-// made emcc take 5 min in place of 80 s.
+// The C stack is 8 MB, as a native one: the 64 KB of emcc overflows in
+// the checker (check_expr_ty) at x_off = -0.8125 mm of the interposer, and
+// in the run of mms_fv_transient, and WebAssembly has no guard page to
+// stop it. JSPI suspends the module while the GPU read-back waits.
+// Reason: Asyncify made emcc take 5 min in place of 80 s.
 fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, memory_mb: i64, glue: u8[>..]&) -> bool {
     var wasm: u8[>..] = [];
     var patched: u8[>..] = [];
@@ -411,7 +467,7 @@ fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, m
     let emcc = str("emcc -O3 -w ", q, "/wasm.c -o ", shell_quoted(js), " -DGS_STACK_RESERVE='(", largest, "ull<<20)' -DGS_STACK_GAP=65536",
                    " -sMEMORY64=1 -sMODULARIZE=1 -sEXPORT_NAME=createSkein -sENVIRONMENT=worker,node -sSINGLE_FILE=1",
                    " -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=", memory_mb, "MB -sEXIT_RUNTIME=1 -sFORCE_FILESYSTEM=1",
-                   " -sEXPORTED_RUNTIME_METHODS=ENV,FS -sSTACK_SIZE=8MB -sJSPI=1 -sJSPI_IMPORTS=skein_gpu_js_read 1>&2");
+                   " -sSTACK_SIZE=8MB -sJSPI=1 -sJSPI_IMPORTS=skein_gpu_js_read -sEXPORTED_RUNTIME_METHODS=ENV,FS 1>&2");
     write_stderr("skein build: emcc\n");
     guard shell(emcc) == 0 && read_file(js, glue) else {
         write_stderr("skein build: emcc cannot build the module: put emcc on PATH\n");

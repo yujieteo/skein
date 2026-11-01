@@ -432,7 +432,7 @@ let BOX = 0;
 let CYLINDER = 1;
 let TUBE = 2;       // a cylinder minus a cylinder on the same axis
 let SECTOR = 3;     // a tube & a box that cuts the quarter x >= cx, y >= cy
-let UNION = 4;      // a union of boxes, a | b, on the grid of runtime::mesh_grid
+let UNION = 4;      // a union of boxes, a | b, on the grid of runtime::mesh_union
 
 // A solid. A box, and a union of boxes, span lo to hi in x, y and z. The
 // others span lo to hi in r, θ and z about the axis x = cx, y = cy, which
@@ -2201,7 +2201,8 @@ fn emit_laws(out: u8[>..]&) {
 // The grid lines along axis `a` of the union of boxes of the domain: each
 // face of each box, and each Point that a bc holds, is a grid plane.
 // Between two planes, the grid has the fewest equal cells of at most the
-// mesh size (spec §9.2, as src/mesher/grid.goose).
+// mesh size. The program meshes the same grid (runtime::mesh_union): this
+// copy gives only the dof estimate.
 fn grid_lines(a: i64) -> f64[>..] {
     let lo = domain.lo[a];
     let hi = domain.hi[a];
@@ -2232,21 +2233,22 @@ fn grid_lines(a: i64) -> f64[>..] {
 fn emit_grid_mesh(out: u8[>..]&) {
     format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ", system.length,
            ", with a grid plane on each face of each box and through each held Point\n");
-    out.append("    runtime::mesh_grid(");
-    for a in 0..3 {
-        out.append(if a == 0 { "[" } else { ",\n                      [" });
-        for x, i in grid_lines(a) {
-            if i > 0 { out.append(", "); }
-            lit(out, x);
-        }
-        out.push(']');
-    }
-    out.append(",\n                      [");
+    out.append("    runtime::mesh_union([");
     for x in 6 * domain.first..6 * (domain.first + domain.count) {
         if x > 6 * domain.first { out.append(", "); }
         lit(out, union_boxes[x]);
     }
-    out.append("]);\n");
+    out.append("],\n                       [");
+    var points = 0;
+    for q in point_sets {
+        if !q.held { continue; }
+        if points > 0 { out.append(", "); }
+        lits(out, q.at);
+        points++;
+    }
+    out.append("], ");
+    lit(out, mesh_size);
+    out.append(");\n");
     for q in point_sets {
         if !q.held { continue; }
         format(out, "    face(runtime::point_set(");

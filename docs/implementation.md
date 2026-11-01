@@ -18,7 +18,7 @@
 
 These notes describe the planned architecture for the
 [specification](skein_spec.md). The repository already contains a front end,
-mesh tools, native solvers and a browser solve for the simplex models.
+mesh tools, native solvers and a browser solve for the simplex and hex models.
 The SIR pipeline and the viewer remain planned work. See the [command reference](command_line.md) for the
 current interface and the [roadmap](roadmap.md) for the planned phases.
 
@@ -243,7 +243,7 @@ The browser runs the same Goose code, compiled to WebAssembly:
 |---|---|
 | `check`, `fmt`, `lint` | planned, in the editor, with no server |
 | mesher | yes, in the page of `skein build --target wasm` |
-| solve | yes, for the simplex models and the `fv` and `dg` grids whose data stacks fit in 15 GB. On the GPU with WebGPU: the explicit steps always, the implicit solves with the control of the page. |
+| solve | yes, for the simplex and hex models and the `fv` and `dg` grids whose memory fits in 15 GB. On the GPU with WebGPU: the explicit steps always, the implicit solves with the control of the page. |
 | viewer | planned, WebGL. The page draws the deformed surface mesh on a 2D canvas. |
 
 The browser target compiles the C that Goose writes with `emcc`, as earlier
@@ -254,25 +254,29 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    each end of the range of each param. The number literals that change
    become slots of the program of the page (`src/codegen/web.goose`).
    Reason: the program holds each value as a literal, and the page has no
-   Goose compiler.
+   Goose compiler. The program of a union of boxes gives the boxes and
+   the mesh size to `runtime::mesh_union`, which computes the grid lines.
+   Reason: the number of grid lines changes with the size of a box, and
+   a list of the lines would change the structure of the program.
 2. It writes the program of the page. It holds the parser, the checker,
    the generator, the mesher and the solvers. For the values of the page,
    it generates the program again, takes the literals of the slots from
    it, and runs the program with them. A program that differs in another
    place than a slot stops the run with an error. Thus the run in the page
    gives the records and the VTU file of `skein run --set`, bit for bit.
-3. It runs that program natively at the default values and at the corner
-   of the ranges with the most dofs, and measures the peak of each Goose
-   data stack and the peak resident memory. A run that fails stops the
-   build with an error.
+3. It runs that program natively at the default values, at the corner
+   of the ranges with the most dofs, and at the other end of each range
+   with the other params at their defaults. Thus each end of each range
+   has a run. It measures the peak of each Goose data stack and the peak
+   resident memory. A run that fails stops the build with an error.
 4. It compiles the C with `emcc` to 64-bit WebAssembly (memory64). Each
-   data stack gets a fixed region: 1.5 times the larger peak of the two
+   data stack gets a fixed region: 1.5 times the largest peak of the
    runs, 1 MB at least. Reason: WebAssembly memory has no address-space reservation and
    no guard pages (Goose `docs/design/wasm.md`, fixed partitions). A
    canary gap behind each region replaces the guard gap: each end of the
    run checks it, and an overrun stops the run with exit status 4. The
    memory starts at 64 MB and grows to the regions plus 1.5 times the
-   larger heap peak (the peak resident memory less the data stacks). A
+   largest heap peak (the peak resident memory less the data stacks). A
    growth that the browser refuses stops the run, and the page shows an
    error with that limit. The page cannot catch the kernel OOM killer: a
    host with no free memory can still stop the tab.
@@ -311,10 +315,18 @@ work (`src/gpu/kernels.wgsl`), and Goose sets up and controls the GPU
 `tests/gpu/gpu.test.mjs` runs each page in Node with the `webgpu` package
 (Dawn) and compares the GPU run with the CPU run.
 
-The page runs the simplex models and the `fv` and `dg` grids only. Sample 01
-(the cantilever) is the validated model of the page. The Hisada
-interposer model (`examples/package/interposer_warpage.skn`, `hex27`
-cells) does not run in the page yet.
+The page runs the simplex models (`tri` or `tet` cells), the hex models
+(a box, a sector or a union of boxes) and the `fv` and `dg` grids.
+Sample 01 (the cantilever) and the Hisada interposer model
+(`examples/package/interposer_warpage.skn`, `hex27` cells) are the
+validated models of the page. The interposer at
+the default values has 4839 cells and 139 449 dofs, and its memory limit
+is 2.9 GB (native peak: 1.7 GB). In Chromium 156, a run meshes and solves
+in 214 s on one thread (native: 263 s on all threads). For a value
+between the study cases of each of `t_int`, `t_rdl`, `h_bump`, `f_bump`
+and `x_off`, the warpage at point A in the page is that of `skein run
+--set` to 2e-8. Native runs with a number of threads other than 1 add
+their sums in another sequence, so they are not bit for bit.
 
 The front end needs little memory. The solver needs much more, so the
 browser limit on memory sets the size of the models that it can solve.
