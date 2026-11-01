@@ -366,20 +366,30 @@ fn explicit_force(u: f64[:], out: f64[:]) {
     }
 }
 
-// The explicit step of J2 at finite strain to the time `end` with the
-// step dt (dt <= 0 for the stable step of the elastic law), from the
-// velocity v0 on the free dofs. False if the state is not finite.
-fn solid_explicit(end: f64, dt: f64, v0: f64[3]) -> bool {
+// The start of an explicit step of J2 at finite strain to the time `end`
+// with the step dt (dt <= 0 for the stable step of the elastic law): the
+// velocity v0 on the free dofs, and the acceleration. The GPU path
+// (src/gpu/) starts with it too.
+fn solid_explicit_start(end: f64, dt: f64, v0: f64[3]) -> bool {
     guard solid_law == SOLID_J2_FINITE else { abort("solid_explicit: set_solid of J2 at finite strain"); }
-    let start = clock();
     guard cd_prepare(end, dt) else { return false; };
-    let n = sol.len;
-    for d in n { velocity[d] = if fixed[d] != 0 { 0.0 } else { v0[d % ncomp] }; }
-    let sizes = state_sizes();
-    let h = cd_dt;
+    for d in sol.len { velocity[d] = if fixed[d] != 0 { 0.0 } else { v0[d % ncomp] }; }
     explicit_force(sol, accel);
     cd_accel();
-    for i in cd_steps {
+    return true;
+}
+
+// The explicit step of J2 at finite strain from solid_explicit_start.
+// False if the state is not finite.
+fn solid_explicit(end: f64, dt: f64, v0: f64[3]) -> bool {
+    let start = clock();
+    guard solid_explicit_start(end, dt, v0) else { return false; };
+    let n = sol.len;
+    let sizes = state_sizes();
+    let h = cd_dt;
+    var steps = 0;
+    var finite = true;
+    while steps < cd_steps && finite {
         for d in n {
             velocity[d] += 0.5 * h * accel[d];
             sol[d] += h * velocity[d];
@@ -387,11 +397,18 @@ fn solid_explicit(end: f64, dt: f64, v0: f64[3]) -> bool {
         explicit_force(sol, accel);
         cd_accel();
         for d in n { velocity[d] += 0.5 * h * accel[d]; }
+        steps++;
+        // Reason: a step above the stable step gives NaN, and the steps of
+        // NaN are slow (the Taylor bar at 0.8 mm took 13 min to 40 us).
+        if steps % 100 == 0 || steps == cd_steps { finite = all_finite(sol); }
     }
     guard state_sizes() == sizes else { abort("solid_explicit: a solve grows no array of the state (rule 3)"); }
-    last_iterations = cd_steps;
+    last_iterations = steps;
     last_seconds = clock() - start;
-    var finite = true;
-    for v in sol { if !(abs(v) < 1.0e300) { finite = false; } }
     return finite;
+}
+
+fn all_finite(v: f64[:]) -> bool {
+    for x in v { if !(abs(x) < 1.0e300) { return false; } }
+    return true;
 }

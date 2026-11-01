@@ -16,6 +16,12 @@
 //
 // A static step is `static(ramp: n)`: n load increments, each with
 // Newton's method.
+//
+// Explicit dynamics of J2 at finite strain: the first-order form
+// `solves u: Vector<Length>, v: Vector<Velocity> = (vx, vy, vz)` with
+// `eq ddt(u) - v = 0` and `eq rho*ddt(v) - div(defgrad(u)*S) = 0`, and a
+// `transient` step with `scheme: central_difference`. `bc wall: v.z = 0`
+// holds u.z at its start value 0.
 import std;
 import math;
 namespace elements_gen;
@@ -43,6 +49,9 @@ var c_name: u8[..64];           // C = transpose(defgrad(u))*defgrad(u)
 var principal_name: u8[..64];   // c = principal(C)
 var energy_node = -1;           // the value of W
 var energy_fns: i64[>..];       // the fn items that W calls
+var velocity_name: u8[..64];    // v of the first-order form
+var velocity_start = -1;        // the initial value of v, or -1
+var dynamic_eq = false;         // eq rho*ddt(v) - div(defgrad(u)*S) = 0
 
 fn solid_reset() {
     solid_law = 0;
@@ -58,6 +67,49 @@ fn solid_reset() {
     principal_name = [];
     energy_node = -1;
     energy_fns.clear();
+    velocity_name = [];
+    velocity_start = -1;
+    dynamic_eq = false;
+}
+
+let DYNAMIC_FIX = "write solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0), with eq ddt(u) - v = 0 and eq rho*ddt(v) - div(defgrad(u)*S) = 0";
+
+// The second unknown: v of the first-order form.
+fn solid_unknown(c: i64) {
+    if velocity_name.len > 0 { unsupported(tok(c), "a third unknown", DYNAMIC_FIX); }
+    set64(velocity_name, name(c));
+    velocity_start = child(c, 1);
+}
+
+// The eqs of the first-order form: ddt(u) - v = 0, and
+// rho*ddt(v) - div(x) = 0 with x as in solid_eq. False for another eq.
+fn solid_dynamic_eq(c: i64) -> bool {
+    guard velocity_name.len > 0 && source_of(child(c, 1)) == "0" else { return false; }
+    let left = child(c, 0);
+    guard kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "-" else { return false; }
+    let a = child(left, 0);
+    let b = child(left, 1);
+    if source_of(a) == str("ddt(", unknown_name, ")") && source_of(b) == velocity_name { return true; }
+    let inertia = source_of(a) == str("rho*ddt(", velocity_name, ")");
+    guard inertia && is_call(b, "div") && solid_eq(arg(b, 0)) else { return false; }
+    dynamic_eq = true;
+    return true;
+}
+
+// The left side of a traction bc: sigma*n, or defgrad(u)*S*n at finite
+// strain, a load on the reference shape (P N).
+fn traction_target() -> u8[>..] {
+    if finite_eq { return str("defgrad(", unknown_name, ")*", flux_name, "*n"); }
+    return str(flux_name, "*n");
+}
+
+// `bc wall: v.z = 0` of the first-order form: b fixes u.z at 0. False for
+// another target.
+fn solid_velocity_bc(target: i64, v: i64, b: Bc&) -> bool {
+    guard velocity_name.len > 0 && kind(target) == syntax::N_MEMBER && source_of(first(target)) == velocity_name else { return false; }
+    b.comp = axis_of(name(target));
+    if b.comp < 0 || source_of(v) != "0" { unsupported(tok(v), "this generator holds a component of v at 0", "write bc wall: v.z = 0"); }
+    return true;
 }
 
 // `state x: T = 0`.
@@ -165,6 +217,9 @@ fn solid_finish(n: i64) {
     }
     if strain_state.len > 0 && plastic_tok < 0 { unsupported(tok(n), "hooke(E, nu, strain(u) - eps_p) needs a plastic block", PLASTIC_FIX); }
     if solid_law == SOLID_J2 && finite_strain { solid_law = SOLID_J2_FINITE; }
+    if velocity_name.len > 0 && (!dynamic_eq || solid_law != SOLID_J2_FINITE) {
+        unsupported(tok(n), "the first-order form is in this generator for J2 at finite strain only", DYNAMIC_FIX);
+    }
     if solid_law == SOLID_ENERGY && !finite_strain { unsupported(tok(n), "an energy W needs assume finite_strain", ENERGY_FIX); }
     if finite_strain && solid_law == 0 { unsupported(tok(n), "finite_strain needs a plastic block or an energy", ENERGY_FIX); }
     if solid_law == SOLID_ENERGY { energy_calls(energy_node); }
@@ -238,6 +293,16 @@ let SOLID_PRELUDE = """
         if !converged { failed = true; }
     }
 
+    // An explicit step of the nonlinear solid from the start velocity
+    // (vx, vy, vz). Its cg_iterations are its time steps.
+    fn explicit_solid(step: u8[:], end: f64, dt: f64, vx: f64, vy: f64, vz: f64) {
+        converged = elements::explicit_solid(end, dt, vx, vy, vz);
+        format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
+               elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        if !converged { failed = true; }
+    }
+
     """;
 
 // The law of the solid, after the elastic law.
@@ -256,8 +321,20 @@ fn emit_solid_law(out: u8[>..]&) {
     format(out, ", ", if solid_law == SOLID_J2_FINITE { "true" } else { "false" }, ");\n");
 }
 
-// The solve of static step s.
+// The solve of step s: a static step, or the explicit step of the
+// first-order form.
 fn emit_solid_solve(out: u8[>..]&, s: Step) {
+    if s.procedure == TRANSIENT {
+        let v0 = if velocity_start >= 0 { value(velocity_start).v } else { [0.0; 3] };
+        out.append("    explicit_solid(");
+        quoted(out, s.name);
+        for x in [s.end, s.dt, v0[0], v0[1], v0[2]] {
+            out.append(", ");
+            lit(out, x);
+        }
+        out.append(");\n");
+        return;
+    }
     out.append("    nonlinear(");
     quoted(out, s.name);
     if solid_law == SOLID_ENERGY {

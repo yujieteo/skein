@@ -357,7 +357,7 @@ fn except_surface(g: i64) -> bool {
 // the region.
 fn fix(comp: i64, v: f64) { fix_region(comp, v); }
 
-// Holds component `comp` of each node of the region at VALUE(x, y, z), a
+// Holds component `comp` of each node of the region at VALUE([x, y, z]), a
 // function of the program: a fixed value that varies on the region.
 fn fix_with<VALUE>(comp: i64) { fix_region_with(comp, VALUE); }
 

@@ -978,8 +978,9 @@ fn physics_item(n: i64) {
             } else {
                 unsupported(tok(c), "this generator has the templates linear_elastic(b) and heat(q_v)", PHYSICS_FIX);
             }
+        } else if k == syntax::N_UNKNOWN && unknown_name.len > 0 {
+            solid_unknown(c);
         } else if k == syntax::N_UNKNOWN {
-            if unknown_name.len > 0 { unsupported(tok(c), "a second unknown", PHYSICS_FIX); }
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
         } else if k == syntax::N_MATASSIGN {
@@ -1001,6 +1002,8 @@ fn physics_item(n: i64) {
                 physics = p;
                 set64(flux_name, name(c));
             }
+        } else if k == syntax::N_EQN && solid_dynamic_eq(c) {
+            if dynamic_eq && eq_count == 0 { eq_count++; }
         } else if k == syntax::N_EQN && physics == WAVE {
             eq_count++;
             wave_eq(c);
@@ -1282,13 +1285,15 @@ fn bc(n: i64) -> i64 {
         }
         if physics == HEAT && x.n != 1 { unsupported(tok(v), "T is a scalar", "write T = 20 degC"); }
         b.v = x.v;
+    } else if solid_velocity_bc(target, v, b) {
+        b.v[0] = 0.0;
     } else if member && physics == ELASTIC && axis_of(name(target)) >= 0 {
         b.comp = axis_of(name(target));
         b.v[0] = scalar_value(v);
-    } else if physics == ELASTIC && t == str(flux_name, "*n") && pressure_of(v) == pressure_of(v) {
+    } else if physics == ELASTIC && t == traction_target() && pressure_of(v) == pressure_of(v) {
         b.kind = BC_PRESSURE;
         b.v[0] = pressure_of(v);
-    } else if physics == ELASTIC && t == str(flux_name, "*n") {
+    } else if physics == ELASTIC && t == traction_target() {
         let x = value(v);
         if x.n != dim { unsupported(tok(v), "the traction is a vector", BC_FIX_TEXT); }
         b.kind = BC_LOAD;
@@ -1427,6 +1432,7 @@ fn transient(proc: i64, s: Step&) {
     if !scheme { unsupported(tok(proc), "this generator has the explicit scheme central_difference", "add scheme: central_difference"); }
     if s.end <= 0.0 || s.dt < 0.0 { unsupported(tok(proc), "the step needs an end after the start, and dt >= 0", TRANSIENT_FIX); }
     if physics != ELASTIC { unsupported(tok(proc), "a transient step needs the linear_elastic template", PHYSICS_FIX); }
+    if solid_law > 0 && !dynamic_eq { unsupported(tok(proc), "a transient step of a nonlinear solid needs the first-order form", DYNAMIC_FIX); }
     if density <= 0.0 || region_laws.len > 0 {
         unsupported(tok(proc), "a transient step needs the density rho of one material", "give rho: Density = 7850 kg/m^3 in the material");
     }
@@ -2367,7 +2373,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         // still counts in the reaction.
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
-        if s.procedure == TRANSIENT {
+        if s.procedure == TRANSIENT && solid_law == 0 {
             out.append("    explicit(");
             quoted(out, s.name);
             out.append(", ");

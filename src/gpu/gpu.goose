@@ -9,6 +9,7 @@
 //
 //     central_difference   elements::central_difference: an explicit step,
 //                          on the GPU whenever the page has WebGPU
+//     explicit_solid       elements::explicit_solid: the same
 //     grid_transient       grid::solve_transient (ssprk3 of fv and dg): the
 //                          same
 //     solve                elements::solve: an implicit step, on the GPU
@@ -83,6 +84,10 @@ let B_CP: i32 = 22;
 let B_CQ: i32 = 23;
 let B_PART: i32 = 25;
 let B_SC: i32 = 26;
+let B_GEO: i32 = 30;
+let B_CONN: i32 = 31;
+let B_PST: i32 = 32;
+let B_PF: i32 = 33;
 
 var ready = -1;                 // skein_gpu_ready, or -1 before the first solve
 var step: u8[..64] = [];        // the step that the program runs
@@ -264,6 +269,141 @@ fn central_difference(end: f64, dt: f64) -> bool {
     }
     let ok = read(u, elements::sol) && read(v, elements::velocity);
     skein_gpu_reset();
+    elements::last_iterations = elements::cd_steps;
+    elements::last_seconds = clock() - start;
+    return ok && finite(elements::sol);
+}
+
+// ---- explicit_solid ----
+
+// The (point, node) pairs of each node, for sd_kick: the pairs of node n
+// are pairs[starts[n]..starts[n + 1]], each as (point) * nodes of a cell +
+// (the node in the cell).
+fn node_points(starts: i64[>..]&, pairs: i64[>..]&) {
+    let nn = elements::node_count();
+    let pc = elements::per_cell;
+    let nq = elements::quad_count(elements::dim);
+    var fill: i64[>..] = [];
+    starts.clear();
+    for i in nn + 1 { starts.push(0); }
+    for c in elements::cell_count() {
+        for l in pc { starts[elements::cell_node(c, l) + 1] += nq; }
+    }
+    for i in nn {
+        starts[i + 1] += starts[i];
+        fill.push(starts[i]);
+    }
+    pairs.clear();
+    for i in starts[nn] { pairs.push(0); }
+    for c in elements::cell_count() {
+        for qp in nq {
+            for l in pc {
+                let n = elements::cell_node(c, l);
+                pairs[fill[n]] = (c * nq + qp) * pc + l;
+                fill[n]++;
+            }
+        }
+    }
+}
+
+// For each point, the gradients of the nodes of its cell (x, y and z)
+// and its volume, for sd_point.
+fn point_geometry() -> i32 {
+    let nq = elements::quad_count(elements::dim);
+    let pc = elements::per_cell;
+    let b = skein_gpu_buffer(4 * elements::cell_count() * nq * (3 * pc + 1));
+    put_start(b);
+    for c in elements::cell_count() {
+        for qp in nq {
+            let xi, w = elements::quad_point(elements::dim, qp);
+            let dv = w * elements::cell_geometry(c, xi) * elements::thickness;
+            for l in pc {
+                for t in 3 { put(if t < elements::dim { elements::grad[3 * l + t] } else { 0.0 }); }
+            }
+            put(dv);
+        }
+    }
+    flush();
+    return b;
+}
+
+// Cp⁻¹ (Voigt) and alpha of each point, for sd_point.
+fn point_state() -> i32 {
+    let np = elements::pt_alpha.len;
+    let b = skein_gpu_buffer(4 * 7 * np);
+    put_start(b);
+    for q in np {
+        for k in 6 { put(elements::pt_state[6 * q + k]); }
+        put(elements::pt_alpha[q]);
+    }
+    flush();
+    return b;
+}
+
+// The explicit step of J2 at finite strain of elements, on the GPU when
+// the page has WebGPU. Each step is cd_drift, sd_point (the forces of the
+// points) and sd_kick (their sums at the dofs). At the end the CPU takes
+// u, v and the state of the points back, and computes the forces again.
+fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool {
+    guard present() else {
+        note("explicit_solid", false);
+        return elements::explicit_solid(end, dt, vx, vy, vz);
+    };
+    note("explicit_solid", true);
+    let start = clock();
+    guard elements::solid_explicit_start(end, dt, [vx, vy, vz]) else { return false; };
+    let n = elements::sol.len;
+    let np = elements::pt_alpha.len;
+    let pc = elements::per_cell;
+    let m = elements::j2;
+    skein_gpu_reset();
+    let p = upload([n * 1.0, elements::cd_dt, np * 1.0, pc * 1.0, elements::quad_count(elements::dim) * 1.0,
+                    m.lame, m.shear, m.yield0, m.hard, elements::ncomp * 1.0]);
+    var starts: i64[>..] = [];
+    var pairs: i64[>..] = [];
+    node_points(starts, pairs);
+    let rows = upload_ints(starts);
+    let cols = upload_ints(pairs);
+    var cells: i64[>..] = [];
+    for c in elements::cell_count() {
+        for l in pc { cells.push(elements::cell_node(c, l)); }
+    }
+    let conn = upload_ints(cells);
+    let geo = point_geometry();
+    let pst = point_state();
+    let pf = zeros(3 * np * pc);
+    let w = upload(elements::minv);
+    let f = zeros(n);
+    put_start(f);
+    for d in n { put(elements::minv[d] * elements::force[d]); }
+    flush();
+    let u = upload(elements::sol);
+    let v = upload(elements::velocity);
+    let a = upload(elements::accel);
+    let drift = bind("cd_drift", [B_P, p, B_U, u, B_V, v, B_ACC, a]);
+    let point = bind("sd_point", [B_P, p, B_GEO, geo, B_CONN, conn, B_U, u, B_PST, pst, B_PF, pf]);
+    let kick = bind("sd_kick", [B_P, p, B_ROWS, rows, B_COLS, cols, B_V, v, B_ACC, a, B_W, w, B_F, f, B_PF, pf]);
+    var done = 0;
+    while done < elements::cd_steps {
+        let k = min(BATCH, elements::cd_steps - done);
+        for i in k {
+            dispatch(drift, n);
+            dispatch(point, np);
+            dispatch(kick, n);
+        }
+        skein_gpu_submit();
+        done += k;
+    }
+    var state: f64[>..] = [];
+    for i in 7 * np { state.push(0.0); }
+    let ok = read(u, elements::sol) && read(v, elements::velocity) && read(pst, state);
+    skein_gpu_reset();
+    for q in np {
+        for k in 6 { elements::pt_state[6 * q + k] = state[7 * q + k]; }
+        elements::pt_alpha[q] = state[7 * q + 6];
+    }
+    elements::explicit_force(elements::sol, elements::accel);
+    elements::cd_accel();
     elements::last_iterations = elements::cd_steps;
     elements::last_seconds = clock() - start;
     return ok && finite(elements::sol);

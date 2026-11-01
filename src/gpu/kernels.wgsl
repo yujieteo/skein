@@ -6,6 +6,7 @@
 // 65535 (src/gpu/gpu.js), so thread i is gid.x + 64 nwg.x gid.y.
 //
 //   central_difference  cd_drift, cd_kick (src/elements/explicit.goose)
+//   explicit_solid      cd_drift, sd_point, sd_kick (src/elements/solid.goose)
 //   ssprk3, dg          rk_stage (src/grid/solve.goose)
 //   ssprk3, fv          fv_grad, fv_minmax, fv_venkat, fv_stage (src/grid/fv.goose)
 //   cg, Jacobi          cg_start, cg_matvec, cg_update, cg_direction, cg_shift, reduce
@@ -50,6 +51,14 @@ const WG: u32 = 64u;
 @group(0) @binding(25) var<storage, read_write> part: array<f32>;
 @group(0) @binding(26) var<storage, read_write> sc: array<f32>;
 
+// explicit_solid: for each point, the gradients of its cell nodes and
+// its volume, the nodes of the cells, Cp⁻¹ (Voigt) and alpha of each
+// point, and the force of each node of each point.
+@group(0) @binding(30) var<storage, read> geo: array<f32>;
+@group(0) @binding(31) var<storage, read> conn: array<u32>;
+@group(0) @binding(32) var<storage, read_write> pst: array<f32>;
+@group(0) @binding(33) var<storage, read_write> pf: array<f32>;
+
 var<workgroup> sh0: array<f32, WG>;
 var<workgroup> sh1: array<f32, WG>;
 
@@ -75,6 +84,130 @@ fn cd_kick(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) nw:
     var s = 0.0;
     for (var e = rows[i]; e < rows[i + 1u]; e++) { s += vals[e] * u[cols[e]]; }
     acc[i] = f[i] - s;
+    v[i] += 0.5 * P[1] * acc[i];
+}
+
+// ---- explicit_solid: J2 at finite strain, P = (n, dt, points, nodes of a
+// cell, points of a cell, lame, shear, yield0, hard, components of a
+// node). A 2D model is in plane strain: u.z = 0 and the gradients have
+// z = 0. ----
+
+// The eigenvalues l and the eigenvectors e (the columns) of a symmetric
+// matrix.
+struct Eigen {
+    l: vec3f,
+    e: mat3x3f,
+}
+
+// The Jacobi rotations of elements::sym_eigen.
+fn sym_eigen(a0: mat3x3f) -> Eigen {
+    var a = a0;
+    var e = mat3x3f(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+    var size = 0.0;
+    for (var k = 0u; k < 3u; k++) { size += dot(a0[k], a0[k]); }
+    for (var sweep = 0; sweep < 10; sweep++) {
+        let off = a[1][0] * a[1][0] + a[2][0] * a[2][0] + a[2][1] * a[2][1];
+        if (off <= 1e-14 * size) { break; }
+        for (var k = 0u; k < 3u; k++) {
+            let p = select(0u, 1u, k == 2u);
+            let q = select(2u, 1u, k == 0u);
+            if (a[q][p] == 0.0) { continue; }
+            let theta = (a[q][q] - a[p][p]) / (2.0 * a[q][p]);
+            let t = select(-1.0, 1.0, theta >= 0.0) / (abs(theta) + sqrt(theta * theta + 1.0));
+            let c = 1.0 / sqrt(t * t + 1.0);
+            var r = mat3x3f(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+            r[p][p] = c;
+            r[q][q] = c;
+            r[q][p] = t * c;
+            r[p][q] = -t * c;
+            a = transpose(r) * a * r;
+            e = e * r;
+        }
+    }
+    return Eigen(vec3f(a[0][0], a[1][1], a[2][2]), e);
+}
+
+fn spectral(d: vec3f, e: mat3x3f) -> mat3x3f {
+    return e * mat3x3f(d.x, 0.0, 0.0, 0.0, d.y, 0.0, 0.0, 0.0, d.z) * transpose(e);
+}
+
+fn inverse3(m: mat3x3f) -> mat3x3f {
+    let c0 = cross(m[1], m[2]);
+    let c1 = cross(m[2], m[0]);
+    let c2 = cross(m[0], m[1]);
+    return transpose(mat3x3f(c0, c1, c2)) * (1.0 / dot(m[0], c0));
+}
+
+// The force of each node of point q: P ∇N dV, with P = τ F⁻ᵀ of the
+// return map of elements::j2_finite, which updates Cp⁻¹ and alpha.
+@compute @workgroup_size(WG)
+fn sd_point(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) nw: vec3u) {
+    let q = thread(g, nw);
+    if (q >= u32(P[2])) { return; }
+    let pc = u32(P[3]);
+    let nc = u32(P[9]);
+    let cell = q / u32(P[4]);
+    let gq = q * (3u * pc + 1u);
+    var f = mat3x3f(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+    for (var l = 0u; l < pc; l++) {
+        let n = conn[cell * pc + l];
+        let un = vec3f(u[nc * n], u[nc * n + 1u], select(0.0, u[nc * n + 2u], nc == 3u));
+        for (var j = 0u; j < 3u; j++) { f[j] += un * geo[gq + 3u * l + j]; }
+    }
+    let s7 = 7u * q;
+    let cpi = mat3x3f(pst[s7], pst[s7 + 3u], pst[s7 + 5u], pst[s7 + 3u], pst[s7 + 1u], pst[s7 + 4u],
+                      pst[s7 + 5u], pst[s7 + 4u], pst[s7 + 2u]);
+    let be = sym_eigen(f * cpi * transpose(f));
+    let e = be.e;
+    var eps = 0.5 * log(be.l);
+    let lame = P[5];
+    let mu = P[6];
+    let t = vec3f(lame * (eps.x + eps.y + eps.z)) + 2.0 * mu * eps;
+    let p = (t.x + t.y + t.z) / 3.0;
+    let s = t - vec3f(p);
+    let qs = sqrt(1.5 * dot(s, s));
+    let alpha = pst[s7 + 6u];
+    let fy = qs - (P[7] + P[8] * alpha);
+    var theta = 1.0;
+    if (fy > 1e-12 * P[7] && qs > 0.0) {
+        let dg = fy / (3.0 * mu + P[8]);
+        eps -= 1.5 * dg * s / qs;
+        pst[s7 + 6u] = alpha + dg;
+        theta = 1.0 - 3.0 * mu * dg / qs;
+    }
+    let finv = inverse3(f);
+    let c = finv * spectral(exp(2.0 * eps), e) * transpose(finv);
+    pst[s7] = c[0][0];
+    pst[s7 + 1u] = c[1][1];
+    pst[s7 + 2u] = c[2][2];
+    pst[s7 + 3u] = c[1][0];
+    pst[s7 + 4u] = c[2][1];
+    pst[s7 + 5u] = c[2][0];
+    let pk = spectral(vec3f(p) + theta * s, e) * transpose(finv);
+    let dv = geo[gq + 3u * pc];
+    for (var l = 0u; l < pc; l++) {
+        let gl = vec3f(geo[gq + 3u * l], geo[gq + 3u * l + 1u], geo[gq + 3u * l + 2u]);
+        let fl = pk * gl * dv;
+        let o = 3u * (q * pc + l);
+        pf[o] = fl.x;
+        pf[o + 1u] = fl.y;
+        pf[o + 2u] = fl.z;
+    }
+}
+
+// a = M⁻¹ f - M⁻¹ (the sum of the forces of the points of the node of
+// dof i), and the half kick of v. rows and cols list the (point, node)
+// pairs of each node, and w holds M⁻¹.
+@compute @workgroup_size(WG)
+fn sd_kick(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) nw: vec3u) {
+    let i = thread(g, nw);
+    if (i >= count()) { return; }
+    let nc = u32(P[9]);
+    let n = i / nc;
+    let k = i % nc;
+    var s = 0.0;
+    for (var e = rows[n]; e < rows[n + 1u]; e++) { s += pf[3u * cols[e] + k]; }
+    acc[i] = f[i] - w[i] * s;
     v[i] += 0.5 * P[1] * acc[i];
 }
 

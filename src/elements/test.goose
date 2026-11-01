@@ -1049,9 +1049,9 @@ fn test_j2_points() {
 // u = G X on the faces of a box of P2 tetrahedra with the free nodes
 // inside: a homogeneous deformation. The reaction on the face x = 1 is
 // P e_x times its area, with P = F S of neo_hooke.
-fn g_x(x: f64, y: f64, z: f64) -> f64 { return 0.3 * x + 0.1 * y; }
-fn g_y(x: f64, y: f64, z: f64) -> f64 { return -0.1 * y + 0.05 * z; }
-fn g_z(x: f64, y: f64, z: f64) -> f64 { return 0.02 * x - 0.08 * z; }
+fn g_x(p: f64[3]) -> f64 { return 0.3 * p[0] + 0.1 * p[1]; }
+fn g_y(p: f64[3]) -> f64 { return -0.1 * p[1] + 0.05 * p[2]; }
+fn g_z(p: f64[3]) -> f64 { return 0.02 * p[0] - 0.08 * p[2]; }
 
 fn test_solid_energy() {
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2, 2, 2);
