@@ -33,6 +33,7 @@ import .stages;
 import .eigen;
 import .wave;
 import .radiation;
+import .explicit;
 import .edge;
 import .mixed;
 
@@ -368,6 +369,11 @@ fn solve() -> bool {
     if physics == MIXED { return mixed_solve(); }
     return if physics == WAVE { wave_solve() } else { solve_system() };
 }
+
+// The transient step central_difference (explicit.goose) to the time
+// `end`, with the step dt, or the stable step for dt <= 0, from rest.
+// Returns false if the state is not finite.
+fn central_difference(end: f64, dt: f64) -> bool { return central_difference_cpu(end, dt); }
 
 // Component `comp` of u, or T (comp 0), at a point, and whether a cell
 // holds the point.

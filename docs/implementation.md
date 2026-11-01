@@ -243,7 +243,7 @@ The browser runs the same Goose code, compiled to WebAssembly:
 |---|---|
 | `check`, `fmt`, `lint` | planned, in the editor, with no server |
 | mesher | yes, in the page of `skein build --target wasm` |
-| solve | yes, for the simplex and hex models whose memory fits in 15 GB |
+| solve | yes, for the simplex and hex models and the `fv` and `dg` grids whose memory fits in 15 GB. On the GPU with WebGPU: the explicit steps always, the implicit solves with the control of the page. |
 | viewer | planned, WebGL. The page draws the deformed surface mesh on a 2D canvas. |
 
 The browser target compiles the C that Goose writes with `emcc`, as earlier
@@ -284,10 +284,42 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    Worker and a module of its own. Thus a new value stops the run before
    it, and the memory of a run goes back when it ends.
 
-The page runs the simplex models (`tri` or `tet` cells) and the hex
-models (a box, a sector or a union of boxes). Sample 01 (the cantilever)
-and the Hisada interposer model (`examples/package/interposer_warpage.skn`,
-`hex27` cells) are the validated models of the page. The interposer at
+The page uses WebGPU as goosestrike does: WGSL compute kernels do the
+work (`src/gpu/kernels.wgsl`), and Goose sets up and controls the GPU
+(`src/gpu/gpu.goose`):
+
+1. The program of the page calls the solves of `gpu` in place of the
+   solves of `elements`, `grid` and `meshless` (`GPU_CALLS` in
+   `src/codegen/build.goose`). Each solve writes the device row of its
+   step, and takes the CPU path when the page has no GPU device. Modal,
+   buckling and the static steps of `fv`, `dg` and `rkpm` always use the
+   CPU. Only the program of the page imports `gpu`, so `skein run` links
+   no GPU code.
+2. Goose converts the matrix and the vectors to f32 buffers, binds them to
+   the kernels and records the dispatches. The GPU keeps the state
+   between two read-backs. Each kernel binds at most 8 storage buffers,
+   the default limit of WebGPU: `central_difference` and `dg` scale the
+   rows of the matrix by 1/m or the stage weight on the CPU, so that no
+   kernel needs them.
+3. The C externs of `gpu` call the methods of `src/gpu/gpu.js` through
+   `Module.skeinGpu`. The read-back waits for the GPU: JSPI suspends the
+   module during the wait. The native profile run links stubs that report
+   no GPU.
+4. For `ssprk3`, the CPU gives the source and the boundary values of each
+   stage (`grid::stage_terms`), and the GPU does the rest of the stage.
+5. The implicit GPU path is CG with the Jacobi preconditioner in f32 on
+   the GPU, in a defect correction in f64 on the CPU. Each pass solves
+   K d = r to a relative residual of 1e-3, adds d to u and computes r
+   again, until the residual of the CPU solve holds.
+
+`tests/gpu/gpu.test.mjs` runs each page in Node with the `webgpu` package
+(Dawn) and compares the GPU run with the CPU run.
+
+The page runs the simplex models (`tri` or `tet` cells), the hex models
+(a box, a sector or a union of boxes) and the `fv` and `dg` grids.
+Sample 01 (the cantilever) and the Hisada interposer model
+(`examples/package/interposer_warpage.skn`, `hex27` cells) are the
+validated models of the page. The interposer at
 the default values has 4839 cells and 139 449 dofs, and its memory limit
 is 2.9 GB (native peak: 1.7 GB). In Chromium 156, a run meshes and solves
 in 214 s on one thread (native: 263 s on all threads). For a value

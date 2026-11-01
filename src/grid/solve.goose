@@ -153,41 +153,74 @@ fn stable_dt() -> f64 {
     return if rate > 0.0 { CFL * ct / rate } else { 1.0e300 };
 }
 
+// The weight 1/(ct m) of dof d in a stage: m is the volume of the cell
+// (fv) or the diagonal of the mass matrix (dg).
+fn stage_weight(d: i64) -> f64 { return 1.0 / (ct * (if method == FV { hx * hy } else { mass(d % per_cell()) })); }
+
 // out = c0 u0 + c1 (v - dt R(v, t)/(ct M)), the stage of SSP-RK3.
 fn stage<SRC, BC>(u0: f64[:], v: f64[:], t: f64, dt: f64, c0: f64, c1: f64, out: f64[:]) {
     if method == DG { dg_rhs(t, rhs, SRC, BC); }
     residual(v, t, r, SRC, BC);
-    let n = per_cell();
-    for d in out.len {
-        let m = if method == FV { hx * hy } else { mass(d % n) };
-        out[d] = c0 * u0[d] + c1 * (v[d] - dt * r[d] / (ct * m));
+    for d in out.len { out[d] = c0 * u0[d] + c1 * (v[d] - dt * r[d] * stage_weight(d)); }
+}
+
+// The terms of a stage at time t that the GPU path of the page
+// (src/gpu/) takes from the CPU, one value at a time through OUT: b(t)
+// times the stage weight of each dof (dg), or the value of each boundary
+// face with a condition, 4 for each cell, and then the source times the
+// volume of each cell (fv).
+fn stage_terms<SRC, BC, OUT>(t: f64) {
+    if method == DG {
+        dg_rhs(t, rhs, SRC, BC);
+        for d in dof_count() { OUT(stage_weight(d) * rhs[d]); }
+        return;
     }
+    for c in cell_count() {
+        for s in 4 { OUT(if face_bc[4 * c + s] >= 0 { face_value(c, s, t, BC) } else { 0.0 }); }
+    }
+    for c in cell_count() {
+        let p = centre(c);
+        OUT(SRC(p[0], p[1], t) * hx * hy);
+    }
+}
+
+// The checks before a transient solve to `end` with the step dt (dt <= 0
+// for the stable step), and the matrix of dg. It gives the step and the
+// count of steps.
+fn transient_start(end: f64, dt: f64) -> f64, i64 {
+    guard method >= 0 && ct > 0.0 && end > time && sol.len == dof_count() && u1.len == sol.len else { abort("solve_transient: a method, ct > 0, end after the time of the state, and clear_bcs"); }
+    solvers::memory_check("grid ssprk3", col.len, dof_count(), 6, 0, "");
+    if method == DG { matrix(); }
+    let h = if dt > 0.0 { dt } else { stable_dt() };
+    let steps = max(1, ceil((end - time) / h - 1.0e-9) as! i64);
+    return (end - time) / steps, steps;
+}
+
+// The end of a transient solve of `steps` steps to `end`. False if the
+// state is not finite.
+fn transient_end(end: f64, steps: i64) -> bool {
+    time = end;
+    iterations = steps;
+    linear_iterations = 0;
+    var finite = true;
+    for v in sol { if !(abs(v) < 1.0e300) { finite = false; } }
+    return finite;
 }
 
 // Integrates from the time of the state to `end` with the step dt, or
 // with the stable step for dt <= 0. False if the state is not finite.
 fn solve_transient<SRC, BC>(end: f64, dt: f64) -> bool {
-    guard method >= 0 && ct > 0.0 && end > time && sol.len == dof_count() && u1.len == sol.len else { abort("solve_transient: a method, ct > 0, end after the time of the state, and clear_bcs"); }
     let start = clock();
     let sizes = state_sizes();
-    solvers::memory_check("grid ssprk3", col.len, dof_count(), 6, 0, "");
-    if method == DG { matrix(); }
-    let h = if dt > 0.0 { dt } else { stable_dt() };
-    let steps = max(1, ceil((end - time) / h - 1.0e-9) as! i64);
-    let k = (end - time) / steps;
+    let k, steps = transient_start(end, dt);
     let t0 = time;
     for i in steps {
         let t = t0 + i * k;
         stage(sol, sol, t, k, 0.0, 1.0, u1, SRC, BC);
         stage(sol, u1, t + k, k, 0.75, 0.25, u2, SRC, BC);
         stage(sol, u2, t + 0.5 * k, k, 1.0 / 3.0, 2.0 / 3.0, sol, SRC, BC);
-        time = t + k;
     }
-    time = end;
-    iterations = steps;
-    linear_iterations = 0;
-    var finite = true;
-    for v in sol { if !(abs(v) < 1.0e300) { finite = false; } }
+    let finite = transient_end(end, steps);
     guard state_sizes() == sizes else { abort("solve_transient: a solve grows no array of the state (rule 3)"); }
     last_seconds = clock() - start;
     return finite;

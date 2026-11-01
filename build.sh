@@ -9,6 +9,12 @@
 #                       model, whose solves check rule 3, and skein run
 #                       checks rule 7. Then scripts/power_of_ten.sh checks
 #                       rules 1, 4 and 5.
+#   ./build.sh gpu      build, then check the GPU path of the page of
+#                       `skein build --target wasm` against its CPU path
+#                       in Node (tests/gpu/gpu.test.mjs). Needs emcc, Node
+#                       and `npm install` in tests/gpu. With no GPU adapter
+#                       the checks skip, and SKEIN_GPU=1 makes that a
+#                       failure.
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.
@@ -45,5 +51,6 @@ run_tests() {
 case "${1:-build}" in
     build) build ;;
     test) build && run_tests ;;
-    *) echo "usage: ./build.sh [build|test]" >&2; exit 2 ;;
+    gpu) build && node --test --test-reporter=spec "$root/tests/gpu/gpu.test.mjs" ;;
+    *) echo "usage: ./build.sh [build|test|gpu]" >&2; exit 2 ;;
 esac

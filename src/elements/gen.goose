@@ -321,12 +321,15 @@ struct Step {
     first_freq: i64,    // the frequencies of a harmonic step in `freqs`
     freq_count: i64,
     damping: f64,       // the damping ratio of a harmonic step
+    end: f64,           // the end time of a transient step
+    dt: f64,            // its time step, or 0 for dt: stable
 }
 
 let STATIC = 0;
 let MODAL = 1;
 let BUCKLING = 2;
 let HARMONIC = 3;
+let TRANSIENT = 4;  // central_difference (src/elements/explicit.goose)
 
 // What a point field samples (api.goose: value_at, stress_at, flux_at).
 let FIELD_VALUE = 0;
@@ -410,7 +413,7 @@ var bloch_period: f64[3] = [0.0; 3];
 var bloch_theta = 0.0;          // dot(k, period)
 var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0, report_count: 0,
                       first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0, first_freq: 0, freq_count: 0,
-                      damping: 0.0 };   // the step that step() reads
+                      damping: 0.0, end: 0.0, dt: 0.0 };   // the step that step() reads
 
 fn reset() {
     density = 0.0;
@@ -1277,7 +1280,7 @@ fn step(n: i64) {
     let proc = child(n, 0);
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
                    first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false,
-                   procedure: STATIC, count: 0, first_freq: 0, freq_count: 0, damping: 0.0 };
+                   procedure: STATIC, count: 0, first_freq: 0, freq_count: 0, damping: 0.0, end: 0.0, dt: 0.0 };
     set64(s.name, name(n));
     procedure(proc, s);
     step_now = s;
@@ -1334,9 +1337,13 @@ fn procedure(proc: i64, s: Step&) {
         harmonic(proc, s);
         return;
     }
+    if p == "transient" {
+        transient(proc, s);
+        return;
+    }
     guard p == "modal" || p == "buckling" else {
         if p != "static" || first(proc) >= 0 {
-            unsupported(tok(proc), "this generator has static steps with no arguments, and modal and buckling steps with count",
+            unsupported(tok(proc), "this generator has static steps with no arguments, modal and buckling steps with count, and transient steps with central_difference",
                         "write step load: static { ... } or step modes: modal(count: 6) { ... }");
         }
         return;
@@ -1359,6 +1366,37 @@ fn procedure(proc: i64, s: Step&) {
     }
     if s.procedure == BUCKLING && steps.len == 0 {
         unsupported(tok(proc), "a buckling step needs a static step before it: its stress", "add step preload: static { ... } before it");
+    }
+}
+
+let TRANSIENT_FIX = "write step pulse: transient(end: 1 ms, dt: stable, scheme: central_difference) { ... }";
+
+// A transient step of linear_elastic: transient(end:, dt:, scheme:
+// central_difference), from rest, with the density of one material.
+fn transient(proc: i64, s: Step&) {
+    s.procedure = TRANSIENT;
+    var scheme = false;
+    var a = first(proc);
+    while a >= 0 {
+        let named = syntax::nodes[a].aux;
+        let w = if named >= 0 { syntax::text(named) } else { "" };
+        let v = first(a);
+        if w == "end" {
+            s.end = scalar_value(v);
+        } else if w == "dt" {
+            s.dt = if kind(v) == syntax::N_NAME && name(v) == "stable" { 0.0 } else { scalar_value(v) };
+        } else if w == "scheme" && source_of(v) == "central_difference" {
+            scheme = true;
+        } else {
+            unsupported(tok(a), "this generator has transient(end:, dt:, scheme: central_difference)", TRANSIENT_FIX);
+        }
+        a = next(a);
+    }
+    if !scheme { unsupported(tok(proc), "this generator has the explicit scheme central_difference", "add scheme: central_difference"); }
+    if s.end <= 0.0 || s.dt < 0.0 { unsupported(tok(proc), "the step needs an end after the start, and dt >= 0", TRANSIENT_FIX); }
+    if physics != ELASTIC { unsupported(tok(proc), "a transient step needs the linear_elastic template", PHYSICS_FIX); }
+    if density <= 0.0 || region_laws.len > 0 {
+        unsupported(tok(proc), "a transient step needs the density rho of one material", "give rho: Density = 7850 kg/m^3 in the material");
     }
 }
 
@@ -1406,15 +1444,15 @@ fn harmonic(proc: i64, s: Step&) {
 fn eigen_step(own: bool) -> Step {
     var at = if own { step_now } else { Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0,
                                                report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0,
-                                               first_freq: 0, freq_count: 0, damping: 0.0 } };
-    if !own { for st in steps { if st.procedure != STATIC { at = st; } } }
+                                               first_freq: 0, freq_count: 0, damping: 0.0, end: 0.0, dt: 0.0 } };
+    if !own { for st in steps { if st.procedure == MODAL || st.procedure == BUCKLING { at = st; } } }
     return at;
 }
 
 // eigenvalue(k) of eigen_step(own): k - 1, or -1 if it is not a mode of it.
 fn eigen_index(e: i64, own: bool) -> i64 {
     guard is_call(e, "eigenvalue") && syntax::child_count(e) == 2 else { return -1; }
-    let count = if eigen_step(own).procedure != STATIC { eigen_step(own).count } else { 0 };
+    let count = eigen_step(own).count;
     let k = scalar_value(arg(e, 0)) as! i64;
     if k < 1 || k > count {
         unsupported(tok(e), str("eigenvalue(", k, ") is not a mode of the modal or buckling step"), str("give 1 <= k <= ", count));
@@ -1858,6 +1896,16 @@ let PRELUDE = """
         if !converged { failed = true; }
     }
 
+    // A transient step: central_difference from rest to `end`. The
+    // cg_iterations of its solve record are its time steps.
+    fn explicit(step: u8[:], end: f64, dt: f64) {
+        converged = elements::central_difference(end, dt);
+        format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
+               elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        if !converged { failed = true; }
+    }
+
     // A modal (or buckling) step: the count lowest modes, by LOBPCG.
     fn eigen(step: u8[:], count: i64, modal: bool) {
         converged = if modal { elements::modal(count) } else { elements::buckling(count) };
@@ -2208,11 +2256,11 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         emit_harmonic_step(out, si, results_dir);
         return;
     }
-    if s.procedure != STATIC {
+    if s.procedure == MODAL || s.procedure == BUCKLING {
         emit_eigen_step(out, si, results_dir);
         return;
     }
-    format(out, "// step ", s.name, ": static\n");
+    format(out, "// step ", s.name, ": ", if s.procedure == TRANSIENT { "transient, central_difference" } else { "static" }, "\n");
     format(out, "fn step_", s.name, "() {\n");
     // After the clear: clear_bcs keeps the solution of the last step,
     // which a birth reads.
@@ -2225,9 +2273,19 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         // still counts in the reaction.
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_bc(out, b); } }
-        out.append("    solve(");
-        quoted(out, s.name);
-        out.append(");\n");
+        if s.procedure == TRANSIENT {
+            out.append("    explicit(");
+            quoted(out, s.name);
+            out.append(", ");
+            lit(out, s.end);
+            out.append(", ");
+            lit(out, s.dt);
+            out.append(");\n");
+        } else {
+            out.append("    solve(");
+            quoted(out, s.name);
+            out.append(");\n");
+        }
         if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, s.name); }
         // The state of the step, for a `results` of another model.
         if rkpm_support <= 0.0 {
@@ -2238,7 +2296,8 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             out.append(");\n");
         }
     }
-    format(out, "    equilibrium(\"", reaction_unit(), "\");\n");
+    // A transient step has the inertia forces too: no equilibrium check.
+    if s.procedure == STATIC { format(out, "    equilibrium(\"", reaction_unit(), "\");\n"); }
     if physics == ELASTIC {
         for b in active[s.first_bc..s.first_bc + s.bc_count] {
             if b.kind != BC_SOURCE { continue; }

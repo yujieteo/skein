@@ -1,0 +1,45 @@
+// A steel bar, fixed at one end, under a sudden traction S at the other
+// end, in plane stress on P2 triangles, with the explicit step
+// central_difference. With nu = 0 the bar is one dimensional: a wave of
+// the speed c = sqrt(E/rho) goes from the tip to the root, and the tip
+// moves with the speed S/(rho*c) until the wave comes back at 2*L/c. Thus
+// at t = L/c the tip displacement is S*L/E, the static value.
+
+model bar_wave_tri: 2d, mm_N_MPa_s
+
+param L: Length = 100 mm in 50 mm..200 mm
+let h: Length = 10 mm
+let S: Pressure = 100 MPa
+let E: Pressure = 200 GPa
+let rho: Density = 7850 kg/m^3
+let c: Velocity = (E/rho)^0.5
+
+scales L, S, L/c
+
+let bar: Surface = rect((0, 0) mm, (L, h))
+let root: Curve = boundary(bar, x == 0 mm)
+let tip: Curve = boundary(bar, x == L)
+
+material steel {
+    E: Pressure = E
+    nu: Real = 0
+    rho: Density = rho
+}
+
+mesh m on bar {
+    size: 2.5 mm
+    cell: tri
+}
+
+physics solid on bar: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_stress(1 mm)
+}
+
+step pulse: transient(end: L/c, dt: stable, scheme: central_difference) {
+    bc root: u = 0
+    bc tip: sigma*n = (S, 0)
+    output u
+    report u.x at (L, h/2)
+    expect tip_u: u.x at (L, h/2) == S*L/E within 2%
+}
