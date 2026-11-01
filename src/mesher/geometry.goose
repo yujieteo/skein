@@ -25,7 +25,9 @@ let FILL = 13;
 
 // `a` and `b` are child nodes, the first point and the point count of a
 // polygon or a fill, or the child node and the copy count of a pattern. `p`
-// holds the numbers of the primitive.
+// holds the numbers of the primitive. A fill of a nurbs has p[0] = 1: its
+// span i is the 12 numbers from polygon_points[2 a + 12 i], and b is the
+// span count + 1.
 struct Shape {
     kind: i64,
     a: i64,
@@ -81,6 +83,88 @@ fn fill(xy: f64[:]) -> i64 {
     let first = polygon_points.len / 2;
     for v in xy { polygon_points.push(v); }
     return add_shape(FILL, first, xy.len / 2, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// The region inside the NURBS curve of degree p (1 to 3) with the knots
+// `knots` and the points x, y, w of `xyw`, and the line from its end to
+// its start (spec §8.1). The knots do not fall, and the first and the
+// last are each p + 1 times. Knot insertion (Boehm) makes each inner knot
+// p times: then each knot span is a rational Bézier curve of degree p,
+// which is raised to degree 3.
+fn fill_nurbs(p: i64, knots: f64[:], xyw: f64[:]) -> i64 {
+    guard p >= 1 && p <= 3 && knots.len == xyw.len / 3 + p + 1 && xyw.len / 3 >= p + 1 else {
+        abort("fill_nurbs: 1 <= p <= 3, p + 1 points or more, and a knot for each point and p + 1 more");
+    }
+    var k: f64[>..] = [];
+    k.append(knots);
+    // The homogeneous points: x w, y w, w.
+    var h: f64[>..] = [];
+    for i in xyw.len / 3 {
+        let w = xyw[3 * i + 2];
+        h.push(xyw[3 * i] * w);
+        h.push(xyw[3 * i + 1] * w);
+        h.push(w);
+    }
+    var i = p + 1;
+    while i < k.len - p - 1 {
+        var m = 1;
+        while i + m < k.len - p - 1 && k[i + m] == k[i] { m++; }
+        let u = k[i];
+        for r in p - m { insert_knot(p, k, h, u); }
+        i += max(m, p);
+    }
+    let first = polygon_points.len / 2;
+    var spans = 0;
+    for j in (h.len / 3 - 1) / p {
+        let c = bezier_span(p, h[3 * j * p..]);
+        for v in c { polygon_points.push(v); }
+        spans++;
+    }
+    return add_shape(FILL, first, spans + 1, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+// Inserts the knot u once into the curve of degree p with the knots k and
+// the homogeneous points h (Boehm). k[p] <= u < k[k.len - p - 1].
+fn insert_knot(p: i64, k: f64[>..]&, h: f64[>..]&, u: f64) {
+    var s = p;
+    while s + 1 < k.len - p - 1 && k[s + 1] <= u { s++; }
+    var q: f64[>..] = [];
+    for i in h.len / 3 + 1 {
+        for c in 3 {
+            if i <= s - p {
+                q.push(h[3 * i + c]);
+            } else if i > s {
+                q.push(h[3 * (i - 1) + c]);
+            } else {
+                let a = (u - k[i]) / (k[i + p] - k[i]);
+                q.push(a * h[3 * i + c] + (1.0 - a) * h[3 * (i - 1) + c]);
+            }
+        }
+    }
+    var kk: f64[>..] = [];
+    kk.append(k[..s + 1]);
+    kk.push(u);
+    kk.append(k[s + 1..]);
+    k = copy(kk);
+    h = copy(q);
+}
+
+// The span of the rational Bézier curve of degree p with the homogeneous
+// points h[0..3 (p + 1)], raised to degree 3, as the cubics of x w, y w
+// and w (span).
+fn bezier_span(p: i64, h: f64[:]) -> f64[12] {
+    var c: f64[12] = default<f64[12]>();
+    for d in 3 {
+        fn at(i: i64) -> f64 { h[3 * i + d] }
+        var b: f64[4] = [at(0), at(1), at(2), at(3 % (p + 1))];
+        if p == 1 { b = [at(0), (2.0 * at(0) + at(1)) / 3.0, (at(0) + 2.0 * at(1)) / 3.0, at(1)]; }
+        if p == 2 { b = [at(0), (at(0) + 2.0 * at(1)) / 3.0, (2.0 * at(1) + at(2)) / 3.0, at(2)]; }
+        c[4 * d] = b[0];
+        c[4 * d + 1] = 3.0 * (b[1] - b[0]);
+        c[4 * d + 2] = 3.0 * (b[2] - 2.0 * b[1] + b[0]);
+        c[4 * d + 3] = b[3] - 3.0 * b[2] + 3.0 * b[1] - b[0];
+    }
+    return c;
 }
 
 // The 2D shape s, from z = 0 to z = h.
@@ -161,6 +245,14 @@ fn polygon_phi(first: i64, count: i64, x: f64, y: f64) -> f64 {
 // are reflections: 2 P(0) - P(1) and 2 P(n-1) - P(n-2).
 fn fill_point(g: i64, k: i64) -> f64[2] {
     let s = shapes[g];
+    if s.p[0] == 1.0 {
+        // A nurbs: the start of span 0 or the end of the last span.
+        let c = stored_span(g, if k <= 0 { 0 } else { s.b - 2 });
+        let u = if k <= 0 { 0.0 } else { 1.0 };
+        let x, _, _ = cubic(c, 0, u);
+        let y, _, _ = cubic(c, 1, u);
+        return [x, y];
+    }
     fn at(j: i64) -> f64[2] { [polygon_points[2 * (s.a + j)], polygon_points[2 * (s.a + j) + 1]] }
     if k < 0 {
         let a = at(0);
@@ -175,11 +267,21 @@ fn fill_point(g: i64, k: i64) -> f64[2] {
     return at(k);
 }
 
+// Span i of the nurbs of fill node g.
+fn stored_span(g: i64, i: i64) -> f64[12] {
+    var c: f64[12] = default<f64[12]>();
+    for j in 12 { c[j] = polygon_points[2 * shapes[g].a + 12 * i + j]; }
+    return c;
+}
+
 // Span i of fill node g, from point i to point i + 1, as the cubics
-// x = c0 + c1 u + c2 u^2 + c3 u^3 (c[0..4]) and y (c[4..8]) for u in
-// [0, 1]. The spline is the centripetal Catmull-Rom spline (Yuksel et al.
-// 2011) in its Hermite form: it has no cusp and no loop in a span.
-fn span(g: i64, i: i64) -> f64[8] {
+// X = c0 + c1 u + c2 u^2 + c3 u^3 (c[0..4]), Y (c[4..8]) and W (c[8..12])
+// for u in [0, 1]: the point is (X / W, Y / W). The spline is the
+// centripetal Catmull-Rom spline (Yuksel et al. 2011) in its Hermite
+// form, with W = 1: it has no cusp and no loop in a span. A nurbs keeps
+// its spans in polygon_points.
+fn span(g: i64, i: i64) -> f64[12] {
+    if shapes[g].p[0] == 1.0 { return stored_span(g, i); }
     let p0 = fill_point(g, i - 1);
     let p1 = fill_point(g, i);
     let p2 = fill_point(g, i + 1);
@@ -188,7 +290,8 @@ fn span(g: i64, i: i64) -> f64[8] {
     let d0 = knot(p0, p1);
     let d1 = knot(p1, p2);
     let d2 = knot(p2, p3);
-    var c: f64[8] = default<f64[8]>();
+    var c: f64[12] = default<f64[12]>();
+    c[8] = 1.0;
     for k in 2 {
         let m1 = d1 * ((p1[k] - p0[k]) / d0 - (p2[k] - p0[k]) / (d0 + d1) + (p2[k] - p1[k]) / d1);
         let m2 = d1 * ((p2[k] - p1[k]) / d1 - (p3[k] - p1[k]) / (d1 + d2) + (p3[k] - p2[k]) / d2);
@@ -200,25 +303,37 @@ fn span(g: i64, i: i64) -> f64[8] {
     return c;
 }
 
-// The value of cubic j (0 is x, 1 is y) of span c at u, and its first and
-// second derivatives.
-fn cubic(c: f64[8], j: i64, u: f64) -> f64, f64, f64 {
-    let a = 4 * j;
-    return c[a] + u * (c[a + 1] + u * (c[a + 2] + u * c[a + 3])),
-           c[a + 1] + u * (2.0 * c[a + 2] + u * 3.0 * c[a + 3]),
-           2.0 * c[a + 2] + 6.0 * u * c[a + 3];
+// The value of coordinate j (0 is x, 1 is y) of span c at u, and its
+// first and second derivatives: v = N / W, by the quotient rule.
+fn cubic(c: f64[12], j: i64, u: f64) -> f64, f64, f64 {
+    fn poly(a: i64) -> f64, f64, f64 {
+        return c[a] + u * (c[a + 1] + u * (c[a + 2] + u * c[a + 3])),
+               c[a + 1] + u * (2.0 * c[a + 2] + u * 3.0 * c[a + 3]),
+               2.0 * c[a + 2] + 6.0 * u * c[a + 3];
+    }
+    let n, n1, n2 = poly(4 * j);
+    let w, w1, w2 = poly(8);
+    let v = n / w;
+    let v1 = (n1 - w1 * v) / w;
+    return v, v1, (n2 - 2.0 * w1 * v1 - w2 * v) / w;
 }
 
-// The box x0, y0, x1, y1 of the Bézier points of span c. It holds the span.
-fn span_box(c: f64[8]) -> f64[4] {
+// Whether span c has W = 1: a span of a spline.
+fn polynomial(c: f64[12]) -> bool { c[8] == 1.0 && c[9] == 0.0 && c[10] == 0.0 && c[11] == 0.0 }
+
+// The box x0, y0, x1, y1 of the Bézier points of span c. It holds the
+// span: the weights are above 0.
+fn span_box(c: f64[12]) -> f64[4] {
     var b: f64[4] = [1.0e300, 1.0e300, -1.0e300, -1.0e300];
+    fn bezier(a: i64) -> f64[4] {
+        [c[a], c[a] + c[a + 1] / 3.0, c[a] + (2.0 * c[a + 1] + c[a + 2]) / 3.0, c[a] + c[a + 1] + c[a + 2] + c[a + 3]]
+    }
+    let w = bezier(8);
     for j in 2 {
-        let a = 4 * j;
-        let e: f64[4] = [c[a], c[a] + c[a + 1] / 3.0, c[a] + (2.0 * c[a + 1] + c[a + 2]) / 3.0,
-                         c[a] + c[a + 1] + c[a + 2] + c[a + 3]];
-        for v in e {
-            b[j] = min(b[j], v);
-            b[2 + j] = max(b[2 + j], v);
+        let e = bezier(4 * j);
+        for v, i in e {
+            b[j] = min(b[j], v / w[i]);
+            b[2 + j] = max(b[2 + j], v / w[i]);
         }
     }
     return b;
@@ -227,9 +342,36 @@ fn span_box(c: f64[8]) -> f64[4] {
 // The number of times span c crosses the ray from (x, y) along +x, with
 // the half-open rule of polygon_phi. Each piece between 2 zeros of dy/du
 // is monotone in y, so it crosses at most once.
-fn span_crossings(c: f64[8], x: f64, y: f64) -> i64 {
-    var cuts: f64[4] = [0.0, 1.0, 1.0, 1.0];
+fn span_crossings(c: f64[12], x: f64, y: f64) -> i64 {
+    var cuts: f64[6] = [0.0, 1.0, 1.0, 1.0, 1.0, 1.0];
     var count = 1;
+    if !polynomial(c) {
+        // The zeros of dy/du of a rational span: its numerator has degree
+        // 4 or less, so 64 samples and a bisection at each change of sign
+        // find them, apart from a double zero, where y does not turn.
+        var lo = 0.0;
+        let _, d0, _ = cubic(c, 1, 0.0);
+        var dlo = d0;
+        for m in 64 {
+            let hi = (m + 1) / 64.0;
+            let _, dhi, _ = cubic(c, 1, hi);
+            if (dlo > 0.0) != (dhi > 0.0) && count < 5 && hi < 1.0 {
+                var a = lo;
+                var b = hi;
+                for r in 60 {
+                    let mid = 0.5 * (a + b);
+                    let _, dm, _ = cubic(c, 1, mid);
+                    if (dm > 0.0) == (dlo > 0.0) { a = mid; } else { b = mid; }
+                }
+                cuts[count] = 0.5 * (a + b);
+                count++;
+            }
+            lo = hi;
+            dlo = dhi;
+        }
+        cuts[count] = 1.0;
+        return piece_crossings(c, cuts, count, x, y);
+    }
     // The zeros of c5 + 2 c6 u + 3 c7 u^2 in (0, 1).
     let qa = 3.0 * c[7];
     let qb = 2.0 * c[6];
@@ -245,6 +387,12 @@ fn span_crossings(c: f64[8], x: f64, y: f64) -> i64 {
         if r > 0.0 && r < 1.0 { cuts[count] = r; count++; }
     }
     cuts[count] = 1.0;
+    return piece_crossings(c, cuts, count, x, y);
+}
+
+// The crossings of the ray from (x, y) along +x with the `count` pieces
+// of span c between cuts[k] and cuts[k + 1]. y is monotone in each piece.
+fn piece_crossings(c: f64[12], cuts: f64[6], count: i64, x: f64, y: f64) -> i64 {
     var n = 0;
     for k in count {
         var lo = cuts[k];
@@ -265,7 +413,7 @@ fn span_crossings(c: f64[8], x: f64, y: f64) -> i64 {
 
 // The square of the distance from (x, y) to span c: the nearest of 9
 // samples, then Newton steps on (P(u) - q) . P'(u) = 0.
-fn span_distance2(c: f64[8], x: f64, y: f64) -> f64 {
+fn span_distance2(c: f64[12], x: f64, y: f64) -> f64 {
     fn d2(u: f64) -> f64 {
         let px, _, _ = cubic(c, 0, u);
         let py, _, _ = cubic(c, 1, u);

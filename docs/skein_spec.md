@@ -842,6 +842,7 @@ function, so that the mesher can find sharp edges (§9.2).
 | `revolve(s, angle)` | `Solid` | about the y axis |
 | `sweep(s, path)` | `Solid` | `path` is a `Curve` |
 | `line(p0, p1)`, `arc(c, r, a0, a1)`, `spline(p…)` | `Curve` | `spline` passes through the points in order |
+| `nurbs(d, knots(k…), p1, w1, …, pn, wn)` | `Curve` | 2D only. The NURBS curve of degree `d` with the control points `pi` and their weights `wi`. `knots(k…)` is optional |
 | `point(p)` | `Point` | |
 | `shell(a, t)` | same as `a` | a wall of constant thickness `t` inside the surface of `a`: `max(φa, −φa − t)` |
 | `loft(s1, s2, h)` | `Solid` | from 2D section `s1` at z = 0 to `s2` at z = `h` |
@@ -863,6 +864,26 @@ let hole: Surface = fill(spline(rim(0), rim(1), rim(2), rim(3), rim(4))) | polyg
 Reason: femahoy gap G24. The airfoils of naca0012-ladson and naca23012-flap
 and the superellipse hole of shape-hole-biaxial are splines through
 points. A polygon through the points has a different boundary.
+
+`nurbs(d, knots(k1, …, km), p1, w1, …, pn, wn)` is the NURBS curve
+(Piegl and Tiller 1997) of degree `d` (1, 2 or 3) with n ≥ d + 1 control
+points `pi`, each with its weight `wi` > 0 (a `Real`). The m = n + d + 1
+knots do not fall, and the first and the last are each d + 1 times
+[`type_mismatch`]. Without `knots`, the knots are 0 (d + 1 times), 1, 2,
+…, n − d (d + 1 times). `fill(nurbs(…))` closes the curve with a line
+from its end to its start, as for `spline`. A rational curve of degree 2
+is a conic, so a circle is exact:
+
+```skein
+let c: Real = 0.7071067811865476
+let bore: Surface = fill(nurbs(2, knots(0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4),
+    (1, 0) mm, 1, (1, 1) mm, c, (0, 1) mm, 1, (-1, 1) mm, c, (-1, 0) mm, 1,
+    (-1, -1) mm, c, (0, -1) mm, 1, (1, -1) mm, c, (1, 0) mm, 1))
+```
+
+The mesher cuts the curve at each knot into rational Bézier spans of
+degree 3. Reason: a CAD curve is a NURBS curve, and a spline through
+points of a circle is not the circle.
 
 Operators and modifiers:
 

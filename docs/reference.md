@@ -183,8 +183,10 @@ Spec: [§7](skein_spec.md#7-expressions-and-operators).
 
 Shapes: `box`, `cylinder`, `sphere`, `rect`, `circle`,
 `polygon`, `fill`, `extrude`, `revolve`, `sweep`, `line`, `arc`, `spline`,
-`point`. `fill(spline(p1, …, pn))` is the region inside a spline through
-the points and the line from `pn` to `p1`.
+`nurbs`, `point`. `fill(spline(p1, …, pn))` is the region inside a spline
+through the points and the line from `pn` to `p1`. `nurbs(d, knots(k…),
+p1, w1, …, pn, wn)` is a NURBS curve of degree 1 to 3 with a weight after
+each point, and `fill` of it closes it with a line.
 Operators: `|` union, `&` intersection, `-` difference. Modifiers: `fillet`,
 `move`, `rotate`, `scale`.
 

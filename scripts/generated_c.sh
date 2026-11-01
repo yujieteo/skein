@@ -36,6 +36,7 @@ examples/elements/harmonic_duct_tri.skn
 examples/elements/heated_bar_study_tet.skn
 examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn
+examples/elements/kirsch_nurbs_tri.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
