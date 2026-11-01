@@ -12,6 +12,7 @@ namespace flow;
 import solvers from "../solvers";
 import .mesh;
 import .cell;
+import .rans;
 
 let NEWTON_MAX = 30;            // the most Newton steps
 let NEWTON_SUFFICIENT = 1.0e-4; // the Armijo constant of the line search
@@ -30,12 +31,18 @@ var val: f64[>..] = [];
 var lu: f64[>..] = [];
 var pre: f64[>..] = [];     // the matrix of the preconditioner
 var diag: i64[>..] = [];
+var lumped: f64[>..] = [];  // the lumped mass of each dof of v, k and w (turbulent)
 
 var newton_steps = 0;
 var linear_iterations = 0;
 var last_seconds = 0.0;
 var first_residual = 0.0;
 var last_residual = 0.0;
+// The next solve_steady starts from sol, and keeps first_residual of the
+// solve before. Reason: the flow solves of solve_fsi after the first
+// start near the root, so a stop relative to their own residual is too
+// tight.
+var warm = false;
 
 // Sets the material and the equations. The values are scaled.
 fn fluid(density: f64, viscosity: f64, navier_stokes: bool, stab: i64) {
@@ -80,7 +87,12 @@ fn clear_bcs() {
         pre.push(0.0);
     }
     diag.clear();
-    for d in n { diag.push(0); }
+    lumped.clear();
+    for d in n {
+        diag.push(0);
+        lumped.push(0.0);
+    }
+    if turbulent { clear_walls(); }
 }
 
 // Fixes velocity component comp (0 or 1) on the nodes of the region.
@@ -91,6 +103,17 @@ fn fix_velocity(comp: i64, value: f64) {
         let d = vdof(n, comp);
         fixed[d] = 1;
         prescribed[d] = value;
+    }
+}
+
+// Fixes velocity component comp on the nodes of the region at F(x, y).
+fn fix_velocity_at<F>(comp: i64) {
+    guard (comp == 0 || comp == 1) && cell_count() > 0 && fixed.len == dof_count() && region.len == node_count() else { abort("fix_velocity_at: comp 0 or 1, and clear_bcs on a mesh"); }
+    for n in node_count() {
+        if region[n] == 0 { continue; }
+        let d = vdof(n, comp);
+        fixed[d] = 1;
+        prescribed[d] = F(coords[2 * n], coords[2 * n + 1]);
     }
 }
 
@@ -183,11 +206,11 @@ fn cell_values(c: i64, u: f64[:], jac: bool, d: f64[>..]&) {
     cell_dofs(c, dofs);
     for a in k { ul[a] = u[dofs[a]]; }
     if !jac {
-        cell_residual(c, ul, rl);
+        if turbulent { rans_residual(c, ul, rl); } else { cell_residual(c, ul, rl); }
         d.append(rl[..k]);
         return;
     }
-    cell_jacobian(c, ul, rl, kl);
+    if turbulent { rans_jacobian(c, ul, rl, kl); } else { cell_jacobian(c, ul, rl, kl); }
     for a in k { d.append(kl[15 * a..15 * a + k]); }
 }
 
@@ -214,9 +237,10 @@ fn add_cell(c: i64, d: f64[:], jac: bool, out: f64[:]) {
 // It grows no array of the state (state_sizes).
 fn solve_steady(rtol: f64) -> bool {
     guard cell_count() > 0 && fixed.len == dof_count() && rtol > 0.0 else { abort("solve_steady: clear_bcs, and rtol > 0"); }
+    guard !turbulent else { return solve_rans(rtol); }
     let start = clock();
     let sizes = state_sizes();
-    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
+    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else if warm { sol[d] } else { 0.0 }; }
     var f: f64[>..] = [];
     var du: f64[>..] = [];
     var trial: f64[>..] = [];
@@ -224,8 +248,8 @@ fn solve_steady(rtol: f64) -> bool {
     solvers::zeros(du, sol.len);
     solvers::zeros(trial, sol.len);
     residual(sol, f);
-    first_residual = solvers::norm(f);
-    last_residual = first_residual;
+    if !warm { first_residual = solvers::norm(f); }
+    last_residual = solvers::norm(f);
     newton_steps = 0;
     linear_iterations = 0;
     var converged = true;
@@ -300,9 +324,9 @@ fn preconditioner(u: f64[:]) {
 
 // The length of each array of the state of the package. A solve grows none
 // of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
-fn state_sizes() -> i64[14] {
+fn state_sizes() -> i64[16] {
     return [coords.len, conn.len, on_boundary.len, row_start.len, col.len, region.len, fixed.len, prescribed.len,
-            sol.len, raw.len, val.len, lu.len, pre.len, diag.len];
+            sol.len, raw.len, val.len, lu.len, pre.len, diag.len, lumped.len, wall_d.len];
 }
 
 // The sum of the reactions of velocity component comp on the region: the
@@ -311,7 +335,131 @@ fn region_force(comp: i64) -> f64 {
     guard (comp == 0 || comp == 1) && raw.len == dof_count() && region.len == node_count() else { abort("region_force: comp 0 or 1, and a solve"); }
     var s = 0.0;
     for n in node_count() {
-        if region[n] != 0 { s += raw[vdof(n, comp)]; }
+        // a node that shares the dofs of a node of the region counts once
+        if region[n] != 0 && (twin[n] < 0 || region[twin[n]] == 0) { s += raw[vdof(n, comp)]; }
     }
     return s;
+}
+
+// The turbulent solve: pseudo-transient continuation (Kelley and Keyes
+// 1998). Each step solves (M/Δτ + J) du = -F(u) with the lumped mass M of
+// the rows of v, k and w, and Δτ grows as the norm of F falls (switched
+// evolution relaxation, Mulder and van Leer 1985). Reason: on the channel
+// at Re_τ = 395 from v = 0, Newton's method (Δτ = ∞) failed in GMRES at
+// step 12, with U_b+ near 3600.
+let PTC_MAX = 300;
+let PTC_GROWTH = 2.0;   // the most that Δτ grows in one step
+let TURBULENCE_DROP = 0.5;
+let PTC_DT = 0.1;       // Δτ of the first step, scaled
+// k of the start, scaled. Reason: the channel at Re_τ = 395 converged to
+// the same flow from k = 1 and from k = 3.3 (u_τ = 1).
+let K_START = 1.0;
+
+fn solve_rans(rtol: f64) -> bool {
+    let start = clock();
+    let sizes = state_sizes();
+    var omega_wall: f64[>..] = [];
+    solvers::zeros(omega_wall, vertex_count);
+    guard find_walls(fixed, prescribed, omega_wall) else { abort("solve_rans: a turbulent flow needs a wall, a boundary with v = 0"); }
+    for n in vertex_count {
+        if on_wall[n] == 0 { continue; }
+        fixed[turbulence_dof(n, 0)] = 1;
+        prescribed[turbulence_dof(n, 0)] = 0.0;
+        fixed[turbulence_dof(n, 1)] = 1;
+        prescribed[turbulence_dof(n, 1)] = omega_wall[n];
+    }
+    rans_start();
+    newton_steps = 0;
+    linear_iterations = 0;
+    let converged = ptc_solve(rtol);
+    assemble_residual(sol, raw);
+    guard state_sizes() == sizes else { abort("solve_rans: a solve grows no array of the state (rule 3)"); }
+    last_seconds = clock() - start;
+    return converged;
+}
+
+// The pseudo-transient continuation from sol to the norm of F at most
+// rtol times its norm at the start.
+fn ptc_solve(rtol: f64) -> bool {
+    var f: f64[>..] = [];
+    var du: f64[>..] = [];
+    solvers::zeros(f, sol.len);
+    solvers::zeros(du, sol.len);
+    residual(sol, f);
+    first_residual = solvers::norm(f);
+    last_residual = first_residual;
+    var dt = PTC_DT;
+    var converged = true;
+    while last_residual > rtol * first_residual {
+        if newton_steps >= PTC_MAX || !ptc_step(dt, f, du) {
+            converged = false;
+            break;
+        }
+        let before = last_residual;
+        residual(sol, f);
+        last_residual = solvers::norm(f);
+        dt *= min(PTC_GROWTH, before / max(last_residual, 1.0e-300));
+    }
+    return converged;
+}
+
+// The start of the turbulent solve: the fixed values, v = 0, p = 0,
+// K_START and w_start, and the lumped mass of each dof.
+fn rans_start() {
+    for d in sol.len { sol[d] = 0.0; }
+    for n in vertex_count {
+        sol[turbulence_dof(n, 0)] = K_START;
+        // the larger of the viscous sublayer, ω = 6 ν / (β1 d²), and the
+        // log layer, ω = √k / (C_μ^¼ κ d) with C_μ^¼ κ = 0.2245
+        let d = max(wall_d[n], 1.0e-12 * diameter);
+        sol[turbulence_dof(n, 1)] = max(6.0 * mu / (rho * BETA1 * d * d), sqrt(K_START) / (0.2245 * d));
+    }
+    for d in sol.len {
+        if fixed[d] != 0 { sol[d] = prescribed[d]; }
+        lumped[d] = 0.0;
+    }
+    var dofs: i64[15] = [0; 15];
+    for c in cell_count() {
+        cell_dofs(c, dofs);
+        let m = geometry(c).area / 3.0;
+        for a in 15 {
+            // the ω rows are divided by omega_scale (rans.goose)
+            if a < 6 || (a >= 9 && a < 12) { lumped[dofs[a]] += m; }
+            if a >= 12 { lumped[dofs[a]] += m / omega_scale; }
+        }
+    }
+}
+
+// One step of the pseudo-transient continuation with Δτ = dt. f holds
+// F(sol). A step takes at most the part TURBULENCE_DROP of k or w of a
+// vertex, so k and w stay positive. Reason: with a clip at k = 0, the k
+// of the channel at Re_τ = 395 fell to 0 below y+ = 10, and k = 0 is a
+// root of its own equation. False if GMRES fails.
+fn ptc_step(dt: f64, f: f64[:], du: f64[:]) -> bool {
+    jacobian(sol, val);
+    for d in sol.len {
+        if fixed[d] == 0 && lumped[d] > 0.0 { val[solvers::entry(row_start, col, d, d)] += lumped[d] / dt; }
+    }
+    for e in val.len { pre[e] = val[e]; }
+    if !solvers::ilu0(row_start, col, pre, lu, diag) { return false; }
+    for d in f.len {
+        f[d] = -f[d];
+        du[d] = 0.0;
+    }
+    solvers::rows_start(row_start, col, val);
+    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
+        solvers::ilu0_apply(row_start, col, lu, diag, r, z);
+    };
+    solvers::rows_stop();
+    linear_iterations += its;
+    if !solved { return false; }
+    for n in vertex_count {
+        for which in 2 {
+            let d = turbulence_dof(n, which);
+            du[d] = max(du[d], -TURBULENCE_DROP * sol[d]);
+        }
+    }
+    for d in sol.len { sol[d] += du[d]; }
+    newton_steps++;
+    return true;
 }

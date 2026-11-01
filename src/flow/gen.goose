@@ -9,6 +9,11 @@
 // method with GMRES and ILU(0). Each other construct gives an error
 // `unsupported` at its token, with a fix.
 //
+// A second physics `linear_elastic` in plane strain on its own shape, with
+// an `interface` item, is a solid in the flow (src/flow/fsi.goose). The
+// mesher meshes the two shapes as one, with the boundary of the solid as
+// an interface, so that the two meshes share the nodes of the interface.
+//
 // The scaled form of spec §21.2: the three values of the `scales` line give
 // the reference length, mass and time, so each quantity q of the dimension
 // L^a M^b T^c has the reference value q_ref = L^a M^b T^c, and the generated
@@ -50,8 +55,9 @@ fn compact(n: i64) -> u8[>..] {
 
 // --- the claim ---------------------------------------------------------------
 
-// Whether this generator takes the model: a physics that uses stokes or
-// navier_stokes, or that solves a Vector<Velocity> and a Pressure.
+// Whether this generator takes the model: a physics that uses stokes,
+// navier_stokes or k_omega_sst, or that solves a Vector<Velocity> and a
+// Pressure.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -60,7 +66,7 @@ fn claims(prog: i64) -> bool {
             var pressure = false;
             var u = first(c);
             while u >= 0 {
-                if kind(u) == syntax::N_USES && (name(u) == "navier_stokes" || name(u) == "stokes") { return true; }
+                if kind(u) == syntax::N_USES && (name(u) == "navier_stokes" || name(u) == "stokes" || name(u) == "k_omega_sst") { return true; }
                 if kind(u) == syntax::N_UNKNOWN {
                     let t = child(u, 0);
                     if kind(t) == syntax::N_TYPE_NAME && name(t) == "Pressure" { pressure = true; }
@@ -339,6 +345,7 @@ struct Refine {
 
 let BC_V = 0;       // component comp of the velocity, or both for comp -1
 let BC_P = 1;
+let BC_U = 2;       // the displacement of the solid at 0
 
 // A `bc`: the region (an index in `named`), the target and the scaled value.
 struct Bc {
@@ -346,6 +353,7 @@ struct Bc {
     kind: i64,
     comp: i64,
     v: f64[2],
+    expr: i64,      // the value node when it has x or y, or -1
 }
 
 struct Report {
@@ -363,6 +371,7 @@ struct Step {
     report_count: i64,
     rtol: f64,
     output: bool,
+    solid_output: bool,
 }
 
 // An `expect`: for each row of a table, when its sides name a table.
@@ -390,6 +399,11 @@ var velocity: u8[..64];     // the names of the unknowns
 var pressure: u8[..64];
 var stress: u8[..64];       // the let of the stress: sigma
 var convective = true;
+var turbulent = false;      // k_omega_sst: the unknowns k and w too
+var turb_k: u8[..64];
+var turb_w: u8[..64];
+var period: f64[2] = [0.0, 0.0];
+var period_high = -1;       // the high boundary of a bloch group: an index in `named`, or -1
 var force: f64[2] = [0.0, 0.0];
 var force_node = -1;
 var mesh_size = 0.0;
@@ -398,6 +412,13 @@ var order = 2;
 var stabilize = 1;          // flow::SUPG
 var stabilize_set = false;
 var has_scales = false;
+var solid_tok = -1;         // the solid physics, or -1
+var solid_name: u8[..64];
+var solid_domain = -1;      // an index in `named`
+var displacement: u8[..64];
+var solid_material = -1;
+var solid_size = 0.0;
+var interface_node = -1;
 
 let STABILIZE_NAMES = ["none", "supg", "supg_pspg", "supg_pspg_lsic"];
 
@@ -421,6 +442,11 @@ fn reset() {
     pressure = [];
     set64(stress, "sigma");
     convective = true;
+    turbulent = false;
+    turb_k = [];
+    turb_w = [];
+    period = [0.0, 0.0];
+    period_high = -1;
     force = [0.0, 0.0];
     force_node = -1;
     mesh_size = 0.0;
@@ -429,6 +455,13 @@ fn reset() {
     stabilize = 1;
     stabilize_set = false;
     has_scales = false;
+    solid_tok = -1;
+    solid_name = [];
+    solid_domain = -1;
+    displacement = [];
+    solid_material = -1;
+    solid_size = 0.0;
+    interface_node = -1;
     base = [1.0, 1.0, 1.0];
     table_node = -1;
     table_row = -1;
@@ -450,10 +483,13 @@ fn named_of(n: i64, k: i64) -> i64 {
     return if i >= 0 && named[i].kind == k { i } else { -1 };
 }
 
-// The material property `word`, or -1.
-fn property(word: u8[:]) -> i64 {
-    guard material_node >= 0 else { return -1; }
-    var p = first(material_node);
+// The property `word` of the fluid, or -1.
+fn property(word: u8[:]) -> i64 { return property_of(material_node, word); }
+
+// The property `word` of material m, or -1.
+fn property_of(m: i64, word: u8[:]) -> i64 {
+    guard m >= 0 else { return -1; }
+    var p = first(m);
     while p >= 0 {
         if name(p) == word { return child(p, 1); }
         p = next(p);
@@ -479,6 +515,12 @@ recursive fn is_shape(n: i64) -> bool {
     return (op == "-" || op == "|" || op == "&") && is_shape(child(n, 0)) && is_shape(child(n, 1));
 }
 
+// Whether n is `a | b` of boundaries that a let names.
+recursive fn is_union(n: i64) -> bool {
+    guard kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "|" else { return false; }
+    return (named_of(child(n, 0), BOUNDARY) >= 0 || is_union(child(n, 0))) && (named_of(child(n, 1), BOUNDARY) >= 0 || is_union(child(n, 1)));
+}
+
 // `let` and `param`: a shape, a region, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
@@ -486,7 +528,7 @@ fn value_item(n: i64) {
     set64(g.name, name(n));
     if is_shape(v) {
         named.push(g);
-    } else if is_call(v, "boundary") || is_call(v, "point") {
+    } else if is_call(v, "boundary") || is_call(v, "point") || is_union(v) {
         g.kind = if is_call(v, "point") { POINT } else { BOUNDARY };
         named.push(g);
     } else {
@@ -496,6 +538,10 @@ fn value_item(n: i64) {
 }
 
 fn material(n: i64) {
+    if property_of(n, "E") >= 0 {
+        solid_materials(n);
+        return;
+    }
     if material_node >= 0 {
         unsupported(tok(n), "a second material: the flow generator has one", "remove the second material");
         return;
@@ -509,6 +555,21 @@ fn material(n: i64) {
         }
         p = next(p);
     }
+}
+
+// A material of the solid: E and nu.
+fn solid_materials(n: i64) {
+    if solid_material >= 0 {
+        unsupported(tok(n), "a second solid material: the flow generator has one", "remove the second material");
+        return;
+    }
+    solid_material = n;
+    var p = first(n);
+    while p >= 0 {
+        if name(p) != "E" && name(p) != "nu" { unsupported(tok(p), str("the property '", name(p), "' is not in the flow generator"), "give the solid E and nu"); }
+        p = next(p);
+    }
+    if property_of(n, "nu") < 0 { unsupported(tok(n), "the solid needs nu", "add nu: Real = 0.3"); }
 }
 
 let PHYSICS_FIX = "write physics flow on dom: navier_stokes solves v: Vector<Velocity>, p: Pressure { material fluid }";
@@ -560,9 +621,10 @@ fn physics_item(n: i64) {
             if domain < 0 { unsupported(tok(first(c)), "the region of the physics is not a shape that a let names", "write physics flow on dom, with let dom: Surface = rect(...)"); }
         } else if k == syntax::N_USES {
             template = true;
-            convective = name(c) == "navier_stokes";
-            if name(c) != "navier_stokes" && name(c) != "stokes" {
-                unsupported(tok(c), "the flow generator has the templates navier_stokes(f) and stokes(f)", PHYSICS_FIX);
+            convective = name(c) != "stokes";
+            turbulent = name(c) == "k_omega_sst";
+            if name(c) != "navier_stokes" && name(c) != "stokes" && !turbulent {
+                unsupported(tok(c), "the flow generator has the templates navier_stokes(f), stokes(f) and k_omega_sst(f)", PHYSICS_FIX);
             }
             if first(c) >= 0 { force_node = first(first(c)); }
         } else if k == syntax::N_UNKNOWN {
@@ -571,6 +633,10 @@ fn physics_item(n: i64) {
                 set64(pressure, name(c));
             } else if kind(t) == syntax::N_TYPE_APPLY && velocity.len == 0 {
                 set64(velocity, name(c));
+            } else if turbulent && turb_k.len == 0 {
+                set64(turb_k, name(c));
+            } else if turbulent && turb_w.len == 0 {
+                set64(turb_w, name(c));
             } else {
                 unsupported(tok(c), "the flow generator solves one velocity and one pressure", PHYSICS_FIX);
             }
@@ -591,11 +657,125 @@ fn physics_item(n: i64) {
     if domain < 0 && ok() { unsupported(tok(n), "the physics has no region", "write physics flow on dom"); }
 }
 
+let SOLID_FIX = "write physics flag on bar: linear_elastic solves u: Vector<Length> { material steel  assume plane_strain }";
+
+// Whether physics n uses the template linear_elastic: the solid.
+fn is_solid(n: i64) -> bool {
+    var c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_USES && name(c) == "linear_elastic" { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
+// The solid physics: linear_elastic with no body force, in plane strain.
+fn solid_item(n: i64) {
+    if solid_tok >= 0 {
+        unsupported(tok(n), "a second solid: the flow generator has one", "remove the second solid");
+        return;
+    }
+    solid_tok = tok(n);
+    set64(solid_name, name(n));
+    var plane = false;
+    var c = first(n);
+    while c >= 0 {
+        let k = kind(c);
+        if k == syntax::N_ON {
+            solid_domain = named_of(first(c), SHAPE);
+            if solid_domain < 0 { unsupported(tok(first(c)), "the region of the solid is not a shape that a let names", SOLID_FIX); }
+        } else if k == syntax::N_USES {
+            if first(c) >= 0 { unsupported(tok(c), "the solid has no body force", "write linear_elastic"); }
+        } else if k == syntax::N_UNKNOWN {
+            set64(displacement, name(c));
+        } else if k == syntax::N_ASSUME {
+            var a = first(c);
+            while a >= 0 {
+                if name(a) == "plane_strain" { plane = true; }
+                if name(a) != "plane_strain" && name(a) != "small_strain" && name(a) != "isotropic" {
+                    unsupported(tok(a), str("the assumption '", name(a), "' is not in the flow generator"), "use plane_strain");
+                }
+                a = next(a);
+            }
+        } else if k != syntax::N_MATASSIGN {
+            unsupported(tok(c), "a physics with a template has no let or eq", "remove it");
+        }
+        c = next(c);
+    }
+    if !plane { unsupported(tok(n), "the 2d solid of the flow generator is in plane strain", "add assume plane_strain"); }
+}
+
+// `interface s: a, b { mesh_motion: harmonic }`. The two meshes share the
+// nodes of the boundary of the solid, so the regions a and b are not used.
+fn interface_item(n: i64) {
+    if interface_node >= 0 {
+        unsupported(tok(n), "a second interface: the flow generator has one", "remove the second interface");
+        return;
+    }
+    interface_node = n;
+    var harmonic = false;
+    var s = first(child(n, 2));
+    while s >= 0 {
+        let v = first(s);
+        if kind(s) == syntax::N_SETTING && name(s) == "mesh_motion" && kind(v) == syntax::N_NAME && name(v) == "harmonic" {
+            harmonic = true;
+        } else {
+            unsupported(tok(s), "the interface of the flow generator has mesh_motion: harmonic only", "write interface fsi: wet_fluid, wet_solid { mesh_motion: harmonic }");
+        }
+        s = next(s);
+    }
+    if !harmonic { unsupported(tok(n), "the interface needs a mesh motion", "add mesh_motion: harmonic"); }
+}
+
+// The method of the solid: cg with order 2.
+fn solid_method(n: i64) {
+    if syntax::text(syntax::nodes[n].aux) != "cg" { unsupported(tok(n), "the solid has the cg method", "write method flag: cg { order: 2 }"); }
+    var s = first(child(n, 0));
+    while s >= 0 {
+        if kind(s) == syntax::N_SETTING && name(s) == "order" {
+            if scalar_value(first(s)) != 2.0 { unsupported(tok(first(s)), "the solid has order 2", "write order: 2"); }
+        } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
+            unsupported(tok(s), "the method setting of the solid is not in the flow generator", "use only mesh and order");
+        }
+        s = next(s);
+    }
+}
+
+// The mesh of the solid: a size, and tri cells.
+fn solid_mesh(n: i64) {
+    var s = first(child(n, 1));
+    while s >= 0 {
+        let v = first(s);
+        if kind(s) == syntax::N_SETTING && name(s) == "size" {
+            solid_size = scaled_value(v);
+        } else if !(kind(s) == syntax::N_SETTING && name(s) == "cell" && kind(v) == syntax::N_NAME && name(v) == "tri") {
+            unsupported(tok(s), "the mesh of the solid has a size and tri cells", "write mesh ms on bar { size: 5 mm, cell: tri }");
+        }
+        s = next(s);
+    }
+    if solid_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 1 cm"); }
+}
+
+// The checks of a model with a solid, after the fluid.
+fn read_solid(at: i64) {
+    if solid_tok < 0 {
+        if interface_node >= 0 { unsupported(tok(interface_node), "an interface needs a solid physics linear_elastic", SOLID_FIX); }
+        return;
+    }
+    if interface_node < 0 { unsupported(solid_tok, "the solid needs an interface with the flow", "write interface fsi: wet_fluid, wet_solid { mesh_motion: harmonic }"); }
+    if solid_domain >= 0 && solid_size <= 0.0 { unsupported(solid_tok, "the solid has no mesh", "add mesh ms on bar { size: 5 mm, cell: tri }"); }
+    if solid_material < 0 { unsupported(solid_tok, "the solid needs a material with E and nu", "add material steel { E: Pressure = 200 GPa, nu: Real = 0.3 }"); }
+    // Reason: the P2 edge nodes of the solid take the reactions of the
+    // edge nodes of the flow.
+    if order != 2 { unsupported(at, "a flow with a solid has order 2", "write method flow: cg { order: { v: 2, p: 1 } }"); }
+    if turbulent || period_high >= 0 { unsupported(solid_tok, "a flow with a solid is laminar and not periodic", "remove k_omega_sst and the symmetry"); }
+}
+
 fn assumptions(n: i64) {
     var a = first(n);
     while a >= 0 {
         let w = name(a);
-        if w != "incompressible" && w != "newtonian" && w != "laminar" {
+        if w != "incompressible" && w != "newtonian" && w != "laminar" && !(turbulent && w == "turbulent") {
             unsupported(tok(a), str("the assumption '", w, "' is not in the flow generator"), "use incompressible, newtonian and laminar");
         }
         a = next(a);
@@ -657,11 +837,15 @@ recursive fn refine_parts(shape: i64, cond: i64, h: f64) {
         refine_parts(shape, child(cond, 1), h);
         return;
     }
-    let circle = named_of(cond, SHAPE);
-    if circle >= 0 && is_call(named[circle].value, "circle") {
-        let c = named[circle].value;
+    let g = named_of(cond, SHAPE);
+    if g >= 0 && is_call(named[g].value, "circle") {
+        let c = named[g].value;
         let centre = scaled(quantity(arg(c, 0)));
         refines.push(Refine { circle: true, p: [centre.v[0], centre.v[1], scaled_value(arg(c, 1)), 0.0], h: h });
+        return;
+    }
+    if g >= 0 && is_call(named[g].value, "rect") {
+        edge_refines(named[g].value, h, refines);
         return;
     }
     let side = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" && kind(child(cond, 0)) == syntax::N_NAME &&
@@ -681,6 +865,29 @@ recursive fn refine_parts(shape: i64, cond: i64, h: f64) {
     }
 }
 
+// The refines of the edges of the shape n: each side of a rect, and each
+// circle.
+recursive fn edge_refines(n: i64, h: f64, into: Refine[>..]&) {
+    if kind(n) == syntax::N_NAME {
+        edge_refines(named[named_of(n, SHAPE)].value, h, into);
+    } else if is_call(n, "circle") {
+        let c = scaled(quantity(arg(n, 0)));
+        into.push(Refine { circle: true, p: [c.v[0], c.v[1], scaled_value(arg(n, 1)), 0.0], h: h });
+    } else if is_call(n, "rect") {
+        let a = scaled(quantity(arg(n, 0)));
+        let b = scaled(quantity(arg(n, 1)));
+        let x: f64[2] = [min(a.v[0], b.v[0]), max(a.v[0], b.v[0])];
+        let y: f64[2] = [min(a.v[1], b.v[1]), max(a.v[1], b.v[1])];
+        for k in 2 {
+            into.push(Refine { circle: false, p: [x[k], y[0], x[k], y[1]], h: h });
+            into.push(Refine { circle: false, p: [x[0], y[k], x[1], y[k]], h: h });
+        }
+    } else {
+        edge_refines(child(n, 0), h, into);
+        edge_refines(child(n, 1), h, into);
+    }
+}
+
 fn mesh(n: i64) {
     if mesh_size > 0.0 {
         unsupported(tok(n), "a second mesh: the flow generator has one", "remove the second mesh");
@@ -697,6 +904,8 @@ fn mesh(n: i64) {
             let r = named_of(v, BOUNDARY);
             if r < 0 {
                 unsupported(tok(v), "the refine is not on a boundary that a let names", REFINE_FIX);
+            } else if !is_call(named[r].value, "boundary") {
+                unsupported(tok(v), "the refine is not on a boundary(shape, condition)", REFINE_FIX);
             } else {
                 let b = named[r].value;
                 refine_parts(arg(b, 0), arg(b, 1), scaled_value(child(s, 1)));
@@ -732,8 +941,18 @@ fn bc(n: i64) -> i64 {
         unsupported(tok(region), "the region of the bc is not a boundary or a point that a let names", BC_FIX_TEXT);
         return -1;
     }
-    var b = Bc { region: r, kind: BC_V, comp: -1, v: [0.0, 0.0] };
+    var b = Bc { region: r, kind: BC_V, comp: -1, v: [0.0, 0.0], expr: -1 };
     let t = compact(target);
+    if solid_tok >= 0 && t == displacement { return solid_bc(n, b); }
+    if mentions_xy(v) && (t == velocity || t == str(velocity, ".x") || t == str(velocity, ".y")) {
+        // a value of x and y: emit_bc writes it as Goose (emit_coordinate)
+        if t == velocity && (kind(v) != syntax::N_VECTOR || syntax::child_count(v) != 2) { unsupported(tok(v), str(velocity, " is a vector"), "write v = (6*U*y*(H - y)/H^2, 0)"); }
+        b.expr = v;
+        b.comp = if t == velocity { -1 } else if t[t.len - 1] == 'x' { 0 } else { 1 };
+        use_region(r);
+        bcs.push(b);
+        return bcs.len - 1;
+    }
     let q = scaled(quantity(v));
     if t == velocity {
         if q.n == 1 && q.v[0] != 0.0 { unsupported(tok(v), str(velocity, " is a vector"), "write v = 0, or a vector"); }
@@ -754,6 +973,25 @@ fn bc(n: i64) -> i64 {
     }
     use_region(r);
     bcs.push(b);
+    return bcs.len - 1;
+}
+
+// Whether the boundary g (an index in `named`) is on the solid.
+fn on_solid(g: i64) -> bool {
+    let v = named[g].value;
+    return solid_domain >= 0 && named[g].kind == BOUNDARY && is_call(v, "boundary") && named_of(arg(v, 0), SHAPE) == solid_domain;
+}
+
+// `bc root: u = 0`, on a boundary of the solid.
+fn solid_bc(n: i64, b: Bc) -> i64 {
+    let v = child(n, 2);
+    let q = quantity(v);
+    if q.v[0] != 0.0 || q.v[1] != 0.0 { unsupported(tok(v), "the flow generator holds the solid at 0", str("write bc root: ", displacement, " = 0")); }
+    if !on_solid(b.region) { unsupported(tok(child(n, 0)), "the bc of the solid is not on a boundary of the solid", "write bc root: u = 0, with let root: Curve = boundary(bar, ...)"); }
+    var c = b;
+    c.kind = BC_U;
+    use_region(b.region);
+    bcs.push(c);
     return bcs.len - 1;
 }
 
@@ -779,7 +1017,7 @@ fn step(n: i64) {
         unsupported(tok(proc), "the flow generator has only static steps with no arguments", "write step steady: static { ... }");
     }
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
-                   first_report: reports.len, report_count: 0, rtol: 1.0e-8, output: false };
+                   first_report: reports.len, report_count: 0, rtol: 1.0e-8, output: false, solid_output: false };
     set64(s.name, name(n));
     var c = next(proc);
     while c >= 0 {
@@ -790,7 +1028,7 @@ fn step(n: i64) {
             solve_settings(c, s);
         } else if k == syntax::N_OUTPUT {
             s.output = true;
-            output_fields(c);
+            s.solid_output = output_fields(c);
         } else if k == syntax::N_REPORT {
             var r = first(c);
             while r >= 0 {
@@ -809,16 +1047,21 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-fn output_fields(n: i64) {
+// The fields of an output. True if it has the displacement of the solid.
+fn output_fields(n: i64) -> bool {
+    var solid = false;
     var o = first(n);
     while o >= 0 {
-        if kind(o) == syntax::N_EVERY {
+        if solid_tok >= 0 && kind(o) == syntax::N_NAME && name(o) == displacement {
+            solid = true;
+        } else if kind(o) == syntax::N_EVERY {
             unsupported(tok(o), "a static step has no every", "remove it");
-        } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure) {
-            unsupported(tok(o), "the flow generator writes the velocity and the pressure", str("write output ", velocity, ", ", pressure));
+        } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure && !(turbulent && (name(o) == turb_k || name(o) == turb_w))) {
+            unsupported(tok(o), "the flow generator writes the velocity and the pressure, and k and w of k_omega_sst", str("write output ", velocity, ", ", pressure));
         }
         o = next(o);
     }
+    return solid;
 }
 
 let REPORT_FIX = "write v.x at (x, y), p at (x, y), integral((sigma*n).x, wall), or + - * / of these and values";
@@ -832,7 +1075,8 @@ fn report(item: i64) {
     reports.push(r);
 }
 
-// `f at p` of the velocity, a component of it, or the pressure: the
+// `f at p` of the velocity, a component of it, the pressure, or the
+// displacement of the solid or a component of it: the
 // flow::VALUE_* of each component, with -1 for the second of a scalar.
 fn point_field(e: i64) -> i64, i64 {
     let f = compact(child(e, 0));
@@ -840,6 +1084,9 @@ fn point_field(e: i64) -> i64, i64 {
     if f == str(velocity, ".x") { return 0, -1; }
     if f == str(velocity, ".y") { return 1, -1; }
     if f == pressure { return 2, -1; }
+    if solid_tok >= 0 && f == displacement { return 3, 4; }
+    if solid_tok >= 0 && f == str(displacement, ".x") { return 3, -1; }
+    if solid_tok >= 0 && f == str(displacement, ".y") { return 4, -1; }
     return -1, -1;
 }
 
@@ -939,9 +1186,10 @@ fn row_count(t: i64) -> i64 {
 // the errors.
 fn read(prog: i64) -> bool {
     reset();
-    var physics_node = -1;
-    var mesh_node = -1;
+    var physics_nodes: i64[>..] = [];
+    var mesh_nodes: i64[>..] = [];
     var methods: i64[>..] = [];
+    var symmetry_node = -1;
     var c = first(prog);
     while c >= 0 {
         let k = kind(c);
@@ -951,16 +1199,22 @@ fn read(prog: i64) -> bool {
             value_item(c);
         } else if k == syntax::N_MATERIAL {
             material(c);
+        } else if k == syntax::N_PHYSICS && is_solid(c) {
+            solid_item(c);
         } else if k == syntax::N_PHYSICS {
-            physics_node = c;
+            physics_nodes.push(c);
         } else if k == syntax::N_MESH {
-            mesh_node = c;
+            mesh_nodes.push(c);
+        } else if k == syntax::N_INTERFACE {
+            interface_item(c);
         } else if k == syntax::N_METHOD {
             methods.push(c);
         } else if k == syntax::N_TABLE {
             tables.push(c);
         } else if k == syntax::N_SCALES {
             has_scales = true;
+        } else if k == syntax::N_SYMMETRY && symmetry_node < 0 {
+            symmetry_node = c;
         } else if k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in the flow generator"),
                         "remove it: the flow generator runs one steady flow model");
@@ -974,16 +1228,58 @@ fn read(prog: i64) -> bool {
         if kind(c) == syntax::N_SCALES { scales(c); }
         c = next(c);
     }
-    if physics_node >= 0 { physics_item(physics_node); } else { unsupported(at, "the model has no physics", PHYSICS_FIX); }
+    for n in physics_nodes { physics_item(n); }
+    if physics_nodes.len == 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if !ok() { return false; }
     read_fluid(at);
-    if mesh_node < 0 { unsupported(at, "the model has no mesh", "add mesh m on dom { size: 1 cm }"); } else { mesh(mesh_node); }
-    for m in methods { method(m); }
+    for m in mesh_nodes {
+        let r = child(m, 0);
+        if solid_domain >= 0 && kind(r) == syntax::N_NAME && name(r) == named[solid_domain].name { solid_mesh(m); } else { mesh(m); }
+    }
+    if mesh_size <= 0.0 && ok() { unsupported(at, "the model has no mesh", "add mesh m on dom { size: 1 cm }"); }
+    for m in methods { if solid_tok >= 0 && name(m) == solid_name { solid_method(m); } else { method(m); } }
     if !stabilize_set { stabilize = if convective { 1 } else { 0 }; }
     if order == 1 && stabilize < 2 { unsupported(at, "order 1 for the velocity needs pressure stabilization", "write stabilize: supg_pspg"); }
+    if turbulent && (order != 1 || stabilize != 2) { unsupported(at, "k_omega_sst runs on P1 cells with supg_pspg", "write method flow: cg { order: 1, stabilize: supg_pspg }"); }
+    if symmetry_node >= 0 { symmetry(symmetry_node); }
+    read_solid(at);
     if !ok() { return false; }
     read_steps(prog, at);
     return ok();
+}
+
+let SYMMETRY_FIX = "write symmetry ends: bloch { period: (L, 0 m), low: inlet, high: outlet, k: (0, 0) m^-1 }, on a rect of width L";
+
+// symmetry s: bloch { period: p, low: a, high: b, k: 0 }: the flow on b is
+// the flow on a (periodic). The domain is a rect, and p is its width
+// along x. Reason: write_mesh meshes half of the rect and its mirror, so
+// that the nodes of a and b match.
+fn symmetry(n: i64) {
+    if name(child(n, 0)) != "bloch" {
+        unsupported(tok(n), "the flow generator has the symmetry bloch with k = 0", SYMMETRY_FIX);
+        return;
+    }
+    var s = first(syntax::nodes[child(n, 0)].next);
+    while s >= 0 {
+        let w = name(s);
+        let v = first(s);
+        if w == "period" {
+            period = scaled(quantity(v)).v;
+        } else if w == "k" {
+            let k = quantity(v);
+            if k.v[0] != 0.0 || k.v[1] != 0.0 { unsupported(tok(v), "the flow generator has bloch with k = 0 (periodic)", SYMMETRY_FIX); }
+        } else if w == "high" {
+            period_high = named_of(v, BOUNDARY);
+            if period_high < 0 { unsupported(tok(v), "high is a boundary that a let names", SYMMETRY_FIX); }
+        }
+        s = next(s);
+    }
+    let rect = named[domain].value;
+    let width = if is_call(rect, "rect") { abs(scaled(quantity(arg(rect, 1))).v[0] - scaled(quantity(arg(rect, 0))).v[0]) } else { -1.0 };
+    if period[1] != 0.0 || abs(period[0] - width) > 1.0e-9 * width {
+        unsupported(tok(n), "the period is the width of the rect of the physics, along x", SYMMETRY_FIX);
+    }
+    if period_high >= 0 { use_region(period_high); }
 }
 
 // rho and mu of the material, and the body force f of the template.
@@ -1078,10 +1374,36 @@ fn write_mesh(dir: u8[:]) -> bool {
     for r in refines {
         if r.circle { mesher::refine_circle(r.p[0], r.p[1], r.p[2], r.h); } else { mesher::refine_segment(r.p[0], r.p[1], r.p[2], r.p[3], r.h); }
     }
-    if !mesher::mesh_2d(mesher_shape(named[domain].value), mesh_size) {
+    // With a period, half of the rect and its mirror at the middle.
+    var shape = mesher_shape(named[domain].value);
+    mesher::clear_interfaces();
+    if solid_tok >= 0 {
+        // the flow and the solid as one shape, with the edges of the solid
+        let solid = mesher_shape(named[solid_domain].value);
+        // The sides of its rects at the solid size, so that the solid has
+        // its size inside. Its circles are on the boundary with the flow,
+        // which the refines of the flow mesh.
+        var list: Refine[>..] = [];
+        edge_refines(named[solid_domain].value, solid_size, list);
+        for r in list { if !r.circle { mesher::refine_segment(r.p[0], r.p[1], r.p[2], r.p[3], r.h); } }
+        shape = mesher::union(shape, solid);
+        mesher::add_interface(solid);
+    }
+    var middle = 0.0;
+    if period_high >= 0 {
+        let r = named[domain].value;
+        let a = scaled(quantity(arg(r, 0)));
+        let b = scaled(quantity(arg(r, 1)));
+        middle = 0.5 * (a.v[0] + b.v[0]);
+        shape = mesher::rect(min(a.v[0], b.v[0]), a.v[1], middle, b.v[1]);
+    }
+    let meshed = mesher::mesh_2d(shape, mesh_size);
+    mesher::clear_interfaces();
+    if !meshed {
         write_stderr(str("skein run: the mesher cannot mesh '", named[domain].name, "' with the size and the refines of the mesh\n"));
         return false;
     }
+    guard solid_tok < 0 else { return write_coupled(dir); }
     var xy: f64[>..] = [];
     var tri: i64[>..] = [];
     for n in mesher::point_count() {
@@ -1092,13 +1414,80 @@ fn write_mesh(dir: u8[:]) -> bool {
     for c in mesher::cell_count() {
         for k in 3 { tri.push(mesher::cell_node(c, k)); }
     }
-    cells = mesher::cell_count();
-    vertices = mesher::point_count();
+    if period_high >= 0 { mirror(xy, tri, middle); }
+    cells = tri.len / 3;
+    vertices = xy.len / 2;
     if !write_file(str(dir, "/flow.xy"), to_bytes(xy[..])) || !write_file(str(dir, "/flow.tri"), to_bytes(tri[..])) {
         write_stderr(str("skein run: cannot write the mesh in '", dir, "'\n"));
         return false;
     }
     return true;
+}
+
+// Writes the triangles of the mesh of the flow and the solid: the cells
+// with the centre in the solid to solid.xy and solid.tri, and the others
+// to flow.xy and flow.tri, each with its own vertices.
+fn write_coupled(dir: u8[:]) -> bool {
+    let solid = mesher_shape(named[solid_domain].value);
+    var part: i64[>..] = [];
+    for c in mesher::cell_count() {
+        var x = 0.0;
+        var y = 0.0;
+        for k in 3 {
+            x += mesher::vertex(mesher::cell_node(c, k))[0] / 3.0;
+            y += mesher::vertex(mesher::cell_node(c, k))[1] / 3.0;
+        }
+        part.push(if mesher::phi(solid, x, y, 0.0) < 0.0 { 1 } else { 0 });
+    }
+    cells = 0;
+    vertices = 0;
+    for side in 2 {
+        var xy: f64[>..] = [];
+        var tri: i64[>..] = [];
+        var index: i64[>..] = [];
+        for n in mesher::point_count() { index.push(-1); }
+        for c in mesher::cell_count() {
+            if part[c] != side { continue; }
+            for k in 3 {
+                let n = mesher::cell_node(c, k);
+                if index[n] < 0 {
+                    index[n] = xy.len / 2;
+                    xy.push(mesher::vertex(n)[0]);
+                    xy.push(mesher::vertex(n)[1]);
+                }
+                tri.push(index[n]);
+            }
+        }
+        let file = if side == 0 { "flow" } else { "solid" };
+        if side == 0 {
+            cells = tri.len / 3;
+            vertices = xy.len / 2;
+        }
+        if tri.len == 0 || !write_file(str(dir, "/", file, ".xy"), to_bytes(xy[..])) || !write_file(str(dir, "/", file, ".tri"), to_bytes(tri[..])) {
+            write_stderr(str("skein run: cannot write the mesh in '", dir, "'\n"));
+            return false;
+        }
+    }
+    return true;
+}
+
+// Adds the mirror of the triangles at x = middle. The vertices on the
+// line x = middle stay single.
+fn mirror(xy: f64[>..]&, tri: i64[>..]&, middle: f64) {
+    let n = xy.len / 2;
+    let t = tri.len;
+    let tol = 1.0e-9 * max(abs(middle), 1.0);
+    var image: i64[>..] = [];
+    for v in n {
+        if abs(xy[2 * v] - middle) <= tol {
+            image.push(v);
+            continue;
+        }
+        image.push(xy.len / 2);
+        xy.push(2.0 * middle - xy[2 * v]);
+        xy.push(xy[2 * v + 1]);
+    }
+    for i in t { tri.push(image[tri[i]]); }
 }
 
 var cells = 0;
@@ -1116,7 +1505,7 @@ fn dof_estimate() -> i64 {
         cell_count += length * band / (0.4330127 * r.h * mesh_size);
     }
     let vertex_count = 0.5 * cell_count;
-    return (if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
+    return (if turbulent { 5.0 * vertex_count } else if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
 }
 
 recursive fn shape_area(n: i64) -> f64 {
@@ -1159,9 +1548,10 @@ fn unit_of(d: i64[3]) -> u8[>..] {
 // The component of a velocity vector in a report, or -1.
 var vector_comp = -1;
 
-let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P"];
+let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P", "flow::VALUE_UX", "flow::VALUE_UY"];
 let VELOCITY_D: i64[3] = [2, 0, -2];
 let PRESSURE_D: i64[3] = [-2, 2, -4];
+let LENGTH_D: i64[3] = [2, 0, 0];
 
 // The Goose expression of the SI value of result e, and its dimension.
 // The program evaluates it in a function with the variable `name`, the
@@ -1170,9 +1560,9 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
     let k = kind(e);
     if k == syntax::N_AT {
         var what, other = point_field(e);
-        if other >= 0 && vector_comp >= 0 { what = vector_comp; }
+        if other >= 0 && vector_comp >= 0 { what += vector_comp; }
         let at = scaled(at_point(child(e, 1)));
-        let d = if what == 2 { PRESSURE_D } else { VELOCITY_D };
+        let d = if what == 2 { PRESSURE_D } else if what >= 3 { LENGTH_D } else { VELOCITY_D };
         format(out, "at(", VALUE_NAMES[what], ", ");
         lit(out, at.v[0]);
         out.append(", ");
@@ -1216,10 +1606,20 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
 
 // The Goose condition of the region of a `boundary(shape, cond)`, in the
 // coordinates x and y and the tolerance tol of the program.
-fn emit_boundary(out: u8[>..]&, b: i64) {
+recursive fn emit_boundary(out: u8[>..]&, b: i64) {
+    if is_union(b) {
+        for k in 2 {
+            out.append(if k == 0 { "(" } else { ") || (" });
+            let c = child(b, k);
+            let r = named_of(c, BOUNDARY);
+            emit_boundary(out, if r >= 0 { named[r].value } else { c });
+        }
+        out.push(')');
+        return;
+    }
     let shape = arg(b, 0);
     let s = named_of(shape, SHAPE);
-    if s != domain {
+    if s != domain && (s < 0 || s != solid_domain) {
         if s < 0 || !emit_shape_edge(out, named[s].value) {
             unsupported(tok(shape), "the shape of the boundary is not the domain, a rect or a circle", "write boundary(dom, ...)");
         }
@@ -1462,6 +1862,29 @@ let PRELUDE = """
 
     """;
 
+// The part of the program of a model with a solid.
+let COUPLED_PRELUDE = """
+    fn solve_coupled(step: u8[:], rtol: f64) {
+        let converged = flow::solve_fsi(rtol);
+        format(solves, "  ", step, ",", flow::cell_count() + flow::solid_cells(), ",", flow::dof_count() + 2 * flow::solid_nodes(), ",",
+               flow::newton_steps, ",", flow::linear_iterations, ",", flow::last_seconds, ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        let r = flow::last_residual / max(flow::first_residual, 1.0e-300);
+        check("solve", "residual", converged, str(r), str("<= ", rtol));
+    }
+
+    fn output_solid(path: u8[:], x_ref: f64) {
+        if !flow::write_solid_vtu(path, x_ref) {
+            write_stderr(str("skein run: cannot write '", path, "'\n"));
+            failed = true;
+            return;
+        }
+        format(results, "  ", path, "\n");
+        result_count++;
+    }
+
+    """;
+
 // The regions that the program selects: indices in `named`.
 var used_regions: i64[>..];
 
@@ -1480,7 +1903,7 @@ fn emit_selects(out: u8[>..]&) {
             lit(out, p.v[1]);
             out.append(");\n}\n\n");
         } else {
-            out.append("flow::select_boundary() { x, y => ");
+            out.append(if on_solid(r) { "flow::select_solid_boundary() { x, y => " } else { "flow::select_boundary() { x, y => " });
             emit_boundary(out, g.value);
             out.append(" };\n}\n\n");
         }
@@ -1492,6 +1915,19 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     format(out, "    region(select_", g.name, "(), ");
     quoted(out, g.name);
     out.append(");\n");
+    if b.kind == BC_U {
+        out.append("    flow::fix_solid();\n");
+        return;
+    }
+    if b.expr >= 0 {
+        for j in 2 {
+            if b.comp >= 0 && b.comp != j { continue; }
+            format(out, "    flow::fix_velocity_at(", j, ") { x, y => ");
+            emit_coordinate(out, if b.comp >= 0 { b.expr } else { child(b.expr, j) });
+            out.append(" };\n");
+        }
+        return;
+    }
     if b.kind == BC_P {
         out.append("    flow::fix_pressure(");
         lit(out, b.v[0]);
@@ -1509,8 +1945,9 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
     format(out, "// step ", s.name, ": static\nfn step_", s.name, "() {\n    flow::clear_bcs();\n");
+    if solid_tok >= 0 { out.append("    flow::clear_solid_bcs();\n"); }
     for b in active[s.first_bc..s.first_bc + s.bc_count] { emit_bc(out, b); }
-    out.append("    solve(");
+    out.append(if solid_tok >= 0 { "    solve_coupled(" } else { "    solve(" });
     quoted(out, s.name);
     out.append(", ");
     lit(out, s.rtol);
@@ -1528,6 +1965,15 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
         lit(out, reference(VELOCITY_D));
         out.append(", ");
         lit(out, reference(PRESSURE_D));
+        out.append(");\n");
+    }
+    if s.solid_output {
+        var path: u8[>..] = [];
+        format(path, results_dir, "/", s.name, "_", solid_name, ".vtu");
+        out.append("    output_solid(");
+        quoted(out, path);
+        out.append(", ");
+        lit(out, reference(LENGTH_D));
         out.append(");\n");
     }
     out.append("}\n\n");
@@ -1612,14 +2058,27 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     quoted(out, str(flow_path[..flow_path.len - 4], "solvers"));
     out.append(";\n");
     out.append(PRELUDE);
+    if solid_tok >= 0 { out.append(COUPLED_PRELUDE); }
     emit_selects(out);
     for si in 0..steps.len { emit_step(out, si, results_dir); }
     out.append("fn main() {\n");
+    if turbulent { out.append("    flow::set_turbulent(true);\n"); }
     format(out, "    // mesh on ", named[domain].name, ": P", order, "/P1 triangles, written by skein run\n    if !flow::read_mesh(");
     quoted(out, results_dir);
     format(out, ", ", order, ") {\n        write_stderr(\"skein run: cannot read the mesh in ");
     out.append(results_dir);
     out.append("\\n\");\n        exit(3);\n    }\n    tol = flow::tolerance();\n");
+    if solid_tok >= 0 {
+        format(out, "    // mesh on ", named[solid_domain].name, ": P2 triangles that share the interface nodes\n    if !flow::read_solid(");
+        quoted(out, results_dir);
+        out.append(") {\n        write_stderr(\"skein run: cannot read the solid mesh in ");
+        out.append(results_dir);
+        format(out, "\\n\");\n        exit(3);\n    }\n    // physics ", solid_name, ", material ", name(solid_material), ": plane strain\n    flow::solid(");
+        lit(out, scaled_value(property_of(solid_material, "E")));
+        out.append(", ");
+        lit(out, scalar_value(property_of(solid_material, "nu")));
+        out.append(");\n");
+    }
     format(out, "    // physics ", physics_name, ", material ", material_name, "\n    flow::fluid(");
     lit(out, scaled_value(property("rho")));
     out.append(", ");
@@ -1631,6 +2090,14 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         out.append(", ");
         lit(out, force[1]);
         out.append(");\n");
+    }
+    if period_high >= 0 {
+        let g = named[period_high];
+        format(out, "    // symmetry: bloch, periodic\n    region(select_", g.name, "(), ");
+        quoted(out, g.name);
+        out.append(");\n    if !flow::periodic(");
+        lit(out, period[0]);
+        out.append(", 0.0) {\n        write_stderr(\"skein run: the nodes of the ends of the period do not match\\n\");\n        exit(3);\n    }\n");
     }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }

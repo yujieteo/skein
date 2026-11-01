@@ -80,6 +80,19 @@ Each phase 4 lane changes only the rows of its own items.
 | sample 05 | done: [05_meshless_plate.skn](../samples/05_meshless_plate.skn) runs with `rkpm` on the 7,171 nodes of a P1 mesh of the plate, in 12 s. Its `expect` passes: σxx at the top of the hole is 298 MPa, 0.6 % from the Kirsch value 3S. Poisson disk points do not run yet. |
 | tessellated STEP AP242 export | done: `skein export --format step` writes a `TESSELLATED_SHELL` with the triangles of the STL export, `src/mesher/stl.goose`. No STEP reader runs on the desktop, so the test in `src/mesher/test.goose` is a schema check: the Part 21 frame, the `#n` references, the index range and the triangle count against the STL. |
 
+## Phase 5 status
+
+Each phase 5 lane changes only the rows of its own items.
+
+| Item | Status |
+|---|---|
+| radiation with view factors | done for 2D steady heat on `cg`: the natural bc `dot(q, n) = radiation(eps)` makes the faces of the bc one gray diffuse enclosure, with view factors by crossed strings and a check of their row sums (`src/elements/radiation.goose`). [radiation_annulus_tri.skn](../examples/elements/radiation_annulus_tri.skn) matches the closed form of two concentric tubes within 0.001 %. 3D and transient steps do not run yet. |
+| turbulence and the turbulence template | done: the `k_omega_sst` template (Menter 1994) on P1 triangles with SUPG/PSPG, pseudo-transient continuation, and automatic wall values of k and w (`src/flow/rans.goose`). A `bloch` group with `k: 0` makes a rect periodic. The centre velocity of [channel_sst_tri.skn](../examples/flow/channel_sst_tri.skn) at Re_tau = 395 is 20.86 u_tau, 3.8 % above the DNS of Moser et al. (1999). Inlet values of k and w do not run yet. |
+| FSI | done for a steady flow and a `linear_elastic` solid in plane strain: an `interface` with `mesh_motion: harmonic`, a partitioned solve with Aitken relaxation, and one mesh of the two shapes with shared interface nodes (`src/flow/fsi.goose`). [turek_hron_fsi1_tri.skn](../examples/flow/turek_hron_fsi1_tri.skn) gives drag 14.298 N/m (+0.02 %), lift 0.758 N/m (-0.7 %) and uy at point A 0.816 mm (-0.6 %). ux at A is 4.5 % high, because the small strain does not shorten the flag as it bends. Its `expect` waits for a `finite_strain` St. Venant-Kirchhoff solid, which is not merged. Transient FSI does not run yet. |
+
+No femahoy gap belongs to these three items, and implementation.md §10
+has no benchmark for them.
+
 ## Risks
 
 | Risk | Effect | What to do |

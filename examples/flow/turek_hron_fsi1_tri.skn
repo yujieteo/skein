@@ -1,0 +1,97 @@
+// Turek and Hron FSI1 (2006): an elastic flag behind a cylinder in a
+// laminar channel flow at Re = 20 bends to a steady shape. The flow has
+// P2/P1 cells, and the flag has P2 cells of a linear elastic solid.
+// References: drag 14.295 N/m, lift 0.7638 N/m, and at point A ux =
+// 0.0227 mm and uy = 0.8209 mm.
+//
+// The benchmark flag is a St. Venant-Kirchhoff solid. Its strain is below
+// 0.1%, so the small strain gives uy within 1%. But ux is 4.5% high: the
+// small strain does not shorten the flag as it bends, by about
+// 2 uy^2/(3 L) = 0.0013 mm. So ux is a report here, and its expect waits
+// for the finite strain of the flow generator.
+
+model turek_hron_fsi1_tri: 2d, SI
+
+let H: Length = 0.41 m
+let D: Length = 0.1 m
+let U_mean: Velocity = 0.2 m/s
+
+scales D, U_mean, 1000 kg/m^3
+
+let chan: Surface = rect((0, 0) m, (2.5 m, H))
+let cyl: Surface = circle((0.2, 0.2) m, D/2)
+let flag: Surface = rect((0.2, 0.19) m, (0.6, 0.21) m)
+let bar: Surface = flag - cyl
+let fluid_dom: Surface = chan - cyl - flag
+let inlet: Curve = boundary(fluid_dom, x == 0 m)
+let walls: Curve = boundary(fluid_dom, y == 0 m || y == H)
+let cyl_wall: Curve = boundary(fluid_dom, cyl)
+let wet_fluid: Curve = boundary(fluid_dom, flag)
+let body: Curve = cyl_wall | wet_fluid
+let root: Curve = boundary(bar, cyl)
+let wet_solid: Curve = boundary(bar, flag)
+
+material water {
+    rho: Density = 1000 kg/m^3
+    mu: DynViscosity = 1 Pa*s
+}
+
+material flag_lin {
+    E: Pressure = 1.4 MPa
+    nu: Real = 0.4
+}
+
+mesh mf on fluid_dom {
+    size: 0.04 m
+    cell: tri
+    refine cyl_wall: 0.0025 m
+    refine wet_fluid: 0.0025 m
+}
+
+mesh ms on bar {
+    size: 0.0025 m
+    cell: tri
+}
+
+// Written out, since the template linear_elastic of the flag has the
+// name sigma too.
+physics flow on fluid_dom solves v: Vector<Velocity>, p: Pressure {
+    material water
+    assume incompressible, newtonian, laminar
+    let sigma_f: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    eq rho*grad(v)*v - div(sigma_f) = 0
+    eq div(v) = 0
+}
+
+physics flag_solid on bar: linear_elastic solves u: Vector<Length> {
+    material flag_lin
+    assume plane_strain
+}
+
+// The fluid velocity is 0 on the flag, and the tractions balance.
+interface fsi: wet_fluid, wet_solid {
+    mesh_motion: harmonic
+}
+
+method flow: cg { mesh: mf, order: { v: 2, p: 1 } }
+
+method flag_solid: cg { mesh: ms, order: 2 }
+
+// The outlet takes the natural condition sigma_f*n = 0.
+step steady: static {
+    bc inlet: v = (6*U_mean*y*(H - y)/H^2, 0)
+    bc walls: v = 0
+    bc cyl_wall: v = 0
+    bc root: u = 0
+    output v, p, u
+    report drag = -integral((sigma_f*n).x, body)
+    report lift = -integral((sigma_f*n).y, body)
+    report u at (0.6, 0.2) m
+    report ux_a = u.x at (0.6, 0.2) m
+}
+
+// n points out of the fluid, so the force on the cylinder and the flag
+// is -sigma_f*n.
+expect drag: -integral((sigma_f*n).x, body) == 14.295 N/m within 4%
+expect lift: -integral((sigma_f*n).y, body) == 0.7638 N/m within 4%
+expect uy_a: u.y at (0.6, 0.2) m == 0.8209 mm within 4%

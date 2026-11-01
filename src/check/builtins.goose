@@ -418,6 +418,27 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(TIME, 0);
     }
+    if name == "radiation" {
+        // radiation(eps): the net gray diffuse radiation out of the faces of an enclosure (spec §12.1).
+        guard arity(tok, name, a, 1, 1) else { return any_ty(); }
+        want_dimless(tok, name, a, 0);
+        if !in_natural {
+            error(tok, "radiation_form", "radiation(eps) stands only as the right side of a natural bc",
+                  "write bc face: dot(q, n) = radiation(0.8)");
+            return any_ty();
+        }
+        let d, ok = named_dim("HeatFlux");
+        var r = num_ty(d, 0);
+        r.varying = true;
+        return r;
+    }
+    if name == "wall_distance" {
+        // wall_distance(): the distance to the nearest wall, a boundary with v = 0 (spec §4.2).
+        guard arity(tok, name, a, 0, 0) else { return any_ty(); }
+        var r = num_ty(LENGTH, 0);
+        r.varying = true;
+        return r;
+    }
     if name == "rms" {
         // rms(f, psd): the root of the sum of |f|^2 psd over the frequencies of a harmonic step (spec §14.5, gap G2).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) && is_num(t0) && is_num(t1) else { return any_ty(); }

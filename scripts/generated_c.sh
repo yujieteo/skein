@@ -38,13 +38,16 @@ examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
+examples/elements/radiation_annulus_tri.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/scordelis_lo_roof.skn
 examples/femahoy/warpage_thick_copper.skn
 examples/flow/cavity_coarse.skn
+examples/flow/channel_sst_tri.skn
 examples/flow/poiseuille_stokes.skn
+examples/flow/turek_hron_fsi1_tri.skn
 examples/grid/mms_dg_static.skn
 examples/grid/mms_fv_static.skn
 examples/grid/mms_fv_transient.skn

@@ -423,7 +423,7 @@ the standard library declares templates in this version.
 | `heat(q_v)` | `T` |
 | `stokes(f)`, `navier_stokes(f)` | `v`, `p` |
 | `reissner_mindlin(layup, mirror, axis, top, q)` (shell), `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` (beam), §4.3 | `w`, `theta` |
-| `k_omega_sst` (turbulence) | `k`, `w` (the specific dissipation rate ω: `omega` is the built-in of §14.2) |
+| `k_omega_sst(f)` (turbulence) | `v`, `p`, `k`, `w` (the specific dissipation rate ω: `omega` is the built-in of §14.2) |
 
 The [roadmap](roadmap.md) gives the phase of each template.
 
@@ -1315,6 +1315,24 @@ is not the point of an earlier `rigid` is an error [`rigid_form`]. With no
 Reason: a test puts its load on a face through a rigid plate, and the
 force and the moment of the plate are in the test (femahoy gap G17,
 CalculiX `*EQUATION`).
+
+The right side `radiation(eps)` of a natural condition on a heat flux is
+the net gray diffuse radiation out of the face, with the emissivity `eps`
+(a constant `Real`). The faces of all such conditions of a step make one
+enclosure, and they must close it. The view factors between the facets of
+the mesh are from the crossed strings of Hottel, with the facets that hide
+a pair in part. The temperature must be absolute (K). Other uses of
+`radiation` are errors [`radiation_form`].
+
+```skein
+bc rod_face: dot(q, n) = radiation(0.8)
+bc tube_face: dot(q, n) = radiation(0.5)
+```
+
+Reason: the radiation between surfaces is non-local, so the strong form
+cannot state it (decision G4.2). A condition and not a separate item:
+radiation is the flux of a face, like the other natural conditions.
+`skein run` solves it in a `2d` model.
 
 ### 12.2 Where `bc` may stand
 
@@ -2431,6 +2449,8 @@ project of its own size, and Skein is a simulation language first. See the
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
 | `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
 | `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
+| `radiation(eps)` | the gray diffuse radiation of a face to the other faces of its enclosure, in a natural condition (§12.1) |
+| `wall_distance()` | the distance to the nearest wall, a boundary with `v = 0`, in a turbulence model (§4.2) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 
@@ -2468,6 +2488,8 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Knyazev, A. V. (2001). Toward the optimal preconditioned eigensolver: LOBPCG. SIAM J. Sci. Comput. 23(2).
 - Labelle, F., Shewchuk, J. R. (2007). Isosurface stuffing: fast tetrahedral meshes with good dihedral angles. ACM Trans. Graph. 26(3).
 - Liu, W. K., Jun, S., Zhang, Y. F. (1995). Reproducing kernel particle methods. IJNMF 20.
+- Menter, F. R. (1994). Two-equation eddy-viscosity turbulence models for engineering applications. AIAA J. 32(8).
+- Moser, R. D., Kim, J., Mansour, N. N. (1999). Direct numerical simulation of turbulent channel flow up to Re_tau = 590. Phys. Fluids 11(4).
 - Remacle, J.-F., Lambrechts, J., Seny, B., Marchandise, E., Johnen, A., Geuzaine, C. (2012). Blossom-Quad: a non-uniform quadrilateral mesh generator using a minimum-cost perfect-matching algorithm. IJNME 89(9).
 - Rhie, C. M., Chow, W. L. (1983). Numerical study of the turbulent flow past an airfoil with trailing edge separation. AIAA J. 21(11).
 - Ruppert, J. (1995). A Delaunay refinement algorithm for quality 2-dimensional mesh generation. J. Algorithms 18(3).

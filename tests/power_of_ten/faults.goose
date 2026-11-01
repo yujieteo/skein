@@ -39,6 +39,11 @@ fn main() {
         elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1, 1, 1);
         elements::plane(0, 0.0);
         elements::traction(1.0, 0.0, 0.0);
+    } else if call == "elements_radiate" {
+        elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1, 1, 1);
+        elements::heat(50.0, 0.0, 1.0);
+        elements::plane(0, 0.0);
+        elements::radiate(0.8, 5.670374419e-8);
     } else if call == "elements_solve" {
         elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1, 1, 1);
         elements::solve();

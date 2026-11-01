@@ -32,6 +32,7 @@ import .source;
 import .stages;
 import .eigen;
 import .wave;
+import .radiation;
 
 let X = 0;
 let Y = 1;
@@ -243,10 +244,18 @@ fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
 // Adds a uniform outward heat flux q·n = g (power per area) on the region.
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 
+// Adds the facets of the region to the enclosure of the step, with the
+// emissivity eps: the natural condition dot(q, n) = radiation(eps).
+// `sb` is the Stefan-Boltzmann constant in the units of the model.
+fn radiate(eps: f64, sb: f64) { add_radiation(eps, sb); }
+
 // Removes the fixed values, the loads and the solution, for the next
 // step. The mesh, the physics and the live set stay. The solution stays as
 // the value of the nodes that no live cell holds.
-fn clear_bcs() { clear_conditions(); }
+fn clear_bcs() {
+    clear_conditions();
+    clear_radiation();
+}
 
 // Assembles and solves by CG with an AMG preconditioner, or the wave
 // physics by GMRES with ILU(0). Returns false if the solver does not

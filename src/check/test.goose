@@ -314,6 +314,10 @@ fn test_conditions() {
     expect_id("bc_conflict", str(elastic, "bc boundary(b, x == 1 m): u = 0\nbc boundary(b,x==1 m): sigma*n = (0, 0, 1) MPa\n"));
     let heat = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial cu {\n    k: Conductivity = 400 W/(m*K)\n}\nmesh m1 on b { size: 0.1 m }\n");
     expect_clean("a flux with other spaces", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T) + k * grad(T) + k * grad(T) + k * grad(T) + k * grad(T)) = 0 W/m^3\n}\nbc f: dot(k*grad(T) + k*grad(T) + k*grad(T) + k*grad(T) + k*grad(T), n) = 0 W/m^2\n"));
+    let heat_eq = "physics h on b solves T: Temperature = 300 K {\n    material cu\n    let q: Vector<HeatFlux> = -k*grad(T)\n    eq div(q) = 0\n}\nbc boundary(b) - f: T = 300 K\n";
+    expect_clean("radiation of a natural bc", str(heat, heat_eq, "bc f: dot(q, n) = radiation(0.8)\n"));
+    expect_id("radiation_form", str(heat, heat_eq, "let g: HeatFlux = radiation(0.8)\n"));
+    expect_id("radiation_form", str(heat, heat_eq, "bc f: T = radiation(0.8)\n"));
     expect_free("a sum flux", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T) + k * grad(T)) = 0 W/m^3\n}\nbc f: T = 300 K\n"),
                 "T,boundary(b) - f,(k * grad(T) + k * grad(T))*n = 0\n");
     expect_free("a bc on a compound region", str(heat, "physics h on b solves T: Temperature {\n    material cu\n    eq div(k * grad(T)) = 0 W/m^3\n}\nbc boundary(b)-f: T = 300 K\n"),

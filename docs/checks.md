@@ -123,6 +123,7 @@ in the file stays in the review.
 | `bc_form` | §12.1 | the left side is not an unknown or a flux | `bc tip: sigma = 0` | `sigma*n = 0` |
 | `bc_conflict` | §12.3 | two conditions fight on one region and component | `u = 0` and `sigma*n = …` on one face | the two lines |
 | `rigid_form` | §12.1 | `rigid(p)` is not the whole right side of an essential condition on a displacement, `p` is not a `Point`, or a `moment` is not on the point of an earlier `rigid` | `bc f: u.x = rigid(c)` | `bc f: u = rigid(c)` |
+| `radiation_form` | §12.1 | `radiation(eps)` is not in the right side of a natural condition | `bc f: T = radiation(0.8)` | `bc f: dot(q, n) = radiation(0.8)` |
 | `bc_off_boundary` | §12.3 | a `bc` region is not on the boundary of its field's region | an interior surface | `boundary(…)` |
 
 ### 2.7 Methods and steps

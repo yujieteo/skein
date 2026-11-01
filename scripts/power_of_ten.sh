@@ -88,6 +88,7 @@ runtime_solve_static|solve_linear_static: a material, a mesh and its dofs
 elements_elastic|set_elastic: E > 0, -1 < nu < 0.5, t > 0 and a plane assumption
 elements_fix|fix_region: a physics, -1 <= comp < ncomp and the arrays of the dofs
 elements_traction|add_region_load: a physics and the arrays of the dofs
+elements_radiate|add_radiation: a 2d heat physics, 0 < eps <= 1 and sb > 0
 elements_solve|solve_system: a physics and the arrays of the dofs
 shells_laminate_ply|laminate_ply: t, e1, e2, g12, g13 and g23 > 0
 shells_fix|fix: 0 <= n < node_count(), and 0 <= dof < 6

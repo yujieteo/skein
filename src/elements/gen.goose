@@ -240,6 +240,7 @@ let PLANE_STRAIN = 2;
 let BC_FIX = 0;
 let BC_LOAD = 1;
 let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
+let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosure of the step
 
 // A region of the boundary: the union of planes `axis == value` and of
 // the surfaces of the shapes `shapes` of the mesher, or the surface of the
@@ -1239,6 +1240,10 @@ fn bc(n: i64) -> i64 {
         if x.n != dim { unsupported(tok(v), "the traction is a vector", BC_FIX_TEXT); }
         b.kind = BC_LOAD;
         b.v = x.v;
+    } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) && is_call(v, "radiation") {
+        if dim != 2 { unsupported(tok(v), "radiation(eps) runs in a 2d model only", "make the model 2d"); }
+        b.kind = BC_RADIATE;
+        b.v[0] = scalar_value(arg(v, 0));
     } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) {
         b.kind = BC_LOAD;
         b.v[0] = scalar_value(v);
@@ -1674,7 +1679,7 @@ fn harmonic_values() {
 fn supports() {
     for s in steps {
         var fixes = 0;
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { fixes++; } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX || b.kind == BC_SOURCE { fixes++; } }
         if fixes == 0 && physics != WAVE {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
@@ -1684,7 +1689,7 @@ fn supports() {
             let arg0 = arg(r.expr, 0);
             let si = find_surf(name(arg0));
             var on = false;
-            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD && b.surf == si { on = true; } }
+            for b in active[s.first_bc..s.first_bc + s.bc_count] { if (b.kind == BC_FIX || b.kind == BC_SOURCE) && b.surf == si { on = true; } }
             if !on {
                 unsupported(tok(arg0), str("the boundary ", name(arg0), " is not fixed in step ", s.name, ", so it has no reaction"),
                             "report the reaction of a boundary with a fixed value");
@@ -2102,6 +2107,13 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         out.append(if b.kind == BC_LOAD { ", " } else { ");\n    elements::fix(1, " });
         lit(out, z[1]);
         out.append(if b.kind == BC_LOAD { ", 0.0);\n" } else { ");\n" });
+    } else if b.kind == BC_RADIATE {
+        // σ = 5.670374419e-8 kg/(s^3 K^4) in the units of the model.
+        out.append("    elements::radiate(");
+        lit(out, b.v[0]);
+        out.append(", ");
+        lit(out, 5.670374419e-8 * codegen::system.t * codegen::system.t * codegen::system.t / codegen::system.m);
+        out.append(");\n");
     } else if b.kind == BC_LOAD && physics == HEAT {
         out.append("    elements::flux(");
         lit(out, b.v[0]);

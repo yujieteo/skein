@@ -651,7 +651,9 @@ fn check_bc(n: i64) {
     if one_arg(rhs, "rigid") >= 0 {
         check_rigid(rhs, l, comp, natural);
     } else {
+        in_natural = natural;
         let r = expr_ty(rhs);
+        in_natural = false;
         if natural {
             var lt = l;
             if point && is_num(lt) {
