@@ -12,9 +12,10 @@
 //    times the least wanted size in the cell, and each cell with a point
 //    at the midpoint of one of its edges. The least wanted size is that at
 //    the distance `reach` nearer to the target than the centre, with reach
-//    the distance from the centre to the farthest point of the cell. Each marked cell is cut in two at the
-//    midpoint of its longest edge. Equal lengths go to the edge of the
-//    smaller key, so two cells that share an edge cut it the same way.
+//    the distance from the centre to the farthest point of the cell. Each
+//    marked cell is cut in two at the midpoint of its longest edge. Equal
+//    lengths go to the edge of the smaller key, so two cells that share an
+//    edge cut it the same way.
 // 3. The rounds stop when no cell is marked. Then no edge holds a point at
 //    its midpoint, and the cells are conforming.
 import std;
