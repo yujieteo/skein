@@ -346,6 +346,9 @@ fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
 // Adds a uniform outward heat flux q·n = g (power per area) on the region.
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 
+// The condition dot(q, n) = h (T - t_inf) on the region.
+fn film(h: f64, t_inf: f64) { add_film(h, t_inf); }
+
 // Adds the facets of the region to the enclosure of the step, with the
 // emissivity eps: the natural condition dot(q, n) = radiation(eps).
 // `sb` is the Stefan-Boltzmann constant in the units of the model.
@@ -356,6 +359,7 @@ fn radiate(eps: f64, sb: f64) { add_radiation(eps, sb); }
 // the value of the nodes that no live cell holds.
 fn clear_bcs() {
     clear_conditions();
+    clear_films();
     clear_radiation();
     clear_impedance();
     if physics == MIXED { clear_pressure(); }
@@ -420,6 +424,10 @@ fn cut_difference() -> f64, f64 {
 
 // The largest von Mises stress at the nodes of the region.
 fn max_von_mises() -> f64 { return region_max_von_mises(); }
+
+// The mean of component `comp` of u, or T (comp 0), on the facets of the
+// region.
+fn mean(comp: i64) -> f64 { return region_mean(comp); }
 
 // The sum of the reactions on all fixed dofs, for the check `equilibrium`.
 fn total_reaction() -> f64, f64, f64 {

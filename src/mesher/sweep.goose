@@ -249,6 +249,40 @@ fn sweep_tets(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     return done;
 }
 
+// Whether each shape is a box, a cylinder or a union, an intersection or
+// a difference: the shapes that turn_shapes can turn.
+fn turnable() -> bool {
+    for s in shapes {
+        if s.kind != BOX && s.kind != CYLINDER && s.kind != UNION && s.kind != INTERSECT && s.kind != SUBTRACT { return false; }
+    }
+    return true;
+}
+
+// Turns the first `count` shapes so that the new axis i is the old axis
+// (i + shift) % 3. A shift of 1 makes x the new z, and a shift of 2 makes
+// y the new z. A shift of 3 - k turns a shift of k back.
+fn turn_shapes(count: i64, shift: i64) {
+    for i in count {
+        // A box holds two corners, and a cylinder a centre and an axis.
+        guard shapes[i].kind == BOX || shapes[i].kind == CYLINDER else { continue; }
+        let p = shapes[i].p;
+        var q: f64[8] = p;
+        for c in 3 {
+            q[c] = p[(c + shift) % 3];
+            q[3 + c] = p[3 + (c + shift) % 3];
+        }
+        shapes[i].p = q;
+    }
+}
+
+// Turns each node of the mesh as turn_shapes turns the shapes.
+fn turn_nodes(shift: i64) {
+    for n in point_count() {
+        let x = point(n);
+        for c in 3 { runtime::coords[3 * n + c] = x[(c + shift) % 3]; }
+    }
+}
+
 // Meshes g with the grid of the planes of its bounds and of the boxes of
 // `planes`, and moves each node on the boundary of the cells onto the
 // boundary of g.

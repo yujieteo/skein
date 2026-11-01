@@ -3,6 +3,7 @@
 // boundary on the surface of a shape.
 import std;
 import math;
+import dictionary;
 namespace elements;
 import mesher from "../mesher";
 import runtime from "../runtime";
@@ -58,12 +59,54 @@ fn build_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
     body_shape = g;
     guard ord == 2 else { return true; }
     let tol = geometry_tolerance();
+    let edges = boundary_edges(d);
+    let nv = node_count();
     for c in cell_count() {
         for e in edge_count(d) {
             let a = cell_node(c, edge_node(d, e, 0));
             let b = cell_node(c, edge_node(d, e, 1));
+            // An edge through the body, such as the third edge of a cell
+            // with two edges on a round side, stays straight.
+            guard edges.get(min(a, b) * nv + max(a, b)) != null else { continue; }
             if shape_gap(g, a) <= tol && shape_gap(g, b) <= tol { snap(g, cell_node(c, d + 1 + e), a, b); }
         }
     }
     return true;
+}
+
+// The edges of the facets on the boundary of the mesh, each a key
+// min(a, b) * node_count() + max(a, b) of its vertices a and b. A facet on
+// the boundary is a facet of one cell.
+fn boundary_edges(d: i64) -> dictionary<i64, i64> {
+    let nv = node_count();
+    guard nv < 2000000 else { abort("boundary_edges: fewer than 2e6 nodes"); }
+    var count = dictionary<i64, i64> {};
+    for c in cell_count() {
+        for f in facet_count(d) { count.update(facet_key(d, c, f), 0) { it += 1; }; }
+    }
+    var edges = dictionary<i64, i64> {};
+    for c in cell_count() {
+        for f in facet_count(d) {
+            let shared = count.get(facet_key(d, c, f));
+            guard shared != null && shared == 1 else { continue; }
+            for i in d {
+                for j in i + 1..d {
+                    let a = cell_node(c, facet_node(d, f, i));
+                    let b = cell_node(c, facet_node(d, f, j));
+                    edges.insert(min(a, b) * nv + max(a, b), 0);
+                }
+            }
+        }
+    }
+    return edges;
+}
+
+// The key of facet f of cell c: its sorted vertices in base node_count().
+fn facet_key(d: i64, c: i64, f: i64) -> i64 {
+    let nv = node_count();
+    var v: i64[3] = [0, 0, 0];
+    for l in d { v[l] = cell_node(c, facet_node(d, f, l)); }
+    if d == 2 { return min(v[0], v[1]) * nv + max(v[0], v[1]); }
+    sort(v);
+    return (v[0] * nv + v[1]) * nv + v[2];
 }
