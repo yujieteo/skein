@@ -292,6 +292,12 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    Worker and a module of its own. Thus a new value stops the run before
    it, and the memory of a run goes back when it ends.
 
+While a slider moves, the viewer shows an approximate answer from the
+solved cases, and the solve in the page replaces it when the slider
+stops (command_line.md §12). Reason: a solve of the interposer takes 45 s
+in the page, and an interpolation of the stored fields takes
+milliseconds.
+
 The page uses WebGPU as goosestrike does: WGSL compute kernels do the
 work (`src/gpu/kernels.wgsl`), and Goose sets up and controls the GPU
 (`src/gpu/gpu.goose`):

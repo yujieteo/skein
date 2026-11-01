@@ -320,7 +320,11 @@ in the browser (implementation.md §8). The page is the page of `report`
 (§12), with the look of §12.1: the source, the viewer and the solver
 tables. Its one stored case is the native run at the default values. The
 page has a slider for each `param` with a range of literals, for example
-`param L: Length = 200 mm in 100 mm..400 mm`. A slider that stops at
+`param L: Length = 200 mm in 100 mm..400 mm`. While a slider moves, the
+page shows an approximate answer at once: the reduced model of §12
+interpolates the fields of the solved cases. Each solve in the page
+becomes a solved case, so the approximate answer improves as the page
+solves more values. A slider that stops at
 other values meshes the model again in the page, solves it with the new
 values, and the viewer and the tables show that run: the deformed mesh,
 its records in TOON with the `mesh_quality` record of its mesh, and its
@@ -553,17 +557,48 @@ and the study table. Each row links to its line of the source.
 
 Each param of the study grid has a slider, and so does each param that
 has a control in the page of `build` (§7). A slider at the values of a
-stored case shows that case at once. A slider that stops at other values
-meshes and solves the model in the page, as the page of `build` does,
-and the viewer and the tables show that run. A value near a stored value
+stored case shows that case at once. A slider that moves between them
+shows an approximate answer at once, from the reduced model below. A
+slider that stops at other values meshes and solves the model in the
+page, as the page of `build` does, and the viewer and the tables show
+that run in place of the approximate answer. A value near a stored value
 (1 % of the range) takes the stored value. The page solve changes only
 the params with a control. If a study param without a control is not at
 its default, the page does not solve. If `report` does not run `build`,
 if `build` fails, or if the model is too large for the browser, the
-sliders move only between the stored cases. For a model that is too
+slider of a study param with a range of literals shows the approximate
+answer between the stored cases, and the other sliders move only between
+the stored cases. For a model that is too
 large, the page gives the memory that the model needs, as the page of
 `build` does. Reason: the interposer study has 72 cases, and its sliders
 must reach each value of each range.
+
+The reduced model (`approximate` in `src/report/viewer.js`) is the same
+for each physics, because it reads only the fields of the result files:
+
+- It interpolates the fields of the solved cases over the param values:
+  the stored cases and the solves in the page. The interpolation is a
+  cubic radial basis function with a linear term, on the params scaled
+  by the range of the cases. A field that is linear in the params, as a
+  load of a linear model, comes back without error. With too few cases
+  for the linear term, the term is a constant.
+- A case takes part only if its mesh has each node of the mesh of the
+  nearest case, or has the same cells with moved nodes. Then the nodes
+  move by the same weights. Reason: a param of the geometry of a box
+  model moves the grid lines, and keeps the cells. A param that changes
+  the cells, as a size of a mesh of tetrahedra, gives the nearest case.
+- Each result file (a step, a mode, or a time of a transient) takes the
+  result of the same name of each other case. Each number of a report
+  value is interpolated with the same weights.
+- The view shows the label "APPROXIMATE" and a dashed border, and the
+  tables show only the reports, marked approximate. The checks and the
+  expects come only from a full solve.
+
+The reduced model is weak where the answer is not smooth in the params:
+near a resonance of a harmonic step, at the start of yield, at a change
+of the flow regime, and for a mode whose sign or sequence changes
+between the cases. Outside the range of the cases it extrapolates with
+the linear term.
 
 The input "Open VTU" opens a VTU file of another solver in the same
 viewer, without source links.

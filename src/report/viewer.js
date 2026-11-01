@@ -349,16 +349,20 @@ function parseExpr(toks, metre) {
   let i = 0;
   const peek = () => toks[i];
   const take = (t) => { if (toks[i] === t) { i++; return true; } return false; };
-  const unit = () => {
-    // a unit after a value: mm, K^-1, W/(m*K): only the length factor matters
+  // a unit after a value: mm, K^-1, W/m^3, W/(m*K): only the length factor matters
+  const unitStart = (k) => UNIT_WORDS.has(toks[k]) || (toks[k] === '(' && UNIT_WORDS.has(toks[k + 1]));
+  const unitAtom = () => {
     let f = 1;
-    while (i < toks.length && UNIT_WORDS.has(toks[i])) {
-      f *= unitFactor(toks[i++], metre);
-      if (take('^')) { const neg = take('-'); const e = +toks[i++]; f = Math.pow(f, neg ? -e : e); }
-      if (peek() === '/' && UNIT_WORDS.has(toks[i + 1])) { i++; f /= unitFactor(toks[i++], metre); }
-    }
+    if (take('(')) { f = units(); take(')'); } else f = unitFactor(toks[i++], metre);
+    if (take('^')) { const neg = take('-'); const e = +toks[i++]; f = Math.pow(f, neg ? -e : e); }
     return f;
   };
+  const units = () => {
+    let f = unitAtom();
+    while ((peek() === '*' || peek() === '/') && unitStart(i + 1)) { const op = toks[i++]; const g = unitAtom(); f = op === '*' ? f * g : f / g; }
+    return f;
+  };
+  const unit = () => (UNIT_WORDS.has(peek()) ? units() : 1);
   function primary() {
     const t = toks[i++];
     if (t === undefined) throw new Error('end of the expression');
@@ -978,7 +982,7 @@ const D = JSON.parse(document.getElementById('skein-data').textContent);
 const M = readModel(D.source || '');
 const S = {
   caseIndex: 0, values: {}, step: 0, field: null, scale: 1, bands: 0, cut: 'off', cutAt: 0.5, mark: null, probe: null,
-  mesh: null, foreign: null, lines: false,
+  mesh: null, foreign: null, lines: false, approx: null,
 };
 const meshes = new Map();
 let view = null;
@@ -1021,6 +1025,18 @@ async function caseFor(values) {
 
 // The value of the text `t` in the unit of the param p of PARAMS.
 function inUnit(p, t) { return valueOf(M, t) / (p.unit ? valueOf(M, '1 ' + p.unit) : 1); }
+
+// A control as in PARAMS for a param with a range of literals that the page
+// does not solve, or null. Its slider shows the approximate answer between
+// the stored cases.
+function rangeControl(param) {
+  const m = param && param.range && /^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(.*)$/.exec(param.value);
+  const ends = m ? param.range.split('..') : [];
+  if (ends.length !== 2) return null;
+  const c = { name: param.name, unit: m[2].trim() };
+  [c.lo, c.hi] = ends.map((t) => inUnit(c, /[A-Za-z]/.test(t) ? t : t + ' ' + c.unit));
+  return c.lo < c.hi ? c : null;
+}
 
 let solves = 0;
 // Whether a solve in the page puts the implicit solves on the GPU too.
@@ -1078,6 +1094,286 @@ function meshOf(r) {
 function stepName(path) { return path.replace(/^.*\//, '').replace(/\.vtu$/, ''); }
 
 function currentCase() { return D.cases[S.caseIndex]; }
+
+// --- the reduced model ---------------------------------------------------------------
+
+// The approximate answer while a slider moves. It interpolates the fields
+// of the solved cases (the stored cases and the solves in the page) over
+// the param values: a cubic radial basis function with a linear term, on
+// the params scaled by the range of the cases. It is the same for each
+// physics: it reads only the fields of the result files. A result file
+// (a step, or a time of a transient) takes the result of the same name of
+// each other case. Only the cases that have each node of the mesh of the
+// nearest case take part, or that have its cells with moved nodes: then
+// the nodes move by the same weights. A param that changes the cells gives
+// the nearest case. The expects and the checks come only from the full
+// solve.
+
+// The fields of each result, and the node map of each pair of meshes.
+const romFields = new Map();
+const romMaps = new Map();
+let romIds = 0;
+
+// The point and cell data of result r.
+async function resultFields(r) {
+  if ('text' in r) return (await meshOf(r)).vtu;
+  if (!romFields.has(r.blob)) romFields.set(r.blob, blobVtu(r.blob));
+  return romFields.get(r.blob);
+}
+
+// The key of the mesh of result r.
+function meshKey(r) {
+  if ('text' in r) return 'page ' + (r.romId ??= ++romIds);
+  return 'blob ' + r.mesh;
+}
+
+// The parsed VTU of the mesh of result r: its points and cells.
+async function geometryOf(r) {
+  if ('text' in r) return (await meshOf(r)).vtu;
+  if (!geometries.has(r.mesh)) geometries.set(r.mesh, blobVtu(r.mesh));
+  return geometries.get(r.mesh);
+}
+
+function sameArray(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// The node of the points pb at each point of pa, or null. Two nodes at one
+// point, as the corners of the cells of fv and dg, give null.
+function pointMap(pa, pb) {
+  let size = 0;
+  for (let k = 0; k < 3; k++) {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = k; i < pa.length; i += 3) { lo = Math.min(lo, pa[i]); hi = Math.max(hi, pa[i]); }
+    size = Math.max(size, hi - lo);
+  }
+  const h = 1e-5 * (size || 1);
+  const at = (p, i, d) => Math.round(p[3 * i] / h + d[0]) + ',' + Math.round(p[3 * i + 1] / h + d[1]) + ',' + Math.round(p[3 * i + 2] / h + d[2]);
+  const nodes = new Map();
+  for (let i = 0; i < pb.length / 3; i++) nodes.set(at(pb, i, [0, 0, 0]), i);
+  if (nodes.size < pb.length / 3) return null;
+  const map = new Int32Array(pa.length / 3);
+  // A coordinate near a rounding boundary takes the key of its neighbour.
+  const near = [[0, 0, 0], [0.5, 0, 0], [-0.5, 0, 0], [0, 0.5, 0], [0, -0.5, 0], [0, 0, 0.5], [0, 0, -0.5]];
+  for (let i = 0; i < map.length; i++) {
+    const d = near.find((n) => nodes.has(at(pa, i, n)));
+    if (!d) return null;
+    map[i] = nodes.get(at(pa, i, d));
+  }
+  return map;
+}
+
+// The corner nodes of the cells of a parsed VTU, as small_vtu of
+// report.goose takes them: the old node of each new node, and the cells
+// of the new nodes.
+function corners(vtu) {
+  const keep = new Map(), old = [], conn = [], ends = [];
+  let from = 0;
+  for (let c = 0; c < vtu.offsets.length; c++) {
+    const to = vtu.offsets[c];
+    const n = Math.min((LINEAR[vtu.types[c]] || [0, to - from])[1], to - from);
+    for (let k = 0; k < n; k++) {
+      const node = vtu.conn[from + k];
+      if (!keep.has(node)) { keep.set(node, old.length); old.push(node); }
+      conn.push(keep.get(node));
+    }
+    ends.push(conn.length);
+    from = to;
+  }
+  return { old: Int32Array.from(old), conn, offsets: ends };
+}
+
+// The node of `from` at each node of `to` (two results): 'same' for one
+// mesh, 'moved' for the same cells with other points (a param of the
+// geometry), the nodes at the same points, or null. A solve in the page
+// has each node, and a stored case the corner nodes: its corner nodes
+// with the cells of `to` give the map.
+async function nodeMap(to, from) {
+  const key = meshKey(to) + '|' + meshKey(from);
+  if (meshKey(to) === meshKey(from)) return 'same';
+  if (romMaps.has(key)) return romMaps.get(key);
+  const [ga, gb] = await Promise.all([geometryOf(to), geometryOf(from)]);
+  let map = null;
+  if (ga.points.length === gb.points.length && sameArray(ga.offsets, gb.offsets) && sameArray(ga.conn, gb.conn)) {
+    map = 'moved';
+  } else if (!('text' in to) && 'text' in from) {
+    const k = corners(gb);
+    if (k.old.length === ga.points.length / 3 && sameArray(ga.offsets, k.offsets) && sameArray(ga.conn, k.conn)) map = k.old;
+  }
+  if (!map && ga.offsets.length === gb.offsets.length) map = pointMap(ga.points, gb.points);
+  romMaps.set(key, map);
+  return map;
+}
+
+// The solution x of the dense system A x = b by Gauss elimination, or
+// null if A is near singular.
+function solveDense(A, b) {
+  const n = b.length;
+  const a = A.map((row, i) => row.concat([b[i]]));
+  const big = Math.max(...a.map((row) => Math.max(...row.slice(0, n).map(Math.abs))), 1e-300);
+  for (let k = 0; k < n; k++) {
+    let p = k;
+    for (let i = k + 1; i < n; i++) if (Math.abs(a[i][k]) > Math.abs(a[p][k])) p = i;
+    if (Math.abs(a[p][k]) < 1e-10 * big) return null;
+    [a[k], a[p]] = [a[p], a[k]];
+    for (let i = k + 1; i < n; i++) {
+      const f = a[i][k] / a[k][k];
+      for (let j = k; j <= n; j++) a[i][j] -= f * a[k][j];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) {
+    let s = a[i][n];
+    for (let j = i + 1; j < n; j++) s -= a[i][j] * x[j];
+    x[i] = s / a[i][i];
+  }
+  return x;
+}
+
+// The weight of each point of `xs` at the point x: the cardinal functions
+// of the interpolation by r^3 with a linear term. Without enough points for
+// the linear term, the term is a constant, and else the nearest point.
+function romWeights(xs, x) {
+  const n = xs.length, d = x.length;
+  const phi = (p, q) => Math.hypot(...p.map((v, k) => v - q[k])) ** 3;
+  for (const linear of [true, false]) {
+    const m = linear ? d + 1 : 1;
+    const poly = (p) => (linear ? [1, ...p] : [1]);
+    const A = [];
+    for (let i = 0; i < n; i++) A.push(xs.map((q) => phi(xs[i], q)).concat(poly(xs[i])));
+    for (let k = 0; k < m; k++) A.push(xs.map((q) => poly(q)[k]).concat(new Array(m).fill(0)));
+    const w = solveDense(A, xs.map((q) => phi(x, q)).concat(poly(x)));
+    if (w) return w.slice(0, n);
+  }
+  const dist = xs.map((q) => Math.hypot(...q.map((v, k) => v - x[k])));
+  return xs.map((q, i) => (i === dist.indexOf(Math.min(...dist)) ? 1 : 0));
+}
+
+// The numbers in the text t.
+const NUMBER = /[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g;
+
+// The report values at the weights w of the cases cs: the text of the
+// first case with each number interpolated. A report that has another
+// count of numbers in a case is left out.
+function romReports(cs, w) {
+  const rows = (c) => (caseToons[D.cases.indexOf(c)].tables.report || { rows: [] }).rows;
+  const out = [];
+  for (const r of rows(cs[0])) {
+    const texts = cs.map((c) => (rows(c).find((q) => q[0] === r[0] && q[1] === r[1]) || [])[2]);
+    if (texts.some((t) => t === undefined)) continue;
+    const nums = texts.map((t) => (t.match(NUMBER) || []).map(Number));
+    if (nums.some((v) => v.length !== nums[0].length)) continue;
+    let k = 0;
+    const next = () => { const v = nums.reduce((s, n, i) => s + w[i] * n[k], 0); k++; return String(v); };
+    out.push([r[0], r[1], texts[0].replace(NUMBER, next)]);
+  }
+  return out;
+}
+
+// The approximate answer at the param values `values` for the step of
+// name `step`: { mesh, cases, weights, reports }, or null.
+async function approximate(values, step) {
+  const num = (v) => Object.fromEntries(Object.entries(v).map(([p, t]) => [p, valueOf(M, t)]));
+  const x = num(values);
+  const cs = D.cases.filter((c) => (c.code === undefined || c.code === 0 || c.code === 1) &&
+    c.results.some((r) => stepName(r.path) === step));
+  if (!cs.length) return null;
+  const xs = cs.map((c) => num(caseValues(D.cases.indexOf(c))));
+  const names = Object.keys(x).filter((p) => xs.every((v) => p in v));
+  const scale = (p, vs) => { const lo = Math.min(...vs.map((v) => v[p])), hi = Math.max(...vs.map((v) => v[p])); return hi > lo ? [lo, hi - lo] : null; };
+  const dist = (v, vs) => Math.hypot(...names.map((p) => { const s = scale(p, vs); return s ? (v[p] - x[p]) / s[1] : 0; }));
+  const all = xs.map((v) => dist(v, xs));
+  const order = cs.map((c, i) => i).sort((i, j) => all[i] - all[j]);
+  const result = (c) => c.results.find((r) => stepName(r.path) === step);
+  // The mesh is of the nearest case, or of the nearest stored case if more
+  // cases have its nodes. Reason: a stored case has only the corner nodes,
+  // and a solve in the page has each node.
+  let nearest = order[0], maps = null;
+  for (const i of [order[0], order.find((k) => !('text' in result(cs[k])))]) {
+    if (i === undefined || (maps && i === nearest)) continue;
+    const m = await Promise.all(cs.map((c) => nodeMap(result(cs[i]), result(c))));
+    if (!maps || m.filter(Boolean).length > maps.filter(Boolean).length) { nearest = i; maps = m; }
+  }
+  const base = result(cs[nearest]);
+  const use = cs.map((c, i) => i).filter((i) => maps[i]);
+  use.sort((i, j) => (i === nearest ? -1 : j === nearest ? 1 : i - j));
+  const vs = use.map((i) => xs[i]);
+  const dims = names.filter((p) => scale(p, vs));
+  const at = (v) => dims.map((p) => { const s = scale(p, vs); return (v[p] - s[0]) / s[1]; });
+  const w = use.length > 1 ? romWeights(vs.map(at), at(x)) : [1];
+  const keep = use.map((i, k) => k).filter((k) => Math.abs(w[k]) > 1e-12);
+  const fields = await Promise.all(keep.map((k) => resultFields(result(cs[use[k]]))));
+  const mesh = await meshOf(base);
+  const nodes = mesh.vtu.points.length / 3;
+  const mix = (section, a, from = fields) => {
+    const out = new Float64Array(a.data.length);
+    keep.forEach((k, j) => {
+      const b = from[j][section].find((q) => q.name === a.name && q.comps === a.comps);
+      if (!b) return;
+      const map = maps[use[k]];
+      const wk = w[k];
+      if (map === 'same' || map === 'moved' || section === 'cellData') {
+        for (let i = 0; i < out.length; i++) out[i] += wk * b.data[i];
+      } else {
+        for (let i = 0; i < nodes; i++) for (let c = 0; c < a.comps; c++) out[a.comps * i + c] += wk * b.data[a.comps * map[i] + c];
+      }
+    });
+    return { name: a.name, comps: a.comps, data: out };
+  };
+  const vtu = { ...mesh.vtu, pointData: mesh.vtu.pointData.map((a) => mix('pointData', a)), cellData: mesh.vtu.cellData.map((a) => mix('cellData', a)) };
+  // A param of the geometry that keeps the cells moves the points too.
+  const geos = await Promise.all(keep.map((k) => geometryOf(result(cs[use[k]]))));
+  vtu.points = mix('points', { name: '', comps: 3, data: mesh.vtu.points }, geos.map((g) => ({ points: [{ name: '', comps: 3, data: g.points }] }))).data;
+  const moved = { ...mesh, lo: [Infinity, Infinity, Infinity], hi: [-Infinity, -Infinity, -Infinity] };
+  for (let i = 0; i < vtu.points.length; i++) {
+    moved.lo[i % 3] = Math.min(moved.lo[i % 3], vtu.points[i]);
+    moved.hi[i % 3] = Math.max(moved.hi[i % 3], vtu.points[i]);
+  }
+  return {
+    mesh: { ...moved, vtu, fields: fieldsOf(vtu), disp: displacement(vtu), regions: new Map() },
+    cases: keep.map((k) => cs[use[k]]),
+    weights: keep.map((k) => w[k]),
+    reports: romReports(keep.map((k) => cs[use[k]]), keep.map((k) => w[k])),
+  };
+}
+
+// Decodes the fields of each case that the mesh of the current case can
+// take, after the page shows. Reason: the first slider move of the
+// interposer study took 1.5 s to decode 36 cases, and a later move 11 ms.
+async function romWarm() {
+  const c = currentCase();
+  if (!c || !c.results.length) return;
+  const r = c.results[Math.min(S.step, c.results.length - 1)];
+  for (const d of D.cases) {
+    const q = d.results.find((x) => stepName(x.path) === stepName(r.path));
+    if (q && (await nodeMap(r, q))) await resultFields(q);
+  }
+}
+
+// Shows the approximate answer at the param values `values` in the view
+// and the tables, if the solved cases give one. It gives false if a newer
+// load or slider value came.
+async function showApprox(values) {
+  const start = performance.now();
+  const c = currentCase();
+  if (!c || !c.results.length) return true;
+  const me = ++loads;
+  const a = await approximate(values, stepName(c.results[Math.min(S.step, c.results.length - 1)].path));
+  if (me !== loads || JSON.stringify(values) !== JSON.stringify(S.values)) return false;
+  if (!a) return true;
+  S.mesh = a.mesh;
+  S.approx = { ...a, values, seconds: (performance.now() - start) / 1000 };
+  S.probe = null;
+  document.getElementById('probe').textContent = '';
+  renderControls();
+  refresh();
+  renderTables();
+  S.approx.seconds = (performance.now() - start) / 1000;
+  document.body.dataset.approx = 'yes';
+  return true;
+}
 
 // --- the source pane -----------------------------------------------------------------
 
@@ -1272,14 +1568,18 @@ function renderSliders() {
   const study = M.studies.find((x) => x.name === D.study);
   box.append(studyTable ? el('h2', {}, 'Study ', D.study, ' ', study ? lineLink(study.line) : null) : el('h2', {}, 'Params'));
   if (SOLVE) {
-    box.append(el('p', { class: 'note' }, 'A slider at the values of a stored case shows that case. A slider that stops at other values meshes and solves the model in the page.'));
+    box.append(el('p', { class: 'note' }, 'A slider at the values of a stored case shows that case. A slider that moves between them shows an approximate answer at once, ' +
+      'from the solved cases. A slider that stops at other values meshes and solves the model in the page, and the solve replaces the approximate answer.'));
     box.append(el('p', { class: 'note' }, HAS_GPU ?
       'WebGPU is present: the explicit steps run on the GPU, in f32. The implicit solves run on the CPU, unless you turn on the GPU for them.' :
       'This browser has no WebGPU: all steps run on the CPU.'));
     box.append(el('label', {}, el('input', { type: 'checkbox', id: 'implicit-gpu', checked: implicitGpu, disabled: !HAS_GPU,
       onchange: (ev) => { implicitGpu = ev.target.checked; } }), ' Implicit solves on the GPU'));
   }
-  else if (typeof tooLarge === 'function') box.append(el('p', { class: 'note' }, tooLarge() + ' The sliders move only between the stored cases.'));
+  else {
+    box.append(el('p', { class: 'note' }, (typeof tooLarge === 'function' ? tooLarge() + ' ' : 'This page cannot solve the model. ') +
+      'A slider of a param with a range shows an approximate answer from the stored cases between them. The other sliders move only between the stored cases.'));
+  }
   for (const p of names) {
     const seen = [];
     for (let i = 0; i < D.cases.length; i++) {
@@ -1288,7 +1588,7 @@ function renderSliders() {
     }
     seen.sort((a, b) => valueOf(M, a) - valueOf(M, b));
     const param = M.params.find((x) => x.name === p);
-    const control = solveParams.find((x) => x.name === p);
+    const control = solveParams.find((x) => x.name === p) || rangeControl(param);
     const out = el('output', { id: 'value-' + p }, S.values[p]);
     const set = (t, solve) => { S.values[p] = t; out.textContent = t; showValues(solve); };
     let input;
@@ -1324,18 +1624,24 @@ async function showValues(solve) {
   let c = await caseFor(values);
   const fixed = fixedParams(values);
   const inPage = SOLVE && fixed.length === 0;
+  // The approximate answer shows at once, and the exact solve replaces it.
+  if (!c && !(S.approx && JSON.stringify(values) === JSON.stringify(S.approx.values)) && !(await showApprox(values))) return;
   if (!c && solve && inPage) {
     c = await solveCase(values);
     if (JSON.stringify(values) !== JSON.stringify(S.values)) return;    // the sliders moved on
   }
+  const note = document.getElementById('note');
+  const tag = S.approx ? 'APPROXIMATE: ' : '';
   if (c) {
-    if (D.cases.indexOf(c) !== S.caseIndex) selectCase(D.cases.indexOf(c));
+    if (D.cases.indexOf(c) !== S.caseIndex || S.approx) selectCase(D.cases.indexOf(c));
   } else if (SOLVE && !inPage) {
-    document.getElementById('note').textContent = 'no stored case has these values, and the page solves only with the default of ' + fixed.join(', ');
+    note.textContent = tag + 'no stored case has these values, and the page solves only with the default of ' + fixed.join(', ');
   } else if (!SOLVE) {
-    document.getElementById('note').textContent = 'no stored case has these values' + (typeof tooLarge === 'function' ? '. ' + tooLarge() : '');
+    note.textContent = tag + 'no stored case has these values, and the page cannot solve them' + (typeof tooLarge === 'function' ? '. ' + tooLarge() : '');
   } else if (!solve) {
-    document.getElementById('note').textContent = 'no stored case has these values: release the slider to solve them in the page';
+    note.textContent = tag + (S.approx ? 'the reduced model of the solved cases. ' : 'no stored case has these values. ') + 'Release the slider to solve them in the page.';
+  } else if (S.approx) {
+    note.textContent = 'APPROXIMATE: the solve in the page failed. ' + note.textContent;
   }
 }
 
@@ -1352,6 +1658,7 @@ function selectCase(i) {
   const same = Object.keys(v).every((p) => p in S.values && sameValue(S.values[p], v[p]));
   S.caseIndex = i;
   S.values = v;
+  S.approx = null;
   S.step = Math.max(0, Math.min(S.step, D.cases[i].results.length - 1));
   S.foreign = null;
   if (!same) renderSliders();
@@ -1397,6 +1704,18 @@ function renderTables() {
   const add = (...kids) => box.append(...kids.filter((k) => k !== null));
   const toon = S.foreign ? null : caseToons[S.caseIndex];
   if (S.foreign) { add(el('p', { class: 'note' }, 'This view shows ', S.foreign, ', a VTU file of another solver: it has no source links and no solver tables.')); return; }
+  if (S.approx) {
+    const a = S.approx;
+    add(el('h2', { class: 'approx' }, 'Approximate answer (reduced model)'));
+    add(el('p', {}, Object.entries(a.values).map(([p, t]) => `${p} = ${t}`).join(', ')));
+    add(el('p', { class: 'note' }, a.cases.length > 1 ?
+      `The fields are interpolated from ${a.cases.length} solved cases (${a.cases.map((c) => 'case ' + c.id).join(', ')}), in ${(a.seconds * 1000).toFixed(0)} ms. ` :
+      `The fields are of the nearest solved case, case ${a.cases[0].id}: no other case has its mesh, or no case differs in these params. `,
+      'This is not a solve: the page has no checks and no expects for these values. Release the slider for the exact solve.'));
+    add(table('Reports (approximate)', a.reports.length ? { cols: ['step', 'expr', 'value'], rows: a.reports } : null,
+      (c, v, r) => (v === null ? c : c === 'expr' ? withLine(v, reportLine(r[0], v)) : v)));
+    return;
+  }
   const c = D.cases[S.caseIndex];
   add(el('h2', {}, c.values ? `Solve in the page (${c.seconds.toFixed(1)} s, exit ${c.code})` : studyTable ? `Case ${c.id}` : 'Run'));
   if (c.failure) add(el('p', { class: 'note' }, c.failure));
@@ -1616,6 +1935,8 @@ async function load() {
   const mesh = await meshOf(r);
   if (me !== loads) return;
   S.mesh = mesh;
+  S.approx = null;
+  document.body.dataset.approx = 'no';
   S.probe = null;
   document.getElementById('probe').textContent = '';
   if (first) { view.fit(S.mesh.lo, S.mesh.hi); S.scale = autoScale(S.mesh); }
@@ -1765,6 +2086,7 @@ async function main() {
     bindMouse(document.getElementById('canvas'));
     window.addEventListener('resize', draw);
     await load();
+    if (SOLVE || studyTable) setTimeout(romWarm, 0);
   } catch (e) {
     document.getElementById('stage').append(el('p', { class: 'fail' }, 'The viewer cannot start: ' + e.message));
     document.body.dataset.ready = 'error';
@@ -1772,5 +2094,5 @@ async function main() {
 }
 
 // The functions that a test or a browser solve uses.
-window.skein = { caseFor, solveCase, selectCase, parseVtu, parseToon, probe, get view() { return view; }, state: S, data: D, model: M };
+window.skein = { caseFor, solveCase, selectCase, approximate, showValues, parseVtu, parseToon, probe, get view() { return view; }, state: S, data: D, model: M };
 main();
