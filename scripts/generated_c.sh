@@ -36,6 +36,7 @@ examples/elements/harmonic_duct_tri.skn
 examples/elements/heated_bar_study_tet.skn
 examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn
+examples/elements/kirsch_nurbs_tri.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
@@ -43,6 +44,7 @@ examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/scordelis_lo_roof.skn
+examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn
 examples/flow/cavity_coarse.skn
 examples/flow/channel_sst_tri.skn
@@ -54,6 +56,7 @@ examples/grid/mms_fv_transient.skn
 examples/lame_profile.skn
 examples/meshless/mms_gfd.skn
 examples/meshless/mms_rkpm.skn
+examples/optim/stiffness_bar.skn
 examples/shells/thin_cylinder_shell.skn
 samples/02_cavity.skn
 samples/05_meshless_plate.skn

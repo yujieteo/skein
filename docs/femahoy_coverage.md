@@ -159,7 +159,7 @@ Skein cannot state the core physics of these cases, so they have no model.
 
 | Gap | Femahoy feature | Evidence | Why the spec cannot state it | Smallest spec change | Phase |
 |---|---|---|---|---|---|
-| G1 | Topology optimization: a density for each cell, SIMP, a sensitivity filter, an optimality criteria update, a volume limit. Then a solid from the density at 0.5. | `validation/cases/topology-mbb-beam/derivation.md:24`, `validation/cases/topology-mbb-beam-cad/derivation.md:23` | `minimize` (§20.2) varies only a few `param` values, and a `param` is a constant (§20.1). Geometry comes only from CSG of constants (§8). | A study procedure `topology(objective, region, volume, penalty, filter)`, and a geometry function `level(f, c)`: the region where a `Results` field `f` is `c` or more. | 5 |
+| G1 | Topology optimization: a density for each cell, SIMP, a sensitivity filter, an optimality criteria update, a volume limit. Then a solid from the density at 0.5. | `validation/cases/topology-mbb-beam/derivation.md:24`, `validation/cases/topology-mbb-beam-cad/derivation.md:23` | `minimize` (§20.2) varies only a few `param` values, and a `param` is a constant (§20.1). Geometry comes only from CSG of constants (§8). | A study procedure `topology(objective, region, volume, penalty, filter)`, and a geometry function `level(f, c)`: the region where a `Results` field `f` is `c` or more. | 5, closed by [§20.2](skein_spec.md#202-study): `topology(..., threshold: 0.5)` makes the solid of the cells at 0.5 or more, in place of `level(f, c)` |
 | G2 | Random vibration: a modal damping ratio, a PSD input and the RMS response over a frequency band. | `validation/cases/random-vibration-cantilever/job.inp:14`, `:25`, `check.toml:9` | `harmonic` (§14.2) has no damping ratio for each mode, and no report function integrates over the frequencies of a step (§14.5). Also needs G8 and G9. | A `harmonic` argument `damping: Real`, and a report function `rms(f, psd)` over the frequencies of the step. | 4, closed by [§14.2](skein_spec.md#142-procedures) and [§14.5](skein_spec.md#145-output-and-report) |
 | G3 | Shells (`S8R`, `S6`), also a composite shell section with plies. | `validation/cases/scordelis-lo-roof/job.inp:26`, `validation/cases/laminate-pagano/job.inp:16` | §4.2 names `reissner_mindlin(t)`, but gives no source, no types of `w` and `theta`, and no load argument. Its parameter `t` is also the built-in time. The thin plate of `laminate-pagano` is missing from its model. | Give the template source in §4.2, with a parameter `h: Length`, a load argument, typed unknowns and an optional `layup` table of plies (thickness, angle, material). | 5, closed by [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
 | G4 | A perfect electric conductor on a curved wall: only the tangential part of the field is zero. | `validation/cases/grid-coax-tem/coax/grid.toml:1` | The left side of an essential `bc` is an unknown or a component of it (§12.1). A component is along x, y or z, not along the wall. | Accept `cross(n, u)` as the left side of an essential condition. | 5 |
@@ -286,7 +286,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A point (a node set of 1 node, a probe) | grid-lame-cylinder, warpage-2p5d-frame, grid-heated-block-stress-ccx | `point(p)` of type `Point` | [§8.3](skein_spec.md#83-lower-dimension-entities) |
 | A curved shell surface | scordelis-lo-roof | `boundary(cylinder(...), ...)` of type `Surface` | [§8.3](skein_spec.md#83-lower-dimension-entities), [§4.3](skein_spec.md#43-shells-beams-and-laminates) |
 | Spline airfoils, a superellipse hole | naca0012-ladson, naca23012-flap, shape-hole-biaxial | `fill(spline(...))` of type `Surface`, closed by a line | [§8.1](skein_spec.md#81-distance-functions) |
-| A solid from a density field | topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
+| A solid from a density field | topology-mbb-beam-cad | `study s: topology(..., threshold: 0.5)`: the cells at 0.5 or more | [§20.2](skein_spec.md#202-study) |
 
 ### Elements and meshes
 
@@ -365,7 +365,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Conjugate heat transfer of 2 regions | cht-heated-channel | 2 physics and `bc` lines on the shared boundary | [§10.4](skein_spec.md#104-coupling), [§12.1](skein_spec.md#121-form) |
 | Case folders for each parameter value | cavity-devahldavis, naca0012-ladson, naca23012-flap, dipole-king-middleton, optics-mie-cylinder | `param`, and `study s: grid` with an `expect` for each case | [§20.1](skein_spec.md#201-param), [§20.2](skein_spec.md#202-study), [§15.3](skein_spec.md#153-expect) |
 | Shape optimization (Nelder-Mead) | shape-hole-biaxial | `study s: minimize(objective, method: nelder_mead, max_cases, xtol, step)` | [§20.2](skein_spec.md#202-study) |
-| Topology optimization (SIMP) | topology-mbb-beam, topology-mbb-beam-cad | none | gap [G1](#gaps-that-block-a-case) |
+| Topology optimization (SIMP) | topology-mbb-beam, topology-mbb-beam-cad | `study s: topology(objective, region, volume, penalty, filter)` | [§20.2](skein_spec.md#202-study) |
 | A least-squares curve fit | fit-nist-pontius | the normal equations: `sum(expr)` over the rows of a table, and a physics of global unknowns | [§5.6](skein_spec.md#56-tables), [§10.5](skein_spec.md#105-odes-and-global-unknowns) |
 
 ### Loads
@@ -447,7 +447,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A shock angle | wedge-oblique-shock | `atan` of the slope | [Appendix A](skein_spec.md#appendix-a-built-in-names) |
 | Directivity and efficiency of an antenna | dipole-king-middleton | none | gap [G13](#gaps-that-remove-a-check) |
 | A check after an earlier step | hyperelastic-tube | `expect` in the step | [§15.3](skein_spec.md#153-expect) |
-| The compliance of a design | topology-mbb-beam | none | gap [G1](#gaps-that-block-a-case) |
+| The compliance of a design | topology-mbb-beam | `report compliance = -(u.y at p)*F`, the objective of `topology` | [§20.2](skein_spec.md#202-study) |
 | `rel_tol` and `abs_tol` of `check.toml` | each case | `within p%` or `within` an absolute value | [§15.3](skein_spec.md#153-expect) |
 
 ## Case inventory
@@ -522,8 +522,8 @@ tests read the fixture.
 | `validation/cases/submodel-kirsch-hole` | [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn), [submodel_kirsch_hole_global.skn](../examples/femahoy/submodel_kirsch_hole_global.skn) |
 | `validation/cases/taylor-bar-impact` | [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) |
 | `validation/cases/team7-eddy-current` | [team7_eddy_current.skn](../examples/femahoy/team7_eddy_current.skn) |
-| `validation/cases/topology-mbb-beam` | none: gap [G1](#gaps-that-block-a-case) |
-| `validation/cases/topology-mbb-beam-cad` | none: gap [G1](#gaps-that-block-a-case) |
+| `validation/cases/topology-mbb-beam` | [topology_mbb_beam.skn](../examples/femahoy/topology_mbb_beam.skn), study `shape` |
+| `validation/cases/topology-mbb-beam-cad` | [topology_mbb_beam.skn](../examples/femahoy/topology_mbb_beam.skn), study `solid` |
 | `validation/cases/turek-hron-fsi1` | [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn) |
 | `validation/cases/warpage-2p5d-frame` | [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) |
 | `validation/cases/warpage-thick-copper` | [warpage_thick_copper.skn](../examples/femahoy/warpage_thick_copper.skn) |
