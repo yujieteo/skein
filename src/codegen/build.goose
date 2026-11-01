@@ -349,7 +349,8 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
     guard ran && (more.len == 0 || more.len == peaks.len) else { return 1; };
     var table: u8[>..] = [];
     // The memory of the module: the regions, 1.5 times the larger heap
-    // peak, and 64 MB for the loader and the files, in 64 MB steps.
+    // peak, and 64 MB for the loader, the C stack and the files, in 64 MB
+    // steps.
     var total = ceil(1.5 * max(heap, heap_corner)) as! i64 + 64;
     var largest = 1;
     for p, i in peaks {
@@ -379,6 +380,8 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
 // WebAssembly module and its loader, one file of JavaScript, in `glue`.
 // The memory of the module starts at 64 MB and grows to `memory_mb` at
 // most. A growth that the browser cannot give stops the run with an error.
+// The C stack is 8 MB, as a native one: the 64 KB of emcc overflows in
+// the generator, and WebAssembly has no guard page to stop it.
 fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, memory_mb: i64, glue: u8[>..]&) -> bool {
     var wasm: u8[>..] = [];
     var patched: u8[>..] = [];
@@ -391,7 +394,7 @@ fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, m
     let emcc = str("emcc -O3 -w ", q, "/wasm.c -o ", shell_quoted(js), " -DGS_STACK_RESERVE='(", largest, "ull<<20)' -DGS_STACK_GAP=65536",
                    " -sMEMORY64=1 -sMODULARIZE=1 -sEXPORT_NAME=createSkein -sENVIRONMENT=worker,node -sSINGLE_FILE=1",
                    " -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sMAXIMUM_MEMORY=", memory_mb, "MB -sEXIT_RUNTIME=1 -sFORCE_FILESYSTEM=1",
-                   " -sEXPORTED_RUNTIME_METHODS=ENV,FS 1>&2");
+                   " -sSTACK_SIZE=8MB -sEXPORTED_RUNTIME_METHODS=ENV,FS 1>&2");
     write_stderr("skein build: emcc\n");
     guard shell(emcc) == 0 && read_file(js, glue) else {
         write_stderr("skein build: emcc cannot build the module: put emcc on PATH\n");
