@@ -121,7 +121,6 @@ fn channel() {
     assert(flow::select_boundary() { x, y => abs(y) <= tol || abs(y - 2.0) <= tol });
     flow::fix_velocity(0, 0.0);
     flow::fix_velocity(1, 0.0);
-    flow::turbulence_start(1.0);
     if !flow::solve_steady(1.0e-8) { fail("channel: the solve does not converge"); }
     var bulk = 0.0;
     for i in 200 {

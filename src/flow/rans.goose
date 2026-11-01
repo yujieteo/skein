@@ -18,8 +18,9 @@
 // value of ω, and the ω row of the first vertex off the wall had no root.
 // The ω rows are divided by omega_scale, so that the norm of the residual
 // does not hold only the ω rows. Reason: in the channel at Re_τ = 395 the
-// wall ω was 1.2e6 in scaled units, and the ω rows held 1e5 times the
-// norm of the momentum rows.
+// wall ω was 1.2e6 in scaled units, and the ω rows held more than 1e6
+// times the norm of the momentum rows. Without the scale, the channel
+// took 51 steps, not 36.
 //
 // A wall is a boundary vertex with v = 0 fixed. The solve fixes k = 0 and
 // ω = 60 ν / (β1 d1²) there, with d1 the wall distance of the nearest

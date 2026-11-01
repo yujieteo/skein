@@ -51,9 +51,10 @@ fn value_at(what: i64, x: f64, y: f64) -> f64, bool {
     return 0.0, false;
 }
 
-// Writes the mesh, v and p to a VTU file. The values are multiplied by the
-// references: x_ref for the coordinates, v_ref and p_ref for the fields,
-// so that the file is dimensional (spec §21.4). An edge node takes the
+// Writes the mesh, v and p, and k and w of a turbulent flow, to a VTU
+// file. The values are multiplied by the references: x_ref for the
+// coordinates, v_ref and p_ref for the fields, v_ref² for k and
+// v_ref/x_ref for w, so that the file is dimensional (spec §21.4). An edge node takes the
 // mean pressure of the ends of its edge.
 fn write_vtu(path: const u8[:], x_ref: f64, v_ref: f64, p_ref: f64) -> bool {
     guard sol.len == dof_count() else { abort("write_vtu: a solve"); }
@@ -87,6 +88,12 @@ fn write_vtu(path: const u8[:], x_ref: f64, v_ref: f64, p_ref: f64) -> bool {
     for n in nodes { format(out, v_ref * sol[vdof(n, 0)], " ", v_ref * sol[vdof(n, 1)], " 0\n"); }
     out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"p\" format=\"ascii\">\n");
     for n in nodes { format(out, p_ref * pressure[n], "\n"); }
+    if turbulent {
+        out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"k\" format=\"ascii\">\n");
+        for n in nodes { format(out, v_ref * v_ref * sol[turbulence_dof(n, 0)], "\n"); }
+        out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"w\" format=\"ascii\">\n");
+        for n in nodes { format(out, v_ref / x_ref * sol[turbulence_dof(n, 1)], "\n"); }
+    }
     out.append("</DataArray>\n</PointData>\n</Piece>\n</UnstructuredGrid>\n</VTKFile>\n");
     return write_file(path, out);
 }

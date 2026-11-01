@@ -50,8 +50,9 @@ fn compact(n: i64) -> u8[>..] {
 
 // --- the claim ---------------------------------------------------------------
 
-// Whether this generator takes the model: a physics that uses stokes or
-// navier_stokes, or that solves a Vector<Velocity> and a Pressure.
+// Whether this generator takes the model: a physics that uses stokes,
+// navier_stokes or k_omega_sst, or that solves a Vector<Velocity> and a
+// Pressure.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -60,7 +61,7 @@ fn claims(prog: i64) -> bool {
             var pressure = false;
             var u = first(c);
             while u >= 0 {
-                if kind(u) == syntax::N_USES && (name(u) == "navier_stokes" || name(u) == "stokes") { return true; }
+                if kind(u) == syntax::N_USES && (name(u) == "navier_stokes" || name(u) == "stokes" || name(u) == "k_omega_sst") { return true; }
                 if kind(u) == syntax::N_UNKNOWN {
                     let t = child(u, 0);
                     if kind(t) == syntax::N_TYPE_NAME && name(t) == "Pressure" { pressure = true; }
@@ -390,6 +391,11 @@ var velocity: u8[..64];     // the names of the unknowns
 var pressure: u8[..64];
 var stress: u8[..64];       // the let of the stress: sigma
 var convective = true;
+var turbulent = false;      // k_omega_sst: the unknowns k and w too
+var turb_k: u8[..64];
+var turb_w: u8[..64];
+var period: f64[2] = [0.0, 0.0];
+var period_high = -1;       // the high boundary of a bloch group: an index in `named`, or -1
 var force: f64[2] = [0.0, 0.0];
 var force_node = -1;
 var mesh_size = 0.0;
@@ -421,6 +427,11 @@ fn reset() {
     pressure = [];
     set64(stress, "sigma");
     convective = true;
+    turbulent = false;
+    turb_k = [];
+    turb_w = [];
+    period = [0.0, 0.0];
+    period_high = -1;
     force = [0.0, 0.0];
     force_node = -1;
     mesh_size = 0.0;
@@ -560,9 +571,10 @@ fn physics_item(n: i64) {
             if domain < 0 { unsupported(tok(first(c)), "the region of the physics is not a shape that a let names", "write physics flow on dom, with let dom: Surface = rect(...)"); }
         } else if k == syntax::N_USES {
             template = true;
-            convective = name(c) == "navier_stokes";
-            if name(c) != "navier_stokes" && name(c) != "stokes" {
-                unsupported(tok(c), "the flow generator has the templates navier_stokes(f) and stokes(f)", PHYSICS_FIX);
+            convective = name(c) != "stokes";
+            turbulent = name(c) == "k_omega_sst";
+            if name(c) != "navier_stokes" && name(c) != "stokes" && !turbulent {
+                unsupported(tok(c), "the flow generator has the templates navier_stokes(f), stokes(f) and k_omega_sst(f)", PHYSICS_FIX);
             }
             if first(c) >= 0 { force_node = first(first(c)); }
         } else if k == syntax::N_UNKNOWN {
@@ -571,6 +583,10 @@ fn physics_item(n: i64) {
                 set64(pressure, name(c));
             } else if kind(t) == syntax::N_TYPE_APPLY && velocity.len == 0 {
                 set64(velocity, name(c));
+            } else if turbulent && turb_k.len == 0 {
+                set64(turb_k, name(c));
+            } else if turbulent && turb_w.len == 0 {
+                set64(turb_w, name(c));
             } else {
                 unsupported(tok(c), "the flow generator solves one velocity and one pressure", PHYSICS_FIX);
             }
@@ -595,7 +611,7 @@ fn assumptions(n: i64) {
     var a = first(n);
     while a >= 0 {
         let w = name(a);
-        if w != "incompressible" && w != "newtonian" && w != "laminar" {
+        if w != "incompressible" && w != "newtonian" && w != "laminar" && !(turbulent && w == "turbulent") {
             unsupported(tok(a), str("the assumption '", w, "' is not in the flow generator"), "use incompressible, newtonian and laminar");
         }
         a = next(a);
@@ -814,8 +830,8 @@ fn output_fields(n: i64) {
     while o >= 0 {
         if kind(o) == syntax::N_EVERY {
             unsupported(tok(o), "a static step has no every", "remove it");
-        } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure) {
-            unsupported(tok(o), "the flow generator writes the velocity and the pressure", str("write output ", velocity, ", ", pressure));
+        } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure && !(turbulent && (name(o) == turb_k || name(o) == turb_w))) {
+            unsupported(tok(o), "the flow generator writes the velocity and the pressure, and k and w of k_omega_sst", str("write output ", velocity, ", ", pressure));
         }
         o = next(o);
     }
@@ -942,6 +958,7 @@ fn read(prog: i64) -> bool {
     var physics_node = -1;
     var mesh_node = -1;
     var methods: i64[>..] = [];
+    var symmetry_node = -1;
     var c = first(prog);
     while c >= 0 {
         let k = kind(c);
@@ -961,6 +978,8 @@ fn read(prog: i64) -> bool {
             tables.push(c);
         } else if k == syntax::N_SCALES {
             has_scales = true;
+        } else if k == syntax::N_SYMMETRY && symmetry_node < 0 {
+            symmetry_node = c;
         } else if k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in the flow generator"),
                         "remove it: the flow generator runs one steady flow model");
@@ -981,9 +1000,45 @@ fn read(prog: i64) -> bool {
     for m in methods { method(m); }
     if !stabilize_set { stabilize = if convective { 1 } else { 0 }; }
     if order == 1 && stabilize < 2 { unsupported(at, "order 1 for the velocity needs pressure stabilization", "write stabilize: supg_pspg"); }
+    if turbulent && (order != 1 || stabilize != 2) { unsupported(at, "k_omega_sst runs on P1 cells with supg_pspg", "write method flow: cg { order: 1, stabilize: supg_pspg }"); }
+    if symmetry_node >= 0 { symmetry(symmetry_node); }
     if !ok() { return false; }
     read_steps(prog, at);
     return ok();
+}
+
+let SYMMETRY_FIX = "write symmetry ends: bloch { period: (L, 0 m), low: inlet, high: outlet, k: (0, 0) m^-1 }, on a rect of width L";
+
+// symmetry s: bloch { period: p, low: a, high: b, k: 0 }: the flow on b is
+// the flow on a (periodic). The domain is a rect, and p is its width
+// along x. Reason: write_mesh meshes half of the rect and its mirror, so
+// that the nodes of a and b match.
+fn symmetry(n: i64) {
+    if name(child(n, 0)) != "bloch" {
+        unsupported(tok(n), "the flow generator has the symmetry bloch with k = 0", SYMMETRY_FIX);
+        return;
+    }
+    var s = first(syntax::nodes[child(n, 0)].next);
+    while s >= 0 {
+        let w = name(s);
+        let v = first(s);
+        if w == "period" {
+            period = scaled(quantity(v)).v;
+        } else if w == "k" {
+            let k = quantity(v);
+            if k.v[0] != 0.0 || k.v[1] != 0.0 { unsupported(tok(v), "the flow generator has bloch with k = 0 (periodic)", SYMMETRY_FIX); }
+        } else if w == "high" {
+            period_high = named_of(v, BOUNDARY);
+            if period_high < 0 { unsupported(tok(v), "high is a boundary that a let names", SYMMETRY_FIX); }
+        }
+        s = next(s);
+    }
+    let rect = named[domain].value;
+    let width = if is_call(rect, "rect") { abs(scaled(quantity(arg(rect, 1))).v[0] - scaled(quantity(arg(rect, 0))).v[0]) } else { -1.0 };
+    if period[1] != 0.0 || abs(period[0] - width) > 1.0e-9 * width {
+        unsupported(tok(n), "the period is the width of the rect of the physics, along x", SYMMETRY_FIX);
+    }
+    if period_high >= 0 { use_region(period_high); }
 }
 
 // rho and mu of the material, and the body force f of the template.
@@ -1078,7 +1133,17 @@ fn write_mesh(dir: u8[:]) -> bool {
     for r in refines {
         if r.circle { mesher::refine_circle(r.p[0], r.p[1], r.p[2], r.h); } else { mesher::refine_segment(r.p[0], r.p[1], r.p[2], r.p[3], r.h); }
     }
-    if !mesher::mesh_2d(mesher_shape(named[domain].value), mesh_size) {
+    // With a period, half of the rect and its mirror at the middle.
+    var shape = mesher_shape(named[domain].value);
+    var middle = 0.0;
+    if period_high >= 0 {
+        let r = named[domain].value;
+        let a = scaled(quantity(arg(r, 0)));
+        let b = scaled(quantity(arg(r, 1)));
+        middle = 0.5 * (a.v[0] + b.v[0]);
+        shape = mesher::rect(min(a.v[0], b.v[0]), a.v[1], middle, b.v[1]);
+    }
+    if !mesher::mesh_2d(shape, mesh_size) {
         write_stderr(str("skein run: the mesher cannot mesh '", named[domain].name, "' with the size and the refines of the mesh\n"));
         return false;
     }
@@ -1092,13 +1157,33 @@ fn write_mesh(dir: u8[:]) -> bool {
     for c in mesher::cell_count() {
         for k in 3 { tri.push(mesher::cell_node(c, k)); }
     }
-    cells = mesher::cell_count();
-    vertices = mesher::point_count();
+    if period_high >= 0 { mirror(xy, tri, middle); }
+    cells = tri.len / 3;
+    vertices = xy.len / 2;
     if !write_file(str(dir, "/flow.xy"), to_bytes(xy[..])) || !write_file(str(dir, "/flow.tri"), to_bytes(tri[..])) {
         write_stderr(str("skein run: cannot write the mesh in '", dir, "'\n"));
         return false;
     }
     return true;
+}
+
+// Adds the mirror of the triangles at x = middle. The vertices on the
+// line x = middle stay single.
+fn mirror(xy: f64[>..]&, tri: i64[>..]&, middle: f64) {
+    let n = xy.len / 2;
+    let t = tri.len;
+    let tol = 1.0e-9 * max(abs(middle), 1.0);
+    var image: i64[>..] = [];
+    for v in n {
+        if abs(xy[2 * v] - middle) <= tol {
+            image.push(v);
+            continue;
+        }
+        image.push(xy.len / 2);
+        xy.push(2.0 * middle - xy[2 * v]);
+        xy.push(xy[2 * v + 1]);
+    }
+    for i in t { tri.push(image[tri[i]]); }
 }
 
 var cells = 0;
@@ -1116,7 +1201,7 @@ fn dof_estimate() -> i64 {
         cell_count += length * band / (0.4330127 * r.h * mesh_size);
     }
     let vertex_count = 0.5 * cell_count;
-    return (if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
+    return (if turbulent { 5.0 * vertex_count } else if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
 }
 
 recursive fn shape_area(n: i64) -> f64 {
@@ -1615,6 +1700,7 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     emit_selects(out);
     for si in 0..steps.len { emit_step(out, si, results_dir); }
     out.append("fn main() {\n");
+    if turbulent { out.append("    flow::set_turbulent(true);\n"); }
     format(out, "    // mesh on ", named[domain].name, ": P", order, "/P1 triangles, written by skein run\n    if !flow::read_mesh(");
     quoted(out, results_dir);
     format(out, ", ", order, ") {\n        write_stderr(\"skein run: cannot read the mesh in ");
@@ -1631,6 +1717,14 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         out.append(", ");
         lit(out, force[1]);
         out.append(");\n");
+    }
+    if period_high >= 0 {
+        let g = named[period_high];
+        format(out, "    // symmetry: bloch, periodic\n    region(select_", g.name, "(), ");
+        quoted(out, g.name);
+        out.append(");\n    if !flow::periodic(");
+        lit(out, period[0]);
+        out.append(", 0.0) {\n        write_stderr(\"skein run: the nodes of the ends of the period do not match\\n\");\n        exit(3);\n    }\n");
     }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }

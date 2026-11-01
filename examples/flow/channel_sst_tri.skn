@@ -1,0 +1,52 @@
+// A fully developed turbulent channel of air at Re_tau = 395, with the
+// k_omega_sst template on P1 triangles. A body force f = rho*u_tau^2/h
+// drives the flow, and the two ends are periodic. The direct numerical
+// simulation of Moser, Kim and Mansour (1999) gives the centre velocity
+// U_c = 20.1 u_tau. The SST model gives about 4% more on this mesh, as
+// the log layer of k-omega models is a little high.
+
+model channel_sst: 2d, SI
+
+let h: Length = 20 mm  // the half height
+let len: Length = 2 mm  // the period
+let nu_air: KinViscosity = 1.5e-5 m^2/s
+let u_tau: Velocity = 395*nu_air/h
+
+scales h, u_tau, 1.2 kg/m^3
+
+let ch: Surface = rect((0, 0) m, (len, 2*h))
+let walls: Curve = boundary(ch, y == 0 m || y == 2*h)
+let inlet: Curve = boundary(ch, x == 0 m)
+let outlet: Curve = boundary(ch, x == len)
+
+material air {
+    rho: Density = 1.2 kg/m^3
+    mu: DynViscosity = 1.2 kg/m^3*nu_air
+}
+
+// The first vertex off a wall is at y+ = 1 or less.
+mesh m on ch {
+    size: h/20
+    cell: tri
+    refine walls: h/790
+}
+
+physics flow on ch: k_omega_sst((1.2 kg/m^3*u_tau^2/h, 0)) solves v: Vector<Velocity>,
+    p: Pressure,
+    k: Velocity^2,
+    w: Frequency {
+    material air
+}
+
+method flow: cg { mesh: m, order: 1, stabilize: supg_pspg }
+
+symmetry period: bloch { period: (len, 0 m), low: inlet, high: outlet, k: (0, 0) m^-1 }
+
+step steady: static {
+    bc walls: v = 0
+    solve { nonlinear: newton, linear: gmres, precond: ilu0, rtol: 1e-8 }
+    output v, p, k, w
+    report centre = v.x at (len/2, h)
+    report wall = integral((sigma*n).x, walls)
+    expect centre: v.x at (len/2, h) == 20.1*u_tau within 6%
+}

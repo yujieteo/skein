@@ -90,17 +90,6 @@ fn clear_bcs() {
     if turbulent { clear_walls(); }
 }
 
-// Fixes k (which 0) or w (which 1) on the vertices of the region of a
-// turbulent flow.
-fn fix_turbulence(which: i64, value: f64) {
-    guard turbulent && (which == 0 || which == 1) && fixed.len == dof_count() && region.len == node_count() else { abort("fix_turbulence: which 0 or 1, and clear_bcs on a turbulent flow"); }
-    for n in vertex_count {
-        if region[n] == 0 { continue; }
-        fixed[turbulence_dof(n, which)] = 1;
-        prescribed[turbulence_dof(n, which)] = value;
-    }
-}
-
 // Fixes velocity component comp (0 or 1) on the nodes of the region.
 fn fix_velocity(comp: i64, value: f64) {
     guard (comp == 0 || comp == 1) && cell_count() > 0 && fixed.len == dof_count() && region.len == node_count() else { abort("fix_velocity: comp 0 or 1, and clear_bcs on a mesh"); }
@@ -330,7 +319,8 @@ fn region_force(comp: i64) -> f64 {
     guard (comp == 0 || comp == 1) && raw.len == dof_count() && region.len == node_count() else { abort("region_force: comp 0 or 1, and a solve"); }
     var s = 0.0;
     for n in node_count() {
-        if region[n] != 0 { s += raw[vdof(n, comp)]; }
+        // a node that shares the dofs of a node of the region counts once
+        if region[n] != 0 && (twin[n] < 0 || region[twin[n]] == 0) { s += raw[vdof(n, comp)]; }
     }
     return s;
 }
@@ -338,18 +328,16 @@ fn region_force(comp: i64) -> f64 {
 // The turbulent solve: pseudo-transient continuation (Kelley and Keyes
 // 1998). Each step solves (M/Δτ + J) du = -F(u) with the lumped mass M of
 // the rows of v, k and w, and Δτ grows as the norm of F falls (switched
-// evolution relaxation, Mulder and van Leer 1985). Reason: from v = 0,
-// Newton's method on the k-ω equations does not converge.
+// evolution relaxation, Mulder and van Leer 1985). Reason: on the channel
+// at Re_τ = 395 from v = 0, Newton's method (Δτ = ∞) failed in GMRES at
+// step 12, with U_b+ near 3600.
 let PTC_MAX = 300;
 let PTC_GROWTH = 2.0;   // the most that Δτ grows in one step
 let TURBULENCE_DROP = 0.5;
 let PTC_DT = 0.1;       // Δτ of the first step, scaled
-var k_start = 1.0;      // k of the start, scaled
-
-fn turbulence_start(k: f64) {
-    guard k > 0.0 else { abort("turbulence_start: k > 0"); }
-    k_start = k;
-}
+// k of the start, scaled. Reason: the channel at Re_τ = 395 converged to
+// the same flow from k = 1 and from k = 3.3 (u_τ = 1).
+let K_START = 1.0;
 
 fn solve_rans(rtol: f64) -> bool {
     let start = clock();
@@ -400,15 +388,15 @@ fn ptc_solve(rtol: f64) -> bool {
 }
 
 // The start of the turbulent solve: the fixed values, v = 0, p = 0,
-// k_start and w_start, and the lumped mass of each dof.
+// K_START and w_start, and the lumped mass of each dof.
 fn rans_start() {
     for d in sol.len { sol[d] = 0.0; }
     for n in vertex_count {
-        sol[turbulence_dof(n, 0)] = k_start;
+        sol[turbulence_dof(n, 0)] = K_START;
         // the larger of the viscous sublayer, ω = 6 ν / (β1 d²), and the
         // log layer, ω = √k / (C_μ^¼ κ d) with C_μ^¼ κ = 0.2245
         let d = max(wall_d[n], 1.0e-12 * diameter);
-        sol[turbulence_dof(n, 1)] = max(6.0 * mu / (rho * BETA1 * d * d), sqrt(k_start) / (0.2245 * d));
+        sol[turbulence_dof(n, 1)] = max(6.0 * mu / (rho * BETA1 * d * d), sqrt(K_START) / (0.2245 * d));
     }
     for d in sol.len {
         if fixed[d] != 0 { sol[d] = prescribed[d]; }

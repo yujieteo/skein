@@ -423,7 +423,7 @@ the standard library declares templates in this version.
 | `heat(q_v)` | `T` |
 | `stokes(f)`, `navier_stokes(f)` | `v`, `p` |
 | `reissner_mindlin(layup, mirror, axis, top, q)` (shell), `timoshenko(A, I_y, I_z, J, y_axis, offset, q)` (beam), §4.3 | `w`, `theta` |
-| `k_omega_sst` (turbulence) | `k`, `w` (the specific dissipation rate ω: `omega` is the built-in of §14.2) |
+| `k_omega_sst(f)` (turbulence) | `v`, `p`, `k`, `w` (the specific dissipation rate ω: `omega` is the built-in of §14.2) |
 
 The [roadmap](roadmap.md) gives the phase of each template.
 
@@ -2450,6 +2450,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
 | `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
 | `radiation(eps)` | the gray diffuse radiation of a face to the other faces of its enclosure, in a natural condition (§12.1) |
+| `wall_distance()` | the distance to the nearest wall, a boundary with `v = 0`, in a turbulence model (§4.2) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 
@@ -2487,6 +2488,8 @@ The physics templates of §4.2 and §4.3. `skein help std` prints their source.
 - Knyazev, A. V. (2001). Toward the optimal preconditioned eigensolver: LOBPCG. SIAM J. Sci. Comput. 23(2).
 - Labelle, F., Shewchuk, J. R. (2007). Isosurface stuffing: fast tetrahedral meshes with good dihedral angles. ACM Trans. Graph. 26(3).
 - Liu, W. K., Jun, S., Zhang, Y. F. (1995). Reproducing kernel particle methods. IJNMF 20.
+- Menter, F. R. (1994). Two-equation eddy-viscosity turbulence models for engineering applications. AIAA J. 32(8).
+- Moser, R. D., Kim, J., Mansour, N. N. (1999). Direct numerical simulation of turbulent channel flow up to Re_tau = 590. Phys. Fluids 11(4).
 - Remacle, J.-F., Lambrechts, J., Seny, B., Marchandise, E., Johnen, A., Geuzaine, C. (2012). Blossom-Quad: a non-uniform quadrilateral mesh generator using a minimum-cost perfect-matching algorithm. IJNME 89(9).
 - Rhie, C. M., Chow, W. L. (1983). Numerical study of the turbulent flow past an airfoil with trailing edge separation. AIAA J. 21(11).
 - Ruppert, J. (1995). A Delaunay refinement algorithm for quality 2-dimensional mesh generation. J. Algorithms 18(3).

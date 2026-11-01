@@ -432,6 +432,13 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         r.varying = true;
         return r;
     }
+    if name == "wall_distance" {
+        // wall_distance(): the distance to the nearest wall, a boundary with v = 0 (spec §4.2).
+        guard arity(tok, name, a, 0, 0) else { return any_ty(); }
+        var r = num_ty(LENGTH, 0);
+        r.varying = true;
+        return r;
+    }
     if name == "rms" {
         // rms(f, psd): the root of the sum of |f|^2 psd over the frequencies of a harmonic step (spec §14.5, gap G2).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) && is_num(t0) && is_num(t1) else { return any_ty(); }
