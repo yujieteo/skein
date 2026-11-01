@@ -18,7 +18,8 @@
 // The state is global: one mesh, one physics, one set of fixed dofs and one
 // set of loads. A boundary call (`fix`, `traction`, `flux`, `reaction`)
 // acts on the region of the last `plane`, `also_plane`, `hole`, `surface`
-// or `also_surface` call.
+// or `also_surface` call, less the nodes of each `except_plane` and
+// `except_surface` call after it. A load acts on each facet of the region.
 // These give false when the region holds no node.
 import std;
 namespace elements;
@@ -36,6 +37,8 @@ import .radiation;
 import .explicit;
 import .edge;
 import .mixed;
+import .material;
+import .solid;
 
 let X = 0;
 let Y = 1;
@@ -292,6 +295,7 @@ fn write_darcy(path: const u8[:], p_name: const u8[:], q_name: const u8[:]) -> b
 // Selects the boundary plane where coordinate `axis` is `value`.
 fn plane(axis: i64, value: f64) -> bool {
     region.clear();
+    region_out.clear();
     return also_plane(axis, value);
 }
 
@@ -310,6 +314,7 @@ fn also_plane(axis: i64, value: f64) -> bool {
 fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
+    region_out.clear();
     region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1 });
     return region_node_count() > 0;
 }
@@ -318,6 +323,7 @@ fn hole(cx: f64, cy: f64, r: f64) -> bool {
 // g is 0.
 fn surface(g: i64) -> bool {
     region.clear();
+    region_out.clear();
     return also_surface(g);
 }
 
@@ -331,9 +337,29 @@ fn also_surface(g: i64) -> bool {
     return false;
 }
 
+// Removes the nodes of the plane from the region: for example the node
+// of a face on a symmetry plane, whose reaction also holds the force of
+// that plane. It gives false when the region holds no node.
+fn except_plane(axis: i64, value: f64) -> bool {
+    guard axis >= 0 && axis < 3 && region_out.len < 8 else { abort("except_plane: 0 <= axis < 3 and at most 8 parts"); }
+    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
+    return region_node_count() > 0;
+}
+
+// Removes the nodes of the surface of shape g from the region.
+fn except_surface(g: i64) -> bool {
+    guard g >= 0 && region_out.len < 8 else { abort("except_surface: a shape and at most 8 parts"); }
+    region_out.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    return region_node_count() > 0;
+}
+
 // Holds component `comp` (X, Y, Z, or ALL) of u, or T (comp 0), at `v` on
 // the region.
 fn fix(comp: i64, v: f64) { fix_region(comp, v); }
+
+// Holds component `comp` of each node of the region at VALUE([x, y, z]), a
+// function of the program: a fixed value that varies on the region.
+fn fix_with<VALUE>(comp: i64) { fix_region_with(comp, VALUE); }
 
 // Holds the unknown on the region at the field of the last `read_state`,
 // interpolated at each node with the shape functions of the other mesh. It
@@ -342,6 +368,10 @@ fn fix_state() -> i64 { return fix_region_source(); }
 
 // Adds a uniform traction (force per area) on the region.
 fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
+
+// Adds the pressure p on the region: the traction -p n on its outward
+// normal n.
+fn pressure_load(p: f64) { add_region_pressure(p); }
 
 // Adds a uniform outward heat flux q·n = g (power per area) on the region.
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
@@ -370,6 +400,36 @@ fn solve() -> bool {
     return if physics == WAVE { wave_solve() } else { solve_system() };
 }
 
+// --- the nonlinear solid (solid.goose, spec §10.6) ----------------------------
+
+// J2 plasticity of the von Mises yield sy + hk α, with the E and nu of the
+// last `elastic` call: at small strain, or at finite strain with the
+// multiplicative split (`finite`).
+fn plastic(sy: f64, hk: f64, finite: bool) { set_solid(if finite { SOLID_J2_FINITE } else { SOLID_J2 }, sy, hk); }
+
+// An isotropic hyperelastic energy of the program (solve_energy), in 3d,
+// or in 2d in plane strain with the thickness t. It needs no E and nu.
+fn hyperelastic(t: f64) {
+    set_elastic(1.0, 0.0, if dim == 2 { PLANE_STRAIN } else { SOLID_3D }, t);
+    set_solid(SOLID_ENERGY, 0.0, 0.0);
+}
+
+// A static step of J2 at small strain in `ramp` increments. False if an
+// increment does not converge.
+fn solve_plastic(ramp: i64) -> bool { return solve_solid(ramp, no_energy); }
+
+// A static step of the energy ENERGY in `ramp` increments. ENERGY takes
+// the principal values of C as hyper-dual numbers (hd_seed) and gives W.
+fn solve_energy<ENERGY>(ramp: i64) -> bool { return solve_solid(ramp, ENERGY); }
+
+// The explicit step of J2 at finite strain to `end` with the step dt (dt
+// <= 0 for the stable step), from the velocity (vx, vy, vz) of each free
+// node. False if the state is not finite.
+fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool { return solid_explicit(end, dt, [vx, vy, vz]); }
+
+// The Newton iterations of the last static step of the nonlinear solid.
+fn newton_iterations() -> i64 { return newton_steps; }
+
 // The transient step central_difference (explicit.goose) to the time
 // `end`, with the step dt, or the stable step for dt <= 0, from rest.
 // Returns false if the state is not finite.
@@ -396,6 +456,10 @@ fn reaction() -> f64, f64, f64 {
     let r = region_reaction();
     return r[0], r[1], r[2];
 }
+
+// The mean of component comp of the solution on the region, weighted by
+// area. NaN if the region holds no facet.
+fn mean_value(comp: i64) -> f64 { return region_mean(comp); }
 
 // The check `submodel_cut`: on each part of the region, the resultant force
 // of the stress of this model and of the field of the last `read_state`.

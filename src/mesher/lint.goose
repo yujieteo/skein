@@ -39,7 +39,7 @@ fn mesh_lint() {
 }
 
 // The smallest feature of shape `g`: the shortest side of the bounding box
-// of each box, cylinder, rect, circle, polygon, fill, extrude, revolve and
+// of each box, cylinder, sphere, rect, circle, polygon, fill, extrude, revolve and
 // loft in it, and of the copy of each pattern.
 recursive fn smallest_feature(g: i64) -> f64 {
     let s = shapes[g];

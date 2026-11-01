@@ -141,17 +141,19 @@ gives the roadmap phase that closes the gap:
   [§9.2](skein_spec.md#92-mesh-generation) allow `quad` and `hex` on each
   region: a grid in r and θ on a quarter of a ring or a tube, Blossom-Quad
   on another `Surface`, a swept grid on a prism along z, and a mapped grid
-  on another `Solid`. The rings of
-  [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn) and
+  on another `Solid`. The ring of
   [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn),
   the parts of
   [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn), the
-  flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn),
-  the rod of
-  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) and
-  the package of
+  flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn)
+  and the package of
   [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) use
-  the cells of femahoy.
+  the cells of femahoy. The ring of
+  [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn) and
+  the rod of
+  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) use
+  quadratic triangles and tetrahedra: the nonlinear solid of phase 5
+  (`src/elements/solid.goose`) runs on simplices only.
 - Phase 5 closes G32 and G35. The captain put them in phase 5 on
   2026-10-31. Spec [§8.4](skein_spec.md#84-region-algebra) gives `a & b`
   the lower dimension of `a` and `b`, so the 787 models
@@ -220,7 +222,7 @@ result, or the mesh or the solve is less efficient.
 | G36 | A structured hex or quad grid on a region that is not a union of axis-aligned boxes or rects: the sloped fillet of a package, a ring about a hole, a tube, a disk on a block. | `validation/cases/warpage-2p5d-frame/mesh.inp:5462`, `validation/cases/contact-cattaneo/mesh.inp:13915` | §9.1 and §9.2 allow `quad` on another `Surface` (Blossom-Quad) and `hex` on a quarter of a tube, but the mesher makes `quad` and `hex` only on a union of boxes or rects. The spec has no `hex` grid on another `Solid` (the fillet, the rod). The models submodel-kirsch-hole, hyperelastic-tube, contact-cattaneo, turek-hron-fsi1, taylor-bar-impact and warpage-2p5d-frame use triangles or tetrahedra. | In the mesher, Blossom-Quad and the quarter-tube grid of §9.2. In §9.2, a mapped or swept `hex` grid on a `Solid` that is not a union of boxes. | 3, closed by [§9.2](skein_spec.md#92-mesh-generation) |
 | G20 | Quarter-point cells at a crack tip. | `validation/cases/fracture-centre-crack/derivation.md:38` | No mesh setting moves the mid-side nodes (§9.1). The model uses a fine mesh. | A mesh entry `crack_tip r: size`. | 2, closed by [§9.1](skein_spec.md#91-mesh) |
 | G21 | The stable increment of an explicit step, chosen by the solver. | `validation/cases/dynamics-bar-step/job.inp:14` | `transient` needs `dt` (§14.2). The model gives a `dt` below the stable limit. | Accept `dt: stable` with an explicit scheme. | 2, closed by [§14.2](skein_spec.md#142-procedures) |
-| G22 | Finite-strain J2 plasticity with a multiplicative split (plastic strain up to 3.24). | `validation/cases/taylor-bar-impact/job.inp:12` | §10.6 states `plastic` with an additive plastic strain. Under `finite_strain` this is a different law at large strain. | One rule in §10.6: under `finite_strain`, the `strain` state is `Fp`, the elastic part is `defgrad(u)*inv(Fp)`, and the return map is the exponential map. | 5 |
+| G22 | Finite-strain J2 plasticity with a multiplicative split (plastic strain up to 3.24). | `validation/cases/taylor-bar-impact/job.inp:12` | §10.6 states `plastic` with an additive plastic strain. Under `finite_strain` this is a different law at large strain. | One rule in §10.6: under `finite_strain`, the `strain` state is `Fp`, the elastic part is `defgrad(u)*inv(Fp)`, and the return map is the exponential map. | 5, closed by [§10.6](skein_spec.md#106-inelastic-materials) |
 | G23 | The stick stiffness of penalty friction. It changes the reference traction by 0.34 % to 3.4 %. | `validation/cases/contact-cattaneo/job.inp:15` | `contact` has only `friction`, `enforce` and `stiffness` (§12.4). | A `contact` setting `stick_stiffness`. | 5 |
 | G24 | Smooth closed shapes from points or parameters: the airfoil splines, a superellipse hole. | `validation/cases/naca0012-ladson/a4.04/system/blockMeshDict:67`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:9` | `spline` gives a `Curve`, and no function makes a `Surface` from a closed curve (§8.1). The models use polygons. | A geometry function `fill(c: Curve)` for a closed curve. | 2, closed by [§8.1](skein_spec.md#81-distance-functions) |
 | G25 | The stop rule and the first simplex of Nelder-Mead. The case tolerance comes from the stop rule. | `validation/cases/shape-hole-biaxial/derivation.md:50` | `minimize` has only `objective`, `method` and `max_cases` (§20.2). | `minimize` arguments `xtol` and `step`. | 2, closed by [§20.2](skein_spec.md#202-study) |

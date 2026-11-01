@@ -30,6 +30,7 @@ import syntax from "../syntax";
 import codegen.codegen;
 import mesher from "../mesher";   // the reader of the geometry, and its shapes
 import .gen_edge;                  // the edge physics and the Darcy flow
+import .gen_solid;                 // plasticity, finite strain and hyperelastic energies
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }
@@ -242,6 +243,18 @@ let BC_FIX = 0;
 let BC_LOAD = 1;
 let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
 let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosure of the step
+let BC_PRESSURE = 4; // `bc inner: sigma*n = -p*n`: v[0] holds p
+
+fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE; }
+
+// The pressure p of the traction value -p*n, or NaN.
+fn pressure_of(v: i64) -> f64 {
+    let neg = kind(v) == syntax::N_UNARY && syntax::text(tok(v)) == "-";
+    let m = if neg { first(v) } else { v };
+    guard kind(m) == syntax::N_BINARY && syntax::text(tok(m)) == "*" && source_of(child(m, 1)) == "n" else { return 0.0 / 0.0; }
+    let p = scalar_value(child(m, 0));
+    return if neg { p } else { -p };
+}
 
 // A region of the boundary: the union of planes `axis == value` and of
 // the surfaces of the shapes `shapes` of the mesher, or the surface of the
@@ -252,6 +265,7 @@ struct Surf {
     axes: i64[..6],
     values: f64[..6],
     shapes: i64[..6],
+    minus: i64,     // the boundary whose nodes a - b removes, or -1
 }
 
 // A refine line of the mesh of a shape: the shape, the size, and whether
@@ -337,6 +351,8 @@ let FIELD_STRESS = 1;
 let FIELD_FLUX = 2;
 let FIELD_EIGEN = 3;    // eigenvalue(comp + 1)
 let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PARTS
+let FIELD_REACTION = 5; // reaction(r).x: the boundary r is at[0]
+let FIELD_MEAN = 6;     // mean(u.x, r): the boundary r is at[0]
 
 struct Expect {
     name: u8[..64],
@@ -378,6 +394,7 @@ var mesh_tok = -1;
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
 var physics = -1;
+var program_node = -1;          // the program that read() reads
 var plane = SOLID_3D;
 var thickness = 1.0;
 var physics_tok = -1;
@@ -473,6 +490,7 @@ fn reset() {
     bloch_high = -1;
     bloch_theta = 0.0;
     edge_reset();
+    solid_reset();
 }
 
 fn set64(into: u8[..64]&, s: u8[:]) { codegen::set64(into, s); }
@@ -504,7 +522,7 @@ fn geometry_call(n: i64) -> i64 {
     return n;
 }
 
-let SHAPE_NAMES = ["box", "rect", "cylinder", "circle", "polygon", "fill", "extrude", "revolve", "loft", "pattern", "pattern_polar"];
+let SHAPE_NAMES = ["box", "rect", "cylinder", "sphere", "circle", "polygon", "fill", "extrude", "revolve", "loft", "pattern", "pattern_polar"];
 
 fn is_shape(n: i64) -> bool {
     guard n >= 0 && kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME else { return false; }
@@ -617,7 +635,7 @@ fn find_source(word: u8[:]) -> i64 {
     return -1;
 }
 
-let BODY_FIX = "write the body as a shape of box, cylinder, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -";
+let BODY_FIX = "write the body as a shape of box, cylinder, sphere, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -";
 
 fn corner(n: i64, i: i64) -> f64[3] {
     let v = value(arg(n, i));
@@ -766,7 +784,7 @@ fn surface(n: i64) {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [] };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], minus: -1 };
     set64(s.name, name(n));
     if !surf_parts(arg(v, 1), s) { return; }
     if s.hole && s.axes.len > 0 || s.shapes.len > 0 && s.axes.len > 0 {
@@ -840,7 +858,7 @@ fn read_law() {
         let w = name(p);
         // The eq of the wave physics names its properties.
         let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || w == "k" || w == "q_v" };
-        if !known && w != "rho" {
+        if !known && w != "rho" && !solid_property(w) {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
         }
@@ -853,7 +871,7 @@ fn read_law() {
         if e >= 0 { young = scalar_value(e); }
         if nu >= 0 { poisson = scalar_value(nu); }
         if rho >= 0 { density = scalar_value(rho); }
-        if young <= 0.0 || poisson <= -1.0 || poisson >= 0.5 {
+        if solid_law != SOLID_ENERGY && (young <= 0.0 || poisson <= -1.0 || poisson >= 0.5) {
             unsupported(tok(material_node), "the material needs E > 0 and -1 < nu < 0.5",
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
         }
@@ -960,23 +978,32 @@ fn physics_item(n: i64) {
             } else {
                 unsupported(tok(c), "this generator has the templates linear_elastic(b) and heat(q_v)", PHYSICS_FIX);
             }
+        } else if k == syntax::N_UNKNOWN && unknown_name.len > 0 {
+            solid_unknown(c);
         } else if k == syntax::N_UNKNOWN {
-            if unknown_name.len > 0 { unsupported(tok(c), "a second unknown", PHYSICS_FIX); }
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
         } else if k == syntax::N_MATASSIGN {
             materials_of(c);
         } else if k == syntax::N_ASSUME {
             assumptions(c);
+        } else if k == syntax::N_STATE {
+            solid_state(c);
+        } else if k == syntax::N_PLASTIC {
+            solid_plastic(c);
+        } else if k == syntax::N_LET && flux_let(c) < 0 {
+            solid_let(c);
         } else if k == syntax::N_LET {
             let p = flux_let(c);
-            if p < 0 || physics >= 0 && p != physics {
+            if physics >= 0 && p != physics {
                 unsupported(tok(c), str("the let '", name(c), "' is not a flux of this generator"),
                             "write let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u)), or let q: Vector<HeatFlux> = -k*grad(T)");
             } else {
                 physics = p;
                 set64(flux_name, name(c));
             }
+        } else if k == syntax::N_EQN && solid_dynamic_eq(c) {
+            if dynamic_eq && eq_count == 0 { eq_count++; }
         } else if k == syntax::N_EQN && physics == WAVE {
             eq_count++;
             wave_eq(c);
@@ -984,7 +1011,7 @@ fn physics_item(n: i64) {
             eq_count++;
             let left = child(c, 0);
             let right = child(c, 1);
-            let div = is_call(left, "div") && flux_name.len > 0 && source_of(arg(left, 0)) == flux_name;
+            let div = is_call(left, "div") && flux_name.len > 0 && (source_of(arg(left, 0)) == flux_name || solid_eq(arg(left, 0)));
             if !div || physics == ELASTIC && source_of(right) != "0" {
                 unsupported(tok(c), "this generator solves eq div(sigma) = 0 or eq div(q) = q_v", PHYSICS_FIX);
             } else if physics == HEAT {
@@ -995,6 +1022,7 @@ fn physics_item(n: i64) {
         }
         c = next(c);
     }
+    solid_finish(n);
     if physics < 0 { unsupported(tok(n), "the physics is neither linear elastic nor heat", PHYSICS_FIX); }
     if physics >= 0 && !uses_template && eq_count != 1 {
         unsupported(tok(n), "a written-out physics needs one eq", "add eq div(sigma) = 0 or eq div(q) = q_v");
@@ -1055,9 +1083,11 @@ fn assumptions(n: i64) {
             if first(a) < 0 && w == "plane_stress" {
                 unsupported(tok(a), "plane_stress needs the thickness", "write plane_stress(1 mm)");
             }
+        } else if w == "finite_strain" {
+            finite_strain = true;
         } else if w != "small_strain" && w != "isotropic" {
             unsupported(tok(a), str("the assumption '", w, "' is not in this generator"),
-                        "use small_strain, isotropic, plane_stress(t) or plane_strain");
+                        "use small_strain, finite_strain, isotropic, plane_stress(t) or plane_strain");
         }
         a = next(a);
     }
@@ -1246,6 +1276,8 @@ fn bc(n: i64) -> i64 {
         unsupported(tok(target), str("the bc target '", t, "' is not in this generator"),
                     str("write bc inlet: ", unknown_name, " = 1 Pa, or bc wall: dot(grad(", unknown_name, "), n) = 0 Pa/m"));
         return -1;
+    } else if t == unknown_name && physics == ELASTIC && mentions_xyz(v) {
+        b.node = v;
     } else if t == unknown_name {
         let x = value(v);
         if physics == ELASTIC && x.n == 1 && x.v[0] != 0.0 {
@@ -1253,10 +1285,15 @@ fn bc(n: i64) -> i64 {
         }
         if physics == HEAT && x.n != 1 { unsupported(tok(v), "T is a scalar", "write T = 20 degC"); }
         b.v = x.v;
+    } else if solid_velocity_bc(target, v, b) {
+        b.v[0] = 0.0;
     } else if member && physics == ELASTIC && axis_of(name(target)) >= 0 {
         b.comp = axis_of(name(target));
         b.v[0] = scalar_value(v);
-    } else if physics == ELASTIC && t == str(flux_name, "*n") {
+    } else if physics == ELASTIC && t == traction_target() && pressure_of(v) == pressure_of(v) {
+        b.kind = BC_PRESSURE;
+        b.v[0] = pressure_of(v);
+    } else if physics == ELASTIC && t == traction_target() {
         let x = value(v);
         if x.n != dim { unsupported(tok(v), "the traction is a vector", BC_FIX_TEXT); }
         b.kind = BC_LOAD;
@@ -1327,7 +1364,7 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-let REPORT_FIX = "write report reaction(root), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
+let REPORT_FIX = "write report reaction(root), reaction(root).x, mean(u.x, top), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
 
 // The procedure of a step: static with no arguments, or modal or buckling
 // with count, on an elastic model, or harmonic on a wave physics.
@@ -1342,7 +1379,7 @@ fn procedure(proc: i64, s: Step&) {
         return;
     }
     guard p == "modal" || p == "buckling" else {
-        if p != "static" || first(proc) >= 0 {
+        if p != "static" || first(proc) >= 0 && !solid_ramp(proc, s) {
             unsupported(tok(proc), "this generator has static steps with no arguments, modal and buckling steps with count, and transient steps with central_difference",
                         "write step load: static { ... } or step modes: modal(count: 6) { ... }");
         }
@@ -1395,6 +1432,7 @@ fn transient(proc: i64, s: Step&) {
     if !scheme { unsupported(tok(proc), "this generator has the explicit scheme central_difference", "add scheme: central_difference"); }
     if s.end <= 0.0 || s.dt < 0.0 { unsupported(tok(proc), "the step needs an end after the start, and dt >= 0", TRANSIENT_FIX); }
     if physics != ELASTIC { unsupported(tok(proc), "a transient step needs the linear_elastic template", PHYSICS_FIX); }
+    if solid_law > 0 && !dynamic_eq { unsupported(tok(proc), "a transient step of a nonlinear solid needs the first-order form", DYNAMIC_FIX); }
     if density <= 0.0 || region_laws.len > 0 {
         unsupported(tok(proc), "a transient step needs the density rho of one material", "give rho: Density = 7850 kg/m^3 in the material");
     }
@@ -1507,6 +1545,12 @@ fn report(item: i64) {
         if what < 0 { return; }
     } else if is_call(e, "eigenvalue") {
         if eigen_index(e, true) < 0 { return; }
+    } else if physics == ELASTIC && (kind(e) == syntax::N_MEMBER || is_call(e, "mean")) {
+        let what, comp = region_field(e);
+        if what < 0 || comp < 0 {
+            unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"), REPORT_FIX);
+            return;
+        }
     } else if !max_von_mises(e) {
         unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"), REPORT_FIX);
         return;
@@ -1556,6 +1600,35 @@ fn point_field(e: i64, errors: bool) -> i64, i64 {
     return what, comp;
 }
 
+// The field of reaction(r).x or of mean(u.x, r) on a boundary r that a let
+// names, or -1, -1.
+fn region_field(e: i64) -> i64, i64 {
+    let r = if kind(e) == syntax::N_MEMBER && is_call(first(e), "reaction") && syntax::child_count(first(e)) == 2 { arg(first(e), 0) }
+            else if is_call(e, "mean") && syntax::child_count(e) == 3 { arg(e, 1) } else { -1 };
+    guard r >= 0 && region_surf(r) >= 0 else { return -1, -1; };
+    if kind(e) == syntax::N_MEMBER { return FIELD_REACTION, axis_of(name(e)); }
+    let f = arg(e, 0);
+    guard kind(f) == syntax::N_MEMBER && source_of(first(f)) == unknown_name else { return -1, -1; };
+    return FIELD_MEAN, axis_of(name(f));
+}
+
+// The boundary of region r: a boundary that a let names, or a - b of two
+// of them, with the nodes of b removed (elements::except_plane). Or -1.
+fn region_surf(r: i64) -> i64 {
+    if kind(r) == syntax::N_NAME { return find_surf(name(r)); }
+    guard kind(r) == syntax::N_BINARY && syntax::text(tok(r)) == "-" && kind(child(r, 0)) == syntax::N_NAME && kind(child(r, 1)) == syntax::N_NAME else { return -1; };
+    let a = find_surf(name(child(r, 0)));
+    let b = find_surf(name(child(r, 1)));
+    let word = source_of(r);
+    guard a >= 0 && b >= 0 && !surfs[b].hole && word.len <= 64 else { return -1; };
+    for s, i in surfs { if s.name == word { return i; } }
+    var s = surfs[a];
+    set64(s.name, word);
+    s.minus = b;
+    surfs.push(s);
+    return surfs.len - 1;
+}
+
 // An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
     if physics == EDGE || physics == DARCY {
@@ -1577,6 +1650,8 @@ fn expect(n: i64, step: i64) {
     } else if wave_part(left) >= 0 {
         comp = wave_part(left);
         what = FIELD_WAVE;
+    } else if physics == ELASTIC {
+        what, comp = region_field(left);
     }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
@@ -1587,7 +1662,9 @@ fn expect(n: i64, step: i64) {
         return;
     }
     let point = if what == FIELD_WAVE { arg(left, 0) } else { left };
-    var x = Expect { name: [], what: what, comp: comp, at: if what == FIELD_EIGEN { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
+    let region = if what == FIELD_REACTION { arg(first(left), 0) } else if what == FIELD_MEAN { arg(left, 1) } else { -1 };
+    let at: f64[3] = if region >= 0 { [region_surf(region) * 1.0, 0.0, 0.0] } else if what == FIELD_EIGEN { [0.0; 3] } else { value(child(point, 1)).v };
+    var x = Expect { name: [], what: what, comp: comp, at: at, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL };
     // A tolerance of a temperature is a difference, not a degC value.
@@ -1603,6 +1680,7 @@ fn expect(n: i64, step: i64) {
 // the errors.
 fn read(prog: i64) -> bool {
     reset();
+    program_node = prog;
     var physics_node = -1;
     var mesh_node = -1;
     var methods: i64[>..] = [];
@@ -1626,7 +1704,7 @@ fn read(prog: i64) -> bool {
             methods.push(c);
         } else if k == syntax::N_SYMMETRY {
             symmetries.push(c);
-        } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY {
+        } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY && k != syntax::N_FN {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this generator"),
                         "remove it: this generator runs one linear static or steady heat model");
         }
@@ -1803,6 +1881,8 @@ fn reaction_unit() -> const u8[:] {
 fn field_unit(what: i64) -> const u8[:] {
     if what == FIELD_VALUE || what == FIELD_WAVE { return value_unit(); }
     if what == FIELD_STRESS { return codegen::system.pressure; }
+    if what == FIELD_REACTION { return reaction_unit(); }
+    if what == FIELD_MEAN { return value_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
     if codegen::system.pressure == "MPa" { return "mW/mm^2"; }
     return "kW/mm^2";
@@ -2167,6 +2247,15 @@ fn emit_region(out: u8[>..]&, si: i64) {
         out.append(")");
     }
     for g, i in s.shapes { format(out, if i == 0 { "elements::surface(" } else { " && elements::also_surface(" }, g, ")"); }
+    if s.minus >= 0 {
+        let m = surfs[s.minus];
+        for a, i in m.axes {
+            format(out, " && elements::except_plane(", AXES[a], ", ");
+            lit(out, m.values[i]);
+            out.append(")");
+        }
+        for g in m.shapes { format(out, " && elements::except_surface(", g, ")"); }
+    }
     out.append(", ");
     quoted(out, s.name);
     out.append(");\n");
@@ -2197,6 +2286,10 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         out.append("    elements::flux(");
         lit(out, b.v[0]);
         out.append(");\n");
+    } else if b.kind == BC_PRESSURE {
+        out.append("    elements::pressure_load(");
+        lit(out, b.v[0]);
+        out.append(");\n");
     } else if b.kind == BC_LOAD {
         format(out, "    ", api(), "traction(");
         lits(out, b.v);
@@ -2205,6 +2298,13 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         out.append("    elements::fix(0, ");
         lit(out, b.v[0]);
         out.append(");\n");
+    } else if b.node >= 0 {
+        // A value of the point p of the node.
+        for j in dim {
+            format(out, "    elements::fix_with(", AXES[j], ") { p => ");
+            emit_space(out, b.node, j);
+            out.append(" };\n");
+        }
     } else if b.comp >= 0 {
         format(out, "    ", api(), "fix(", AXES[b.comp], ", ");
         lit(out, b.v[0]);
@@ -2226,7 +2326,7 @@ fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     format(out, "// step ", s.name, ": ", if modal { "modal" } else { "buckling" }, "\nfn step_", s.name, "() {\n");
     out.append("    elements::clear_bcs();\n");
     for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
-    for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
+    for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
     out.append("    eigen(");
     quoted(out, s.name);
     format(out, ", ", s.count, ", ", if modal { "true" } else { "false" }, ");\n");
@@ -2271,9 +2371,9 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     } else {
         // The fixed values first: a load on a node that a later fix holds
         // still counts in the reaction.
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_LOAD { emit_bc(out, b); } }
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_bc(out, b); } }
-        if s.procedure == TRANSIENT {
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
+        if s.procedure == TRANSIENT && solid_law == 0 {
             out.append("    explicit(");
             quoted(out, s.name);
             out.append(", ");
@@ -2281,6 +2381,8 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             out.append(", ");
             lit(out, s.dt);
             out.append(");\n");
+        } else if solid_law > 0 {
+            emit_solid_solve(out, s);
         } else {
             out.append("    solve(");
             quoted(out, s.name);
@@ -2412,6 +2514,17 @@ fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3])
         out.append(");\n");
         return;
     }
+    if what == FIELD_REACTION || what == FIELD_MEAN {
+        out.append("    ");
+        emit_region(out, at[0] as! i64);
+        if what == FIELD_MEAN {
+            format(out, "        let ", var_name, " = elements::mean_value(", AXES[comp], ");\n");
+        } else {
+            format(out, "        let r_x, r_y, r_z = ", api(), "reaction();\n        let ", var_name, " = r_", AXIS_NAMES[comp], ";\n");
+        }
+        format(out, "        let found_", var_name, " = ", var_name, " == ", var_name, ";\n");
+        return;
+    }
     format(out, "        let ", var_name, ", found_", var_name, " = ", api());
     if what == FIELD_VALUE { format(out, "value_at(", comp, ", "); }
     if what == FIELD_FLUX { format(out, "flux_at(", AXES[comp], ", "); }
@@ -2436,6 +2549,11 @@ fn emit_report(out: u8[>..]&, step: Step, r: Report) {
         emit_region(out, find_surf(name(arg(e, 1))));
         out.append("        let x = elements::max_von_mises();\n");
         format(v, "quantity(x, \"", codegen::system.pressure, "\")");
+    } else if physics == ELASTIC && (kind(e) == syntax::N_MEMBER || is_call(e, "mean")) {
+        let what, comp = region_field(e);
+        let r = if what == FIELD_REACTION { arg(first(e), 0) } else { arg(e, 1) };
+        emit_sample(out, "x", what, comp, [region_surf(r) * 1.0, 0.0, 0.0]);
+        format(v, "quantity(x, \"", field_unit(what), "\")");
     } else if kind(e) == syntax::N_CALL {
         out.append("    ");
         emit_region(out, find_surf(name(arg(e, 0))));
@@ -2588,6 +2706,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
     if physics == EDGE || physics == DARCY { out.append(EDGE_PRELUDE); }
+    if solid_law > 0 { emit_energy(out); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
@@ -2645,6 +2764,8 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         lit(out, thickness);
         out.append(");\n");
         if bloch_low >= 0 { emit_bloch(out); }
+    } else if solid_law == SOLID_ENERGY {
+        emit_solid_law(out);
     } else {
         out.append(if plane == PLANE_STRESS { "    elements::elastic_plane_stress(" }
                    else if plane == PLANE_STRAIN { "    elements::elastic_plane_strain(" } else { "    elements::elastic(" });
@@ -2667,6 +2788,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             lit(out, thickness);
             out.append(");\n");
         }
+        emit_solid_law(out);
         if body_node >= 0 {
             out.append("    elements::body_force(");
             lits(out, body_force);

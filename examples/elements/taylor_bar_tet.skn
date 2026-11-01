@@ -1,0 +1,62 @@
+// The first 5 us of the Taylor bar of examples/femahoy/taylor_bar_impact.skn,
+// on a coarse mesh: J2 plasticity at finite strain with the explicit step
+// central_difference. The wall stops the bar, and a wave goes up from the
+// wall with the dilatational speed c = sqrt((lam + 2*mu)/rho) = 4587 m/s. The
+// top does not know of the impact until the wave arrives at Lb/c = 7.06 us:
+// at 5 us it has moved V0*t, for each V0.
+
+model taylor_bar_tet: 3d, mm_N_MPa_s
+
+param V0: Velocity = 227 m/s in 50 m/s..300 m/s
+let R: Length = 3.2 mm
+let Lb: Length = 32.4 mm
+let t_end: Time = 5 us
+let rho_cu: Density = 8930 kg/m^3
+
+scales R, V0, rho_cu
+
+let rod: Solid = cylinder((0, 0, 0) mm, (0, 0, 1), R, Lb) & box((0, 0, 0) mm, (R, R, Lb))
+let symx: Surface = boundary(rod, x == 0 mm)
+let symy: Surface = boundary(rod, y == 0 mm)
+let wall: Surface = boundary(rod, z == 0 mm)
+let top: Surface = boundary(rod, z == Lb)
+
+material copper {
+    E: Pressure = 117 GPa
+    nu: Real = 0.35
+    rho: Density = rho_cu
+    sy: Pressure = 400 MPa
+    Hk: Pressure = 100 MPa
+}
+
+mesh m on rod {
+    size: 1.6 mm
+    cell: tet
+}
+
+physics impact on rod solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0) {
+    material copper
+    assume finite_strain, isotropic
+    state eps_p: Tensor2<Real> = 0
+    state alpha: Real = 0
+    let S: Tensor2<Pressure> = hooke(E, nu, strain(u) - eps_p)
+    plastic {
+        yield: von_mises(S) - (sy + Hk*alpha)
+        strain: eps_p
+        hardening: alpha
+    }
+    eq ddt(u) - v = 0
+    eq rho*ddt(v) - div(defgrad(u)*S) = 0
+}
+
+method impact: cg { mesh: m, order: 2 }
+
+bc symx: v.x = 0
+bc symy: v.y = 0
+bc wall: v.z = 0
+
+step crash: transient(end: t_end, dt: stable, scheme: central_difference) {
+    output u
+}
+
+expect top_free: mean(u.z, top) == -V0*t_end within 0.5%

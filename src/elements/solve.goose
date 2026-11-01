@@ -21,6 +21,7 @@ var last_iterations = 0;
 var last_seconds = 0.0;
 
 let CG_TOLERANCE = 1.0e-12;   // the residual relative to the larger of the load and the first residual
+var cg_tolerance = CG_TOLERANCE; // of the next cg_solve: a Newton iteration needs less
 
 // y = K x, on the workers of solvers::rows_start during a solve.
 fn multiply(x: f64[:], y: f64[:]) {
@@ -147,11 +148,12 @@ fn cg_solve(start: f64, key: i64, warm: bool) -> bool {
     }
     let r2 = if warm { warm_scale(r, z) } else { dot(r, r) };
     guard key < 0 || setup_preconditioner(key) else {
+        solvers::rows_stop();
         last_iterations = 0;
         last_seconds = clock() - start;
         return false;
     }
-    let target = CG_TOLERANCE * sqrt(max(f2, r2));
+    let target = cg_tolerance * sqrt(max(f2, r2));
     precondition(r, z);
     for d in n { p[d] = z[d]; }
     var rz = dot(r, z);

@@ -1227,8 +1227,20 @@ plastic {
 `ddt(eps_p) = λ ∂f/∂σ`, `ddt(alpha) = λ √(2/3) |∂f/∂σ|`, `λ ≥ 0`, `λ f = 0`.
 The compiler makes the closest-point return map and its consistent tangent
 (Simo and Hughes 1998) by symbolic differentiation of `f`. `yield` must have
-the dimension of the stress [`unit_mismatch`]. A hyperelastic law needs no
-state. Write the strain energy and derive the stress with `diff`:
+the dimension of the stress [`unit_mismatch`].
+
+Under `finite_strain`, with the equation `div(defgrad(u)*S) = 0`, the same
+block states the multiplicative split `F = Fe*Fp`. `strain(u) - eps_p` is
+then the logarithmic elastic strain `ln(Ve)`, with `Fe = Ve*Re`, and
+`hooke` gives the Kirchhoff stress from it (a Hencky law). The `strain`
+state holds `inv(Cp)`, with `Cp = transpose(Fp)*Fp`, and the return map is
+the exponential map of Simo (1992), J2 on the Kirchhoff stress. `S` is
+`inv(F)*tau*inv(transpose(F))`. At small strain the law is the additive law
+above. Reason: the Taylor bar of femahoy has plastic strains up to 3.24
+(gap G22). There the additive split of the Green-Lagrange strain is a
+different law, and its stress grows without limit at large strain.
+
+A hyperelastic law needs no state. Write the strain energy and derive the stress with `diff`:
 
 ```skein
 assume finite_strain, isotropic
@@ -1903,7 +1915,7 @@ each expectation as a post-solve verification result. The place of the
 ```skein
 step inflate_25: static(ramp: 20) {
     bc inner: u = (15 mm)/A_in*(x, y)
-    expect f_25: reaction(inner).x == 5.74269 N within 0.2%
+    expect f_25: reaction(inner - sx).x == 5.74269 N within 0.2%
 }
 
 study ra_sweep: grid {

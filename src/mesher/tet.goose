@@ -26,7 +26,8 @@
 // mesh_quality measures each mesh. The sharp edges of the shape are cut
 // off (chamfered) by about one lattice cell. So a prism along z with a
 // cylinder or an extrude in it is not stuffed: sweep_tets (sweep.goose)
-// sweeps the triangles of its section, and keeps its sharp edges.
+// sweeps the triangles of its section, and keeps its sharp edges, and an
+// octant of a spherical shell is swept radially (shell_tets).
 import std;
 import math;
 import dictionary;
@@ -330,6 +331,7 @@ fn lattice_tets() {
 // finish.
 fn mesh_3d(g: i64, size: f64) -> bool {
     clear_mesh(3);
+    if shell_tets(g, size) { return true; }
     let b = bounds(g);
     if has_round(g) && targets_span_z(b[2], b[5]) {
         let s = section(g, b[2], b[5]);

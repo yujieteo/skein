@@ -224,6 +224,7 @@ var assembled_source: f64[>..] = [];
 fn assemble(path: u8[:], vectors: i64) {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
+    internal.clear();
     solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), "");
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
@@ -329,11 +330,15 @@ struct Part {
 }
 
 var region: Part[..8] = [];
+var region_out: Part[..8] = [];    // the parts whose nodes are not in the region
 
 fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
+    return part_holds(region[k], n);
+}
+
+fn part_holds(p: Part, n: i64) -> bool {
     let tol = geometry_tolerance();
-    let p = region[k];
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
@@ -343,6 +348,7 @@ fn on_part(n: i64, k: i64) -> bool {
 
 fn on_region(n: i64) -> bool {
     guard n >= 0 && n < node_count() else { abort("on_region: n < node_count()"); }
+    for p in region_out { if part_holds(p, n) { return false; } }
     for k in region.len { if on_part(n, k) { return true; } }
     return false;
 }
@@ -367,9 +373,43 @@ fn fix_region(comp: i64, v: f64) {
     }
 }
 
+// Holds component `comp` of each node of the region at VALUE(p), with p
+// the point of the node.
+fn fix_region_with<VALUE>(comp: i64) {
+    guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("fix_region_with: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
+    for n in node_count() {
+        if !on_region(n) { continue; }
+        fixed[ncomp * n + comp] = 1;
+        prescribed[ncomp * n + comp] = VALUE([node_x(n, 0), node_x(n, 1), node_x(n, 2)]);
+    }
+}
+
 // Adds ∫ g Ni dA over the facets of the region to component p of node i,
 // for g = gv[p].
-fn add_region_load(gv: f64[3]) {
+fn add_region_load(gv: f64[3]) { add_facet_load(gv, 0.0); }
+
+// Adds the pressure p on the boundary facets of the region: the traction
+// -p n, with n the outward normal of the facet in the undeformed mesh.
+fn add_region_pressure(p: f64) { add_facet_load([0.0; 3], p); }
+
+// The unit outward normal of facet f of cell c at the point x, from the
+// tangents tan of the facet: it points away from the centre of the cell.
+fn facet_normal(c: i64, x: f64[3], tan: f64[6]) -> f64[3] {
+    var nv: f64[3] = if dim == 2 { [tan[1], -tan[0], 0.0] } else {
+        [tan[1] * tan[5] - tan[2] * tan[4], tan[2] * tan[3] - tan[0] * tan[5], tan[0] * tan[4] - tan[1] * tan[3]] };
+    let count = node_count_of(dim, order);
+    var side = 0.0;
+    for l in count {
+        let n = cell_node(c, l);
+        for t in 3 { side += nv[t] * (x[t] - node_x(n, t)) / count; }
+    }
+    let size = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    let s = if side < 0.0 { -1.0 / size } else { 1.0 / size };
+    return [s * nv[0], s * nv[1], s * nv[2]];
+}
+
+// Adds the traction gv - p n on the boundary facets of the region.
+fn add_facet_load(gv: f64[3], p: f64) {
     guard physics >= 0 && ncomp <= gv.len && dofs_sized() else { abort("add_region_load: a physics and the arrays of the dofs"); }
     let fd = dim - 1;
     let fnodes = node_count_of(fd, order);
@@ -406,9 +446,17 @@ fn add_region_load(gv: f64[3]) {
                     let nz = tan[0] * tan[4] - tan[1] * tan[3];
                     da = sqrt(nx * nx + ny * ny + nz * nz);
                 }
+                var tv = gv;
+                if p != 0.0 {
+                    var x: f64[3] = [0.0; 3];
+                    for l in fnodes {
+                        for t in 3 { x[t] += fn_shape[l] * node_x(cell_node(c, facet_node(dim, f, l)), t); }
+                    }
+                    tv = gv - p * facet_normal(c, x, tan);
+                }
                 for l in fnodes {
                     let n = cell_node(c, facet_node(dim, f, l));
-                    for p in ncomp { load[ncomp * n + p] += gv[p] * fn_shape[l] * w * da; }
+                    for k in ncomp { load[ncomp * n + k] += tv[k] * fn_shape[l] * w * da; }
                 }
             }
         }
@@ -426,6 +474,23 @@ fn clear_conditions() {
 
 // --- reactions -----------------------------------------------------------------
 
+// The internal force of each dof after a static step of the nonlinear
+// solid (solid.goose), in place of K u; empty after a linear solve.
+var internal: f64[>..] = [];
+
+// The force K u of dof d, or its internal force, and the sum of the sizes
+// of the terms of the sum K u (the size of its round-off).
+fn row_force(d: i64) -> f64, f64 {
+    if internal.len == sol.len { return internal[d], abs(internal[d]); }
+    var ku = 0.0;
+    var terms = 0.0;
+    for e in row_start[d]..row_start[d + 1] {
+        ku += val[e] * sol[col[e]];
+        terms += abs(val[e] * sol[col[e]]);
+    }
+    return ku, terms;
+}
+
 // The force of the supports on the body (or the heat that flows in through
 // them): K u - f on the fixed dofs of the region. With equilibrium, the
 // reactions and the applied loads sum to 0.
@@ -438,12 +503,31 @@ fn region_reaction() -> f64[3] {
         for p in ncomp {
             let d = ncomp * n + p;
             if fixed[d] != 1 { continue; }
-            var ku = 0.0;
-            for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+            let ku, terms = row_force(d);
             sum[p] += ku - load[d] - assembled_source[d];
         }
     }
     return sum;
+}
+
+// The mean of component comp of the solution on the boundary facets of the
+// region, weighted by area: the weight of each node is the load of a
+// unit traction (add_region_load). The load stays as it was.
+fn region_mean(comp: i64) -> f64 {
+    guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("region_mean: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
+    var kept: f64[>..] = [];
+    kept.append(load);
+    for &v in load { v = 0.0; }
+    add_region_load([1.0; 3]);
+    var sum = 0.0;
+    var area = 0.0;
+    for n in node_count() {
+        let w = load[ncomp * n + comp];
+        sum += w * sol[ncomp * n + comp];
+        area += w;
+    }
+    for d in load.len { load[d] = kept[d]; }
+    return if area > 0.0 { sum / area } else { 0.0 / 0.0 };
 }
 
 // The sum of the reactions on all fixed dofs.
@@ -453,8 +537,7 @@ fn all_reaction() -> f64[3] {
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
         if fixed[d] != 1 { continue; }
-        var ku = 0.0;
-        for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+        let ku, terms = row_force(d);
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
     }
     return sum;
@@ -475,11 +558,8 @@ fn load_magnitude() -> f64 {
     var terms = 0.0;
     for d in sol.len {
         if fixed[d] != 1 { continue; }
-        var ku = 0.0;
-        for e in row_start[d]..row_start[d + 1] {
-            ku += val[e] * sol[col[e]];
-            terms += abs(val[e] * sol[col[e]]);
-        }
+        let ku, t = row_force(d);
+        terms += t;
         sum += abs(ku - load[d] - assembled_source[d]);
     }
     return max(sum, terms);
