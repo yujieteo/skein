@@ -1385,30 +1385,31 @@ function withLine(text, line) { return line ? el('span', {}, text, ' ', lineLink
 function renderTables() {
   const box = document.getElementById('tables');
   box.textContent = '';
+  const add = (...kids) => box.append(...kids.filter((k) => k !== null));
   const toon = S.foreign ? null : caseToons[S.caseIndex];
-  if (S.foreign) { box.append(el('p', { class: 'note' }, 'This view shows ', S.foreign, ', a VTU file of another solver: it has no source links and no solver tables.')); return; }
+  if (S.foreign) { add(el('p', { class: 'note' }, 'This view shows ', S.foreign, ', a VTU file of another solver: it has no source links and no solver tables.')); return; }
   const c = D.cases[S.caseIndex];
-  box.append(el('h2', {}, c.values ? `Solve in the page (${c.seconds.toFixed(1)} s, exit ${c.code})` : studyTable ? `Case ${c.id}` : 'Run'));
-  if (c.failure) box.append(el('p', { class: 'note' }, c.failure));
+  add(el('h2', {}, c.values ? `Solve in the page (${c.seconds.toFixed(1)} s, exit ${c.code})` : studyTable ? `Case ${c.id}` : 'Run'));
+  if (c.failure) add(el('p', { class: 'note' }, c.failure));
   const v = caseValues(S.caseIndex);
-  if (Object.keys(v).length) box.append(el('p', {}, Object.entries(v).map(([p, t]) => `${p} = ${t}`).join(', ')));
+  if (Object.keys(v).length) add(el('p', {}, Object.entries(v).map(([p, t]) => `${p} = ${t}`).join(', ')));
   // the solver
   const method = checkToon.tables.method;
-  box.append(table('Method', method, (c, v, r) => (v === null ? c : c === 'physics' ? withLine(v, itemLine('physics', v)) :
+  add(table('Method', method, (c, v, r) => (v === null ? c : c === 'physics' ? withLine(v, itemLine('physics', v)) :
     c === 'mesh' ? withLine(v, itemLine('mesh', v)) : v)));
   if (!method) {
     const lines = M.methods.map((m) => M.items.find((it) => it.line === m.line));
-    if (lines.length) box.append(el('div', { class: 'table' }, el('h3', {}, 'Method'), lines.map((it) => el('p', {}, el('code', {}, it.text), ' ', lineLink(it.line, '↗')))));
+    if (lines.length) add(el('div', { class: 'table' }, el('h3', {}, 'Method'), lines.map((it) => el('p', {}, el('code', {}, it.text), ' ', lineLink(it.line, '↗')))));
   }
   const solveText = M.solves.length ? M.solves.map((s) => el('p', {}, el('code', {}, 'solve { ' + s.text + ' }'), ' ', lineLink(s.line, '↗')))
     : [el('p', {}, 'The model has no solve item, so the solver uses the defaults of spec §14.4: CG for a symmetric positive definite system, else GMRES, with the AMG preconditioner.')];
-  box.append(el('div', { class: 'table' }, el('h3', {}, 'Linear solver'), solveText));
-  box.append(table('Mesh (of the default param values)', verifyToon.tables.mesh, (c, v) => (v === null ? c : c === 'name' ? withLine(v, itemLine('mesh', v)) : v)));
-  box.append(table('Solve', toon.tables.solve, (c, v) => (v === null ? c : c === 'step' ? withLine(v, itemLine('step', v)) : v)));
+  add(el('div', { class: 'table' }, el('h3', {}, 'Linear solver'), solveText));
+  add(table('Mesh (of the default param values)', verifyToon.tables.mesh, (c, v) => (v === null ? c : c === 'name' ? withLine(v, itemLine('mesh', v)) : v)));
+  add(table('Solve', toon.tables.solve, (c, v) => (v === null ? c : c === 'step' ? withLine(v, itemLine('step', v)) : v)));
   const verify = { cols: ['stage', 'id', 'result', 'value', 'limit'], rows: [] };
   if (verifyToon.tables.verify) verify.rows.push(...verifyToon.tables.verify.rows);
   if (toon.tables.verify) verify.rows.push(...toon.tables.verify.rows);
-  box.append(table('Verification', verify, (c, v, r) => {
+  add(table('Verification', verify, (c, v, r) => {
     if (v === null) return c;
     if (c === 'result') return el('span', { class: v === 'pass' ? 'pass' : 'fail' }, v);
     if (c === 'id') return withLine(v, verifyLine(r, verify.cols));
@@ -1417,19 +1418,19 @@ function renderTables() {
     const id = r[1];
     return id === 'expect' ? { 'data-expect': (r[3] || '').split(':')[0] } : { 'data-check': id };
   }));
-  box.append(table('Reports', toon.tables.report, (c, v, r) => (v === null ? c : c === 'expr' ? withLine(v, reportLine(r[0], v)) : v),
+  add(table('Reports', toon.tables.report, (c, v, r) => (v === null ? c : c === 'expr' ? withLine(v, reportLine(r[0], v)) : v),
     (r) => ({ 'data-report': r[1] })));
   if (studyTable) {
-    box.append(table('Study table', studyTable, (c, v) => {
+    add(table('Study table', studyTable, (c, v) => {
       if (v !== null) return c === 'status' || c === 'verify' ? el('span', { class: v === 'ok' || v === 'pass' ? 'pass' : 'fail' }, v) : v;
       const line = itemLine('param', c) || itemLine('expect', c) || (M.reports.find((x) => x.expr.startsWith(c + ' ') || x.expr === c) || {}).line;
       return withLine(c, line);
     }, (r, i) => ({ class: i === S.caseIndex ? 'current' : '', 'data-case': i, onclick: () => selectCase(i) })));
-    box.append(expectTable());
+    add(expectTable());
   }
   const notes = M.lines.map((t, i) => [t.trim(), i + 1]).filter(([t]) => t.startsWith('///'));
   if (notes.length) {
-    box.append(el('div', { class: 'table' }, el('h3', {}, 'Notes and assumptions of the model'),
+    add(el('div', { class: 'table' }, el('h3', {}, 'Notes and assumptions of the model'),
       el('ul', {}, notes.map(([t, line]) => el('li', {}, t.slice(3).trim(), ' ', lineLink(line, '↗'))))));
   }
 }
