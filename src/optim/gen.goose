@@ -708,8 +708,9 @@ let PRELUDE = """
     var solve_count = 0;
     var results: u8[>..] = [];
     var result_count = 0;
-    // A fault of the model or of a solve, and a failed check.
+    // A fault of the model or of a solve.
     var failed = false;
+    // A failed check.
     var missed = false;
     var gradients: u8[>..] = [];
     var gradient_count = 0;
