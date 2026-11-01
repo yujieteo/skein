@@ -63,6 +63,8 @@ let LANE_GRID = 4;
 // skein-p4-grid: an fv or dg model goes to src/grid/gen.goose.
 fn read_model(prog: i64) -> i64 {
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
+    // Edge and face elements go to the simplex generator, before flow claims a q and a p.
+    if elements_gen::family_claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
     if flow_gen::claims(prog) { return if flow_gen::read(prog) { LANE_FLOW } else { -1 }; }
     if grid_gen::claims(prog) { return if grid_gen::read(prog) { LANE_GRID } else { -1 }; }
     if elements_gen::claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }

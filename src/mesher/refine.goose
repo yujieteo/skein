@@ -32,6 +32,7 @@ struct Target {
 }
 
 var targets: Target[>..] = [];
+var section_z = 0.0;   // the z at which the 2D mesher measures a target
 
 fn clear_refine() { targets.clear(); }
 

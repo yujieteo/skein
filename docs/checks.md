@@ -120,7 +120,7 @@ in the file stays in the review.
 
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
-| `bc_form` | §12.1 | the left side is not an unknown or a flux | `bc tip: sigma = 0` | `sigma*n = 0` |
+| `bc_form` | §12.1 | the left side is not an unknown, `cross(n, u)` or a flux | `bc tip: sigma = 0` | `sigma*n = 0` |
 | `bc_conflict` | §12.3 | two conditions fight on one region and component | `u = 0` and `sigma*n = …` on one face | the two lines |
 | `rigid_form` | §12.1 | `rigid(p)` is not the whole right side of an essential condition on a displacement, `p` is not a `Point`, or a `moment` is not on the point of an earlier `rigid` | `bc f: u.x = rigid(c)` | `bc f: u = rigid(c)` |
 | `radiation_form` | §12.1 | `radiation(eps)` is not in the right side of a natural condition | `bc f: T = radiation(0.8)` | `bc f: dot(q, n) = radiation(0.8)` |
@@ -131,7 +131,7 @@ in the file stays in the review.
 | Id | Spec | Rule | Example | Suggested fix |
 |---|---|---|---|---|
 | `method_missing` | §13 | a physics has no `method`, and the default cannot choose one mesh | two meshes on the region | a `method` item that names the mesh |
-| `method_setting` | §13 | a setting does not belong to the method kind, or a `family` or `quadrature` word is not a value of the setting | `points:` in `cg` | the valid settings or values |
+| `method_setting` | §13 | a setting does not belong to the method kind, a `family`, `quadrature` or `gauge` word is not a value of the setting, or `gauge` is not on `family: nedelec` | `points:` in `cg` | the valid settings or values |
 | `family_cell` | §13 | `serendipity` without order 2, `incompatible` without order 1 or with `quadrature: reduced`, or either family on cells that are not `quad` or `hex` | `family: incompatible` with `order: 2` | `order: 1`, or `cell: hex` in the mesh |
 | `method_physics` | §13 | the method cannot discretize the physics | `gfd` with a `plastic` block | a method that can |
 | `inf_sup` | §13 | an unstable velocity-pressure pair with no stabilization | `order: { v: 1, p: 1 }`, `stabilize: none` | `stabilize: supg_pspg` or `order: { v: 2, p: 1 }` |
@@ -150,6 +150,7 @@ in the file stays in the review.
 | `eigenvalue_step` | §14.5 | `eigenvalue(k)` is not in a `report` or an `expect`, has no `modal` or `buckling` step, or `k` is outside `1..count` of the step | `report eigenvalue(1)` in a `static` step, `report eigenvalue(13)` in `modal(count: 12)` | a `modal` or `buckling` step, or a `k` in `1..count` |
 | `when_step` | §14.5 | `when(f, value)` is not in a `report` or an `expect` of a `transient` step, or in another `expect` whose last step is `transient` | `report when(front, 1 m)` in a `static` step | a `transient` step |
 | `rms_step` | §14.5 | `rms(f, psd)` is not in a `report` or an `expect` of a `harmonic` step, or in another `expect` whose last step is `harmonic` | `report rms(u.z at p, 0.04/(1 Hz))` in a `static` step | a `harmonic` step |
+| `far_field_form` | §14.5 | `far_field(E, H, s, d)` without a `Complex` vector `E` and `H`, a `Surface` `s` and a constant vector `d`, or not in a `report` or an `expect` of a `harmonic` step of a `3d` model | `report far_field(ef, hf, body, (1, 0, 0))` with a `Solid` `body` | `far_field(ef, hf, boundary(air), (1, 0, 0))` |
 | `expect_cases` | §15.3 | a list of an `expect` is not in a `grid` or a `zip` study, or does not have one value for each case | `== [1, 2] m` in a study of 3 cases | one value for each case |
 
 ### 2.9 Parameters, scales and studies

@@ -1,0 +1,51 @@
+// Radial Darcy flow from a well of radius 0.1 m to a rim of radius 1 m, on the Raviart-Thomas
+// elements of P1 triangles: the flux q on the edges and the pressure p in the cells. The well is at
+// 100 kPa and the rim at 0 Pa. The closed form: p = p1*(1 - ln(r/r1)/ln(r2/r1)), so
+// p = 30103.0 Pa and q.x = 8.68589e-5 m/s at (0.5, 0) m, and the flow out of the rim for each
+// metre of depth is 2*pi*k*p1/ln(r2/r1) = 2.72875e-4 m^2/s.
+
+model darcy_annulus_tri: 2d, SI
+
+let r1: Length = 0.1 m
+let r2: Length = 1 m
+let p1: Pressure = 100 kPa
+let p2: Pressure = 0 Pa
+
+scales r2, p1, 1e-4 m/s
+
+let well: Surface = circle((0, 0) m, r1)
+let field: Surface = circle((0, 0) m, r2)
+let ring: Surface = field - well
+let bore: Curve = boundary(ring, well)
+let rim: Curve = boundary(ring, field)
+
+// The permeability over the viscosity.
+material sand {
+    k: Area/(Pressure*Time) = 1e-9 m^2/(Pa*s)
+}
+
+mesh m on ring {
+    size: 20 mm
+    cell: tri
+}
+
+physics darcy on ring solves q: Vector<Velocity>, p: Pressure {
+    material sand
+    eq q + k*grad(p) = 0
+    eq div(q) = 0
+}
+
+method darcy: cg { mesh: m, order: 1, family: raviart_thomas }
+
+// A pressure is the natural condition of the mixed form.
+step steady: static {
+    bc bore: p = p1
+    bc rim: p = p2
+    output p
+    report flow = integral(dot(q, n), rim)
+}
+
+// p is constant in each cell, so a point value has an error of half a cell times the gradient.
+expect flow_out: integral(dot(q, n), rim) == 2.72875e-4 m^2/s within 1%
+expect p_mid: p at (0.5, 0) m == 30103.0 Pa within 3%
+expect q_mid: q.x at (0.5, 0) m == 8.68589e-5 m/s within 3%

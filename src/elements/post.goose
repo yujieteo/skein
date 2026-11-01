@@ -11,6 +11,7 @@ import .shape;
 import .mesh;
 import .assemble;
 import .stages;
+import .edge;
 
 let FIELD_VALUE = 0;    // component comp of u, or T
 let FIELD_STRESS = 1;   // sigma at comp = 3 i + j
@@ -150,11 +151,10 @@ fn vtk_type() -> i64 {
     return if order == 1 { 10 } else { 24 };
 }
 
-fn write_vtu_file(path: const u8[:], field: const u8[:]) -> bool {
-    guard ncomp >= 1 && sol.len == dof_total() else { abort("write_vtu_file: a solution of each dof"); }
+// The VTU file up to its point data: the nodes and the cells of the mesh.
+fn vtu_mesh(out: u8[>..]&) {
     let nodes = node_count();
     let cells = cell_count();
-    var out: u8[>..] = [];
     format(out, """
         <?xml version="1.0"?>
         <VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian">
@@ -173,15 +173,25 @@ fn write_vtu_file(path: const u8[:], field: const u8[:]) -> bool {
     out.append("</DataArray>\n<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\n");
     for c in cells { format(out, vtk_type(), "\n"); }
     out.append("</DataArray>\n</Cells>\n<PointData>\n");
+}
+
+let VTU_END = "</PointData>\n</Piece>\n</UnstructuredGrid>\n</VTKFile>\n";
+
+fn write_vtu_file(path: const u8[:], field: const u8[:]) -> bool {
+    if physics == EDGE { return write_edge_vtu(path, field); }
+    guard ncomp >= 1 && sol.len == dof_total() else { abort("write_vtu_file: a solution of each dof"); }
+    var out: u8[>..] = [];
+    vtu_mesh(out);
     let comps = if ncomp == 1 { 1 } else { 3 };
     format(out, "<DataArray type=\"Float64\" Name=\"", field, "\" NumberOfComponents=\"", comps,
            "\" format=\"ascii\">\n");
-    for n in nodes {
+    for n in node_count() {
         for a in comps {
             let v = if a < ncomp { sol[ncomp * n + a] } else { 0.0 };
             format(out, v, if a + 1 < comps { " " } else { "\n" });
         }
     }
-    out.append("</DataArray>\n</PointData>\n</Piece>\n</UnstructuredGrid>\n</VTKFile>\n");
+    out.append("</DataArray>\n");
+    out.append(VTU_END);
     return write_file(path, out);
 }

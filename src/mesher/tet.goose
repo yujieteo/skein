@@ -24,7 +24,9 @@
 // The paper's own cuts of the pyramids and the prisms give dihedral angles
 // from 10.7 to 164.8 degrees. These cuts do not have that bound, so
 // mesh_quality measures each mesh. The sharp edges of the shape are cut
-// off (chamfered) by about one lattice cell.
+// off (chamfered) by about one lattice cell. So a prism along z with a
+// cylinder or an extrude in it is not stuffed: sweep_tets (sweep.goose)
+// sweeps the triangles of its section, and keeps its sharp edges.
 import std;
 import math;
 import dictionary;
@@ -329,6 +331,10 @@ fn lattice_tets() {
 fn mesh_3d(g: i64, size: f64) -> bool {
     clear_mesh(3);
     let b = bounds(g);
+    if has_round(g) {
+        let s = section(g, b[2], b[5]);
+        if s >= 0 { return sweep_tets(s, b[2], b[5], size); }
+    }
     for a in 3 {
         let side = b[3 + a] - b[a];
         guard side > 0.0 else { return false; }

@@ -29,6 +29,7 @@ namespace elements_gen;
 import syntax from "../syntax";
 import codegen.codegen;
 import mesher from "../mesher";   // the reader of the geometry, and its shapes
+import .gen_edge;                  // the edge physics and the Darcy flow
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }
@@ -468,6 +469,7 @@ fn reset() {
     bloch_low = -1;
     bloch_high = -1;
     bloch_theta = 0.0;
+    edge_reset();
 }
 
 fn set64(into: u8[..64]&, s: u8[:]) { codegen::set64(into, s); }
@@ -834,7 +836,7 @@ fn read_law() {
     while p >= 0 {
         let w = name(p);
         // The eq of the wave physics names its properties.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || w == "k" || w == "q_v" };
+        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || w == "k" || w == "q_v" };
         if !known && w != "rho" {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -930,6 +932,10 @@ fn physics_item(n: i64) {
     }
     physics_tok = tok(n);
     set64(physics_name, name(n));
+    if family_word.len > 0 {
+        edge_physics(n);
+        return;
+    }
     var eq_count = 0;
     var uses_template = false;
     var c = first(n);
@@ -956,24 +962,7 @@ fn physics_item(n: i64) {
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
         } else if k == syntax::N_MATASSIGN {
-            // The first material is law 0. Each other one holds its region.
-            var m = first(c);
-            while m >= 0 {
-                let item = find_material(name(m));
-                if item < 0 {
-                    unsupported(tok(m), str("'", name(m), "' is not a material of the model"), PHYSICS_FIX);
-                } else if m == first(c) {
-                    material_node = item;
-                    set64(material_name, name(m));
-                } else if first(m) < 0 {
-                    unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
-                } else {
-                    var w = Law { g: region_shape(first(m)), item: item, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
-                    codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
-                    region_laws.push(w);
-                }
-                m = next(m);
-            }
+            materials_of(c);
         } else if k == syntax::N_ASSUME {
             assumptions(c);
         } else if k == syntax::N_LET {
@@ -1009,6 +998,28 @@ fn physics_item(n: i64) {
     }
     if dim == 2 && physics == ELASTIC && plane == SOLID_3D {
         unsupported(tok(n), "a 2d elastic physics needs plane_stress(t) or plane_strain", "add assume plane_stress(1 mm)");
+    }
+}
+
+// `material steel, copper on pin`: the first material is law 0. Each
+// other one holds its region.
+fn materials_of(c: i64) {
+    var m = first(c);
+    while m >= 0 {
+        let item = find_material(name(m));
+        if item < 0 {
+            unsupported(tok(m), str("'", name(m), "' is not a material of the model"), PHYSICS_FIX);
+        } else if m == first(c) {
+            material_node = item;
+            set64(material_name, name(m));
+        } else if first(m) < 0 {
+            unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
+        } else {
+            var w = Law { g: region_shape(first(m)), item: item, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
+            codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
+            region_laws.push(w);
+        }
+        m = next(m);
     }
 }
 
@@ -1106,10 +1117,16 @@ fn method(n: i64) {
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
         } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
             pml_setting(first(s));
+        } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
+            // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
-            unsupported(tok(s), "the method setting is not in this generator", "use only mesh, order and the pml of a wave physics");
+            unsupported(tok(s), "the method setting is not in this generator",
+                        "use only mesh, order, the pml of a wave physics, and the family and gauge: tree of edge elements");
         }
         s = next(s);
+    }
+    if (physics == EDGE || physics == DARCY) && order != 1 {
+        unsupported(tok(n), str("the family ", family_word, " has order 1 in this generator"), "write order: 1");
     }
 }
 
@@ -1203,6 +1220,7 @@ fn bc(n: i64) -> i64 {
         unsupported(tok(region), "the region of the bc is not a boundary that a let names", SURF_FIX);
         return -1;
     }
+    if physics == EDGE || physics == DARCY { return edge_bc(n, s); }
     var b = Bc { surf: s, kind: BC_FIX, comp: -1, v: [0.0, 0.0, 0.0], tok: tok(n), node: -1 };
     let t = source_of(target);
     let member = kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
@@ -1353,7 +1371,7 @@ fn bare(n: i64) -> bool {
 // harmonic(freq: [f1, f2, ...], damping: z) of the wave physics.
 fn harmonic(proc: i64, s: Step&) {
     let fix = "write step sweep: harmonic(freq: [100, 200] Hz) { ... }, with a Complex unknown";
-    if physics != WAVE || name(proc) != "harmonic" {
+    if physics != WAVE && physics != EDGE || name(proc) != "harmonic" {
         unsupported(tok(proc), "this generator has harmonic steps of a Complex unknown, and no other step of it", fix);
         return;
     }
@@ -1430,6 +1448,10 @@ fn wave_part(e: i64) -> i64 {
 
 fn report(item: i64) {
     let e = first(item);
+    if physics == EDGE || physics == DARCY {
+        edge_report(item);
+        return;
+    }
     if physics == WAVE {
         if wave_part(e) < 0 {
             unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"),
@@ -1498,6 +1520,10 @@ fn point_field(e: i64, errors: bool) -> i64, i64 {
 
 // An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
+    if physics == EDGE || physics == DARCY {
+        edge_expect(n, step);
+        return;
+    }
     let left = child(n, 0);
     let right = child(n, 1);
     let within = child(n, 2);
@@ -1571,6 +1597,8 @@ fn read(prog: i64) -> bool {
     let at = if first(prog) >= 0 { tok(first(prog)) } else { tok(prog) };
     if physics_node < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if !ok() { return false; }
+    let family = family_of(methods);
+    if family == "nedelec" || family == "raviart_thomas" { set64(family_word, family); }
     mesher::read_geometry(prog);
     physics_item(physics_node);
     if !ok() { return false; }
@@ -1662,6 +1690,7 @@ fn step_bcs() {
 // The Complex values of each frequency of each harmonic step: c, s and the
 // bcs at its omega, so that a fault in them stops the model here.
 fn harmonic_values() {
+    guard physics == WAVE else { return; }
     for s in steps {
         if s.procedure != HARMONIC { continue; }
         for f in freqs[s.first_freq..s.first_freq + s.freq_count] {
@@ -1677,6 +1706,8 @@ fn harmonic_values() {
 
 // Each step needs a fixed value, and each reaction report a fixed region.
 fn supports() {
+    // A natural condition alone makes the edge physics and the Darcy flow unique.
+    guard physics != EDGE && physics != DARCY else { return; }
     for s in steps {
         var fixes = 0;
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX || b.kind == BC_SOURCE { fixes++; } }
@@ -2169,6 +2200,10 @@ fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
 
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) {
     let s = steps[si];
+    if physics == EDGE || physics == DARCY {
+        emit_edge_step(out, si, results_dir);
+        return;
+    }
     if s.procedure == HARMONIC {
         emit_harmonic_step(out, si, results_dir);
         return;
@@ -2404,6 +2439,7 @@ fn dof_estimate() -> i64 {
         for g in interfaces { mesher::add_interface(g); }
         let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
         let points = if done { mesher::point_count() } else { 0 };
+        if physics == EDGE || physics == DARCY { return edge_dofs(points); }
         let nodes = if order == 2 { points * (if dim == 3 { 8 } else { 4 }) } else { points };
         return nodes * per_node();
     }
@@ -2419,6 +2455,7 @@ fn dof_estimate() -> i64 {
     if dim == 3 { cells[2] = max(ceil((hi[2] - lo[2]) / mesh_size - 1.0e-9) as! i64, 1); }
     var nodes = 1;
     for j in dim { nodes *= order * cells[j] + 1; }
+    if physics == EDGE || physics == DARCY { return edge_dofs(nodes); }
     return nodes * per_node();
 }
 
@@ -2491,6 +2528,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     }
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
+    if physics == EDGE || physics == DARCY { out.append(EDGE_PRELUDE); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
@@ -2541,6 +2579,8 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         out.append(", ");
         lit(out, thickness);
         out.append(");\n");
+    } else if physics == EDGE || physics == DARCY {
+        out.append("    // each step sets the coefficients of the physics\n");
     } else if physics == WAVE {
         out.append("    elements::wave(");
         lit(out, thickness);
@@ -2593,6 +2633,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     if cut_source >= 0 { emit_source(out); }
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
+    for x in probes { if x.step < 0 { emit_edge_expect(out, x); } }
     for s in skipped {
         out.append("    not_run(");
         quoted(out, s);

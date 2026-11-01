@@ -90,14 +90,15 @@ fn nearest_of(name: u8[:], names: const u8[:][:]) -> u8[>..] {
 
 // --- physics (spec §10) ----------------------------------------------------------------------
 
-// Records `div(F)` in the equation of unknown `k` (spec §12.1).
+// Records `div(F)` and `curl(F)` in the equation of unknown `k` (spec §12.1).
 recursive fn note_fluxes(n: i64, k: i64) {
     let nd = syntax::nodes[n];
     if nd.kind == syntax::N_CALL {
         let callee = nd.first;
         let arg = syntax::nodes[callee].next;
-        if syntax::nodes[callee].kind == syntax::N_NAME && tok_text(syntax::nodes[callee].tok) == "div" && arg >= 0 {
-            fluxes.push(Flux { phys: cur_phys, node: syntax::nodes[arg].first, unknown: k });
+        let word = if syntax::nodes[callee].kind == syntax::N_NAME { tok_text(syntax::nodes[callee].tok) } else { "" };
+        if (word == "div" || word == "curl") && arg >= 0 {
+            fluxes.push(Flux { phys: cur_phys, node: syntax::nodes[arg].first, unknown: k, curl: word == "curl" });
         }
     }
     var c = nd.first;
@@ -537,22 +538,37 @@ fn unknown_of(n: i64) -> i64 {
     return -1;
 }
 
-// The unknown of the flux `f` (an expression), or -1.
-fn flux_unknown(f: i64) -> i64 {
+// The unknown of the flux `f` (an expression) of a div, or of a curl with
+// `curl`, or -1.
+fn flux_unknown(f: i64, curl: bool) -> i64 {
     let text = norm_text(f);
     for fl in fluxes {
-        if norm_text(fl.node) == text { return fl.unknown; }
+        if fl.curl == curl && norm_text(fl.node) == text { return fl.unknown; }
     }
     return -1;
 }
 
-// For `F*n` or `dot(F, n)`, the node of F, else -1.
-fn flux_of(n: i64) -> i64 {
+// For `cross(n, a)`, the node of a, else -1.
+fn tangent_of(n: i64) -> i64 {
+    let k = syntax::nodes[n];
+    guard k.kind == syntax::N_CALL && call_name(k.first) == "cross" else { return -1; };
+    let a1 = syntax::nodes[k.first].next;
+    let a2 = if a1 >= 0 { syntax::nodes[a1].next } else { -1 };
+    guard a2 >= 0 && syntax::nodes[a2].next < 0 else { return -1; };
+    let first = syntax::nodes[a1].first;
+    guard syntax::nodes[first].kind == syntax::N_NAME && tok_text(syntax::nodes[first].tok) == "n" else { return -1; };
+    return syntax::nodes[a2].first;
+}
+
+// For `F*n` or `dot(F, n)`, the node of F, and for `cross(n, F)` the node
+// of F and true. Else -1.
+fn flux_of(n: i64) -> i64, bool {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
         let r = syntax::nodes[k.first].next;
-        if syntax::nodes[r].kind == syntax::N_NAME && tok_text(syntax::nodes[r].tok) == "n" { return k.first; }
+        if syntax::nodes[r].kind == syntax::N_NAME && tok_text(syntax::nodes[r].tok) == "n" { return k.first, false; }
     }
+    if tangent_of(n) >= 0 { return tangent_of(n), true; }
     if k.kind == syntax::N_CALL {
         let callee = k.first;
         let a1 = syntax::nodes[callee].next;
@@ -560,11 +576,11 @@ fn flux_of(n: i64) -> i64 {
             let a2 = syntax::nodes[a1].next;
             if a2 >= 0 && syntax::nodes[syntax::nodes[a2].first].kind == syntax::N_NAME
                 && tok_text(syntax::nodes[syntax::nodes[a2].first].tok) == "n" {
-                return syntax::nodes[a1].first;
+                return syntax::nodes[a1].first, false;
             }
         }
     }
-    return -1;
+    return -1, false;
 }
 
 // For a call `name(a)` with one argument, the node of `a`, else -1.
@@ -617,11 +633,14 @@ fn check_bc(n: i64) {
         unknown = unknown_of(syntax::nodes[lhs].first);
         if unknown >= 0 { comp = key(tok_text(syntax::nodes[lhs].tok)); }
     }
+    // Gap G4: `cross(n, u) = g` holds the tangential part of u, as on a
+    // perfect conductor.
+    if unknown < 0 && !moment && tangent_of(lhs) >= 0 { unknown = unknown_of(tangent_of(lhs)); }
     if unknown < 0 || moment {
         unknown = -1;
-        let f = flux_of(lhs);
+        let f, curl = flux_of(lhs);
         if f >= 0 {
-            unknown = flux_unknown(f);
+            unknown = flux_unknown(f, curl);
             natural = unknown >= 0;
         }
     }
@@ -631,7 +650,7 @@ fn check_bc(n: i64) {
         expr_ty(rhs);
         in_bc = false;
         error(first_tok(lhs), "bc_form", str("the left side '", node_text(lhs), "' is not an unknown or a flux"),
-              "write an unknown (u = …), a component (u.x = …), or a flux F*n where div(F) is in an eq");
+              "write an unknown (u = …), a component (u.x = …), cross(n, u), a flux F*n where div(F) is in an eq, or cross(n, F) where curl(F) is in an eq");
         return;
     };
     cur_phys = syms[unknown].phys;
@@ -781,8 +800,13 @@ fn free_boundary() {
         for j in p.count {
             let u = p.first + j;
             var flux = -1;
+            var curl = false;
             for fl in fluxes {
-                if fl.unknown == u { flux = fl.node; break; }
+                if fl.unknown == u {
+                    flux = fl.node;
+                    curl = fl.curl;
+                    break;
+                }
             }
             if flux < 0 { continue; }
             let name = tok_text(syms[u].tok);
@@ -793,7 +817,8 @@ fn free_boundary() {
                 region.append(" - ");
                 region.append(grouped(b.region));
             }
-            add_free(p.sym, name, region, str(ftext, "*n = 0"));
+            let free: u8[>..] = if curl { str("cross(n, ", node_text(flux), ") = 0") } else { str(ftext, "*n = 0") };
+            add_free(p.sym, name, region, free);
             for b, i in bcs {
                 if b.unknown != u || b.comp.len == 0 || seen_before(u, i) || has_bc(u, b.region, "") { continue; }
                 for c in COMPONENTS[..space] {
@@ -809,7 +834,7 @@ fn free_boundary() {
 // --- methods (spec §13) --------------------------------------------------------------------
 
 let METHOD_KINDS = ["cg", "dg", "fv", "rkpm", "gfd", "ode"];
-let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple", "pml"];
+let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple", "pml", "gauge"];
 let DG_SETTINGS = ["mesh", "order", "flux", "penalty", "couple"];
 let FV_SETTINGS = ["mesh", "gradient", "flux", "limiter", "pv_coupling", "couple"];
 let RKPM_SETTINGS = ["points", "basis", "support", "integrate", "bc", "couple"];
@@ -818,6 +843,7 @@ let ODE_SETTINGS = ["couple"];
 let STABLE = ["supg_pspg", "vms", "supg_pspg_lsic", "pspg"];
 let FAMILIES = ["lagrange", "serendipity", "incompatible", "nedelec", "raviart_thomas"];
 let QUADRATURES = ["full", "reduced"];
+let GAUGES = ["tree"];
 
 fn check_method(n: i64) {
     let k = syntax::nodes[n];
@@ -920,6 +946,13 @@ fn setting_word(b: i64, name: u8[:], words: const u8[:][:], default: u8[:]) -> u
 fn family_cell(b: i64) {
     let family = setting_word(b, "family", FAMILIES, "lagrange");
     let quadrature = setting_word(b, "quadrature", QUADRATURES, "full");
+    // `gauge: tree` (gap G27) holds the edges of a spanning tree, so it is
+    // for edge elements only.
+    let gauge = setting_word(b, "gauge", GAUGES, "");
+    if gauge.len > 0 && family != "nedelec" {
+        error(first_tok(setting(b, "gauge")), "method_setting", "gauge: tree is for the edge elements of family: nedelec",
+              "add family: nedelec, or remove gauge");
+    }
     guard family == "serendipity" || family == "incompatible" else { return; };
     let at = first_tok(setting(b, "family"));
     let want = if family == "serendipity" { 2.0 } else { 1.0 };

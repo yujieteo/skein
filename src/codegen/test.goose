@@ -927,7 +927,7 @@ fn test_wave_values() {
     let eq = "eq div(grad(p)) + (omega/c)^2*p = 0";
     let cases = [
         [eq, "eq div(grad(p)) + (omega/c)^2*p = 1 Pa/m^2*exp(im*0.5)",
-         "wave_values.skn,27,51,"],
+         "wave_values.skn,27,52,"],
         [eq, "eq div(grad(p)) + (omega/c)^2*(1 - im*0.1)^0.5*p = 0",
          "wave_values.skn,27,47,"],
         [eq, "eq div(grad(p)) + (0 - (omega/c)^2)*p = 0",

@@ -18,6 +18,8 @@ import solvers from "../solvers";
 let ELASTIC = 0;
 let HEAT = 1;
 let WAVE = 2;      // the complex scalar wave of wave.goose
+let EDGE = 3;      // the edge elements of edge.goose
+let MIXED = 4;     // the mixed Darcy flow of mixed.goose
 
 // The plane assumption of an elastic 2D model.
 let SOLID_3D = 0;
@@ -44,7 +46,9 @@ var row_start: i64[>..] = [];
 var col: i32[>..] = [];
 var val: f64[>..] = [];
 
-fn dof_total() -> i64 { return ncomp * node_count(); }
+var other_dofs = 0;     // the dofs of an edge or a mixed physics, which are not on the nodes
+
+fn dof_total() -> i64 { return if physics == EDGE || physics == MIXED { other_dofs } else { ncomp * node_count() } }
 
 // Whether each array of the dofs has one entry for each dof, and the
 // matrix, if there is one, one row for each dof.

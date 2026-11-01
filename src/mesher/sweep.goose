@@ -188,6 +188,57 @@ fn mesh_sweep(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     return done;
 }
 
+// Whether g has a cylinder or an extrude: a round or sloped side, whose
+// sharp edges isosurface stuffing cuts off (tet.goose).
+fn has_round(g: i64) -> bool {
+    var todo: i64[>..] = [g];
+    while todo.len > 0 {
+        let s = shapes[todo[todo.len - 1]];
+        todo.pop();
+        if s.kind == CYLINDER || s.kind == EXTRUDE { return true; }
+        if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT {
+            todo.push(s.b);
+            todo.push(s.a);
+        }
+    }
+    return false;
+}
+
+// Sweeps the triangles of the 2D section s from z0 to z1 through layers of
+// equal height, and cuts each prism into 3 tetrahedra (add_prism). The ends
+// are planes and the side nodes are on the side, so the sharp edges stay
+// sharp. A refine target of 3D shapes sizes the section at the middle z.
+// False as mesh_2d.
+fn sweep_tets(s: i64, z0: f64, z1: f64, size: f64) -> bool {
+    section_z = 0.5 * (z0 + z1);
+    let done = mesh_2d(s, size);
+    section_z = 0.0;
+    var xy: f64[>..] = [];
+    for v in point_count() {
+        let p = point(v);
+        xy.push(p[0]);
+        xy.push(p[1]);
+    }
+    var tris: i64[>..] = [];
+    for c in cell_count() {
+        for i in 3 { tris.push(cell_node(c, i)); }
+    }
+    let n = xy.len / 2;
+    let nz = max(1, ceil((z1 - z0) / size - 1.0e-9) as i64);
+    clear_mesh(3);
+    for k in nz + 1 {
+        for v in n { add_point(xy[2 * v], xy[2 * v + 1], z0 + (z1 - z0) * k / nz); }
+    }
+    for k in nz {
+        for t in tris.len / 3 {
+            let a = n * k;
+            let b = n * (k + 1);
+            add_prism(tris[3 * t] + a, tris[3 * t + 1] + a, tris[3 * t + 2] + a, tris[3 * t] + b, tris[3 * t + 1] + b, tris[3 * t + 2] + b);
+        }
+    }
+    return done;
+}
+
 // Meshes g with the grid of the planes of its bounds and of the boxes of
 // `planes`, and moves each node on the boundary of the cells onto the
 // boundary of g.
