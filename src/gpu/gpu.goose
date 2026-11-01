@@ -38,12 +38,12 @@ import solvers from "../solvers";
 extern fn skein_gpu_ready() -> i32;
 extern fn skein_gpu_reset();
 extern fn skein_gpu_buffer(bytes: i64) -> i32;
-extern fn skein_gpu_write(buf: i32, data: const f32[:]);
-extern fn skein_gpu_write_ints(buf: i32, data: const i32[:]);
+extern fn skein_gpu_write(buf: i32, at: i64, data: const f32[:]);
+extern fn skein_gpu_write_ints(buf: i32, at: i64, data: const i32[:]);
 extern fn skein_gpu_bind(kernel: const u8[:], pairs: const i32[:]) -> i32;
 extern fn skein_gpu_dispatch(group: i32, threads: i64);
 extern fn skein_gpu_submit();
-extern fn skein_gpu_read(buf: i32, out: f32[:]) -> i32;
+extern fn skein_gpu_read(buf: i32, at: i64, out: f32[:]) -> i32;
 
 let WG = 64;            // the workgroup size of kernels.wgsl
 let ROW_GROUPS = 65535; // the most workgroups in a row of a dispatch (gpu.js)
@@ -82,7 +82,16 @@ var ready = -1;                 // skein_gpu_ready, or -1 before the first solve
 var step: u8[..64] = [];        // the step that the program runs
 var devices: u8[>..] = [];
 var device_count = 0;
-var stage: f32[>..] = [];       // f32 copies for an upload or a read-back
+// The f32 copies of an upload or a read-back go through these chunks of
+// CHUNK values. Reason: the native profile run of the page has no GPU, so
+// it does not measure a growable array of this package, and a copy of the
+// matrix of sample 01 overran its data stack in the page.
+let CHUNK = 65536;
+var chunk: f32[65536] = [0.0; 65536];
+var ichunk: i32[65536] = [0; 65536];
+var fill = 0;           // the values in chunk or ichunk
+var fill_at = 0;        // the index in the buffer of chunk[0]
+var fill_buf: i32 = -1;
 
 // The program of the page calls this at the start of each step.
 fn step_name(name: u8[:]) {
@@ -111,26 +120,62 @@ fn implicit_on() -> bool {
 
 // ---- buffers and dispatches ----
 
+// The writes of buffer b from its start: put or put_int each value, then
+// flush or flush_ints.
+fn put_start(b: i32) {
+    fill_buf = b;
+    fill = 0;
+    fill_at = 0;
+}
+
+fn put(x: f64) {
+    chunk[fill] = x as f32;
+    fill++;
+    if fill == CHUNK { flush(); }
+}
+
+fn flush() {
+    if fill > 0 { skein_gpu_write(fill_buf, fill_at, chunk[..fill]); }
+    fill_at += fill;
+    fill = 0;
+}
+
+fn put_int(x: i64) {
+    ichunk[fill] = x as! i32;
+    fill++;
+    if fill == CHUNK { flush_ints(); }
+}
+
+fn flush_ints() {
+    if fill > 0 { skein_gpu_write_ints(fill_buf, fill_at, ichunk[..fill]); }
+    fill_at += fill;
+    fill = 0;
+}
+
 fn upload(data: f64[:]) -> i32 {
-    stage.clear();
-    for x in data { stage.push(x as f32); }
     let b = skein_gpu_buffer(4 * data.len);
-    skein_gpu_write(b, stage[..]);
+    put_start(b);
+    for x in data { put(x); }
+    flush();
     return b;
 }
 
 fn zeros(n: i64) -> i32 { return skein_gpu_buffer(4 * n); }
 
-fn upload_ints(data: const i32[:]) -> i32 {
+fn upload_ints(data: i64[:]) -> i32 {
     let b = skein_gpu_buffer(4 * data.len);
-    skein_gpu_write_ints(b, data);
+    put_start(b);
+    for x in data { put_int(x); }
+    flush_ints();
     return b;
 }
 
-fn upload_rows(row_start: i64[:]) -> i32 {
-    var rows: i32[>..] = [];
-    for e in row_start { rows.push(e as! i32); }
-    return upload_ints(rows[..]);
+fn upload_cols(data: const i32[:]) -> i32 {
+    let b = skein_gpu_buffer(4 * data.len);
+    put_start(b);
+    for x in data { put_int(x as i64); }
+    flush_ints();
+    return b;
 }
 
 // A bind group of `kernel`: binding pairs[2 k] is buffer pairs[2 k + 1].
@@ -148,10 +193,13 @@ fn workgroups(n: i64) -> i64 {
 
 // Reads buffer b back into out. False if the GPU failed.
 fn read(b: i32, out: f64[:]) -> bool {
-    stage.clear();
-    for x in out { stage.push(0.0); }
-    guard skein_gpu_read(b, stage[..]) == 1 else { return false; };
-    for x, i in stage { out[i] = x; }
+    var at = 0;
+    while at < out.len {
+        let m = min(CHUNK, out.len - at);
+        guard skein_gpu_read(b, at, chunk[..m]) == 1 else { return false; };
+        for i in m { out[at + i] = chunk[i]; }
+        at += m;
+    }
     return true;
 }
 
@@ -180,20 +228,22 @@ fn central_difference(end: f64, dt: f64) -> bool {
     elements::cd_accel();
     skein_gpu_reset();
     let p = upload([n * 1.0, elements::cd_dt]);
-    let rows = upload_rows(elements::row_start);
-    let cols = upload_ints(elements::col);
+    let rows = upload_ints(elements::row_start);
+    let cols = upload_cols(elements::col);
     // M⁻¹ K and M⁻¹ f, so that cd_kick fits in 8 buffers
-    var scaled: f64[>..] = [];
-    var mf: f64[>..] = [];
+    let vals = skein_gpu_buffer(4 * elements::val.len);
+    put_start(vals);
     for d in n {
-        for e in elements::row_start[d]..elements::row_start[d + 1] { scaled.push(elements::minv[d] * elements::val[e]); }
-        mf.push(elements::minv[d] * elements::force[d]);
+        for e in elements::row_start[d]..elements::row_start[d + 1] { put(elements::minv[d] * elements::val[e]); }
     }
-    let vals = upload(scaled[..]);
+    flush();
+    let f = zeros(n);
+    put_start(f);
+    for d in n { put(elements::minv[d] * elements::force[d]); }
+    flush();
     let u = upload(elements::sol);
     let v = upload(elements::velocity);
     let a = upload(elements::accel);
-    let f = upload(mf[..]);
     let drift = bind("cd_drift", [B_P, p, B_U, u, B_V, v, B_ACC, a]);
     let kick = bind("cd_kick", [B_P, p, B_ROWS, rows, B_COLS, cols, B_VALS, vals, B_U, u, B_V, v, B_ACC, a, B_F, f]);
     var done = 0;
@@ -265,9 +315,7 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     let f = zeros(n);
     // fv: the face values and then the source of each cell
     let gf = zeros(if fv { 5 * n } else { 1 });
-    var codes: i32[>..] = [];
-    for b in grid::face_bc { codes.push(b as! i32); }
-    let fbc = upload_ints(codes[..]);
+    let fbc = upload_ints(grid::face_bc);
     let grad = zeros(2 * n);
     let phi = zeros(n);
     let stats = zeros(2);
@@ -279,15 +327,16 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
             gr.venkats[x] = bind("fv_venkat", [B_P, ps[0], B_XV, xs[x], B_GFACE, gf, B_FBC, fbc, B_GRAD, grad, B_PHI, phi, B_STATS, stats]);
         }
     }
-    let rows = upload_rows(grid::row_start);
-    let cols = upload_ints(grid::col);
+    let rows = upload_ints(grid::row_start);
+    let cols = upload_cols(grid::col);
     // dg: the rows of A scaled by the stage weight, so that rk_stage fits
     // in 8 buffers
-    var scaled: f64[>..] = [];
+    let vals = skein_gpu_buffer(4 * grid::val.len);
+    put_start(vals);
     for d in if fv { 0 } else { n } {
-        for e in grid::row_start[d]..grid::row_start[d + 1] { scaled.push(weights[d] * grid::val[e]); }
+        for e in grid::row_start[d]..grid::row_start[d + 1] { put(weights[d] * grid::val[e]); }
     }
-    let vals = upload(scaled[..]);
+    flush();
     for parity in 2 {
         let sol = parity;
         let other = 1 - parity;
@@ -306,21 +355,20 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
         }
     }
     let t0 = grid::time;
-    var stage_f: f32[>..] = [];
     for i in steps {
         let parity = i % 2;
         let ins = [parity, 1 - parity, 2];
         for s in 3 {
             grid::stage_terms(t0 + (i + at[s]) * k, src, g, SRC, BC);
-            stage_f.clear();
             if fv {
-                for x in g { stage_f.push(x as f32); }
-                for x in src { stage_f.push(x as f32); }
-                skein_gpu_write(gf, stage_f[..]);
+                put_start(gf);
+                for x in g { put(x); }
+                for x in src { put(x); }
             } else {
-                for d in n { stage_f.push((weights[d] * grid::rhs[d]) as f32); }
-                skein_gpu_write(f, stage_f[..]);
+                put_start(f);
+                for d in n { put(weights[d] * grid::rhs[d]); }
             }
+            flush();
             if fv && grid::flux == grid::LINEAR_UPWIND {
                 dispatch(gr.grads[ins[s]], n);
                 if grid::limiter == grid::VENKATAKRISHNAN {
@@ -355,8 +403,8 @@ struct Cg {
 
 fn cg_setup(n: i64, dinv: f64[:]) -> Cg {
     let p = upload([n * 1.0]);
-    let rows = upload_rows(elements::row_start);
-    let cols = upload_ints(elements::col);
+    let rows = upload_ints(elements::row_start);
+    let cols = upload_cols(elements::col);
     let vals = upload(elements::val);
     let w = upload(dinv);
     let x = zeros(n);
@@ -380,11 +428,12 @@ fn cg_setup(n: i64, dinv: f64[:]) -> Cg {
 // Solves K d = r on the free dofs on the GPU to INNER_RTOL, with d in out.
 // It gives the iterations, and false if the GPU failed or cg broke down.
 fn cg_pass(c: Cg, n: i64, r: f64[:], out: f64[:]) -> i64, bool {
-    stage.clear();
-    for x in r { stage.push(x as f32); }
-    skein_gpu_write(c.r, stage[..]);
-    for &x in stage { x = 0.0; }
-    skein_gpu_write(c.x, stage[..]);
+    put_start(c.r);
+    for x in r { put(x); }
+    flush();
+    put_start(c.x);
+    for x in r { put(0.0); }
+    flush();
     dispatch(c.start, n);
     dispatch(c.sums[0], WG);
     var sc: f64[8] = [0.0; 8];

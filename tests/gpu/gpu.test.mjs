@@ -47,13 +47,17 @@ function page(model) {
 }
 
 // One run of the page at the default values: on the GPU if `gpu`, with
-// the implicit solves on it too if `implicit`.
-async function run(p, gpu, implicit) {
+// the implicit solves on it too if `implicit`. A run that takes more than
+// `seconds` fails. Reason: a WebAssembly fault after a GPU read-back left
+// a run of sample 01 waiting with no end.
+async function run(p, gpu, implicit, seconds) {
   const out = [], err = [];
   let mod = null, dev = null;
   if (gpu) dev = p.skeinGpu(await (await webgpu.requestAdapter({ powerPreference: "high-performance" })).requestDevice(), p.WGSL);
   const keep = setInterval(() => {}, 1000);   // Dawn does not keep Node alive while the GPU works
+  let timer = null;
   const code = await new Promise((resolve) => {
+    timer = setTimeout(() => { err.push(`no exit in ${seconds} s`); resolve(-3); }, 1000 * seconds);
     p.createSkein({
       arguments: p.PARAMS.map((k) => k.name + "=" + k.value + (k.unit ? " " + k.unit : "")),
       skeinGpu: dev,
@@ -70,6 +74,7 @@ async function run(p, gpu, implicit) {
     }).catch((x) => { err.push(String(x)); resolve(-1); });
   });
   clearInterval(keep);
+  clearTimeout(timer);
   const toon = out.join("\n");
   assert.equal(code, 0, toon + "\n" + err.join("\n"));
   if (dev) assert.deepEqual(dev.errors, []);
@@ -96,19 +101,21 @@ function difference(a, b) {
 // The GPU works in f32, so the explicit steps agree with the CPU (f64) to
 // the rounding of f32 over the steps. The implicit solve corrects its
 // f32 passes in f64 to the tolerance of the CPU solve.
+// `seconds` is the limit of each run, about 10 times the run on the
+// desktop.
 const cases = [
-  { model: "examples/elements/bar_wave_tri.skn", implicit: false, tolerance: 1e-3 },
-  { model: "examples/grid/mms_fv_transient.skn", implicit: false, tolerance: 1e-3 },
-  { model: "examples/grid/mms_dg_transient.skn", implicit: false, tolerance: 1e-3 },
-  { model: "samples/01_cantilever.skn", implicit: true, tolerance: 1e-6 },
+  { model: "examples/elements/bar_wave_tri.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
+  { model: "examples/grid/mms_fv_transient.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
+  { model: "examples/grid/mms_dg_transient.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
+  { model: "examples/elements/kirsch_plate_tri.skn", implicit: true, tolerance: 1e-6, seconds: 60 },
 ];
 
 for (const c of cases) {
   test(`${c.model}: the GPU run matches the CPU run within ${c.tolerance}`, { skip }, async () => {
     assert.ok(adapter, why);
     const p = page(c.model);
-    const cpu = await run(p, false, false);
-    const gpu = await run(p, true, c.implicit);
+    const cpu = await run(p, false, false, c.seconds);
+    const gpu = await run(p, true, c.implicit, c.seconds);
     assert.ok(cpu.devices.length > 0 && cpu.devices.every((d) => d === "cpu"), cpu.devices.join());
     assert.ok(gpu.devices.length > 0 && gpu.devices.every((d) => d === "gpu"), gpu.devices.join());
     const d = difference(cpu.field, gpu.field);

@@ -33,11 +33,11 @@ function skeinGpu(device, wgsl) {
       bufs.push(device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST }));
       return bufs.length - 1;
     },
-    // A write goes to the queue at once, so the work recorded before it
-    // goes first.
-    write(b, bytes) {
+    // Writes bytes at the byte `at` of buffer b. A write goes to the queue
+    // at once, so the work recorded before it goes first.
+    write(b, at, bytes) {
       submit();
-      device.queue.writeBuffer(bufs[b], 0, bytes);
+      device.queue.writeBuffer(bufs[b], at, bytes);
     },
     // A bind group of the kernel `name`: binding pairs[2 k] is buffer pairs[2 k + 1].
     bind(name, pairs) {
@@ -59,14 +59,14 @@ function skeinGpu(device, wgsl) {
       pass.dispatchWorkgroups(x, Math.ceil(n / x));
     },
     submit,
-    // The first `bytes` of buffer b, after the work so far, or null after
-    // a WebGPU error.
-    async read(b, bytes) {
+    // The `bytes` of buffer b from the byte `at`, after the work so far,
+    // or null after a WebGPU error.
+    async read(b, at, bytes) {
       submit();
       const size = Math.ceil(bytes / 4) * 4;
       const st = device.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
       enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(bufs[b], 0, st, 0, size);
+      enc.copyBufferToBuffer(bufs[b], at, st, 0, size);
       submit();
       await st.mapAsync(GPUMapMode.READ);
       const out = new Uint8Array(st.getMappedRange(0, size)).slice(0, bytes);

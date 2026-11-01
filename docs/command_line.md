@@ -342,7 +342,8 @@ device of each solve, and the page shows it in a table.
 `./build.sh gpu` checks each GPU path against the CPU path of the same
 page (`tests/gpu/gpu.test.mjs`): the largest difference of the fields,
 relative to the largest value, is at most 1e-3 for the explicit steps
-and 1e-6 for the implicit solve.
+and 1e-6 for the implicit solve. The implicit GPU path is slow on stiff
+3D models: sample 01 did not end in 15 min (roadmap, phase 4.5).
 
 It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
 `emcc` on `PATH`. It runs the model natively twice: at the default values

@@ -100,12 +100,12 @@ let GPU_STUB_C = """
     int32_t skein_gpu_ready(void) { return 0; }
     void skein_gpu_reset(void) {}
     int32_t skein_gpu_buffer(int64_t bytes) { (void)bytes; return -1; }
-    void skein_gpu_write(int32_t buf, sl_f32 data) { (void)buf; (void)data; }
-    void skein_gpu_write_ints(int32_t buf, sl_i32 data) { (void)buf; (void)data; }
+    void skein_gpu_write(int32_t buf, int64_t at, sl_f32 data) { (void)buf; (void)at; (void)data; }
+    void skein_gpu_write_ints(int32_t buf, int64_t at, sl_i32 data) { (void)buf; (void)at; (void)data; }
     int32_t skein_gpu_bind(sl_u8 kernel, sl_i32 pairs) { (void)kernel; (void)pairs; return -1; }
     void skein_gpu_dispatch(int32_t group, int64_t threads) { (void)group; (void)threads; }
     void skein_gpu_submit(void) {}
-    int32_t skein_gpu_read(int32_t buf, sl_f32 out) { (void)buf; (void)out; return 0; }
+    int32_t skein_gpu_read(int32_t buf, int64_t at, sl_f32 out) { (void)buf; (void)at; (void)out; return 0; }
 
     """;
 
@@ -120,8 +120,8 @@ let GPU_C = """
     EM_JS(int32_t, skein_gpu_js_ready, (void), { return Module.skeinGpu ? 1 : 0; });
     EM_JS(void, skein_gpu_js_reset, (void), { Module.skeinGpu.reset(); });
     EM_JS(int32_t, skein_gpu_js_buffer, (int64_t bytes), { return Module.skeinGpu.buffer(Number(bytes)); });
-    EM_JS(void, skein_gpu_js_write, (int32_t buf, const void *p, int64_t bytes), {
-        Module.skeinGpu.write(buf, HEAPU8.slice(Number(p), Number(p) + Number(bytes)));
+    EM_JS(void, skein_gpu_js_write, (int32_t buf, int64_t at, const void *p, int64_t bytes), {
+        Module.skeinGpu.write(buf, Number(at), HEAPU8.slice(Number(p), Number(p) + Number(bytes)));
     });
     EM_JS(int32_t, skein_gpu_js_bind, (const void *k, int64_t kn, const void *p, int64_t n), {
         const name = new TextDecoder().decode(HEAPU8.slice(Number(k), Number(k) + Number(kn)));
@@ -130,8 +130,8 @@ let GPU_C = """
     });
     EM_JS(void, skein_gpu_js_dispatch, (int32_t group, int64_t threads), { Module.skeinGpu.dispatch(group, Number(threads)); });
     EM_JS(void, skein_gpu_js_submit, (void), { Module.skeinGpu.submit(); });
-    EM_ASYNC_JS(int32_t, skein_gpu_js_read, (int32_t buf, void *p, int64_t bytes), {
-        const out = await Module.skeinGpu.read(buf, Number(bytes));
+    EM_ASYNC_JS(int32_t, skein_gpu_js_read, (int32_t buf, int64_t at, void *p, int64_t bytes), {
+        const out = await Module.skeinGpu.read(buf, Number(at), Number(bytes));
         if (!out) return 0;
         HEAPU8.set(out, Number(p));
         return 1;
@@ -140,12 +140,12 @@ let GPU_C = """
     int32_t skein_gpu_ready(void) { return skein_gpu_js_ready(); }
     void skein_gpu_reset(void) { skein_gpu_js_reset(); }
     int32_t skein_gpu_buffer(int64_t bytes) { return skein_gpu_js_buffer(bytes); }
-    void skein_gpu_write(int32_t buf, sl_f32 data) { skein_gpu_js_write(buf, data.data, 4 * data.len); }
-    void skein_gpu_write_ints(int32_t buf, sl_i32 data) { skein_gpu_js_write(buf, data.data, 4 * data.len); }
+    void skein_gpu_write(int32_t buf, int64_t at, sl_f32 data) { skein_gpu_js_write(buf, 4 * at, data.data, 4 * data.len); }
+    void skein_gpu_write_ints(int32_t buf, int64_t at, sl_i32 data) { skein_gpu_js_write(buf, 4 * at, data.data, 4 * data.len); }
     int32_t skein_gpu_bind(sl_u8 kernel, sl_i32 pairs) { return skein_gpu_js_bind(kernel.data, kernel.len, pairs.data, pairs.len); }
     void skein_gpu_dispatch(int32_t group, int64_t threads) { skein_gpu_js_dispatch(group, threads); }
     void skein_gpu_submit(void) { skein_gpu_js_submit(); }
-    int32_t skein_gpu_read(int32_t buf, sl_f32 out) { return skein_gpu_js_read(buf, out.data, 4 * out.len); }
+    int32_t skein_gpu_read(int32_t buf, int64_t at, sl_f32 out) { return skein_gpu_js_read(buf, 4 * at, out.data, 4 * out.len); }
 
     """;
 

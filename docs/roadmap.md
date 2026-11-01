@@ -81,6 +81,16 @@ Each phase 4 lane changes only the rows of its own items.
 | sample 05 | done: [05_meshless_plate.skn](../samples/05_meshless_plate.skn) runs with `rkpm` on the 7,171 nodes of a P1 mesh of the plate, in 12 s. Its `expect` passes: σxx at the top of the hole is 298 MPa, 0.6 % from the Kirsch value 3S. Poisson disk points do not run yet. |
 | tessellated STEP AP242 export | done: `skein export --format step` writes a `TESSELLATED_SHELL` with the triangles of the STL export, `src/mesher/stl.goose`. No STEP reader runs on the desktop, so the test in `src/mesher/test.goose` is a schema check: the Part 21 frame, the `#n` references, the index range and the triangle count against the STL. |
 
+## Phase 4.5 status
+
+| Item | Status |
+|---|---|
+| `central_difference` | done for `linear_elastic` with a lumped mass (HRZ) and `dt: stable` (Gershgorin), natively and in the page, `src/elements/explicit.goose`. [bar_wave_tri.skn](../examples/elements/bar_wave_tri.skn) gives the tip displacement S·L/E within 0.02 % at t = L/c. |
+| WebGPU in the page | done: `src/gpu/` (WGSL kernels, Goose control, `gpu.js`). The page asks for a GPU device in the worker of each run, and shows the device of each solve. The explicit steps always use it. The implicit GPU path (CG with Jacobi, in a defect correction in f64) is off by default, and a control turns it on. |
+| the gate | `./build.sh gpu` with `SKEIN_GPU=1` passes on the desktop (NVIDIA, Dawn in Node). The largest difference of the GPU field from the CPU field, relative to its largest value: 5.0e-5 for bar_wave_tri, 4.6e-7 for mms_fv_transient, 5.3e-6 for [mms_dg_transient.skn](../examples/grid/mms_dg_transient.skn), and 8.6e-14 for the implicit solve of kirsch_plate_tri. The limits are 1e-3 and 1e-6. |
+| open: sample 01 on the implicit GPU path | the GPU run of sample 01 (319,320 dofs) did not end in 15 min, and the CPU (AMG) takes about 50 s. Jacobi CG in f32 converges too slowly on this stiff 3D model. A better GPU preconditioner is not done. The control stays off by default. |
+| open: a check in Chrome | `chrome-devtools-axi` could not start Chrome on the desktop, so the GPU path is checked only in Node, with Dawn, the WebGPU of Chrome. |
+
 ## Phase 5 status
 
 Each phase 5 lane changes only the rows of its own items.
