@@ -480,8 +480,8 @@ skein report samples/01_cantilever.skn --study sizes -o cantilever.html
 `report` runs `check`, `verify` and `run` on the model, and `build
 --target wasm` (§7), then writes one HTML file. `report` does not run
 `build` if the model has no `param` with a range, or if the model is a
-shell, flow, fv or dg model, because the page of `build` cannot change
-or solve it. The file opens offline in a browser with WebGL2: it holds
+shell, flow, fv or dg model or a scalar rkpm or gfd model, because the
+page of `build` cannot change or solve it. The file opens offline in a browser with WebGL2: it holds
 the viewer, the source, the tables, the results and the solve of the page
 of `build`. Without `-o`, the file is
 `<model>.html`. Without `--study`, the report uses the first study of the
