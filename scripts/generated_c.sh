@@ -46,9 +46,16 @@ examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
 examples/elements/taylor_bar_tet.skn
 examples/elements/uniform_temperature_tet.skn
+examples/femahoy/bar_pressure.skn
+examples/femahoy/cantilever_2step.skn
 examples/femahoy/grid_cantilever.skn
+examples/femahoy/grid_coax_capacitor.skn
 examples/femahoy/grid_coax_tem.skn
 examples/femahoy/grid_kirsch_hole.skn
+examples/femahoy/grid_lame_cylinder.skn
+examples/femahoy/grid_pipe_wall.skn
+examples/femahoy/grid_round_cantilever.skn
+examples/femahoy/heat_fin.skn
 examples/femahoy/hyperelastic_tube.skn
 examples/femahoy/plasticity_sphere.skn
 examples/femahoy/scordelis_lo_roof.skn

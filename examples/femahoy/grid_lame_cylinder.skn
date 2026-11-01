@@ -28,8 +28,11 @@ material steel {
     nu: Real = 0.3
 }
 
+// femahoy has 2.5 mm cells. Skein sweeps the tetrahedra of the section
+// through the 2 mm height, and 2.5 mm cells give one layer: the radial
+// displacement of the bore is then 2.3 % high. 1.25 mm cells give 0.02 %.
 mesh m on tube {
-    size: 2.5 mm
+    size: 1.25 mm
     cell: tet
 }
 

@@ -337,6 +337,21 @@ fn mesh_3d(g: i64, size: f64) -> bool {
         let s = section(g, b[2], b[5]);
         if s >= 0 { return sweep_tets(s, b[2], b[5], size); }
     }
+    // A prism along x or y: turn the shapes so that its axis is z, sweep,
+    // and turn the shapes and the nodes back.
+    for shift in [1, 2] {
+        guard has_round(g) && turnable() else { break; }
+        let count = shapes.len;
+        turn_shapes(count, shift);
+        let t = bounds(g);
+        let s = if targets_span_z(t[2], t[5]) { section(g, t[2], t[5]) } else { -1 };
+        let done = s >= 0 && sweep_tets(s, t[2], t[5], size);
+        turn_shapes(count, 3 - shift);
+        if s >= 0 {
+            turn_nodes(3 - shift);
+            return done;
+        }
+    }
     for a in 3 {
         let side = b[3 + a] - b[a];
         guard side > 0.0 else { return false; }

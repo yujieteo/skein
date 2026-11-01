@@ -130,6 +130,7 @@ let BASE_UNITS = [
     // so A has no exponent here, and V is W/A. deg is an angle in rad.
     BaseUnit { name: "A", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
     BaseUnit { name: "V", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
+    BaseUnit { name: "C", u: Unit { f: 1.0, l: 0, m: 0, t: 2 } },
     BaseUnit { name: "deg", u: Unit { f: 0.017453292519943295, l: 0, m: 0, t: 0 } },
 ];
 
@@ -177,7 +178,7 @@ fn unit_name(t: i64) -> Unit {
         }
     }
     unsupported(t, str("the unit '", word, "' is not in this slice"),
-                "use m, g, t, s, N, Pa, bar, W, K, Hz, A, V or deg, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
+                "use m, g, t, s, N, Pa, bar, W, K, Hz, A, V, C or deg, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
     return Unit { f: 1.0, l: 0, m: 0, t: 0 };
 }
 

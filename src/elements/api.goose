@@ -302,8 +302,8 @@ fn plane(axis: i64, value: f64) -> bool {
 // Adds a plane to the region of the last `plane` or `hole` call, so the
 // region is their union. It gives false when the plane holds no node.
 fn also_plane(axis: i64, value: f64) -> bool {
-    guard axis >= 0 && axis < 3 && region.len < 8 else { abort("also_plane: 0 <= axis < 3 and at most 8 parts"); }
-    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
+    guard axis >= 0 && axis < 3 && region.len < 16 else { abort("also_plane: 0 <= axis < 3 and at most 16 parts"); }
+    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
@@ -315,7 +315,7 @@ fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
     region_out.clear();
-    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1 });
+    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1 });
     return region_node_count() > 0;
 }
 
@@ -330,26 +330,55 @@ fn surface(g: i64) -> bool {
 // Adds the surface of the shape g to the region of the last call that
 // selects a region. It gives false when the surface holds no node.
 fn also_surface(g: i64) -> bool {
-    guard g >= 0 && region.len < 8 else { abort("also_surface: a shape and at most 8 parts"); }
-    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    guard g >= 0 && region.len < 16 else { abort("also_surface: a shape and at most 16 parts"); }
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
 }
 
+// Selects the node nearest to the point (x, y, z).
+fn point(x: f64, y: f64, z: f64) -> bool {
+    region.clear();
+    region_out.clear();
+    return also_point(x, y, z);
+}
+
+// Adds the node nearest to the point (x, y, z) to the region of the last
+// call that selects a region.
+fn also_point(x: f64, y: f64, z: f64) -> bool {
+    guard region.len < 16 && node_count() > 0 else { abort("also_point: a mesh and at most 16 parts"); }
+    var best = 0;
+    var least = 1.0e300;
+    for n in node_count() {
+        let d = (node_x(n, 0) - x) * (node_x(n, 0) - x) + (node_x(n, 1) - y) * (node_x(n, 1) - y) + (node_x(n, 2) - z) * (node_x(n, 2) - z);
+        if d < least {
+            least = d;
+            best = n;
+        }
+    }
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: -1, node: best });
+    return true;
+}
+
+// The force (fx, fy, fz) on each node of the region.
+fn node_force(fx: f64, fy: f64, fz: f64) { add_node_force([fx, fy, fz]); }
+
+// The mean of the stress component (i, j) over the body.
+fn mean_stress(i: i64, j: i64) -> f64 { return body_mean(FIELD_STRESS, 3 * i + j); }
 // Removes the nodes of the plane from the region: for example the node
 // of a face on a symmetry plane, whose reaction also holds the force of
 // that plane. It gives false when the region holds no node.
 fn except_plane(axis: i64, value: f64) -> bool {
     guard axis >= 0 && axis < 3 && region_out.len < 8 else { abort("except_plane: 0 <= axis < 3 and at most 8 parts"); }
-    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
+    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1 });
     return region_node_count() > 0;
 }
 
 // Removes the nodes of the surface of shape g from the region.
 fn except_surface(g: i64) -> bool {
     guard g >= 0 && region_out.len < 8 else { abort("except_surface: a shape and at most 8 parts"); }
-    region_out.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    region_out.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1 });
     return region_node_count() > 0;
 }
 
@@ -376,6 +405,9 @@ fn pressure_load(p: f64) { add_region_pressure(p); }
 // Adds a uniform outward heat flux q·n = g (power per area) on the region.
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 
+// The condition dot(q, n) = h (T - t_inf) on the region.
+fn film(h: f64, t_inf: f64) { add_film(h, t_inf); }
+
 // Adds the facets of the region to the enclosure of the step, with the
 // emissivity eps: the natural condition dot(q, n) = radiation(eps).
 // `sb` is the Stefan-Boltzmann constant in the units of the model.
@@ -386,6 +418,7 @@ fn radiate(eps: f64, sb: f64) { add_radiation(eps, sb); }
 // the value of the nodes that no live cell holds.
 fn clear_bcs() {
     clear_conditions();
+    clear_films();
     clear_radiation();
     clear_impedance();
     if physics == MIXED { clear_pressure(); }
