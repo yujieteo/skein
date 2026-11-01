@@ -218,6 +218,20 @@ recursive fn primitive(v: i64) -> i64 {
         let angle = scalar_value(arg(v, 2));
         return if a < 0 { -1 } else { add_shape(S_TURN, a, -1, [d[0] / l, d[1] / l, d[2] / l, angle, 0.0, 0.0, 0.0, 0.0]) };
     }
+    if (is_call(v, "pattern") || is_call(v, "pattern_polar")) && count == 3 {
+        let a = shape_of(arg(v, 0));
+        let n = round(scalar_value(arg(v, 2))) as! i64;
+        if a < 0 || n < 1 { return -1; }
+        let d = vec3(value(arg(v, 1)));
+        let l = sqrt(dot3(d, d));
+        var g = -1;
+        for k in n {
+            let c = if is_call(v, "pattern") { add_shape(S_MOVE, a, -1, [k * d[0], k * d[1], k * d[2], 0.0, 0.0, 0.0, 0.0, 0.0]) }
+                    else { add_shape(S_TURN, a, -1, [d[0] / l, d[1] / l, d[2] / l, 2.0 * PI * k / n, 0.0, 0.0, 0.0, 0.0]) };
+            g = if g < 0 { c } else { add_shape(S_UNION, g, c, [0.0; 8]) };
+        }
+        return g;
+    }
     if is_call(v, "fillet") && count == 2 {
         let a = shape_of(arg(v, 0));
         return if a < 0 { -1 } else { rounded(a, scalar_value(arg(v, 1)), tok(v)) };

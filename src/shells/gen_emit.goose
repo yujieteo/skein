@@ -1142,6 +1142,7 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
             if !edge_on(r.node, e) { continue; }
             edge_n = edge_normal(e);
             let f = value_at(b.value, edge_mid(e));
+            if !ok() { break; }
             if f.n != 3 {
                 unsupported(tok(b.value), "the force per length is a vector", BC_FIX_TEXT);
                 break;

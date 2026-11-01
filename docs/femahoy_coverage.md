@@ -61,6 +61,9 @@ gives the roadmap phase that closes the gap:
   [scordelis_lo_roof.skn](../examples/femahoy/scordelis_lo_roof.skn) and
   the thin plate of
   [laminate_pagano.skn](../examples/femahoy/laminate_pagano.skn) use it.
+  Phase 5 runs G3, G31 and G33 in the two 787 models with `skein run`:
+  two laminates, offset beams of two sections, order 2, and the global
+  values in the submodel ([notes](studies/b787/skein/notes.md#run-status)).
 - Phase 2 closes G5. Spec [§5.6](skein_spec.md#56-tables) states `sum`,
   and the new model
   [fit_nist_pontius.skn](../examples/femahoy/fit_nist_pontius.skn) uses it.
@@ -155,7 +158,9 @@ gives the roadmap phase that closes the gap:
   [fuselage.skn](studies/b787/skein/fuselage.skn) and
   [door_corner.skn](studies/b787/skein/door_corner.skn) pass `skein check`
   with no mark. Spec [§8.1](skein_spec.md#81-distance-functions) states
-  `copy(r)`, the index of the copy of a pattern at a point.
+  `copy(r)`, the index of the copy of a pattern at a point. `skein run`
+  runs both models with the cuts, and
+  [window_barrel.skn](../examples/shells/window_barrel.skn) runs `copy(r)`.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.

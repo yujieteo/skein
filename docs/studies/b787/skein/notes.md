@@ -17,24 +17,37 @@ not read the library file `barrel.skn`, because it has no header.
 
 ## Run status
 
-The models do not run yet. `skein run` solves a shell on a part of the
-side of a cylinder, with `timoshenko` beams tied to it
-([stiffened_barrel.skn](../../../../examples/shells/stiffened_barrel.skn)).
-The 787 models also need these parts of the shell lane
-(`src/shells/gen.goose`):
+Both models run with `skein run` (`src/shells/gen.goose`): MITC9 shells
+and 2-node offset beams of order 2, on a grid of the side of the cylinder.
+The nodes near a cut move onto it, so the door cutout and the pad-up band
+are cuts of the grid, with no triangles. The run on the desktop gives:
 
-- a cut in the shell (the door cutout and the pad-up band), with
-  triangles at the corners;
-- more than one material on the shell and on the beams;
-- order 2 for the shells and the beams, and the submodel cut values.
+| Model | Cells and beams | Dofs | Solve | Peak memory | Checks |
+|---|---|---|---|---|---|
+| `fuselage.skn` | 45,079 | 714,834 | 34 s, nested dissection | 1.9 GB | C1 to C5 pass |
+| `door_corner.skn` | 2,203 | 267,126 | 8 s | 0.7 GB | C6 passes |
 
-`src/shells/test.goose` solves the global model of the sheet on a
-structured grid, with the cutout as a staircase of cells, and checks C1 to
-C5.
+| Value | Result |
+|---|---|
+| C1: hoop stress at P | 54.3 MPa, ratio 0.886 to p_U R/t |
+| C2: axial stress at P | 29.4 MPa, ratio 0.960 to p_U R/(2t) |
+| C3, C4, C5: reactions | -1272.96 kN, 0.03 kN and -3427.61 kN |
+| C6: hoop strain on the cut, aft and top | 1621 and 289 µε, 1.5 % and 1.4 % from the global model |
+| Outputs 5 to 7 | e_1 max 10,524 µε on the cutout edge, K = 13.1, MS = -0.62 |
+
+The largest strain is on the upper aft corner arc, near the end of the
+straight aft edge. The plug door load is a radial line load on the free
+edge of the skin, so the skin bends there. 6 cm aft of the edge, the
+hoop strain of the submodel is 2470 µε, and of the global model 2700 µε.
+
+The submodel takes `global.w`, `global.theta` and `global.e_hoop` from the
+state that the run of `fuselage.skn` saves. A run of `door_corner.skn`
+runs `fuselage.skn` first if the state is not there.
 
 ## Gaps
 
-No gap blocks the models. These gaps are closed:
+No gap blocks the models. These gaps are closed, and `skein run` runs
+them:
 
 | Gap | Feature | Closed by |
 |---|---|---|

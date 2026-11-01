@@ -242,6 +242,7 @@ recursive fn value(n: i64) -> Val {
             if f == "sqrt" { return scalar(sqrt(x)); }
             return scalar(abs(x));
         }
+        if count == 1 && f == "copy" { return scalar(copy_index(arg(n, 0))); }
         if count == 2 && f == "dot" {
             let a = value(arg(n, 0));
             let b = value(arg(n, 1));
@@ -273,6 +274,47 @@ recursive fn value(n: i64) -> Val {
     unsupported(tok(n), str("the expression '", source_of(n), "' is not in this slice"),
                 "write a number with a unit, a name, a vector (x, y, z), sin, cos, sqrt, abs, dot, or + - * / ^ of these");
     return scalar(0.0);
+}
+
+// The copies of the patterns that copy(r) has met: the pattern node and
+// the shape of its copy 0.
+var copy_nodes: i64[>..] = [];
+var copy_shapes: i64[>..] = [];
+
+// copy(r) at the point px (spec §8.1): the index of the copy of the
+// pattern r, a Solid, whose φ is the lowest.
+fn copy_index(r: i64) -> f64 {
+    var v = r;
+    if kind(v) == syntax::N_NAME {
+        let si = find(solid_names, name(v));
+        if si >= 0 { v = solid_nodes[si]; }
+    }
+    let polar = is_call(v, "pattern_polar");
+    if !at_point || !(polar || is_call(v, "pattern")) || syntax::child_count(v) != 4 {
+        unsupported(tok(r), "this slice has copy(r) of a Solid of a pattern, in the value of a bc", "write let windows: Solid = pattern(window_0, (f_pitch, 0 m, 0 m), 8)");
+        return 0.0;
+    }
+    var k = position(copy_nodes[..], v);
+    if k < 0 {
+        k = copy_nodes.len;
+        copy_nodes.push(v);
+        copy_shapes.push(shape_of(arg(v, 0)));
+    }
+    let n = round(scalar_value(arg(v, 2))) as! i64;
+    let d = vec3(value(arg(v, 1)));
+    let l = sqrt(dot3(d, d));
+    var best = 0;
+    var low = 1.0e300;
+    for c in n {
+        let q = if polar { rodrigues(px, [d[0] / l, d[1] / l, d[2] / l], -2.0 * PI * c / n) }
+                else { [px[0] - c * d[0], px[1] - c * d[1], px[2] - c * d[2]] };
+        let f = phi(copy_shapes[k], q);
+        if f < low {
+            low = f;
+            best = c;
+        }
+    }
+    return 1.0 * best;
 }
 
 fn scalar_value(n: i64) -> f64 {
@@ -435,6 +477,8 @@ fn reset() {
     let_nodes.clear();
     let_types.clear();
     cur_mat = -1;
+    copy_nodes.clear();
+    copy_shapes.clear();
     depth = 0;
     at_point = false;
     in_physics = false;
@@ -1261,6 +1305,10 @@ fn step(n: i64) {
             unsupported(tok(proc), str("this slice has ", p, " steps of the beams only, with no shell"), "remove the shell, or use a static step");
         }
         if s.count < 1 || s.count > 50 { unsupported(tok(proc), "the count is not 1 to 50", "write count: 4"); }
+        // The geometric stiffness comes from the axial force of the solve before.
+        if s.kind == STEP_BUCKLING && (steps.len == 0 || steps[steps.len - 1].kind != STEP_STATIC) {
+            unsupported(tok(proc), "a buckling step needs a static step just before it", "add step preload: static { ... } before it");
+        }
     } else if p != "static" || first(proc) >= 0 {
         unsupported(tok(proc), "this slice has static steps with no arguments, and modal and buckling steps", "write step load: static { ... }");
     }
@@ -1418,6 +1466,8 @@ fn check_values() {
         if physics_tok < 0 { unsupported(tok(o), "an output of a value needs the shell", "write output w"); }
         let k = field_index(o);
     }
+    // The bcs, so that a value of a bc that cannot run stops here.
+    for b in bcs { emit_bc(scratch, b); }
     for k in fields.len { emit_field_fn(scratch, k); }
     fields.clear();
     field_ranks.clear();

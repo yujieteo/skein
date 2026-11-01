@@ -500,6 +500,15 @@ section y axis is `y_axis` made normal to `tau`, and z is `cross(tau, e_y)`.
 `nu`. The template gives the axial force `Nx` (positive in tension), the
 force `F_b` and the moment `M_b`.
 
+A `modal` step (§14.2) of beams takes the mass from the density `rho` of
+each beam material: `rho*A` for the translation, `rho*(I_y + I_z)` for the
+twist and `rho*I_y`, `rho*I_z` for the rotary inertia, on the axis of the
+section. A `buckling` step of beams takes the geometric stiffness of the
+axial force `Nx` of the `static` step just before it.
+Reason: a stiffened panel needs the modes and the buckling load of its
+stiffeners (implementation.md §10). The template has no time derivative,
+so the density is the only input.
+
 The built-in functions of the two templates:
 
 | Function | Meaning |
@@ -513,8 +522,8 @@ Reason: a fuselage, a wing and a ship hull are shells with offset
 stiffeners. A solid mesh of a 4.6 mm skin on a 3 m radius needs millions
 of cells. The ABD matrix of classical laminate theory is the standard
 section of a composite shell (Jones 1999, §4.2). The solver uses the MITC4
-shell (Dvorkin and Bathe 1984) for these equations, so the shell does not
-lock in shear.
+shell (Dvorkin and Bathe 1984) for `order: 1` and the MITC9 shell (Bucalem
+and Bathe 1993) for `order: 2`, so the shell does not lock in shear.
 
 ---
 

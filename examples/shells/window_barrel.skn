@@ -1,0 +1,85 @@
+// A pressurized half barrel with a row of three windows: a pattern of a
+// Solid cuts the skin (spec §8.1 and §8.4), and copy(windows) gives the
+// window at each point of the window edges (gap G35). The pane load
+// p*A of each window goes to its fore and aft edges, p*|x - x_w| per
+// unit s, with x_w the centre of the window there. n is the outward
+// normal of the skin, so it points into the window, and
+// -(x - x_w)*dot(n, e_x) is |x - x_w| per unit s for each unit of edge
+// length. The sign, not abs, makes the sum p*A on a cut edge that
+// steps back. Then the y reactions on the plane y = 0 balance the
+// pressure on the half barrel with the windows closed: -p*2R*L.
+
+model window_barrel: 3d, SI
+
+let R: Length = 2 m
+let L: Length = 3 m
+let p: Pressure = 60 kPa
+let t_skin: Length = 2 mm
+let pitch: Length = 1 m
+let x_w0: Length = 0.5 m
+let a_w: Length = 0.2 m
+let b_w: Length = 0.3 m
+
+scales R, p
+
+let barrel: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
+let wall: Surface = boundary(barrel, y^2 + z^2 == R^2 && y >= 0 m)
+
+// Window 0 about theta = 75 deg; rotate by -75 deg takes +z there.
+let window_0: Solid = fillet(
+    rotate(box((x_w0 - a_w, -b_w, R - 0.5 m), (x_w0 + a_w, b_w, R + 0.5 m)), (1, 0, 0), -75 deg),
+    0.08 m,
+)
+let windows: Solid = pattern(window_0, (pitch, 0 m, 0 m), 3)
+let skin: Surface = wall - windows
+
+let sym_x: Curve = boundary(skin, x == 0 m)
+let sym_y: Curve = boundary(skin, y == 0 m)
+let end: Curve = boundary(skin, x == L)
+let window_edge: Curve = boundary(skin, windows)
+let bottom: Point = point((0 m, 0 m, -R))
+
+let e_x: Vector<Real> = (1, 0, 0)
+let e_r: Vector<Real> = (0, y/R, z/R)
+let dx_w: Length = x - (x_w0 + copy(windows)*pitch)
+
+material alu {
+    E1: Pressure = 70 GPa
+    E2: Pressure = 70 GPa
+    G12: Pressure = 26.9 GPa
+    nu12: Real = 0.3
+    t_ply: Length = t_skin
+    h: Length = t_skin
+}
+
+mesh m on skin {
+    size: 50 mm
+    cell: quad
+}
+
+physics skin_shell on skin: reissner_mindlin(top: e_r, q: p*e_r) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material alu
+}
+
+method skin_shell: cg { mesh: m, order: 1 }
+
+bc sym_x: w.x = 0
+bc sym_x: theta.y = 0
+bc sym_x: theta.z = 0
+bc sym_y: w.y = 0
+bc sym_y: theta.x = 0
+bc sym_y: theta.z = 0
+bc bottom: w.z = 0
+
+step pressurize: static {
+    bc end: N*n = (p*R/2, 0, 0)
+    bc window_edge: N*n = -p*dx_w*dot(n, e_x)*e_r
+    output w
+    report reaction(sym_y)
+    report reaction(bottom)
+}
+
+expect closed_y: (reaction(sym_y)).y == -p*2*R*L within 0.01%
+
+expect closed_z: (reaction(bottom)).z == 0 N within 1 N
