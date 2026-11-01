@@ -2703,16 +2703,16 @@ static void main_g(int64_t gs_sp) {
         cs_g.len = 0;
         int64_t t52 = (int64_t)((uint64_t)((int64_t)((int64_t)(((cells_g.len))))) / (uint64_t)((int64_t)(2)));
         for (int64_t i_g_3 = 0; i_g_3 < t52; i_g_3++) {
-            int64_t t55 = gs_mul_i64((int64_t)(2), i_g_3, gs_file1, 1085);
+            int64_t t55 = gs_mul_i64((int64_t)(2), i_g_3, gs_file1, 1089);
             int64_t t56 = (((int64_t *)((cells_g.base)))[t55]);
             uint8_t *t256 = GS(gs_sp + 1)->top;
             for (int64_t k_g = 0; k_g < t56; k_g++) {
                 int64_t t59;
-                int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g_3, gs_file1, 1085)), 1, gs_file1, 1085);
+                int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g_3, gs_file1, 1089)), 1, gs_file1, 1089);
                 if ((uint8_t)((int64_t)((int64_t)((((int64_t *)((cells_g.base)))[t60]))) >= (int64_t)(0))) {
-                    int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g_3, gs_file1, 1085)), 1, gs_file1, 1085);
+                    int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g_3, gs_file1, 1089)), 1, gs_file1, 1089);
                     int64_t t62 = (((int64_t *)((cells_g.base)))[t61]);
-                    t59 = (((int64_t *)((GS_GL->secs_g.base)))[GS_IDX((int64_t)(t62), (t222), gs_file1, 1085)]);
+                    t59 = (((int64_t *)((GS_GL->secs_g.base)))[GS_IDX((int64_t)(t62), (t222), gs_file1, 1089)]);
                 } else {
                     t59 = -1;
                 }
@@ -3527,7 +3527,7 @@ static void main_g(int64_t gs_sp) {
                 gs_memcpy(t261, (const uint8_t *)(((uint8_t *)gs_str8)), (size_t)t141);
                 t261 += t141;
                 GS_GL->results_g.len += t141;
-                GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 738);
+                GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 742);
                 (&GS_GL->gs_gstk_results_g)->top = t261;
             }
             L127:;

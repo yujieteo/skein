@@ -3682,7 +3682,7 @@ static void step_load_g(int64_t gs_sp) {
             gs_memcpy(t303, (const uint8_t *)(((uint8_t *)gs_str21)), (size_t)t271);
             t303 += t271;
             GS_GL->results_g.len += t271;
-            GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 738);
+            GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 742);
             (&GS_GL->gs_gstk_results_g)->top = t303;
         }
         L257:;
@@ -13719,7 +13719,7 @@ static GS_NOINLINE a9_f64 field_0_g(int64_t v_g, int64_t k_g, int64_t gs_sp) {
     }
     L37:;
     return t35;
-    GS_UNREACHABLE(gs_file1, 753);
+    GS_UNREACHABLE(gs_file1, 757);
     t41 = (a9_f64){0};
     return t41;
 }
@@ -13845,7 +13845,7 @@ static GS_NOINLINE a9_f64 field_1_g(int64_t v_g, int64_t k_g, int64_t gs_sp) {
     }
     L37:;
     return t35;
-    GS_UNREACHABLE(gs_file1, 764);
+    GS_UNREACHABLE(gs_file1, 768);
     t41 = (a9_f64){0};
     return t41;
 }

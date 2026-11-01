@@ -711,7 +711,8 @@ let PRELUDE = """
         if !converged { failed = true; }
     }
 
-    // The lowest `count` eigenpairs of a modal or a buckling step.
+    // The lowest `count` eigenpairs of a modal or a buckling step. If the
+    // solve fails, the program stops: no report or expect has eigenvalues.
     fn eigen(step: u8[:], buckling: bool, count: i64) {
         let t = clock();
         let converged = if buckling { shells::buckling(count) } else { shells::modes(count) };
@@ -719,7 +720,10 @@ let PRELUDE = """
         format(solves, "  ", step, ",", shells::shells.len + shells::beams.len, ",", shells::dof_count(), ",0,",
                clock() - t, ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
-        if !converged { failed = true; }
+        if !converged {
+            print_records();
+            exit(1);
+        }
     }
 
     // The sum of the reactions and the applied loads is 0 (checks.md,
