@@ -36,10 +36,16 @@ import .page;
 
 let BUILD_USAGE = "usage: skein build <file.skn> --target wasm\n";
 
-// Whether the page can take program `prog`: a `param` with a range, and no
-// shell, flow, fv or dg model. `skein report` runs `build` only then.
+// Whether the generator of program `prog` is one that the page has: not
+// the shell, flow, fv or dg generator.
+fn page_lane(prog: i64) -> bool {
+    return !shells_gen::claims(prog) && !flow_gen::claims(prog) && !grid_gen::claims(prog);
+}
+
+// Whether the page can take program `prog`: a `param` with a range, and
+// page_lane. `skein report` runs `build` only then.
 fn page_takes(prog: i64) -> bool {
-    guard !shells_gen::claims(prog) && !flow_gen::claims(prog) && !grid_gen::claims(prog) else { return false; };
+    guard page_lane(prog) else { return false; };
     var c = syntax::nodes[prog].first;
     while c >= 0 {
         if kind(c) == syntax::N_PARAM && syntax::child_of_kind(c, syntax::N_RANGE) >= 0 { return true; }
@@ -240,6 +246,11 @@ fn build(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein build: cannot read '", path, "'\n"));
         return 1;
     };
+    let prog = syntax::parse_model(path, text);
+    if prog >= 0 && !page_lane(prog) {
+        write_stderr("skein build: --target wasm takes no shell, flow, fv or dg model\n");
+        return 1;
+    }
     var base: u8[>..] = [];
     var none: const u8[:][>..] = [];
     guard web_program(path, text, none, base) else { return 1; };
