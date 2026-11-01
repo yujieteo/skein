@@ -7,6 +7,7 @@
 //     profile.c       main.c with the profile of the data stacks
 //     native.toon     the run of profile.c at the default values
 //     corner.toon     its run at the corner of the ranges with the most dofs
+//     end.toon        its run at the other end of each range, one at a time
 //     wasm.c          main.c with the regions of WebAssembly
 //     solve.html      the module and the solve of the page (skein report
 //                     puts it in its page)
@@ -15,11 +16,13 @@
 // A Goose data stack is a region of reserved address space with a guard
 // gap behind it. WebAssembly memory has no reservation and no guard
 // pages, so each stack gets a fixed region of memory64. Its size is the
-// larger peak of the stack in two native runs, at the default values and
-// at the corner of the param ranges with the most dofs, times 1.5 (1 MB
-// at least). A canary gap behind each region stops the run with an error
-// if a stack overruns it. The memory of the module grows to the regions
-// and 1.5 times the larger heap peak of the two runs. A model that needs
+// largest peak of the stack in the native runs, times 1.5 (1 MB at least).
+// The runs are at the default values, at the corner of the param ranges
+// with the most dofs, and at the other end of each range with the other
+// params at their defaults, so that each end of each range has a run. A
+// canary gap behind each region stops the run with an error if a stack
+// overruns it. The memory of the module grows to the regions and 1.5
+// times the largest heap peak of the runs. A model that needs
 // more than the browser gives (MAX_MEMORY_MB) gets the page without the
 // module, with the native results and its size.
 import std;
@@ -85,9 +88,10 @@ fn set_word(k: Control, v: f64) -> u8[>..] { return str(k.name, "=", v, if k.uni
 // The literals of `base` that change at the ends of the ranges of
 // `params`, in `slots`, and the corner of the ranges with the most dofs,
 // as words of --set, in `corner`: the end of each range with more dofs
-// than the other end. False, with an error on stderr, if a value changes
+// than the other end. The other end of each range goes to `others`. False, with an error on stderr, if a value changes
 // the program in another place.
-fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: i64[>..]&, corner: u8[..256][>..]&) -> bool {
+fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: i64[>..]&, corner: u8[..256][>..]&,
+              others: u8[..256][>..]&) -> bool {
     let lb = literals(base);
     var changed: bool[>..] = [];
     for l in lb { changed.push(false); }
@@ -95,7 +99,8 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
     for k in params {
         var most = -1;
         var end: u8[..256] = [];
-        for v in [k.lo, k.hi] {
+        var at_hi = false;
+        for v, j in [k.lo, k.hi] {
             let word = set_word(k, v);
             var words: const u8[:][>..] = [];
             words.push(word);
@@ -104,6 +109,7 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
             if dofs >= most {
                 most = dofs;
                 set256(end, word);
+                at_hi = j == 1;
             }
             let lp = literals(program);
             guard same_text(base, lb, program, lp) else {
@@ -121,6 +127,9 @@ fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: 
             }
         }
         corner.push(end);
+        var other: u8[..256] = [];
+        set256(other, set_word(k, if at_hi { k.lo } else { k.hi }));
+        others.push(other);
     }
     slots.clear();
     for c, i in changed {
@@ -263,7 +272,8 @@ fn build(args: const u8[:][:]) -> i64 {
     model.append(model_name);
     var slots: i64[>..] = [];
     var corner: u8[..256][>..] = [];
-    guard find_slots(path, text, base, params, slots, corner) else { return 1; };
+    var others: u8[..256][>..] = [];
+    guard find_slots(path, text, base, params, slots, corner, others) else { return 1; };
     let dir = str(".skein/build/", model, "/web");
     guard make_dirs(str(dir, "/.skein/results/", model)) else {
         write_stderr("skein build: cannot make the directory .skein\n");
@@ -273,7 +283,7 @@ fn build(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein build: cannot write '", dir, "/main.goose'\n"));
         return 1;
     };
-    return build_page(dir, model, params, corner);
+    return build_page(dir, model, params, corner, others);
 }
 
 // Links each part of the compiler in `dir`, beside main.goose: the program
@@ -317,10 +327,10 @@ fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> 
     return true, seconds, max(heap, 0);
 }
 
-// Builds main.goose of `dir` to C, runs the profile at the default values
-// and at `corner`, and writes the page. goose gets the absolute path of
+// Builds main.goose of `dir` to C, runs the profile at the default values,
+// at `corner` and at each word of `others` alone, and writes the page. goose gets the absolute path of
 // main.goose, so that each link resolves to one path.
-fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]) -> i64 {
+fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:], others: u8[..256][:]) -> i64 {
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
     let q = shell_quoted(dir);
@@ -337,24 +347,29 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
         return 1;
     };
     var peaks: i64[>..] = [];
-    var more: i64[>..] = [];
     let none: u8[..256][>..] = [];
-    let ran, seconds, heap = profile_run(dir, none, "native.toon", peaks);
-    var heap_corner = 0;
-    if ran && corner.len > 0 {
-        let corner_ran, _, h = profile_run(dir, corner, "corner.toon", more);
-        guard corner_ran else { return 1; };
-        heap_corner = h;
+    let ran, seconds, first_heap = profile_run(dir, none, "native.toon", peaks);
+    guard ran else { return 1; };
+    var heap = first_heap;
+    // The end runs: n = 0 at the corner, n > 0 at the word n - 1 of
+    // `others` alone.
+    for n in 0..if corner.len > 0 { others.len + 1 } else { 0 } {
+        var sets: u8[..256][>..] = [];
+        if n == 0 { sets.append(corner); } else { sets.push(others[n - 1]); }
+        var more: i64[>..] = [];
+        let end_ran, _, h = profile_run(dir, sets, if n == 0 { "corner.toon" } else { "end.toon" }, more);
+        guard end_ran && more.len == peaks.len else { return 1; };
+        heap = max(heap, h);
+        for p, i in more { peaks[i] = max(peaks[i], p); }
     }
-    guard ran && (more.len == 0 || more.len == peaks.len) else { return 1; };
     var table: u8[>..] = [];
-    // The memory of the module: the regions, 1.5 times the larger heap
+    // The memory of the module: the regions, 1.5 times the largest heap
     // peak, and 64 MB for the loader, the C stack and the files, in 64 MB
     // steps.
-    var total = ceil(1.5 * max(heap, heap_corner)) as! i64 + 64;
+    var total = ceil(1.5 * heap) as! i64 + 64;
     var largest = 1;
     for p, i in peaks {
-        let mb = max(1, ceil(1.5 * max(p, if more.len > 0 { more[i] } else { 0 })) as! i64);
+        let mb = max(1, ceil(1.5 * p) as! i64);
         format(table, if i > 0 { "," } else { "" }, mb);
         total += mb;
         largest = max(largest, mb);
@@ -381,7 +396,8 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
 // The memory of the module starts at 64 MB and grows to `memory_mb` at
 // most. A growth that the browser cannot give stops the run with an error.
 // The C stack is 8 MB, as a native one: the 64 KB of emcc overflows in
-// the generator, and WebAssembly has no guard page to stop it.
+// the checker (check_expr_ty) at x_off = -0.8125 mm of the interposer, and
+// WebAssembly has no guard page to stop it.
 fn wasm_module(dir: u8[:], model: u8[:], c: u8[:], table: u8[:], largest: i64, memory_mb: i64, glue: u8[>..]&) -> bool {
     var wasm: u8[>..] = [];
     var patched: u8[>..] = [];

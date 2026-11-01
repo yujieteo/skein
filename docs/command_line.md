@@ -326,8 +326,10 @@ as `skein run --set` with the same values. The page also shows the
 records of a native run at the default values.
 
 It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
-`emcc` on `PATH`. It runs the model natively twice: at the default values
-and at the corner of the param ranges with the most dofs. A native run
+`emcc` on `PATH`. It runs the model natively at the default values, at
+the corner of the param ranges with the most dofs, and at the other end
+of each range with the other params at their defaults. Thus each end of
+each range has a native run. A native run
 that fails stops `build` with an error. The peak memory of these runs
 sets the memory limit of the page: the author sets nothing. The memory of
 a run starts at 64 MB and grows to that limit. If the browser cannot give
