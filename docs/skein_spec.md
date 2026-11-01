@@ -1745,6 +1745,16 @@ Each setting is optional. The defaults:
 
 All solvers are in Goose (§18.4).
 
+A static step with `linear: cg` and `precond: amg` on a mesh of a lattice
+(a box or a union of boxes of hexahedra, a box or a plate of simplices)
+solves with a sparse direct factorization when it pays: its work is at
+most 1e12 multiplies and adds and its factor fits in the free memory.
+Else, or if the factorization fails (K is not positive definite), it solves
+with CG and AMG. The program chooses, so the model needs no
+setting for it. Reason: on `interposer_warpage` (139,449 dofs, thin layers)
+CG with AMG takes 677 iterations and 268 s on 1 thread, and the direct
+solve 11.6 s (in the page 43 s, and 3 s with the factor of the last run).
+
 `linear: gmres` with `precond: ilu0` uses GMRES with a fixed restart of
 300. It is for small models only, because each solve holds about 301 basis
 vectors of n doubles for n unknowns. A finer mesh needs more iterations,

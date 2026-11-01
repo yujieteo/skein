@@ -84,6 +84,10 @@ struct MemoryPath {
 //     simplex newton skyline ldlt  examples/femahoy/hyperelastic_tube.skn at 0.7 mm, 8,010
 //                         dofs, 751,855 entries of the profile, on 2026-11-01: 16.2 (U and
 //                         L, 8 bytes each). No threads.
+//     lattice ldlt        interposer_warpage, 139,449 dofs, on 2026-11-02: 9.0 for each value
+//                         of the factor, the fronts and the update matrices of
+//                         solvers/nested.goose (one value each and 1 more for the plan and
+//                         the files of a page). Estimate 1323 MB and peak 1249 MB. No threads.
 //     shell skyline ldlt  thin cylinder 38.1 mm, 23,760 dofs: 8.2 (one value for each
 //                         entry of the profile), and no threads
 //     simplex wave        PML duct at 6 mm and 4 mm, 35,070 and 76,602 dofs: 17.6 and 9.1
@@ -125,6 +129,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex central_difference", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 12.0 },
     MemoryPath { name: "simplex newton cg amg", entry_bytes: 32.0, dof_bytes: 1600.0, thread_bytes: 16.0 },
+    MemoryPath { name: "lattice ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex newton skyline ldlt", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
@@ -253,6 +258,14 @@ fn memory_estimate(name: u8[:], entries: i64, dofs: i64, vectors: i64, mesh: i64
 }
 
 var memory_checks = 0;   // the checks of the run
+
+// Whether a solve on path `name` fits in the budget on 1 thread, or the
+// budget is not known. A solve with a choice of paths asks it before the
+// memory_check of the path that it takes.
+fn memory_fits(name: u8[:], entries: i64, dofs: i64, vectors: i64, mesh: i64) -> bool {
+    let have = memory_budget();
+    return have <= 0.0 || resident_bytes() + path_bytes(memory_path(name), entries, dofs, vectors, mesh, 1) <= have;
+}
 
 // Checks, after the pattern of a solve on path `name` and before its
 // values, that the case fits in the budget (memory_estimate). If it does

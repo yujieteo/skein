@@ -423,6 +423,29 @@ fn test_equilibrium_scale() {
     }
 }
 
+// A nearly incompressible solid, fixed at x = 0 and pulled at x = 1: its
+// matrix has a pivot that the factor of the direct solve rejects (relative
+// 1e-12). The solve must still end, with CG and AMG, as before the direct
+// solve.
+fn test_direct_fallback() {
+    elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 4, 4, 4);
+    elements::elastic(1000.0, 0.49999999999999);
+    assert(elements::plane(elements::X, 0.0));
+    elements::fix(0, 0.0);
+    elements::fix(1, 0.0);
+    elements::fix(2, 0.0);
+    assert(elements::plane(elements::X, 1.0));
+    elements::flux(1.0);
+    if !elements::solve() {
+        failures++;
+        print("FAIL direct fallback: the solve does not converge");
+    }
+    if elements::direct {
+        failures++;
+        print("FAIL direct fallback: the factor passes");
+    }
+}
+
 // --- the warm start of a page ----------------------------------------------------
 
 // Two fixed temperatures and no source: the free load is 0. A second solve
@@ -1156,6 +1179,7 @@ fn main() {
     test_heated_bar();
     test_body_force();
     test_equilibrium_scale();
+    test_direct_fallback();
     test_submodel();
     test_stages();
     test_eigen();

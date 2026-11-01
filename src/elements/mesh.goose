@@ -44,6 +44,7 @@ fn geometry_tolerance() -> f64 {
 // so a P2 midpoint node is a lattice point too. Node (i, j, k) has the
 // index i + lat[0] (j + lat[1] k).
 var lat: i64[3] = [1, 1, 1];
+var on_lattice = false;     // node n is lattice point n: a mesh of build_lattice
 
 fn lattice_node(i: i64, j: i64, k: i64) -> i64 {
     guard i >= 0 && i < lat[0] && j >= 0 && j < lat[1] && k >= 0 && k < lat[2] else { abort("lattice_node: (i, j, k) in the lattice"); }
@@ -67,6 +68,7 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     per_cell = node_count_of(d, ord);
     coords.clear();
     conn.clear();
+    on_lattice = false;
     map_lo = lo;
     map_hi = hi;
     bbox_lo = lo;
@@ -194,6 +196,7 @@ fn build_lattice(nx: i64, ny: i64, nz: i64) {
     lat = [order * nx + 1, order * ny + 1, if dim == 3 { order * nz + 1 } else { 1 }];
     place_nodes();
     cut_cells(nx, ny, if dim == 3 { nz } else { 1 });
+    on_lattice = true;
 }
 
 // --- the meshers -------------------------------------------------------------
@@ -316,6 +319,7 @@ fn load_mesh(dir: const u8[:]) -> bool {
     var bbox: f64[>..] = [];
     guard load_array(dir, "sizes", sizes) && sizes.len == 4 && load_array(dir, "bbox", bbox) && bbox.len == 6 &&
           load_array(dir, "coords", coords) && load_array(dir, "conn", conn) else { return false; };
+    on_lattice = false;
     dim = sizes[0];
     order = sizes[1];
     per_cell = sizes[2];

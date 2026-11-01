@@ -330,7 +330,9 @@ starts from the last solution of the page, and keeps the AMG levels of
 the last run when the matrix has the same dofs, pattern and fixed dofs:
 a change of a load or a material, not of the mesh. Its records then
 agree with `skein run --set` within the solver tolerance, with fewer
-iterations.
+iterations. A direct solve of a lattice (implementation.md §6) keeps its
+factor when the matrix is the same: a change of a load alone then needs
+only two triangular solves.
 
 When the browser has WebGPU, the page uses the GPU (src/gpu/):
 
