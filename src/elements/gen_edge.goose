@@ -14,7 +14,8 @@
 //
 // A report or an expect is a Complex expression of constants, of points
 // (`hc.x at p`) and of line integrals (`integral(ef.x, c)` on a `line`), and
-// for the Darcy flow of `integral(dot(q, n), s)` on a boundary.
+// of `far_field(u, H, s, d)` on a boundary, with H a constant times curl(u),
+// and for the Darcy flow of `integral(dot(q, n), s)` on a boundary.
 import std;
 import math;
 namespace elements_gen;
@@ -27,7 +28,7 @@ let DARCY = 4;      // MIXED there
 
 let EDGE_FIX = "write let h: Vector<...> = curl(u)/mu and eq curl(h) + c*u = 0, with family: nedelec";
 let DARCY_FIX = "write eq q + k*grad(p) = 0 and eq div(q) = f, with family: raviart_thomas";
-let PROBE_FIX = "write re, imag, abs or arg of + - * / of constants, F.x at a point, integral(F.x, c) on a line c, or integral(dot(q, n), s)";
+let PROBE_FIX = "write re, imag, abs or arg of + - * / of constants, F.x at a point, integral(F.x, c) on a line c, integral(dot(q, n), s), or far_field(u, hf*curl(u), s, d)";
 
 var family_word: u8[..64];          // "nedelec", "raviart_thomas" or ""
 var curl_name: u8[..64];            // h of the edge physics
@@ -305,6 +306,8 @@ recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         emit_field(out, child(n, 0), p.v, p.v);
     } else if is_call(n, "integral") && syntax::child_count(n) == 3 {
         emit_integral(out, pre, n);
+    } else if is_call(n, "far_field") && syntax::child_count(n) == 5 {
+        emit_far_field(out, pre, n);
     } else {
         probe_fail(tok(n), str("the expression '", source_of(n), "' is not in this generator"), PROBE_FIX);
     }
@@ -327,6 +330,64 @@ fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         return;
     };
     emit_field(out, f, value(arg(c, 0)).v, value(arg(c, 1)).v);
+}
+
+// far_field(u, H, s, d) of the edge physics on a boundary s, with
+// H = hf*curl(u), into the medium of the physics: curl(curl(u)/mu) -
+// omega^2*eps*u = 0 has nu = 1/mu and c = -omega^2*eps, so k = sqrt(-c/nu)
+// and eta = omega*mu/k. The generator checks the medium only at an omega
+// of a step.
+fn emit_far_field(out: u8[>..]&, pre: u8[>..]&, n: i64) {
+    let r = arg(n, 2);
+    let s = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
+    let hf, ok = curl_factor(arg(n, 1));
+    let nu, c = edge_terms();
+    guard physics == EDGE && source_of(arg(n, 0)) == unknown_name && ok && s >= 0 && (omega_now == 0.0 || c[0] < 0.0 && c[1] == 0.0) else {
+        probe_fail(tok(n), "far_field needs E = u, H = a constant times curl(u), a boundary of the body, and a medium with no loss", PROBE_FIX);
+        return;
+    };
+    let k = sqrt(max(-c[0] / nu, 0.0));
+    emit_region(pre, s);
+    format(pre, "    let far_", n, " = elements::far_field(");
+    lits(pre, value(arg(n, 3)).v);
+    pre.append(", ");
+    lit(pre, k);
+    pre.append(", ");
+    lit(pre, if k > 0.0 { omega_now / (nu * k) } else { 0.0 });
+    pre.append(", ");
+    lit(pre, hf[0]);
+    pre.append(", ");
+    lit(pre, hf[1]);
+    pre.append(");\n");
+    format(out, "[far_", n, ", 0.0]");
+}
+
+// The constant hf of a field H = hf*curl(u): curl(u), a let of the physics,
+// and - * / of these with constants. False for another field.
+recursive fn curl_factor(n: i64) -> f64[2], bool {
+    let k = kind(n);
+    let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
+    if source_of(n) == str("curl(", unknown_name, ")") { return [1.0, 0.0], true; }
+    if k == syntax::N_NAME && physics_let(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let f, ok = curl_factor(physics_let(name(n)));
+        codegen::depth--;
+        return f, ok;
+    }
+    if k == syntax::N_UNARY && op == "-" {
+        let f, ok = curl_factor(first(n));
+        return [-f[0], -f[1]], ok;
+    }
+    if op == "*" && !has_unknown(child(n, 0)) {
+        let f, ok = curl_factor(child(n, 1));
+        return cmul(cval(child(n, 0)), f), ok;
+    }
+    if (op == "*" || op == "/") && !has_unknown(child(n, 1)) {
+        let f, ok = curl_factor(child(n, 0));
+        let z = cval(child(n, 1));
+        return (if op == "*" { cmul(f, z) } else { cdiv(f, z) }), ok;
+    }
+    return [0.0, 0.0], false;
 }
 
 // Writes component F.x of a field at the point a (a == b), or its integral

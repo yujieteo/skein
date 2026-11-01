@@ -990,7 +990,7 @@ licences are not compatible with Apache 2.0.
 | 2D triangles | Delaunay refinement (Chew 1989, Ruppert 1995, Shewchuk 2002) on a boundary that the mesher samples from φ, with the sharp corners as fixed vertices |
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
-| 3D tetrahedra on a prism along z with a `cylinder` or an `extrude` | the triangles of the 2D case on its section, swept through layers of equal height, each prism cut into 3 tetrahedra along the diagonal of each side face from its point of smallest index (Dompierre et al. 1999) |
+| 3D tetrahedra on a prism along z with a `cylinder` or an `extrude`, and with each `refine` target in its full z range | the triangles of the 2D case on its section, swept through layers of equal height, each prism cut into 3 tetrahedra along the diagonal of each side face from its point of smallest index (Dompierre et al. 1999) |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
 | `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ (and z) on a quarter of a ring or a tube: `(circle - circle) & rect` or `(cylinder - cylinder) & box`, with the corner of the rect or the box on the axis |
 | `quad` on another `Surface` | the triangles of the 2D case, then the merge of pairs of neighbour triangles into quads (Blossom-Quad, Remacle et al. 2012): a matching of the largest size (Edmonds 1965) on the pairs whose quad has an acceptable quality. A triangle stays where it has no such pair. |

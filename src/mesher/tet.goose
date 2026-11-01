@@ -331,7 +331,7 @@ fn lattice_tets() {
 fn mesh_3d(g: i64, size: f64) -> bool {
     clear_mesh(3);
     let b = bounds(g);
-    if has_round(g) {
+    if has_round(g) && targets_span_z(b[2], b[5]) {
         let s = section(g, b[2], b[5]);
         if s >= 0 { return sweep_tets(s, b[2], b[5], size); }
     }

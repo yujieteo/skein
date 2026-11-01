@@ -79,6 +79,7 @@ fn set_edge(nu: f64, c: f64[2], t: f64) {
         edge_c.append(c);
     }
     gauge_count = 0;
+    clear_impedance();
 }
 
 // The edges of the mesh, each once, and the edge and the sign of each

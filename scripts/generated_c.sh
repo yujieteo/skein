@@ -32,6 +32,7 @@ examples/elements/buckling_column_tet.skn
 examples/elements/column_weight_tet.skn
 examples/elements/conduction_slab_tet.skn
 examples/elements/darcy_annulus_tri.skn
+examples/elements/far_field_box_tet.skn
 examples/elements/frequency_cantilever_tet.skn
 examples/elements/harmonic_duct_tri.skn
 examples/elements/heated_bar_study_tet.skn

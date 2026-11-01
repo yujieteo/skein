@@ -204,6 +204,16 @@ fn has_round(g: i64) -> bool {
     return false;
 }
 
+// Whether each refine target spans z0 to z1, so that the section at the
+// middle z (sweep_tets) sizes it. A target on an end face does not.
+fn targets_span_z(z0: f64, z1: f64) -> bool {
+    for t in targets {
+        let tb = bounds(t.g);
+        if tb[2] > z0 || tb[5] < z1 { return false; }
+    }
+    return true;
+}
+
 // Sweeps the triangles of the 2D section s from z0 to z1 through layers of
 // equal height, and cuts each prism into 3 tetrahedra (add_prism). The ends
 // are planes and the side nodes are on the side, so the sharp edges stay
