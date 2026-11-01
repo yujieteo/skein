@@ -1043,7 +1043,7 @@ async function solveCase(values) {
     return null;
   }
   note.textContent = '';
-  const c = { id: 'page ' + ++solves, values, run: r.out, results, seconds: r.seconds, code: r.code, failure: r.code === 0 ? null : failure(r) };
+  const c = { id: 'page ' + ++solves, values, run: r.out, err: r.err, results, seconds: r.seconds, code: r.code, failure: r.code === 0 ? null : failure(r) };
   D.cases.push(c);
   caseToons.push(parseToon(r.out));
   return c;
@@ -1430,6 +1430,7 @@ function renderTables() {
   }));
   add(table('Reports', toon.tables.report, (c, v, r) => (v === null ? c : c === 'expr' ? withLine(v, reportLine(r[0], v)) : v),
     (r) => ({ 'data-report': r[1] })));
+  if (c.values) add(el('div', { class: 'table' }, el('h3', {}, 'Records of the run'), el('pre', {}, c.run + (c.err ? '\n' + c.err : ''))));
   if (studyTable) {
     add(table('Study table', studyTable, (c, v) => {
       if (v !== null) return c === 'status' || c === 'verify' ? el('span', { class: v === 'ok' || v === 'pass' ? 'pass' : 'fail' }, v) : v;

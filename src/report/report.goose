@@ -456,6 +456,18 @@ fn last_run(model: u8[:], study: u8[:], toon: u8[:]) -> i64 {
     return if find(last, ",fail,") >= 0 { 1 } else { 0 };
 }
 
+// Fills the fields check and verify of `json` with the records of `skein
+// check` and `skein verify` of the model at `path`. Their files are in `work`.
+fn add_checks(path: u8[:], work: u8[:]) {
+    var me: u8[>..] = [];
+    arg(0, me);
+    for key in ["check", "verify"] {
+        let file = str(work, "/", key, ".toon");
+        shell(str(quoted(me), " ", key, " ", quoted(path), " > ", quoted(file), " 2>&1"));
+        json_field(json, key, text_of(file));
+    }
+}
+
 // Fills `page` with the run of the model at `path`, and of its study
 // `study` if that is not "". It gives the exit status of the run, or 3.
 // With `no_run`, it reads the table of the last run of the study from
@@ -465,8 +477,6 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
     var me: u8[>..] = [];
     arg(0, me);
     let skein = quoted(me);
-    shell(str(skein, " check ", quoted(path), " > ", quoted(str(work, "/check.toon")), " 2>&1"));
-    shell(str(skein, " verify ", quoted(path), " > ", quoted(str(work, "/verify.toon")), " 2>&1"));
     let toon = str(work, "/run.toon");
     let study_arg = if study.len > 0 { str(" --study ", quoted(study)) } else { str("") };
     var status = 0;
@@ -477,8 +487,7 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
         write_stderr(text_of(str(work, "/run.err")));
     }
     if status > 1 { return status; }
-    json_field(json, "check", text_of(str(work, "/check.toon")));
-    json_field(json, "verify", text_of(str(work, "/verify.toon")));
+    add_checks(path, work);
     json_field(json, "study", study);
     let table: u8[>..] = if study.len > 0 { text_of(toon) } else { "" };
     json_field(json, "table", table);
@@ -596,7 +605,8 @@ fn web_page(path: u8[:], text: u8[:], model: u8[:], dir: u8[:], toon: u8[:], sol
     json_field(json, "file", path);
     json_field(json, "source", text);
     format(json, "\"tokens\":", classes, ",");
-    for key in ["check", "verify", "study", "table"] { json_field(json, key, ""); }
+    add_checks(path, dir);
+    for key in ["study", "table"] { json_field(json, key, ""); }
     json.append("\"cases\":[");
     guard add_case(dir, str(dir, "/"), 1, toon) else { return ""; };
     json.append("]}");

@@ -322,9 +322,10 @@ tables. Its one stored case is the native run at the default values. The
 page has a slider for each `param` with a range of literals, for example
 `param L: Length = 200 mm in 100 mm..400 mm`. A slider that stops at
 other values meshes the model again in the page, solves it with the new
-values, and the viewer and the tables show that run. The run in the page
-gives the same records and VTU file as `skein run --set` with the same
-values, on the CPU.
+values, and the viewer and the tables show that run: the deformed mesh,
+its records in TOON with the `mesh_quality` record of its mesh, and its
+log. The run in the page gives the same records and VTU file as `skein
+run --set` with the same values, on the CPU.
 
 When the browser has WebGPU, the page uses the GPU (src/gpu/):
 
