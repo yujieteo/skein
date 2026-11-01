@@ -13,7 +13,9 @@
 //                          same
 //     solve                elements::solve: an implicit step, on the GPU
 //                          only with the control of the page on
-//                          (SKEIN_GPU_IMPLICIT=1), else CG with AMG
+//                          (SKEIN_GPU_IMPLICIT=1), else the CPU solve;
+//                          the wave, edge and mixed physics and
+//                          radiation always use the CPU
 //     grid_static, modal,  grid::solve_static, elements::modal,
 //     buckling,            elements::buckling and meshless::solve_static:
 //     meshless_static      on the CPU
@@ -471,9 +473,11 @@ fn cg_pass(c: Cg, n: i64, r: f64[:], out: f64[:]) -> i64, bool {
 // The static solve of elements: on the GPU with the control of the page
 // on, else elements::solve.
 fn solve() -> bool {
-    let wave = elements::physics == elements::WAVE;
-    guard present() && implicit_on() && !wave && elements::rad_count() == 0 else {
-        note(if wave { "gmres ilu0" } else { "cg amg" }, false);
+    let p = elements::physics;
+    let gmres = p == elements::WAVE || p == elements::EDGE;
+    let nodal = !gmres && p != elements::MIXED;
+    guard present() && implicit_on() && nodal && elements::rad_count() == 0 else {
+        note(if gmres { "gmres ilu0" } else if p == elements::MIXED { "schur cg" } else { "cg amg" }, false);
         return elements::solve();
     };
     note("cg jacobi", true);

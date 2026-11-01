@@ -332,8 +332,9 @@ When the browser has WebGPU, the page uses the GPU (src/gpu/):
 - an implicit solve runs on the GPU only when the control "Implicit
   solves on the GPU" is on. It is off by default. The GPU path is CG with
   the Jacobi preconditioner, in a defect correction that keeps the
-  tolerance of the CPU solve. A model with radiation or a `Complex` unknown
-  uses the CPU;
+  tolerance of the CPU solve. A model with radiation, a `Complex` unknown,
+  a Nédélec (edge) unknown or a mixed (Raviart-Thomas) unknown uses the
+  CPU;
 - a run without WebGPU uses the CPU. A WebGPU error stops the GPU solve,
   and its solve record says that it did not converge.
 
