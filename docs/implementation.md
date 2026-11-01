@@ -155,7 +155,7 @@ A sparse matrix is CSR in three arrays. The solvers use no other storage.
 | Newton | with a backtracking line search and the load ramp of `static(ramp:)` |
 | LOBPCG | for `modal` and `buckling` |
 | AMG | smoothed aggregation, with the near null space of each physics (`src/solvers/modes.goose`): the constant of a scalar field, the rigid-body modes of a solid, and 3 plate bending modes more for a thin 3D solid |
-| direct, lattice | multifrontal LDLᵀ on a nested dissection of a lattice (`src/solvers/nested.goose`): a static solve of `cg` with `amg` on a mesh of a lattice (a box or a union of boxes of hexahedra, a box or a plate of simplices) takes it when its work is at most 1e12 multiplies and adds and it fits in the memory. Else CG with AMG. The pattern of K gives the planes that can cut, so it fits each physics and cell type. |
+| direct, lattice | multifrontal LDLᵀ on a nested dissection of a lattice (`src/solvers/nested.goose`): a static solve of `cg` with `amg` on a mesh of a lattice (a box or a union of boxes of hexahedra, a box or a plate of simplices) takes it when its work is at most 1e12 multiplies and adds and it fits in the memory. Else, or if the factor fails, CG with AMG. The pattern of K gives the planes that can cut, so it fits each physics and cell type. |
 | threads | assembly and the matrix-vector products of CG and of the flow GMRES(m) run in Goose workers (`src/solvers/pool.goose`) |
 
 Goose threads share no memory. A worker gets a range of cells as a flat

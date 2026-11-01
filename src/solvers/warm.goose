@@ -7,7 +7,8 @@
 //
 // Each solve of a run has a key: its number in the run. The files of solve
 // k are <dir>/<k>.x (the solution), <dir>/<k>.amg.* (the levels) and
-// <dir>/<k>.ldlt.* (the factor of a direct solve, nested.goose).
+// <dir>/<k>.ldlt.* (the factor and the values of K of a direct solve,
+// nested.goose).
 //
 // The levels of the last run are a preconditioner of the new matrix when
 // the matrix has the same dofs and pattern and the same fixed dofs: the
@@ -159,8 +160,9 @@ fn nested_reuse(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8
 
 // Keeps the factor of the last nested_factor as the factor of solve `key`,
 // with the values of K that it factors, in files of LDLT_CHUNK values: the
-// copy of each file is the only memory more. Reason: one file of the factor of interposer_warpage (1.1 GB) took
-// the peak from 1215 MB to 1903 MB.
+// copy of each file is the only memory more.
+// Reason: one file of the factor of interposer_warpage (1.1 GB) took the
+// peak from 1215 MB to 1903 MB.
 fn nested_keep(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:]) {
     guard warm_dir().len > 0 else { return; }
     var sig: i64[>..] = [];

@@ -1749,7 +1749,8 @@ A static step with `linear: cg` and `precond: amg` on a mesh of a lattice
 (a box or a union of boxes of hexahedra, a box or a plate of simplices)
 solves with a sparse direct factorization when it pays: its work is at
 most 1e12 multiplies and adds and its factor fits in the free memory.
-Else it solves with CG and AMG. The program chooses, so the model needs no
+Else, or if the factorization fails (K is not positive definite), it solves
+with CG and AMG. The program chooses, so the model needs no
 setting for it. Reason: on `interposer_warpage` (139,449 dofs, thin layers)
 CG with AMG takes 677 iterations and 268 s on 1 thread, and the direct
 solve 11.6 s (in the page 43 s, and 3 s with the factor of the last run).
