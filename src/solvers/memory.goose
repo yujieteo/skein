@@ -64,6 +64,10 @@ struct MemoryPath {
 //     simplex modal       frequency cantilever 1.5 mm, 54,675 dofs: 66.3, and 1.0 more
 //     simplex buckling    buckling column 3 mm, 32,805 dofs: 36.6, and 0 more. The static
 //                         step before it leaves pages that the buckling step uses again.
+//     simplex central_difference  bar_wave_tri at 0.5 mm and 0.25 mm, 32,882 and
+//                         129,762 dofs, on 2026-11-01: 8.1 and 7.5, and 12 more on 16
+//                         threads (the copy of the matrix of rows_start). On 16 threads the
+//                         estimate is 245 MB and the peak 170 MB.
 //     shell skyline ldlt  thin cylinder 38.1 mm, 23,760 dofs: 8.2 (one value for each
 //                         entry of the profile), and no threads
 //     simplex wave        PML duct at 6 mm and 4 mm, 35,070 and 76,602 dofs: 17.6 and 9.1
@@ -93,6 +97,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "simplex cg amg", entry_bytes: 32.0, dof_bytes: 1600.0, thread_bytes: 16.0 },
     MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, dof_bytes: 0.0, thread_bytes: 1.0 },
+    MemoryPath { name: "simplex central_difference", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 12.0 },
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },

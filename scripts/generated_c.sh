@@ -27,6 +27,7 @@ set -eu
 # The models that skein run can run. Add a model here when skein run can run it.
 models="
 examples/closed_cylinder.skn
+examples/elements/bar_wave_tri.skn
 examples/elements/bloch_cell_tri.skn
 examples/elements/buckling_column_tet.skn
 examples/elements/column_weight_tet.skn
@@ -51,6 +52,7 @@ examples/flow/channel_sst_tri.skn
 examples/flow/poiseuille_stokes.skn
 examples/flow/turek_hron_fsi1_tri.skn
 examples/grid/mms_dg_static.skn
+examples/grid/mms_dg_transient.skn
 examples/grid/mms_fv_static.skn
 examples/grid/mms_fv_transient.skn
 examples/lame_profile.skn

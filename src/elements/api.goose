@@ -33,6 +33,7 @@ import .stages;
 import .eigen;
 import .wave;
 import .radiation;
+import .explicit;
 
 let X = 0;
 let Y = 1;
@@ -261,6 +262,11 @@ fn clear_bcs() {
 // physics by GMRES with ILU(0). Returns false if the solver does not
 // converge.
 fn solve() -> bool { return if physics == WAVE { wave_solve() } else { solve_system() }; }
+
+// The transient step central_difference (explicit.goose) to the time
+// `end`, with the step dt, or the stable step for dt <= 0, from rest.
+// Returns false if the state is not finite.
+fn central_difference(end: f64, dt: f64) -> bool { return central_difference_cpu(end, dt); }
 
 // Component `comp` of u, or T (comp 0), at a point, and whether a cell
 // holds the point.

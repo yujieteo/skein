@@ -322,8 +322,27 @@ in 100 mm..400 mm`. When a control changes, the page meshes the model
 again, solves it with the new values, and shows the records of the run
 in TOON, the `mesh_quality` record and the deformed mesh. The run in the
 page gives the same records and VTU file as `skein run --set` with the
-same values. The page also shows the records of a native run at the
-default values.
+same values, on the CPU. The page also shows the records of a native run
+at the default values.
+
+When the browser has WebGPU, the page uses the GPU (src/gpu/):
+
+- an explicit step (`central_difference`, and `ssprk3` of `fv` and `dg`)
+  always runs on the GPU;
+- an implicit solve runs on the GPU only when the control "Implicit
+  solves on the GPU" is on. It is off by default. The GPU path is CG with
+  the Jacobi preconditioner, in a defect correction that keeps the
+  tolerance of the CPU solve;
+- a run without WebGPU uses the CPU. A WebGPU error stops the GPU solve,
+  and its solve record says that it did not converge.
+
+The GPU works in f32, so a GPU run does not give the CPU records bit for
+bit. The record `device[n]{step,solver,device}` of each run gives the
+device of each solve, and the page shows it in a table.
+`./build.sh gpu` checks each GPU path against the CPU path of the same
+page (`tests/gpu/gpu.test.mjs`): the largest difference of the fields,
+relative to the largest value, is at most 1e-3 for the explicit steps
+and 1e-6 for the implicit solve.
 
 It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
 `emcc` on `PATH`. It runs the model natively twice: at the default values
@@ -337,19 +356,24 @@ and the page gives the size of the model.
 
 Current limits:
 
-- only the models of the simplex generator (`tri` or `tet` cells).
+- only the models of the simplex generator (`tri` or `tet` cells) and
+  the `fv` and `dg` models on a `rect` grid.
   Sample 01 (the cantilever) is the validated model of the page. The
   Hisada interposer model (`examples/package/interposer_warpage.skn`,
   `hex27` cells) does not run in the page yet;
 - a value must not change the structure of the program, for example the
   number of steps or of shapes. `build` stops with an error for such a
   `param`;
-- the page runs on one thread, in a browser with WebAssembly memory64
-  (tested in Chromium 156), from a `file://` or an `http://` address;
+- the page runs on one thread, in a browser with WebAssembly memory64 and
+  JSPI (tested in Chromium 156), from a `file://` or an `http://` address;
+- the GPU path needs WebGPU. It is for the models of the simplex
+  generator and the `rect` grids of `fv` and `dg`;
 - no `use` files.
 
-The page has a function `skeinSolve(values)` for other pages: `values`
-holds a number for each param, in the unit of its default value. It gives
+The page has a function `skeinSolve(values, options)` for other pages:
+`values` holds a number for each param, in the unit of its default value.
+`options.gpu` (default: the browser has WebGPU) gives the run the GPU,
+and `options.implicitGpu` puts the implicit solves on it. It gives
 a promise of `{ code, out, err, files, seconds, sets }`: the exit status
 (section 10), the records in TOON, standard error, the VTU text of each
 result file, the time and the words of `--set`.

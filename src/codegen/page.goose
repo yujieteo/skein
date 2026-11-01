@@ -25,6 +25,7 @@ let PAGE_IMPORTS = """
     import codegen.codegen;
     import codegen.web;
     import elements.gen;
+    import grid.gen;
     import mesher.verify;
     import fmt.fmt;
     import syntax from "./syntax";
@@ -33,15 +34,18 @@ let PAGE_IMPORTS = """
     import runtime from "./runtime";
     import solvers from "./solvers";
     import elements from "./elements";
+    import grid from "./grid";
+    import gpu from "./gpu";
 
     """;
 
 // The end of the program of the page. The arguments are the words of
-// `--set`. web_quality prints the mesh_quality record of the mesh after
-// the records.
+// `--set`. web_quality prints the device record of src/gpu/ and the
+// mesh_quality record of the mesh after the records.
 let PAGE_MAIN = """
 
     fn web_quality() {
+        write_stdout(gpu::records());
         if mesher::cell_count() == 0 { return; }
         var s: u8[>..] = [];
         mesher::format(s, mesher::mesh_quality());
@@ -86,6 +90,62 @@ let PROFILE_C = """
         fprintf(stderr, "\nskein-rss: %ld\n", (use.ru_maxrss + 1023) / 1024);
         fflush(stderr);
     }
+
+    """;
+
+// The externs of src/gpu/gpu.goose in the native profile run: no GPU, so
+// each solve takes its CPU path.
+let GPU_STUB_C = """
+
+    int32_t skein_gpu_ready(void) { return 0; }
+    void skein_gpu_reset(void) {}
+    int32_t skein_gpu_buffer(int64_t bytes) { (void)bytes; return -1; }
+    void skein_gpu_write(int32_t buf, sl_f32 data) { (void)buf; (void)data; }
+    void skein_gpu_write_ints(int32_t buf, sl_i32 data) { (void)buf; (void)data; }
+    int32_t skein_gpu_bind(sl_u8 kernel, sl_i32 pairs) { (void)kernel; (void)pairs; return -1; }
+    void skein_gpu_dispatch(int32_t group, int64_t threads) { (void)group; (void)threads; }
+    void skein_gpu_submit(void) {}
+    int32_t skein_gpu_read(int32_t buf, sl_f32 out) { (void)buf; (void)out; return 0; }
+
+    """;
+
+// The externs of src/gpu/gpu.goose in the module: calls of the methods of
+// Module.skeinGpu (src/gpu/gpu.js), which the worker of the page sets when
+// it has a WebGPU device. The read-back waits for the GPU: JSPI suspends
+// the module during the wait (skein_gpu_js_read in JSPI_IMPORTS). The bytes are copied, since Goose packs its arrays
+// without alignment.
+let GPU_C = """
+
+    #include <emscripten.h>
+    EM_JS(int32_t, skein_gpu_js_ready, (void), { return Module.skeinGpu ? 1 : 0; });
+    EM_JS(void, skein_gpu_js_reset, (void), { Module.skeinGpu.reset(); });
+    EM_JS(int32_t, skein_gpu_js_buffer, (int64_t bytes), { return Module.skeinGpu.buffer(Number(bytes)); });
+    EM_JS(void, skein_gpu_js_write, (int32_t buf, const void *p, int64_t bytes), {
+        Module.skeinGpu.write(buf, HEAPU8.slice(Number(p), Number(p) + Number(bytes)));
+    });
+    EM_JS(int32_t, skein_gpu_js_bind, (const void *k, int64_t kn, const void *p, int64_t n), {
+        const name = new TextDecoder().decode(HEAPU8.slice(Number(k), Number(k) + Number(kn)));
+        const pairs = new Int32Array(HEAPU8.slice(Number(p), Number(p) + 4 * Number(n)).buffer);
+        return Module.skeinGpu.bind(name, Array.from(pairs));
+    });
+    EM_JS(void, skein_gpu_js_dispatch, (int32_t group, int64_t threads), { Module.skeinGpu.dispatch(group, Number(threads)); });
+    EM_JS(void, skein_gpu_js_submit, (void), { Module.skeinGpu.submit(); });
+    EM_ASYNC_JS(int32_t, skein_gpu_js_read, (int32_t buf, void *p, int64_t bytes), {
+        const out = await Module.skeinGpu.read(buf, Number(bytes));
+        if (!out) return 0;
+        HEAPU8.set(out, Number(p));
+        return 1;
+    });
+
+    int32_t skein_gpu_ready(void) { return skein_gpu_js_ready(); }
+    void skein_gpu_reset(void) { skein_gpu_js_reset(); }
+    int32_t skein_gpu_buffer(int64_t bytes) { return skein_gpu_js_buffer(bytes); }
+    void skein_gpu_write(int32_t buf, sl_f32 data) { skein_gpu_js_write(buf, data.data, 4 * data.len); }
+    void skein_gpu_write_ints(int32_t buf, sl_i32 data) { skein_gpu_js_write(buf, data.data, 4 * data.len); }
+    int32_t skein_gpu_bind(sl_u8 kernel, sl_i32 pairs) { return skein_gpu_js_bind(kernel.data, kernel.len, pairs.data, pairs.len); }
+    void skein_gpu_dispatch(int32_t group, int64_t threads) { skein_gpu_js_dispatch(group, threads); }
+    void skein_gpu_submit(void) { skein_gpu_js_submit(); }
+    int32_t skein_gpu_read(int32_t buf, sl_f32 out) { return skein_gpu_js_read(buf, out.data, 4 * out.len); }
 
     """;
 
@@ -169,8 +229,9 @@ fn base64(out: u8[>..]&, s: u8[:]) {
 
 // The page of `model`, with its controls `params`, the native run
 // `native` of `seconds`, the module `glue` (empty if the model is too
-// large) and the memory of its regions.
-fn page_html(model: u8[:], params: Control[:], native: u8[:], glue: u8[:], memory_mb: i64, seconds: f64) -> u8[>..] {
+// large), the memory of its regions, and the kernels and the WebGPU calls
+// of src/gpu/.
+fn page_html(model: u8[:], params: Control[:], native: u8[:], glue: u8[:], memory_mb: i64, seconds: f64, wgsl: u8[:], gpu_js: u8[:]) -> u8[>..] {
     var out: u8[>..] = [];
     var data: u8[>..] = [];
     data.append("const MODEL = ");
@@ -186,7 +247,11 @@ fn page_html(model: u8[:], params: Control[:], native: u8[:], glue: u8[:], memor
     }
     data.append("];\nconst NATIVE = ");
     json_string(data, native);
-    format(data, ";\nconst MEMORY_MB = ", memory_mb, ";\nconst MAX_MEMORY_MB = ", MAX_MEMORY_MB, ";\nconst NATIVE_SECONDS = ", seconds, ";\n");
+    format(data, ";\nconst MEMORY_MB = ", memory_mb, ";\nconst MAX_MEMORY_MB = ", MAX_MEMORY_MB, ";\nconst NATIVE_SECONDS = ", seconds, ";\nconst WGSL = ");
+    json_string(data, wgsl);
+    data.append(";\nconst GPU_JS = ");
+    json_string(data, gpu_js);
+    data.append(";\n");
     var at = 0;
     while at < PAGE_HTML.len {
         if PAGE_HTML.len - at >= 6 && PAGE_HTML[at..at + 6] == "@DATA@" {
@@ -206,10 +271,13 @@ fn page_html(model: u8[:], params: Control[:], native: u8[:], glue: u8[:], memor
     return out;
 }
 
-// The page. skeinSolve(values) is the solve of the page: it takes the
-// value of each param (in its unit) and gives the run. Each run has a
+// The page. skeinSolve(values, options) is the solve of the page: it takes
+// the value of each param (in its unit) and gives the run. Each run has a
 // worker and a module of its own, so that a new value stops the run
-// before it, and the memory of a run goes back when it ends.
+// before it, and the memory of a run goes back when it ends. With WebGPU
+// the worker gives the module a GPU device (src/gpu/gpu.js): the explicit
+// steps always use it, and the implicit solves use it when the control
+// "Implicit solves on the GPU" is on.
 let PAGE_HTML = """
     <!doctype html>
     <html lang="en">
@@ -233,10 +301,12 @@ let PAGE_HTML = """
     <h1>@MODEL@</h1>
     <p id="note"></p>
     <div id="params"></div>
-    <p><button id="solve">Solve in the page</button> <span id="state"></span></p>
+    <p><button id="solve">Solve in the page</button> <label><input type="checkbox" id="implicit-gpu"> Implicit solves on the GPU</label> <span id="state"></span></p>
+    <p id="gpu-note"></p>
     <p id="error"></p>
     <canvas id="view" width="1200" height="600"></canvas>
     <p id="summary"></p>
+    <table id="devices"></table>
     <h2>Run in the page</h2>
     <pre id="out">No run yet.</pre>
     <h2>Native run (skein run, default values)</h2>
@@ -258,9 +328,10 @@ let PAGE_HTML = """
       return paths;
     }
 
-    // The worker of one run: it runs the module with the words of --set.
+    // The worker of one run: it runs the module with the words of --set,
+    // with a GPU device if e.data.gpu.
     function workerMain() {
-      self.onmessage = (e) => {
+      self.onmessage = async (e) => {
         const out = [], err = [];
         let mod = null, sent = false;
         const send = (code) => {
@@ -272,11 +343,24 @@ let PAGE_HTML = """
           }
           postMessage({ code, out: out.join("\n"), err: err.join("\n"), files });
         };
+        let gpu = null;
+        if (e.data.gpu && self.navigator.gpu) {
+          try {
+            const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+            if (adapter) gpu = skeinGpu(await adapter.requestDevice(), WGSL);
+          } catch (x) { err.push("no GPU device: " + x); }
+        }
         createSkein({
           arguments: e.data.args,
+          skeinGpu: gpu,
           print: (s) => out.push(s),
           printErr: (s) => err.push(s),
-          preRun: [(m) => { mod = m; m.ENV.SKEIN_THREADS = "1"; m.FS.mkdirTree(e.data.results); }],
+          preRun: [(m) => {
+            mod = m;
+            m.ENV.SKEIN_THREADS = "1";
+            if (e.data.implicitGpu) m.ENV.SKEIN_GPU_IMPLICIT = "1";
+            m.FS.mkdirTree(e.data.results);
+          }],
           onExit: (code) => send(code),
           onAbort: (why) => { err.push("abort: " + why); send(-1); },
         }).catch((x) => { err.push(String(x)); send(-1); });
@@ -289,10 +373,12 @@ let PAGE_HTML = """
     // unit of the param (the default for a param that it does not hold).
     // It gives { code, out, err, files, seconds, sets }: code 0 is a run
     // whose checks pass, out its records in TOON, files its VTU files.
-    function skeinSolve(values) {
+    // options.gpu (default: WebGPU is present) gives the run a GPU, and
+    // options.implicitGpu puts the implicit solves on it too.
+    function skeinSolve(values, options = {}) {
       if (running) { running.worker.terminate(); running.resolve({ code: -2, out: "", err: "stopped by a new run", files: {}, sets: running.sets }); }
       const sets = PARAMS.map((p) => p.name + "=" + (values[p.name] ?? p.value) + (p.unit ? " " + p.unit : ""));
-      const source = [MODULE, "\n" + resultPaths.toString() + "\n(" + workerMain.toString() + ")();"];
+      const source = [MODULE, "\nconst WGSL = " + JSON.stringify(WGSL) + ";\n" + GPU_JS + "\n" + resultPaths.toString() + "\n(" + workerMain.toString() + ")();"];
       const worker = new Worker(URL.createObjectURL(new Blob(source, { type: "text/javascript;charset=utf-8" })));
       const start = performance.now();
       return new Promise((resolve) => {
@@ -304,7 +390,7 @@ let PAGE_HTML = """
         };
         worker.onmessage = (e) => end(e.data);
         worker.onerror = (e) => end({ code: -1, out: "", err: String(e.message), files: {} });
-        worker.postMessage({ args: sets, results: RESULTS });
+        worker.postMessage({ args: sets, results: RESULTS, gpu: options.gpu ?? HAS_GPU, implicitGpu: !!options.implicitGpu });
       });
     }
 
@@ -330,6 +416,7 @@ let PAGE_HTML = """
         const o = c > 0 ? v.offs[c - 1] : 0, t = v.types[c];
         const n = Array.from(v.conn.slice(o, o + 4));
         if (t === 5 || t === 22) { tris.push([n[0], n[1], n[2]]); continue; }
+        if (t === 9 || t === 23 || t === 28) { tris.push([n[0], n[1], n[2]], [n[0], n[2], n[3]]); continue; }
         for (const f of [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]) {
           const tri = [n[f[0]], n[f[1]], n[f[2]]], key = tri.slice().sort((a, b) => a - b).join(",");
           count.set(key, count.has(key) ? null : tri);
@@ -380,6 +467,27 @@ let PAGE_HTML = """
       return { nodes: nn, cells: v.types.length, most, scale };
     }
 
+    // The rows of the record `name[n]{...}:` of a run.
+    function recordRows(toon, name) {
+      const lines = toon.split("\n"), rows = [];
+      let i = lines.findIndex((l) => l.startsWith(name + "["));
+      if (i < 0) return rows;
+      for (i++; i < lines.length && lines[i].startsWith("  "); i++) rows.push(lines[i].trim().split(","));
+      return rows;
+    }
+
+    // The table of the device of each step of a run.
+    function showDevices(toon) {
+      const t = document.getElementById("devices");
+      t.textContent = "";
+      const rows = recordRows(toon, "device");
+      if (!rows.length) return;
+      for (const r of [["step", "solver", "device"], ...rows]) {
+        const tr = t.insertRow();
+        for (const c of r) tr.insertCell().textContent = c;
+      }
+    }
+
     function solveRow(toon) {
       const lines = toon.split("\n"), i = lines.findIndex((l) => l.startsWith("solve["));
       return i >= 0 && i + 1 < lines.length ? lines[i + 1].trim().split(",") : null;
@@ -416,8 +524,9 @@ let PAGE_HTML = """
       if (!MODULE.length) return;
       state.textContent = "meshing and solving in the page...";
       error.textContent = "";
-      const r = await skeinSolve(values);
+      const r = await skeinSolve(values, { implicitGpu: document.getElementById("implicit-gpu").checked });
       if (r.code === -2) return;
+      showDevices(r.out);
       document.getElementById("out").textContent = r.sets.join("  ") + "\n\n" + r.out + (r.err ? "\n" + r.err : "");
       state.textContent = "exit " + r.code + " in " + r.seconds.toFixed(1) + " s";
       if (r.code !== 0) error.textContent = failure(r);
@@ -429,6 +538,13 @@ let PAGE_HTML = """
       }
     }
 
+    // WebGPU in the page: the worker asks for its own adapter, and a run
+    // without one takes the CPU path of each step.
+    const HAS_GPU = !!(self.navigator && navigator.gpu);
+    document.getElementById("implicit-gpu").disabled = !HAS_GPU;
+    document.getElementById("gpu-note").textContent = HAS_GPU ?
+      "WebGPU is present: the explicit steps run on the GPU, in f32. The implicit solves run on the CPU, unless you turn on the GPU for them." :
+      "This browser has no WebGPU: all steps run on the CPU.";
     document.getElementById("native").textContent = NATIVE;
     document.getElementById("solve").onclick = run;
     const row = solveRow(NATIVE);
