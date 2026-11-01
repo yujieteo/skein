@@ -3228,7 +3228,7 @@ static void main_g(int64_t gs_sp) {
         if (!((uint8_t)((int64_t)((int64_t)(3)) < (int64_t)(((GS_GL->mesher_shapes_g6.len)))))) {
             t27.data = ((uint8_t *)gs_str0); t27.len = 34;
             t28 = t27;
-            gs_abort_msg(t28.data, t28.len, gs_file1, 52);
+            gs_abort_msg(t28.data, t28.len, gs_file1, 53);
         }
         uint8_t *t154 = (&GS_GL->gs_gstk_mesher_targets_g6)->top;
         int64_t t155 = GS_GL->mesher_targets_g6.len;
