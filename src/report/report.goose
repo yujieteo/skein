@@ -555,9 +555,10 @@ fn token_classes(out: u8[>..]&) {
     out.append("]");
 }
 
-// `skein report`. `args` are the words after `report`. It gives the exit
-// status (command_line.md §10).
-fn run(args: const u8[:][:]) -> i64 {
+// `skein report`. `args` are the words after `report`. F(prog) tells if the
+// page of `skein build --target wasm` can take the program `prog`: if not,
+// the report does not run `build`. It gives the exit status (command_line.md §10).
+fn run<F>(args: const u8[:][:]) -> i64 {
     var path: u8[>..] = [];
     var out_path: u8[>..] = [];
     var study: u8[>..] = [];
@@ -593,7 +594,9 @@ fn run(args: const u8[:][:]) -> i64 {
     };
     check::check_text(path, text);
     if check::error_count() > 0 { return check::finish(false); }
-    let model, first_study = names(syntax::parse_model(path, text));
+    let prog = syntax::parse_model(path, text);
+    let model, first_study = names(prog);
+    let takes = F(prog);
     var classes: u8[>..] = [];
     token_classes(classes);
     if study.len == 0 { study.append(first_study); }
@@ -610,7 +613,13 @@ fn run(args: const u8[:][:]) -> i64 {
     format(json, "\"tokens\":", classes, ",");
     let status = run_model(path, model, study, work, no_run);
     if status > 1 { return status; }
-    let solve, solve_in_page = page_solve(path, model, work);
+    var solve: u8[>..] = [];
+    var solve_in_page = false;
+    if takes {
+        let page, in_page = page_solve(path, model, work);
+        solve.append(page);
+        solve_in_page = in_page;
+    }
     let dir = str(resource_dir(), "../src/report/");
     var html = text_of(str(dir, "page.html"));
     guard html.len > 0 else {
