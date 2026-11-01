@@ -39,6 +39,11 @@ main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap:
 #legend .legend-name { font-weight: 600; font-size: var(--small); }
 #probe { position: absolute; right: 10px; top: 10px; background: rgba(255,255,255,.9); padding: 6px 8px; border-radius: 4px; max-width: 46%; font-size: var(--small); }
 #probe:empty { display: none; }
+/* The approximate answer of the reduced model while a slider moves: a label on the view, and a dashed border. */
+body[data-approx=yes] #stage { border: 2px dashed var(--fail); }
+body[data-approx=yes] #stage::before { content: "APPROXIMATE: reduced model, not a solve"; position: absolute; left: 10px; top: 10px;
+  background: rgba(255,255,255,.9); color: var(--fail); font-weight: 600; padding: 4px 8px; border-radius: 4px; }
+h2.approx { color: var(--fail); }
 .slider { margin: 8px 0 12px; }
 .slider input { width: 100%; }
 .slider .doc { font-size: var(--small); }
