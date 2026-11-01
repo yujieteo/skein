@@ -18,8 +18,14 @@ let RX = 3;
 let RY = 4;
 let RZ = 5;
 
+// A shell cell has 4 nodes (MITC4) or 9 nodes (MITC9). The 4 corners come
+// first, anticlockwise about the top normal: (-1, -1), (1, -1), (1, 1),
+// (-1, 1) in the cell axes (xi, eta). A 9-node cell then has the mid-sides
+// (0, -1), (1, 0), (0, 1), (-1, 0) and the centre (0, 0). A 4-node cell
+// has -1 in n[4..9].
 struct Shell {
-    n: i64[4],      // the nodes, anticlockwise about the top normal
+    n: i64[9],
+    count: i64,     // 4 or 9
     section: i64,
     axis: f64[3],   // the 1 axis of the section, projected on the surface
 }
@@ -62,6 +68,8 @@ fn clear() {
     beam_sections.clear();
     sections.clear();
     grids.clear();
+    grid_lines.clear();
+    grid_cells.clear();
     fixed.clear();
     load.clear();
     disp.clear();
@@ -96,7 +104,18 @@ fn set_director(n: i64, vx: f64, vy: f64, vz: f64) {
 
 fn add_shell(n0: i64, n1: i64, n2: i64, n3: i64, section: i64, ax: f64, ay: f64, az: f64) -> i64 {
     guard min(min(n0, n1), min(n2, n3)) >= 0 && max(max(n0, n1), max(n2, n3)) < node_count() && section >= 0 && section < sections.len else { abort("add_shell: each node < node_count(), and 0 <= section < sections.len"); }
-    shells.push(Shell { n: [n0, n1, n2, n3], section: section, axis: [ax, ay, az] });
+    shells.push(Shell { n: [n0, n1, n2, n3, -1, -1, -1, -1, -1], count: 4, section: section, axis: [ax, ay, az] });
+    return shells.len - 1;
+}
+
+// A 9-node shell cell (MITC9). The nodes n are in the sequence of the
+// comment on Shell: the corners, the mid-sides, then the centre.
+fn add_shell9(n: i64[9], section: i64, ax: f64, ay: f64, az: f64) -> i64 {
+    var lo = n[0];
+    var hi = n[0];
+    for k in n { lo = min(lo, k); hi = max(hi, k); }
+    guard lo >= 0 && hi < node_count() && section >= 0 && section < sections.len else { abort("add_shell9: each node < node_count(), and 0 <= section < sections.len"); }
+    shells.push(Shell { n: n, count: 9, section: section, axis: [ax, ay, az] });
     return shells.len - 1;
 }
 
@@ -134,6 +153,31 @@ fn edge_load(a: i64, b: i64, fx: f64, fy: f64, fz: f64) {
     for c in 3 {
         load[6 * a + c] += half * f[c];
         load[6 * b + c] += half * f[c];
+    }
+}
+
+// A force per length (fx, fy, fz) on the quadratic edge a, m, b, with m
+// the middle node. The force of node k is ∫ N_k f ds along the edge, by 3
+// Gauss points. On a straight edge with m at the middle, the weights are
+// 1/6, 4/6 and 1/6 of the length.
+fn edge_load3(a: i64, m: i64, b: i64, fx: f64, fy: f64, fz: f64) {
+    guard min(min(a, m), b) >= 0 && max(max(a, m), b) < node_count() && load.len == dof_count() else { abort("edge_load3: 0 <= a, m, b < node_count()"); }
+    let pa = node_point(a);
+    let pm = node_point(m);
+    let pb = node_point(b);
+    let f: f64[3] = [fx, fy, fz];
+    let gs = [-0.7745966692414834, 0.0, 0.7745966692414834];
+    let gw = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0];
+    for g in 3 {
+        let s = gs[g];
+        let w: f64[3] = [0.5 * s * (s - 1.0), 1.0 - s * s, 0.5 * s * (s + 1.0)];
+        var t: f64[3] = [0.0; 3];     // dx/ds
+        for k in 3 { t[k] = (s - 0.5) * pa[k] - 2.0 * s * pm[k] + (s + 0.5) * pb[k]; }
+        let ds = gw[g] * norm(t);
+        let nodes = [a, m, b];
+        for l in 3 {
+            for k in 3 { load[6 * nodes[l] + k] += w[l] * ds * f[k]; }
+        }
     }
 }
 

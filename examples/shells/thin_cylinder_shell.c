@@ -3242,7 +3242,7 @@ static void step_pressurize_g(int64_t gs_sp) {
         gs_memcpy(t276, (const uint8_t *)(((uint8_t *)gs_str32)), (size_t)t92);
         t276 += t92;
         GS_GL->solves_g.len += t92;
-        int64_t t93 = gs_fmt_i64(t276, (int64_t)(gs_add_i64((int64_t)(((GS_GL->shells_shells_g6.len))), ((GS_GL->shells_beams_g6.len)), gs_file4, 222)));
+        int64_t t93 = gs_fmt_i64(t276, (int64_t)(((GS_GL->shells_shells_g6.len))));
         t276 += t93;
         GS_GL->solves_g.len += t93;
         int64_t t94 = 1;
@@ -3279,7 +3279,7 @@ static void step_pressurize_g(int64_t gs_sp) {
         gs_memcpy(t276, (const uint8_t *)(((uint8_t *)gs_str22)), (size_t)t104);
         t276 += t104;
         GS_GL->solves_g.len += t104;
-        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file4, 224);
+        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file4, 129);
         if ((uint8_t)(!converged_g)) {
             GS_GL->failed_g = 1;
         }
@@ -3705,7 +3705,7 @@ static void step_pressurize_g(int64_t gs_sp) {
         gs_memcpy(t284, (const uint8_t *)(((uint8_t *)gs_str22)), (size_t)t264);
         t284 += t264;
         GS_GL->results_g.len += t264;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 254);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 159);
         (&GS_GL->gs_gstk_results_g)->top = t284;
     }
     L250:;
@@ -8336,7 +8336,7 @@ static a9_f64 resultants_at_g(double x_g, double y_g, double z_g, double tol_g, 
     t17 = shells_shell_resultants_g6(t7, &t6, gs_sp + 0);
     *gs_r1 = t6;
     return t17;
-    GS_UNREACHABLE(gs_file4, 212);
+    GS_UNREACHABLE(gs_file4, 117);
     t18 = (a9_f64){0};
     return t18;
 }

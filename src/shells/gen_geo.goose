@@ -762,8 +762,10 @@ recursive fn edge_on(v: i64, e: Edge) -> bool {
     if is_condition(c) {
         return holds(c, lat_point(e.a), tol) && holds(c, lat_point(e.b), tol) && holds(c, edge_mid(e), tol);
     }
-    // A node on a fixed line can stay near the cut, not on it.
+    // A node on a fixed line, or a node whose move went back, can stay up
+    // to a cell from the cut. Each edge here is on the boundary of the
+    // kept cells, so a cell of tolerance takes no other edge.
     let g = shape_of(c);
-    let near = 0.3 * edge_length(e);
+    let near = 1.0 * edge_length(e);
     return abs(phi(g, lat_point(e.a))) <= near && abs(phi(g, lat_point(e.b))) <= near && abs(phi(g, edge_mid(e))) <= near;
 }

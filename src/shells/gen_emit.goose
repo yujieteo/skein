@@ -38,6 +38,10 @@ fn i64s(out: u8[>..]&, v: i64[:]) {
 
 // The part of the generated program that is the same for each model.
 let PRELUDE = """
+    extern "libc.so.6" {
+        fn system(command: const u8&) -> i32;
+    }
+
     // The reports and the verification records, in TOON (command_line.md §6).
     var reports: u8[>..] = [];
     var report_count = 0;
@@ -173,7 +177,7 @@ let PRELUDE = """
     // A view holds the solution of a model at its nodes, for the reports
     // and for a submodel: view 0 is this model, view 1 the model of the
     // results value. It is [order, nx, nt, r, nodes, the x lines, the θ
-    // lines], then VIEW_SIZE values for each node: x, y and z, the 6 dofs,
+    // lines, 1 or 0 for each cell (i + nx j) that is kept], then VIEW_SIZE values for each node: x, y and z, the 6 dofs,
     // N, eps_m and the material. The nodes of a grid are its lattice
     // points, a + (order nx + 1) b. A view of beams has order 0 and the
     // nodes of the model.
@@ -191,7 +195,8 @@ let PRELUDE = """
     fn v_nx(v: i64) -> i64 { return view(v)[1] as! i64; }
     fn v_nt(v: i64) -> i64 { return view(v)[2] as! i64; }
     fn v_count(v: i64) -> i64 { return view(v)[4] as! i64; }
-    fn v_base(v: i64) -> i64 { return if v_order(v) == 0 { 5 } else { 7 + v_nx(v) + v_nt(v) }; }
+    fn v_base(v: i64) -> i64 { return if v_order(v) == 0 { 5 } else { 7 + v_nx(v) + v_nt(v) + v_nx(v) * v_nt(v) }; }
+    fn v_kept(v: i64, i: i64, j: i64) -> bool { return view(v)[7 + v_nx(v) + v_nt(v) + i + v_nx(v) * j] > 0.0; }
     fn v_val(v: i64, k: i64, c: i64) -> f64 { return view(v)[v_base(v) + VIEW_SIZE * k + c]; }
     fn v_point(v: i64, k: i64) -> f64[3] { return [v_val(v, k, 0), v_val(v, k, 1), v_val(v, k, 2)]; }
     fn v_w(v: i64, k: i64) -> f64[3] { return [v_val(v, k, 3), v_val(v, k, 4), v_val(v, k, 5)]; }
@@ -220,8 +225,14 @@ let PRELUDE = """
 
     fn to_node(k: i64) -> i64 { return if grid >= 0 { lnode(k) } else { k }; }
 
+    // The (xi, eta) of the nodes of a cell: the corners, the mid-sides and
+    // the centre (shells::Shell).
+    let CELL_XI = [-1.0, 1.0, 1.0, -1.0, 0.0, 1.0, 0.0, -1.0, 0.0];
+    let CELL_ETA = [-1.0, -1.0, 1.0, 1.0, -1.0, 0.0, 1.0, 0.0, 0.0];
+
     // View 0 from the solution: N and eps_m at a node are the mean over
-    // the shell cells at the node.
+    // the shell cells at the node of the values of each cell at the node.
+
     fn make_own() {
         own.clear();
         var count = shells::node_count();
@@ -231,6 +242,7 @@ let PRELUDE = """
             own.append([1.0 * g.order, 1.0 * g.nx, 1.0 * g.nt, g.r, 1.0 * count]);
             for i in g.nx + 1 { own.push(shells::grid_line(grid, 0, i)); }
             for j in g.nt + 1 { own.push(shells::grid_line(grid, 1, j)); }
+            for j in g.nt { for i in g.nx { own.push(if shells::grid_cell(grid, i, j) >= 0 { 1.0 } else { 0.0 }); } }
         } else {
             own.append([0.0, 0.0, 0.0, 0.0, 1.0 * count]);
         }
@@ -247,14 +259,27 @@ let PRELUDE = """
             for c in 19 { own.push(0.0); }
             cells_at.push(0);
         }
+        // The resultants at the 2 x 2 Gauss points of each cell, taken
+        // bilinearly out to its nodes.
+        let g = 1.0 / sqrt(3.0);
+        let gauss = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+        var at: f64[72] = [0.0; 72];
         for c, ci in shells::shells {
-            let tn, te = shells::shell_resultants(ci);
+            for q in 4 {
+                let tn, te = shells::shell_resultants_at(ci, g * gauss[q][0], g * gauss[q][1]);
+                for e in 9 {
+                    at[18 * q + e] = tn[e];
+                    at[18 * q + 9 + e] = te[e];
+                }
+            }
             let m = position(secs[..], c.section);
             for j in c.count {
                 let k = node_view[c.n[j]];
-                for e in 9 {
-                    own[base + VIEW_SIZE * k + 9 + e] += tn[e];
-                    own[base + VIEW_SIZE * k + 18 + e] += te[e];
+                let r = sqrt(3.0) * CELL_XI[j];
+                let s = sqrt(3.0) * CELL_ETA[j];
+                for q in 4 {
+                    let w = 0.25 * (1.0 + r * gauss[q][0]) * (1.0 + s * gauss[q][1]);
+                    for e in 18 { own[base + VIEW_SIZE * k + 9 + e] += w * at[18 * q + e]; }
                 }
                 own[base + VIEW_SIZE * k + 27] = 1.0 * m;
                 cells_at[k]++;
@@ -339,38 +364,137 @@ let PRELUDE = """
         let r = s[3];
         let xl = s[5..6 + nx];
         let tl = s[6 + nx..7 + nx + nt];
-        var d = atan2(p[1], p[2]) - tl[0];
-        d -= 2.0 * PI * floor(d / (2.0 * PI));
         let span = tl[nt] - tl[0];
-        if d > span && 2.0 * PI - d < d - span { d -= 2.0 * PI; }
+        let d = arc_of(p, tl[0], span);
         let off_x = max(max(xl[0] - p[0], p[0] - xl[nx]), 0.0);
         let off_t = r * max(max(-d, d - span), 0.0);
         if off_x > tol || off_t > tol || abs(sqrt(p[1] * p[1] + p[2] * p[2]) - r) > tol {
             fault(label, "is not on the shell");
             return nodes, w, 0;
         }
-        let t = tl[0] + d;
-        let i = line_index(xl, p[0]);
-        let j = line_index(tl, t);
-        let fx = clamp((p[0] - xl[i]) / (xl[i + 1] - xl[i]), 0.0, 1.0);
-        let ft = clamp((t - tl[j]) / (tl[j + 1] - tl[j]), 0.0, 1.0);
-        let la = o * nx + 1;
-        if o == 1 {
-            nodes = [i + la * j, i + 1 + la * j, i + 1 + la * (j + 1), i + la * (j + 1), 0, 0, 0, 0, 0];
-            w = [(1.0 - fx) * (1.0 - ft), fx * (1.0 - ft), fx * ft, (1.0 - fx) * ft, 0.0, 0.0, 0.0, 0.0, 0.0];
-            return nodes, w, 4;
+        // The nodes move onto the cuts, so the cell of the lines is only a
+        // start: the kept cell near it whose map holds p, or comes nearest.
+        let i0 = line_index(xl, p[0]);
+        let j0 = line_index(tl, tl[0] + d);
+        let best_i, best_j, bxi, beta, best = nearest_cell(v, i0, j0, p[0], r * d, tl[0], span);
+        if best_i < 0 || best > 0.5 * (xl[min(i0 + 1, nx)] - xl[i0] + r * (tl[min(j0 + 1, nt)] - tl[j0])) {
+            fault(label, "is not on the mesh of the shell");
+            return nodes, w, 0;
         }
-        let lx = quad_weights(2.0 * fx - 1.0);
-        let lt = quad_weights(2.0 * ft - 1.0);
+        let la = o * nx + 1;
+        let lx, dx = shape1(o, bxi);
+        let lt, dt = shape1(o, beta);
         var c = 0;
-        for b in 3 {
-            for a in 3 {
-                nodes[c] = 2 * i + a + la * (2 * j + b);
+        for b in o + 1 {
+            for a in o + 1 {
+                nodes[c] = o * best_i + a + la * (o * best_j + b);
                 w[c] = lx[a] * lt[b];
                 c++;
             }
         }
-        return nodes, w, 9;
+        return nodes, w, c;
+    }
+
+    // The kept cell within 2 cells of cell (i0, j0) of view v that holds
+    // the point (x, s), or comes nearest to it: the cell, its (xi, eta) and
+    // the distance. The cell is -1 if no cell is kept there.
+    fn nearest_cell(v: i64, i0: i64, j0: i64, x: f64, s: f64, t0: f64, span: f64) -> i64, i64, f64, f64, f64 {
+        var best_i = -1;
+        var best_j = -1;
+        var best = 1.0e300;
+        var bxi = 0.0;
+        var beta = 0.0;
+        for dj in 5 {
+            for di in 5 {
+                let i = i0 + di - 2;
+                let j = j0 + dj - 2;
+                if i < 0 || j < 0 || i >= v_nx(v) || j >= v_nt(v) || !v_kept(v, i, j) { continue; }
+                let xi, eta, gap = cell_coords(v, i, j, x, s, t0, span);
+                if gap < best {
+                    best = gap;
+                    best_i = i;
+                    best_j = j;
+                    bxi = xi;
+                    beta = eta;
+                }
+            }
+        }
+        return best_i, best_j, bxi, beta, best;
+    }
+
+    // The θ of p from t0, in [0, 2π), or a little below 0 near t0.
+    fn arc_of(p: f64[3], t0: f64, span: f64) -> f64 {
+        var d = atan2(p[1], p[2]) - t0;
+        d -= 2.0 * PI * floor(d / (2.0 * PI));
+        if d > span && 2.0 * PI - d < d - span { d -= 2.0 * PI; }
+        return d;
+    }
+
+    // The shape functions of order o (1 or 2) on [-1, 1] at u, and their
+    // derivatives.
+    fn shape1(o: i64, u: f64) -> f64[3], f64[3] {
+        if o == 1 { return [0.5 * (1.0 - u), 0.5 * (1.0 + u), 0.0], [-0.5, 0.5, 0.0]; }
+        return quad_weights(u), [u - 0.5, -2.0 * u, u + 0.5];
+    }
+
+    // The (xi, eta) of the point (x, s) in cell (i, j) of view v, from the
+    // nodes of the cell, and the distance in x and s from the cell (0 in
+    // it). s is r times the θ from t0.
+    fn cell_coords(v: i64, i: i64, j: i64, x: f64, s: f64, t0: f64, span: f64) -> f64, f64, f64 {
+        let o = v_order(v);
+        let la = o * v_nx(v) + 1;
+        let r = view(v)[3];
+        var px: f64[9] = [0.0; 9];
+        var ps: f64[9] = [0.0; 9];
+        var c = 0;
+        for b in o + 1 {
+            for a in o + 1 {
+                let q = v_point(v, o * i + a + la * (o * j + b));
+                px[c] = q[0];
+                ps[c] = r * arc_of(q, t0, span);
+                c++;
+            }
+        }
+        var xi = 0.0;
+        var eta = 0.0;
+        for it in 30 {
+            let fx, fs, j = cell_map(o, px, ps, xi, eta);
+            let det = j[0] * j[3] - j[1] * j[2];
+            if abs(det) <= 1.0e-300 { break; }
+            let sx = (j[3] * (fx - x) - j[1] * (fs - s)) / det;
+            let se = (j[0] * (fs - s) - j[2] * (fx - x)) / det;
+            xi = clamp(xi - sx, -3.0, 3.0);
+            eta = clamp(eta - se, -3.0, 3.0);
+            if abs(sx) + abs(se) <= 1.0e-12 { break; }
+        }
+        // The distance from the nearest point of the cell.
+        let cx = clamp(xi, -1.0, 1.0);
+        let ce = clamp(eta, -1.0, 1.0);
+        let qx, qs, j = cell_map(o, px, ps, cx, ce);
+        return cx, ce, sqrt((qx - x) * (qx - x) + (qs - s) * (qs - s));
+    }
+
+    // The (x, s) of a cell of order o with nodes (px, ps) at (xi, eta), and
+    // its Jacobian [dx/dxi, dx/deta, ds/dxi, ds/deta].
+    fn cell_map(o: i64, px: f64[9], ps: f64[9], xi: f64, eta: f64) -> f64, f64, f64[4] {
+        let lx, dx = shape1(o, xi);
+        let lt, dt = shape1(o, eta);
+        var x = 0.0;
+        var s = 0.0;
+        var j: f64[4] = [0.0; 4];
+        var c = 0;
+        for b in o + 1 {
+            for a in o + 1 {
+                x += lx[a] * lt[b] * px[c];
+                s += lx[a] * lt[b] * ps[c];
+                j[0] += dx[a] * lt[b] * px[c];
+                j[1] += lx[a] * dt[b] * px[c];
+                j[2] += dx[a] * lt[b] * ps[c];
+                j[3] += lx[a] * dt[b] * ps[c];
+                c++;
+            }
+        }
+        return x, s, j;
     }
 
     // Field f at point p: the shape functions of its view.
@@ -574,11 +698,13 @@ let PRELUDE = """
     // K u = f with the prescribed values: u = u_p + d, with K d = f - K u_p
     // on the free dofs and d = 0 on the fixed dofs.
     fn solve_prescribed() -> bool {
-        let f = shells::load.clone();
+        var f: f64[>..] = [];
+        f.append(shells::load);
         for &x in shells::disp { x = 0.0; }
         for d, i in pres_dofs { shells::disp[d] = pres_vals[i]; }
         let r = shells::out_of_balance();
-        let up = shells::disp.clone();
+        var up: f64[>..] = [];
+        up.append(shells::disp);
         for d in shells::dof_count() { shells::load[d] = if shells::fixed[d] != 0 { 0.0 } else { -r[d] }; }
         let converged = shells::solve();
         for d in shells::dof_count() {
