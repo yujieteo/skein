@@ -21,6 +21,9 @@ var coords: f64[>..] = [];      // x, y and z of each node (z = 0 in 2D)
 var conn: i64[>..] = [];        // the nodes of each cell
 var bbox_lo: f64[3] = [0.0, 0.0, 0.0];
 var bbox_hi: f64[3] = [0.0, 0.0, 0.0];
+var cell_body: i64[>..] = [];   // the body of each cell of build_bodies (csg.goose), else empty
+var node_body: i64[>..] = [];   // the body of each node, likewise
+var body_shapes: i64[>..] = []; // the shape of each body
 
 fn node_count() -> i64 { return coords.len / 3; }
 fn cell_count() -> i64 { return if per_cell > 0 { conn.len / per_cell } else { 0 }; }
@@ -69,6 +72,9 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     coords.clear();
     conn.clear();
     on_lattice = false;
+    cell_body.clear();
+    node_body.clear();
+    body_shapes.clear();
     map_lo = lo;
     map_hi = hi;
     bbox_lo = lo;
@@ -310,7 +316,8 @@ fn save_mesh(dir: const u8[:]) -> bool {
     bbox.append(bbox_lo);
     bbox.append(bbox_hi);
     return save_array(dir, "sizes", sizes) && save_array(dir, "bbox", bbox) && save_array(dir, "coords", coords) &&
-           save_array(dir, "conn", conn);
+           save_array(dir, "conn", conn) && save_array(dir, "cell_body", cell_body) && save_array(dir, "node_body", node_body) &&
+           save_array(dir, "body_shapes", body_shapes);
 }
 
 // Reads the mesh that save_mesh wrote in the directory `dir`.
@@ -318,7 +325,8 @@ fn load_mesh(dir: const u8[:]) -> bool {
     var sizes: i64[>..] = [];
     var bbox: f64[>..] = [];
     guard load_array(dir, "sizes", sizes) && sizes.len == 4 && load_array(dir, "bbox", bbox) && bbox.len == 6 &&
-          load_array(dir, "coords", coords) && load_array(dir, "conn", conn) else { return false; };
+          load_array(dir, "coords", coords) && load_array(dir, "conn", conn) && load_array(dir, "cell_body", cell_body) &&
+          load_array(dir, "node_body", node_body) && load_array(dir, "body_shapes", body_shapes) else { return false; };
     on_lattice = false;
     dim = sizes[0];
     order = sizes[1];

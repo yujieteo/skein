@@ -1123,6 +1123,51 @@ fn g_x(p: f64[3]) -> f64 { return 0.3 * p[0] + 0.1 * p[1]; }
 fn g_y(p: f64[3]) -> f64 { return -0.1 * p[1] + 0.05 * p[2]; }
 fn g_z(p: f64[3]) -> f64 { return 0.02 * p[0] - 0.08 * p[2]; }
 
+// --- the contact (contact.goose) ---------------------------------------------------
+
+// One point of a contact with the normal z: the traction of the return map
+// in stick and in slip, and the stick tangent against central differences.
+fn test_contact_points() {
+    elements::clear_contact();
+    elements::ct_n.append([0.0, 0.0, 1.0]);
+    elements::ct_g0.push(0.001);
+    elements::ct_law.append([1000.0, 500.0, 0.3]);
+    for k in 3 {
+        elements::ct_t.push(0.0);
+        elements::ct_r.push(0.0);
+        elements::ct_trial_t.push(0.0);
+        elements::ct_trial_r.push(0.0);
+    }
+    elements::ct_p.push(0.0);
+    var d: f64[9] = [0.0; 9];
+    // stick: p = kn (0.003 - 0.001) = 2 and t = kt r_t = 0.05 < mu p
+    let r: f64[3] = [1.0e-4, 0.0, -0.003];
+    let f = elements::point_traction(0, r, d);
+    expect_near("contact stick t", f[0], 0.05, 1.0e-12);
+    expect_near("contact stick p", f[2], -2.0, 1.0e-12);
+    var worst = 0.0;
+    var dd: f64[9] = [0.0; 9];
+    for b in 3 {
+        var up = r;
+        var down = r;
+        up[b] += 1.0e-7;
+        down[b] -= 1.0e-7;
+        let fu = elements::point_traction(0, up, dd);
+        let fd = elements::point_traction(0, down, dd);
+        for a in 3 { worst = max(worst, abs((fu[a] - fd[a]) / 2.0e-7 - d[3 * a + b]) / 1000.0); }
+    }
+    print("contact: stick tangent error ", worst);
+    if !(worst < 1.0e-9) { failures++; print("FAIL contact stick tangent: ", worst); }
+    // slip: t = mu p along the trial traction kt r_t
+    let s = elements::point_traction(0, [0.01, 0.005, -0.003], d);
+    expect_near("contact slip |t|", sqrt(s[0] * s[0] + s[1] * s[1]), 0.6, 1.0e-12);
+    expect_near("contact slip direction", s[1] / s[0], 0.5, 1.0e-12);
+    // open: no traction
+    let o = elements::point_traction(0, [0.01, 0.0, 0.0], d);
+    if !(o[0] == 0.0 && o[2] == 0.0 && elements::ct_p[0] == 0.0) { failures++; print("FAIL contact open: ", o[0], " ", o[2]); }
+    elements::clear_contact();
+}
+
 fn test_solid_energy() {
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2, 2, 2);
     elements::hyperelastic(1.0);
@@ -1174,6 +1219,7 @@ fn main() {
     test_solid_points();
     test_solid_energy();
     test_solid_plastic();
+    test_contact_points();
     test_patches();
     test_kirsch();
     test_heated_bar();

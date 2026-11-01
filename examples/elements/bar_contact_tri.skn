@@ -1,0 +1,59 @@
+// Two equal steel bars A and B end to end, in contact at x = L, in plane
+// stress on P2 triangles, with the explicit step central_difference. The far
+// end of B is fixed, and a sudden pressure S acts on the free end of A.
+// With nu = 0 the bars are one dimensional (Graff 1975, section 2.1): a
+// compression wave of the speed c = sqrt(E/rho) goes through the contact
+// into B, and behind its front each point moves with the speed S/(rho*c).
+// The front passes the middle of B at 1.5*L/c, so at 2*L/c the middle of B
+// has moved by 0.5*S*L/E. With no contact, the middle of B does not move.
+
+model bar_contact_tri: 2d, mm_N_MPa_s
+
+param L: Length = 100 mm in 50 mm..200 mm
+let h: Length = 10 mm
+let S: Pressure = 100 MPa
+let E: Pressure = 200 GPa
+let rho: Density = 7850 kg/m^3
+let c: Velocity = (E/rho)^0.5
+
+scales L, S, L/c
+
+let bar_a: Surface = rect((0, 0) mm, (L, h))
+let bar_b: Surface = rect((L, 0 mm), (2*L, h))
+let bars: Surface = bar_a | bar_b
+let free: Curve = boundary(bars, x == 0 mm)
+let root: Curve = boundary(bars, x == 2*L)
+let face_b: Curve = boundary(bar_b, x == L)
+let face_a: Curve = boundary(bar_a, x == L)
+
+material steel {
+    E: Pressure = E
+    nu: Real = 0
+    rho: Density = rho
+}
+
+mesh m on bars {
+    size: 2.5 mm
+    cell: tri
+}
+
+physics solid on bars: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_stress(1 mm)
+}
+
+// The penalty is 25 times the stiffness E/size of a cell, so the contact
+// delays the wave by rho*c/(2*kn) = 0.05 % of L/c.
+contact butt: face_b, face_a {
+    friction: 0
+    enforce: penalty
+    stiffness: 2e6 MPa/mm
+}
+
+step pulse: transient(end: 2*L/c, dt: stable, scheme: central_difference) {
+    bc root: u = 0
+    bc free: sigma*n = (S, 0)
+    output u
+    report u.x at (1.5*L, h/2)
+    expect mid_b: u.x at (1.5*L, h/2) == 0.5*S*L/E within 2%
+}

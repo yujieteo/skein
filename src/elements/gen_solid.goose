@@ -28,6 +28,7 @@ namespace elements_gen;
 import syntax from "../syntax";
 import codegen.codegen;
 import .gen;
+import .gen_contact;
 
 let SOLID_J2 = 1;           // as in src/elements/solid.goose
 let SOLID_J2_FINITE = 2;
@@ -274,7 +275,7 @@ fn solid_property(word: u8[:]) -> bool {
 // static(ramp: n) of the nonlinear solid: s.count gets n.
 fn solid_ramp(proc: i64, s: Step&) -> bool {
     let a = first(proc);
-    guard solid_law > 0 && a >= 0 && next(a) < 0 && syntax::nodes[a].aux >= 0 && syntax::text(syntax::nodes[a].aux) == "ramp" else { return false; }
+    guard (solid_law > 0 || has_ties()) && a >= 0 && next(a) < 0 && syntax::nodes[a].aux >= 0 && syntax::text(syntax::nodes[a].aux) == "ramp" else { return false; }
     s.count = scalar_value(first(a)) as! i64;
     if s.count < 1 { unsupported(tok(a), "the ramp needs at least 1 increment", "write static(ramp: 10)"); }
     return true;

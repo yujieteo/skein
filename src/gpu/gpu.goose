@@ -9,7 +9,8 @@
 //
 //     central_difference   elements::central_difference: an explicit step,
 //                          on the GPU whenever the page has WebGPU
-//     explicit_solid       elements::explicit_solid: the same
+//     explicit_solid       elements::explicit_solid: the same; both add
+//                          the contact (ct_pair and ct_kick)
 //     grid_transient       grid::solve_transient (ssprk3 of fv and dg): the
 //                          same
 //     solve                elements::solve: an implicit step, on the GPU
@@ -19,7 +20,9 @@
 //                          radiation always use the CPU
 //     grid_static, modal,  grid::solve_static, elements::modal,
 //     buckling,            elements::buckling and meshless::solve_static:
-//     meshless_static      on the CPU
+//     meshless_static      on the CPU; also elements::solve_contact, a
+//                          static step with contact, which the program
+//                          calls with no change
 //
 // Each falls back to the CPU solve when the page has no WebGPU. This
 // package sets up the GPU: it converts the arrays of the CPU solve to f32
@@ -234,7 +237,7 @@ fn central_difference(end: f64, dt: f64) -> bool {
     let n = elements::sol.len;
     // the acceleration at the start, in f64 on the CPU
     solvers::rows_start(elements::row_start, elements::col, elements::val);
-    elements::multiply(elements::sol, elements::accel);
+    elements::cd_force(elements::sol, elements::accel);
     solvers::rows_stop();
     elements::cd_accel();
     skein_gpu_reset();
@@ -257,17 +260,19 @@ fn central_difference(end: f64, dt: f64) -> bool {
     let a = upload(elements::accel);
     let drift = bind("cd_drift", [B_P, p, B_U, u, B_V, v, B_ACC, a]);
     let kick = bind("cd_kick", [B_P, p, B_ROWS, rows, B_COLS, cols, B_VALS, vals, B_U, u, B_V, v, B_ACC, a, B_F, f]);
+    let ct = contact_groups(u, v, a, if elements::contact_points() > 0 { upload(elements::minv) } else { -1 });
     var done = 0;
     while done < elements::cd_steps {
         let k = min(BATCH, elements::cd_steps - done);
         for i in k {
             dispatch(drift, n);
             dispatch(kick, n);
+            contact_kick(ct, n);
         }
         skein_gpu_submit();
         done += k;
     }
-    let ok = read(u, elements::sol) && read(v, elements::velocity);
+    let ok = read(u, elements::sol) && read(v, elements::velocity) && contact_state(ct);
     skein_gpu_reset();
     elements::last_iterations = elements::cd_steps;
     elements::last_seconds = clock() - start;
@@ -383,6 +388,7 @@ fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool {
     let drift = bind("cd_drift", [B_P, p, B_U, u, B_V, v, B_ACC, a]);
     let point = bind("sd_point", [B_P, p, B_GEO, geo, B_CONN, conn, B_U, u, B_PST, pst, B_PF, pf]);
     let kick = bind("sd_kick", [B_P, p, B_ROWS, rows, B_COLS, cols, B_V, v, B_ACC, a, B_W, w, B_F, f, B_PF, pf]);
+    let ct = contact_groups(u, v, a, w);
     var done = 0;
     while done < elements::cd_steps {
         let k = min(BATCH, elements::cd_steps - done);
@@ -390,13 +396,14 @@ fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool {
             dispatch(drift, n);
             dispatch(point, np);
             dispatch(kick, n);
+            contact_kick(ct, n);
         }
         skein_gpu_submit();
         done += k;
     }
     var state: f64[>..] = [];
     for i in 7 * np { state.push(0.0); }
-    let ok = read(u, elements::sol) && read(v, elements::velocity) && read(pst, state);
+    let ok = read(u, elements::sol) && read(v, elements::velocity) && read(pst, state) && contact_state(ct);
     skein_gpu_reset();
     for q in np {
         for k in 6 { elements::pt_state[6 * q + k] = state[7 * q + k]; }
@@ -407,6 +414,103 @@ fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool {
     elements::last_iterations = elements::cd_steps;
     elements::last_seconds = clock() - start;
     return ok && finite(elements::sol);
+}
+
+// ---- the contact of an explicit step ----
+
+// The bind groups of ct_pair and ct_kick, the buffer of the state of the
+// points (t and r of src/elements/contact.goose), and the points.
+struct ContactGroups {
+    pair: i32,
+    kick: i32,
+    state: i32,
+    points: i64,
+}
+
+// The contact on the state buffers u, v and acc, with w = M⁻¹. No points
+// with no contact.
+fn contact_groups(u: i32, v: i32, a: i32, w: i32) -> ContactGroups {
+    let np = elements::contact_points();
+    guard np > 0 else { return ContactGroups { pair: -1, kick: -1, state: -1, points: 0 }; }
+    let nc = elements::ncomp;
+    let pp = upload([np * 1.0, nc * 1.0]);
+    let pk = upload([elements::sol.len * 1.0, elements::cd_dt, nc * 1.0]);
+    var nodes: i64[>..] = [];
+    for k in elements::ct_node { nodes.push(max(k, 0)); }
+    let conn = upload_ints(nodes);
+    let ws = upload(elements::ct_w);
+    let geo = skein_gpu_buffer(4 * 8 * np);
+    put_start(geo);
+    for i in np {
+        for t in 3 { put(elements::ct_n[3 * i + t]); }
+        put(elements::ct_area[i]);
+        put(elements::ct_g0[i]);
+        for t in 3 { put(elements::ct_law[3 * i + t]); }
+    }
+    flush();
+    let state = skein_gpu_buffer(4 * 6 * np);
+    put_start(state);
+    for i in np {
+        for t in 3 { put(elements::ct_t[3 * i + t]); }
+        for t in 3 { put(elements::ct_r[3 * i + t]); }
+    }
+    flush();
+    let pf = zeros(3 * elements::CT_SLOTS * np);
+    var starts: i64[>..] = [];
+    var pairs: i64[>..] = [];
+    node_slots(starts, pairs);
+    let rows = upload_ints(starts);
+    let cols = upload_ints(pairs);
+    let pair = bind("ct_pair", [B_P, pp, B_CONN, conn, B_W, ws, B_GEO, geo, B_U, u, B_PST, state, B_PF, pf]);
+    let kick = bind("ct_kick", [B_P, pk, B_ROWS, rows, B_COLS, cols, B_V, v, B_ACC, a, B_W, w, B_PF, pf]);
+    return ContactGroups { pair: pair, kick: kick, state: state, points: np };
+}
+
+// The (point, slot) pairs of each node, for ct_kick: the pairs of node n
+// are pairs[starts[n]..starts[n + 1]], each as point * CT_SLOTS + slot.
+fn node_slots(starts: i64[>..]&, pairs: i64[>..]&) {
+    let nn = elements::node_count();
+    let s = elements::CT_SLOTS;
+    var fill: i64[>..] = [];
+    starts.clear();
+    for i in nn + 1 { starts.push(0); }
+    for k in elements::ct_node { if k >= 0 { starts[k + 1]++; } }
+    for i in nn {
+        starts[i + 1] += starts[i];
+        fill.push(starts[i]);
+    }
+    pairs.clear();
+    for i in starts[nn] { pairs.push(0); }
+    for k, e in elements::ct_node {
+        if k < 0 { continue; }
+        pairs[fill[k]] = e;
+        fill[k]++;
+    }
+}
+
+// The dispatches of the contact after the kick of a step.
+fn contact_kick(ct: ContactGroups, n: i64) {
+    guard ct.points > 0 else { return; }
+    dispatch(ct.pair, ct.points);
+    dispatch(ct.kick, n);
+}
+
+// Reads the state of the points back into the contact. False if the GPU
+// failed.
+fn contact_state(ct: ContactGroups) -> bool {
+    guard ct.points > 0 else { return true; }
+    var state: f64[>..] = [];
+    for i in 6 * ct.points { state.push(0.0); }
+    guard read(ct.state, state) else { return false; };
+    for i in ct.points {
+        for t in 3 {
+            elements::ct_t[3 * i + t] = state[6 * i + t];
+            elements::ct_r[3 * i + t] = state[6 * i + 3 + t];
+            elements::ct_trial_t[3 * i + t] = state[6 * i + t];
+            elements::ct_trial_r[3 * i + t] = state[6 * i + 3 + t];
+        }
+    }
+    return true;
 }
 
 // ---- ssprk3 of fv and dg ----

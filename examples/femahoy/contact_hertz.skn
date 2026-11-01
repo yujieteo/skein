@@ -23,6 +23,7 @@ let base: Surface = boundary(parts, z == 0 mm)
 let top: Surface = boundary(parts, z == zc)
 let block_top: Surface = boundary(block, z == 10 mm)
 let cap: Surface = boundary(ball, globe)
+let c: Point = point((0 mm, 0 mm, zc))
 let zone: Solid = sphere((0, 0, 10) mm, 1 mm)
 
 material steel {
@@ -56,10 +57,11 @@ step approach: static {
     bc top: u.z = -0.075 mm
 }
 
-// The quarter carries P/4 as the pressure P/(pi*R^2) on the quarter top face.
+// The quarter carries P/4. ccx puts it on the top face as the pressure P/(pi*R^2). The
+// mesher cuts off the sharp rim of the top face, so here a rigid top takes P/4 at c.
 step load: static {
-    release top
-    bc top: sigma*n = (0, 0, -P/(pi*R^2))
+    bc top: u = rigid(c)
+    bc c: sigma*n = (0, 0, -P/4)
     output u, sigma
 }
 

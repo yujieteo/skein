@@ -31,6 +31,7 @@ import .stages;
 import .material;
 import .explicit;
 import .direct;
+import .contact;
 import solvers from "../solvers";
 
 let SOLID_NONE = 0;
@@ -55,6 +56,7 @@ var nl_load: f64[>..] = [];     // the loads of the step
 var nl_last_load: f64[>..] = [];    // the loads of the end of the step before
 var nl_base: f64[>..] = [];     // u at the start of the increment
 var nl_step: f64[>..] = [];     // the change of u in the increment before
+var nl_dx: f64[>..] = [];       // the last Newton step of the free dofs
 var newton_steps = 0;           // the Newton iterations of the last static step
 var newton_direct = false;      // the step solves with the skyline
 var pt_s: f64[6] = [0.0; 6];    // the stress and the tangent of the last point
@@ -81,22 +83,20 @@ fn set_solid(law: i64, yield0: f64, hard: f64) {
         trial_alpha.push(0.0);
         pt_stress.append([0.0; 6]);
     }
-    nl_u.clear();
-    nl_start.clear();
-    nl_target.clear();
-    nl_load.clear();
-    nl_last_load.clear();
-    nl_base.clear();
-    nl_step.clear();
-    for d in dof_total() {
-        nl_base.push(0.0);
-        nl_step.push(0.0);
-        nl_u.push(0.0);
-        nl_start.push(0.0);
-        nl_target.push(0.0);
-        nl_load.push(0.0);
-        nl_last_load.push(0.0);
-    }
+    solid_arrays();
+}
+
+// The arrays of the dofs of the Newton iterations, at 0.
+fn solid_arrays() {
+    let n = dof_total();
+    solvers::zeros(nl_u, n);
+    solvers::zeros(nl_start, n);
+    solvers::zeros(nl_target, n);
+    solvers::zeros(nl_load, n);
+    solvers::zeros(nl_last_load, n);
+    solvers::zeros(nl_base, n);
+    solvers::zeros(nl_step, n);
+    solvers::zeros(nl_dx, n);
 }
 
 // The deformation gradient F = I + Σ u_l ⊗ ∇N_l of cell c, from the
@@ -213,6 +213,10 @@ fn add_point_tangent(f: f64[9], dv: f64, finite: bool) {
 // the displacement u.
 fn solid_cell<ENERGY>(c: i64, u: f64[:], tangent: bool) {
     let m = per_cell * ncomp;
+    if solid_law == SOLID_NONE {
+        linear_cell(c, u);
+        return;
+    }
     for k in m * m { ke[k] = 0.0; }
     for k in m { fe[k] = 0.0; }
     let finite = solid_law != SOLID_J2;
@@ -227,12 +231,29 @@ fn solid_cell<ENERGY>(c: i64, u: f64[:], tangent: bool) {
     }
 }
 
-// The tangent in val and the internal force in `internal`, at nl_u.
+// The internal force K_e u_e - f_e of the linear law of cell c into fe,
+// with its K_e in ke.
+fn linear_cell(c: i64, u: f64[:]) {
+    let m = per_cell * ncomp;
+    cell_terms(c);
+    for r in m {
+        var s = -fe[r];
+        for l in per_cell {
+            let n = cell_node(c, l);
+            for i in ncomp { s += ke[m * r + ncomp * l + i] * u[ncomp * n + i]; }
+        }
+        fe[r] = s;
+    }
+}
+
+// The tangent in val and the internal force in `internal`, at nl_u, with
+// the terms of the contact and the rigid face (contact.goose).
 fn solid_assemble<ENERGY>() {
     let m = per_cell * ncomp;
     for &v in val { v = 0.0; }
     for &v in assembled_source { v = 0.0; }
     for c in cell_count() {
+        if !is_live(c) { continue; }
         solid_cell(c, nl_u, true, ENERGY);
         add_cell(c, ke[..m * m], fe[..m]);
     }
@@ -240,6 +261,8 @@ fn solid_assemble<ENERGY>() {
         internal[d] = assembled_source[d];
         assembled_source[d] = 0.0;
     }
+    rigid_terms(nl_u, internal, true);
+    contact_terms(nl_u, internal, true);
 }
 
 // The energy of a law with no energy.
@@ -249,7 +272,8 @@ fn no_energy(c: Hd[3]) -> Hd { return hd(0.0); }
 // energy ENERGY of the program for SOLID_ENERGY. False if an increment
 // does not converge.
 fn solve_solid<ENERGY>(ramp: i64) -> bool {
-    guard (solid_law == SOLID_J2 || solid_law == SOLID_ENERGY) && ramp >= 1 && dofs_sized() && nl_u.len == sol.len else { abort("solve_solid: set_solid of J2 at small strain or of an energy, ramp >= 1 and the arrays of the dofs"); }
+    if solid_law == SOLID_NONE && nl_u.len != sol.len { solid_arrays(); }
+    guard (solid_law == SOLID_J2 || solid_law == SOLID_ENERGY || solid_law == SOLID_NONE && physics == ELASTIC) && ramp >= 1 && dofs_sized() && nl_u.len == sol.len else { abort("solve_solid: J2 at small strain, an energy or the linear law, ramp >= 1 and the arrays of the dofs"); }
     let start = clock();
     build_pattern();
     newton_direct = direct_setup();
@@ -297,6 +321,7 @@ fn solve_solid<ENERGY>(ramp: i64) -> bool {
 fn commit_points() {
     for k in pt_state.len { pt_state[k] = trial_state[k]; }
     for q in pt_alpha.len { pt_alpha[q] = trial_alpha[q]; }
+    commit_contact();
 }
 
 // Newton's method for the increment to the fraction lam of the step. its
@@ -306,6 +331,8 @@ fn commit_points() {
 // can turn cells inside out.
 fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
     let n = sol.len;
+    var last = 1.0e300;
+    var back = 0;
     for it in NEWTON_MAX {
         solid_assemble(ENERGY);
         var r2 = 0.0;
@@ -321,13 +348,31 @@ fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
             if fixed[d] == 0 { r2 += load[d] * load[d]; }
         }
         if it > 0 && moved == 0.0 && sqrt(r2) <= NEWTON_TOL * sqrt(scale) { return true; }
+        // With contact, a step that does not lower the residual goes back
+        // by half, up to 4 times. Reason: with the symmetric tangent of
+        // slip, Newton's method cycled in the press step of
+        // contact-cattaneo. hyperelastic-tube diverges with it.
+        let rel = sqrt(r2 / scale);
+        if contact_points() > 0 && it > 0 && moved == 0.0 && rel >= last && back < 4 {
+            back++;
+            for d in n {
+                nl_dx[d] *= 0.5;
+                nl_u[d] -= nl_dx[d];
+            }
+            continue;
+        }
+        back = 0;
+        last = rel;
         cg_tolerance = if it == 0 && !predicted { CG_TOLERANCE } else { 1.0e-2 };
         let solved = if newton_direct { direct_solve(start) } else { cg_solve(start, 0, false) };
         cg_tolerance = CG_TOLERANCE;
         guard solved else { return false; };
         its += last_iterations;
         newton_steps++;
-        for d in n { nl_u[d] += sol[d]; }
+        for d in n {
+            nl_dx[d] = if fixed.len > 0 && fixed[d] != 0 { 0.0 } else { sol[d] };
+            nl_u[d] += nl_dx[d];
+        }
         if fixed.len > 0 {
             for d in n { if fixed[d] != 0 { nl_u[d] = nl_start[d] + lam * (nl_target[d] - nl_start[d]); } }
         }
@@ -364,6 +409,8 @@ fn explicit_force(u: f64[:], out: f64[:]) {
             for i in ncomp { out[ncomp * cell_node(c, l) + i] += fe[ncomp * l + i]; }
         }
     }
+    contact_terms(u, out, false);
+    commit_contact();
 }
 
 // The start of an explicit step of J2 at finite strain to the time `end`

@@ -577,6 +577,13 @@ contact grip: jaw_face, part_face {
     friction: 0.2
     enforce: mortar
 }
+
+contact rough: block_face, pad_face {
+    friction: 0.3
+    enforce: penalty
+    stiffness: 1e7 MPa/mm
+    stick_stiffness: 1e7 MPa/mm
+}
 ```
 
 Spec: [§12.4](skein_spec.md#124-contact).

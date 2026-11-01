@@ -1475,6 +1475,12 @@ master, the second the slave. `enforce` is `penalty` (with `stiffness`),
 `nitsche` or `mortar`. Contact makes the system nonlinear, so the step uses
 Newton's method.
 
+`friction` is the Coulomb coefficient. Under `penalty`, `stick_stiffness`
+is the slope of the tangential traction against the slip while the point
+sticks, a pressure per length. With no `stick_stiffness`, the slope is
+`stiffness`. Reason: in femahoy contact-cattaneo the stick slope changes
+the reference traction by 0.34 % to 3.4 % (gap G23).
+
 ### 12.5 Values from other models
 
 The right side of an essential condition may be a field of a `Results`
