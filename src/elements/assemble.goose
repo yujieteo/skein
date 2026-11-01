@@ -237,12 +237,14 @@ fn assemble(path: u8[:], vectors: i64) {
             add_cell(c, ke[..m * m], fe[..m]);
         }
         use_law_0();
+        add_films();
         return;
     }
     var ids: i64[>..] = [];
     for w in workers { ids.push(thread_spawn(cell_worker)); }
     solvers::gather_cells(cell_count(), workers, m * m + m, add_cells);
     for id in ids { thread_wait(id); }
+    add_films();
 }
 
 // Whether the static solve of the pattern takes the direct solve of a
@@ -332,9 +334,9 @@ fn add_cell(c: i64, k: f64[:], f: f64[:]) {
 
 // A region of the boundary: a union of parts. A part is the plane where
 // coordinate `axis` is `value`, the surface of the hole at distance
-// `radius` from the z axis through (cx, cy), or the surface of the shape
-// `shape` of src/mesher/. On the mesh of a shape (csg.goose), a plane
-// holds only the nodes on the surface of that shape.
+// `radius` from the z axis through (cx, cy), the surface of the shape
+// `shape` of src/mesher/, or the one node `node`. On the mesh of a shape
+// (csg.goose), a plane holds only the nodes on the surface of that shape.
 struct Part {
     hole: bool,
     axis: i64,
@@ -342,9 +344,10 @@ struct Part {
     c: f64[2],
     r: f64,
     shape: i64,
+    node: i64,
 }
 
-var region: Part[..8] = [];
+var region: Part[..16] = [];
 var region_out: Part[..8] = [];    // the parts whose nodes are not in the region
 
 fn on_part(n: i64, k: i64) -> bool {
@@ -353,6 +356,7 @@ fn on_part(n: i64, k: i64) -> bool {
 }
 
 fn part_holds(p: Part, n: i64) -> bool {
+    if p.node >= 0 { return n == p.node; }
     let tol = geometry_tolerance();
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
@@ -432,15 +436,7 @@ fn add_facet_load(gv: f64[3], p: f64) {
     var fn_dref: f64[30] = [0.0; 30];
     for c in cell_count() {
         for f in facet_count(dim) {
-            // A facet with its vertices on two parts can cut a corner of
-            // the body, so all vertices must be on one part.
-            var on = false;
-            for k in region.len {
-                var all = true;
-                for l in fd + 1 { if !on_part(cell_node(c, facet_node(dim, f, l)), k) { all = false; } }
-                if all { on = true; }
-            }
-            if !on { continue; }
+            if !region_facet(c, f) { continue; }
             for qp in quad_count(fd) {
                 let xi, w = quad_point(fd, qp);
                 shape(fd, order, xi, fn_shape, fn_dref);
@@ -473,6 +469,124 @@ fn add_facet_load(gv: f64[3], p: f64) {
                     let n = cell_node(c, facet_node(dim, f, l));
                     for k in ncomp { load[ncomp * n + k] += tv[k] * fn_shape[l] * w * da; }
                 }
+            }
+        }
+    }
+}
+
+// Whether facet f of cell c is on the region. A facet with its vertices
+// on two parts can cut a corner of the body, so all vertices must be on
+// one part.
+fn region_facet(c: i64, f: i64) -> bool {
+    for k in region.len {
+        var all = true;
+        for l in dim { if !on_part(cell_node(c, facet_node(dim, f, l)), k) { all = false; } }
+        if all { return true; }
+    }
+    return false;
+}
+
+// The shape functions of the nodes of facet f of cell c at its quadrature
+// point qp, in fn_shape, and the weight of the point times dA.
+fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[10]&) -> f64 {
+    let fd = dim - 1;
+    var fn_dref: f64[30] = [0.0; 30];
+    let xi, w = quad_point(fd, qp);
+    shape(fd, order, xi, fn_shape, fn_dref);
+    // The tangents dx/dxi_r of the facet.
+    var tan: f64[6] = [0.0; 6];
+    for l in node_count_of(fd, order) {
+        let n = cell_node(c, facet_node(dim, f, l));
+        for r in fd {
+            for t in 3 { tan[3 * r + t] += fn_dref[3 * l + r] * node_x(n, t); }
+        }
+    }
+    if fd == 1 { return w * sqrt(tan[0] * tan[0] + tan[1] * tan[1]) * thickness; }
+    let nx = tan[1] * tan[5] - tan[2] * tan[4];
+    let ny = tan[2] * tan[3] - tan[0] * tan[5];
+    let nz = tan[0] * tan[4] - tan[1] * tan[3];
+    return w * sqrt(nx * nx + ny * ny + nz * nz);
+}
+
+// Adds the force f to each node of the region.
+fn add_node_force(f: f64[3]) {
+    guard physics >= 0 && dofs_sized() else { abort("add_node_force: a physics and the arrays of the dofs"); }
+    for n in node_count() {
+        if !on_region(n) { continue; }
+        for p in ncomp { load[ncomp * n + p] += f[p]; }
+    }
+}
+
+// The mean ∫ v dV / ∫ dV over the live cells of the field `what`,
+// component `comp`, as cell_field gives it.
+fn body_mean(what: i64, comp: i64) -> f64 {
+    var sum = 0.0;
+    var volume = 0.0;
+    for c in cell_count() {
+        if !is_live(c) { continue; }
+        for qp in quad_count(dim) {
+            let xi, w = quad_point(dim, qp);
+            let dv = cell_geometry(c, xi) * w;
+            sum += cell_field(c, xi, what, comp) * dv;
+            volume += dv;
+        }
+    }
+    return if volume > 0.0 { sum / volume } else { 0.0 };
+}
+
+// The facets of the film conditions dot(q, n) = h (T - T_inf) of the step:
+// the cell, the facet and h of each. The matrix of each is ∫ h Ni Nj dA.
+var film_cell: i64[>..] = [];
+var film_facet: i64[>..] = [];
+var film_h: f64[>..] = [];
+
+// Adds the condition dot(q, n) = h (T - t_inf) of a heat physics on the
+// facets of the region.
+fn add_film(h: f64, t_inf: f64) {
+    guard physics == HEAT && h > 0.0 && dofs_sized() else { abort("add_film: a heat physics and h > 0"); }
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(c, f) { continue; }
+            film_cell.push(c);
+            film_facet.push(f);
+            film_h.push(h);
+        }
+    }
+    add_region_load([h * t_inf, 0.0, 0.0]);
+}
+
+fn clear_films() {
+    film_cell.clear();
+    film_facet.clear();
+    film_h.clear();
+}
+
+// The heat ∫ h T dA that the film facets give, with T of the solution:
+// the part of a film condition that the load does not hold.
+fn film_heat() -> f64 {
+    var fn_shape: f64[10] = [0.0; 10];
+    var heat = 0.0;
+    for c, i in film_cell {
+        let f = film_facet[i];
+        for qp in quad_count(dim - 1) {
+            let wda = facet_point(c, f, qp, fn_shape) * film_h[i];
+            for a in node_count_of(dim - 1, order) { heat += fn_shape[a] * sol[cell_node(c, facet_node(dim, f, a))] * wda; }
+        }
+    }
+    return heat;
+}
+
+// Adds ∫ h Ni Nj dA of each film facet to the matrix.
+fn add_films() {
+    var fn_shape: f64[10] = [0.0; 10];
+    let fnodes = node_count_of(dim - 1, order);
+    for c, i in film_cell {
+        let f = film_facet[i];
+        for qp in quad_count(dim - 1) {
+            let wda = facet_point(c, f, qp, fn_shape) * film_h[i];
+            for a in fnodes {
+                let na = cell_node(c, facet_node(dim, f, a));
+                for b in fnodes { val[entry(na, cell_node(c, facet_node(dim, f, b)))] += fn_shape[a] * fn_shape[b] * wda; }
             }
         }
     }
@@ -586,5 +700,6 @@ fn total_load() -> f64[3] {
     var sum: f64[3] = [0.0, 0.0, 0.0];
     for v, d in load { sum[d % ncomp] += v; }
     for v, d in assembled_source { sum[d % ncomp] += v; }
+    sum[0] -= film_heat();
     return sum;
 }
