@@ -1,0 +1,83 @@
+// femahoy: validation/cases/grid-coax-tem/coax/grid.toml
+// A coaxial line of PTFE, 20 mm long, inner radius 1 mm and outer radius 2.3 mm, at 5 GHz. Both
+// conductors are perfect: only the tangential part of E is zero on the curved walls (gap G4).
+// The time factor is exp(im*omega*t). The exact answer is the TEM wave: the impedance
+// eta/(2*pi)*ln(b/a) = 34.461857 ohm, and S21 = exp(-im*beta*L), with |S21| = 1 and a phase
+// of -174.016907 deg.
+
+model grid_coax_tem: 3d, SI
+
+let a: Length = 1 mm
+let b: Length = 2.3 mm
+let L: Length = 20 mm
+let f0: Frequency = 5 GHz
+let v0: Mass*Length^2/(Time^3*Current) = 1 V
+let eps_r: Real = 2.1
+let c0: Velocity = 299792458 m/s
+let mu0: Mass*Length/(Time^2*Current^2) = 1.25663706212e-6 V*s/(A*m)
+let eps0: Current^2*Time^4/(Mass*Length^3) = 1/(mu0*c0^2)
+let beta: Length^-1 = 2*pi*f0*sqrt(eps_r)/c0
+
+scales b, c0, 1 V/m, 1 A
+
+// The TEM field of the voltage v0 between the conductors: radial, v0/(r*ln(b/a)).
+let e_tem: Vector<Mass*Length/(Time^3*Current)> = v0/ln(b/a)*(x, y, 0 m)/(x^2 + y^2)
+
+// The conductors are longer than the line, so their surfaces are only the curved walls.
+let core: Solid = cylinder((0, 0, -1) mm, (0, 0, 1), a, 22 mm)
+let shield: Solid = cylinder((0, 0, -1) mm, (0, 0, 1), b, 22 mm)
+let line_body: Solid = (shield - core) & box((-3, -3, 0) mm, (3, 3, 20) mm)
+let inner_wall: Surface = boundary(line_body, core)
+let outer_wall: Surface = boundary(line_body, shield)
+let port_in: Surface = boundary(line_body, z == 0 mm)
+let port_out: Surface = boundary(line_body, z == L)
+// A radius at each end and at z = 10 mm for the voltage, and a square loop round the core at
+// z = 10 mm, anticlockwise seen from +z, for the current. The impedance takes V and I at one z.
+let v_in: Curve = line((1, 0, 0) mm, (2.3, 0, 0) mm)
+let v_out: Curve = line((1, 0, 20) mm, (2.3, 0, 20) mm)
+let v_mid: Curve = line((1, 0, 10) mm, (2.3, 0, 10) mm)
+let lp_s: Curve = line((-1.4, -1.4, 10) mm, (1.4, -1.4, 10) mm)
+let lp_e: Curve = line((1.4, -1.4, 10) mm, (1.4, 1.4, 10) mm)
+let lp_n: Curve = line((-1.4, 1.4, 10) mm, (1.4, 1.4, 10) mm)
+let lp_w: Curve = line((-1.4, -1.4, 10) mm, (-1.4, 1.4, 10) mm)
+
+material ptfe {
+    eps: Current^2*Time^4/(Mass*Length^3) = eps_r*eps0
+    mu: Mass*Length/(Time^2*Current^2) = mu0
+}
+
+mesh m on line_body {
+    size: 0.5 mm
+    cell: tet
+    refine inner_wall: 0.25 mm
+}
+
+// H = curl(ef)/(-im*omega*mu) = im*hc/omega.
+physics em on line_body solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
+    material ptfe
+    let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu
+    eq curl(hc) - omega^2*eps*ef = 0
+}
+
+method em: cg { mesh: m, order: 1, family: nedelec }
+
+step tone: harmonic(freq: [f0]) {
+    bc inner_wall: cross(n, ef) = 0
+    bc outer_wall: cross(n, ef) = 0
+    // Port 1 holds the TEM field. Port 2 is a matched load: cross(n, H) = -ef/eta of the wave
+    // that leaves the line, so cross(n, hc) = im*beta/mu*ef.
+    bc port_in: cross(n, ef) = cross(n, e_tem)
+    bc port_out: cross(n, hc) = im*beta/mu*ef
+    output ef
+    report z_line = integral(ef.x, v_mid)/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) -
+        integral(hc.x, lp_n) - integral(hc.y, lp_w)))
+    report s21 = integral(ef.x, v_out)/integral(ef.x, v_in)
+}
+
+// femahoy passes each value within 5e-3 of it. The impedance has 1%: H is curl(ef) of the
+// lowest-order elements, constant in each cell, and this mesh gives 34.17 ohm (-0.84%). A mesh of
+// 0.35 mm did not solve in 20 minutes.
+expect impedance: re(integral(ef.x, v_mid)/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) -
+    integral(hc.x, lp_n) - integral(hc.y, lp_w)))) == 34.461857 V/A within 1%
+expect s21_mag: abs(integral(ef.x, v_out)/integral(ef.x, v_in)) == 1 within 0.5%
+expect s21_deg: arg(integral(ef.x, v_out)/integral(ef.x, v_in)) == -174.016907 deg within 0.5%

@@ -1,5 +1,4 @@
 // femahoy: validation/cases/team7-eddy-current/50hz/case.pro
-// blocked-by: G27
 // TEAM problem 7: an aluminium plate with an off-centre hole under a coil with 50 Hz current.
 // Time-harmonic eddy currents with the vector potential a, E = -im*omega*a in the plate.
 // Reference: Bz on the line A1-B1 at omega*t = 0 and 90 deg (Fujiwara and Nakata 1990).
@@ -69,11 +68,13 @@ physics em on world solves a: Vector<Complex<Mass*Length/(Time^2*Current)>> {
     eq curl(h) + im*omega*sig*a = js
 }
 
-// gap G27: no gauge. The edge elements of a are not unique in the air and the coil.
+// The edge elements of a are not unique where sig = 0, in the air and the coil. The tree gauge
+// holds the edges of a spanning tree of those cells (gap G27).
 method em: cg {
     mesh: m
     order: 1
     family: nedelec
+    gauge: tree
     pml: { region: layer, thickness: 0.1 m }
 }
 

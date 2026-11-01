@@ -34,6 +34,8 @@ import .eigen;
 import .wave;
 import .radiation;
 import .explicit;
+import .edge;
+import .mixed;
 
 let X = 0;
 let Y = 1;
@@ -188,6 +190,105 @@ fn bloch_low() -> bool { return keep_low(); }
 // theta (spec §12.6). False if a node has no partner.
 fn bloch(px: f64, py: f64, pz: f64, theta: f64) -> bool { return tie_high([px, py, pz], theta); }
 
+// The edge physics of `family: nedelec` (edge.goose): curl(ν curl(u)) +
+// c u = s for a vector u on the edges of a P1 mesh, with ν = nu and
+// c = c_re + i c_im on each cell. In 2D, t is the thickness.
+fn edge(nu: f64, c_re: f64, c_im: f64, t: f64) { set_edge(nu, [c_re, c_im], t); }
+
+// Gives the cells in the shape g of src/mesher/ the coefficients ν and c
+// of the edge physics. False if g holds no cell.
+fn edge_in(g: i64, nu: f64, c_re: f64, c_im: f64) -> bool { return edge_material(g, nu, [c_re, c_im]) > 0; }
+
+// Adds the source s of the edge physics, with s = S(p) at each point p
+// (f64[3]): the real parts of its 3 components, then the imaginary parts
+// (f64[6]).
+fn current<S>() { edge_source() { p => S(p) }; }
+
+// The essential condition cross(n, u) = cross(n, g) of the edge physics
+// on the region, with g = G(p) as in `current`. False if the region holds
+// no edge.
+fn tangent<G>() -> bool { return fix_tangent() { p => G(p) } > 0; }
+
+// The natural condition cross(n, h) = z u of the edge physics on the
+// region, with h = ν curl(u) and z = z_re + i z_im. False if the region
+// holds no facet.
+fn impedance(z_re: f64, z_im: f64) -> bool { return edge_impedance([z_re, z_im]) > 0; }
+
+// The tree gauge of the edge physics (`gauge: tree`): holds at 0 the
+// edges of a spanning tree of the cells with c = 0. Call it after the
+// essential conditions. It gives the edges of the tree.
+fn gauge() -> i64 { return tree_gauge(); }
+
+// Part `part` (0 the real part, 1 the imaginary part) of component `comp`
+// of u, or of curl(u) with `curl`, at a point of the edge physics, and
+// whether a cell holds the point.
+fn edge_at(curl: bool, part: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
+    guard (part == 0 || part == 1) && comp >= 0 && comp < 3 else { abort("edge_at: part 0 or 1 and 0 <= comp < 3"); }
+    let v, found = edge_value_at([x, y, z], curl);
+    return v[3 * part + comp], found;
+}
+
+// The integral of component `comp` of u, or of curl(u) with `curl`, along
+// the line from (x0, y0, z0) to (x1, y1, z1), by the midpoint rule on n
+// pieces: its real and imaginary parts, and whether each point is near a
+// cell.
+fn edge_line_integral(curl: bool, comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, n: i64) -> f64, f64, bool {
+    let s, found = edge_line([x0, y0, z0], [x1, y1, z1], comp, curl, n);
+    return s[0], s[1], found;
+}
+
+// The radiation intensity (power per solid angle) in the direction
+// (dx, dy, dz) of the field on the closed surface of the region, by the
+// near-to-far-field transform into a medium of wave number k and
+// impedance eta, with E = u and H = (hf_re + i hf_im) curl(u)
+// (edge.goose, gap G13). 3D only.
+fn far_field(dx: f64, dy: f64, dz: f64, k: f64, eta: f64, hf_re: f64, hf_im: f64) -> f64 {
+    surface_samples([hf_re, hf_im]);
+    return far_intensity([dx, dy, dz], k, eta);
+}
+
+// The power out of the closed surface of the region, ∮ ½ Re(E × H*) · n dA,
+// with E and H as in far_field.
+fn radiated_power(hf_re: f64, hf_im: f64) -> f64 {
+    surface_samples([hf_re, hf_im]);
+    return surface_power();
+}
+
+// The mixed Darcy flow of `family: raviart_thomas` (mixed.goose):
+// q + k grad(p) = 0 and div(q) = f, with q on the facets and p on the
+// cells of a P1 mesh. In 2D, t is the thickness.
+fn darcy(k: f64, f: f64, t: f64) { set_mixed(k, f, t); }
+
+// Gives the cells in the shape g of src/mesher/ the coefficients k and f
+// of the Darcy flow. False if g holds no cell.
+fn darcy_in(g: i64, k: f64, f: f64) -> bool { return mixed_material(g, k, f) > 0; }
+
+// Sets f of each cell to its mean of F(p) (p: f64[3], F gives an f64).
+fn darcy_source<F>() { mixed_source() { p => F(p) }; }
+
+// The pressure p = v on the boundary facets of the region: a natural
+// condition of the mixed form. False if the region holds no facet.
+fn pressure(v: f64) -> bool { return mixed_pressure(v) > 0; }
+
+// The flux dot(q, n) = g on the boundary facets of the region: an
+// essential condition. False if the region holds no facet.
+fn normal_flux(g: f64) -> bool { return mixed_normal_flux(g) > 0; }
+
+// Component `comp` of q (0, 1 or 2), or p (comp 3), at a point of the
+// Darcy flow, and whether a cell holds the point.
+fn darcy_at(comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
+    guard comp >= 0 && comp < 4 else { abort("darcy_at: 0 <= comp < 4"); }
+    let v, found = mixed_value_at([x, y, z]);
+    return v[comp], found;
+}
+
+// The flux out of the boundary facets of the region, ∮ dot(q, n) dA.
+fn boundary_flux() -> f64 { return mixed_flux(); }
+
+// Writes the mesh with p and q of the Darcy flow, named `p_name` and
+// `q_name`, to a VTU file.
+fn write_darcy(path: const u8[:], p_name: const u8[:], q_name: const u8[:]) -> bool { return write_mixed_vtu(path, p_name, q_name); }
+
 // Selects the boundary plane where coordinate `axis` is `value`.
 fn plane(axis: i64, value: f64) -> bool {
     region.clear();
@@ -256,12 +357,18 @@ fn radiate(eps: f64, sb: f64) { add_radiation(eps, sb); }
 fn clear_bcs() {
     clear_conditions();
     clear_radiation();
+    clear_impedance();
+    if physics == MIXED { clear_pressure(); }
 }
 
 // Assembles and solves by CG with an AMG preconditioner, or the wave
 // physics by GMRES with ILU(0). Returns false if the solver does not
 // converge.
-fn solve() -> bool { return if physics == WAVE { wave_solve() } else { solve_system() }; }
+fn solve() -> bool {
+    if physics == EDGE { return edge_solve(); }
+    if physics == MIXED { return mixed_solve(); }
+    return if physics == WAVE { wave_solve() } else { solve_system() };
+}
 
 // The transient step central_difference (explicit.goose) to the time
 // `end`, with the step dt, or the stable step for dt <= 0, from rest.

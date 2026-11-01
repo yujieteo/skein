@@ -86,6 +86,14 @@ struct MemoryPath {
 //                         2026-11-01: 14.5 (U and L, 8 bytes each). The check is before the
 //                         factors are sized; the check of the solve counts 0 entries. No
 //                         threads.
+//                         The Nédélec elements take this path too: the coax line of
+//                         examples/femahoy/grid_coax_tem.skn, 104,856 dofs, on 2026-11-01:
+//                         estimate 613 MB and peak 588 MB. The AMG of the gradient
+//                         correction (src/elements/edge.goose) is on the nodes, and the
+//                         estimate holds it.
+//     simplex mixed cg    examples/elements/darcy_annulus_tri.skn, 80,804 dofs, on
+//                         2026-11-01: estimate 55 MB and peak 28 MB with 16 bytes for each
+//                         entry (val and the Schur product). No threads.
 //     radiation dense     counted, not measured: the n × n arrays F, M, X and Q of the
 //                         facets of an enclosure (src/elements/radiation.goose). No threads.
 //     q4 band cholesky    counted, not measured: the band of the Cholesky factor, 8 bytes
@@ -104,6 +112,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "grid ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "meshless skyline lu", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "simplex mixed cg", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "radiation dense", entry_bytes: 32.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "q4 band cholesky", entry_bytes: 8.0, dof_bytes: 0.0, thread_bytes: 0.0 },
 ];

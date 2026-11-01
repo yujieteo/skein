@@ -682,6 +682,229 @@ fn test_bloch() {
     expect_wave("bloch cell", wave_at(0.3), [0.0247168, -0.0093576], 1.0e-5);
 }
 
+// --- edge elements ----------------------------------------------------------------
+
+// The manufactured field of the edge tests: in 2D (sin(pi y), sin(pi x)),
+// with curl(curl(u)) = pi^2 u, and in 3D (sin(pi y) sin(pi z),
+// sin(pi z) sin(pi x), sin(pi x) sin(pi y)), with curl(curl(u)) = 2 pi^2 u.
+fn edge_exact(p: f64[3]) -> f64[6] {
+    if elements::dim == 2 { return [sin(PI * p[1]), sin(PI * p[0]), 0.0, 0.0, 0.0, 0.0]; }
+    return [sin(PI * p[1]) * sin(PI * p[2]), sin(PI * p[2]) * sin(PI * p[0]), sin(PI * p[0]) * sin(PI * p[1]), 0.0, 0.0, 0.0];
+}
+
+fn edge_exact_curl(p: f64[3]) -> f64[3] {
+    if elements::dim == 2 { return [0.0, 0.0, PI * cos(PI * p[0]) - PI * cos(PI * p[1])]; }
+    let s: f64[3] = [sin(PI * p[0]), sin(PI * p[1]), sin(PI * p[2])];
+    let c: f64[3] = [cos(PI * p[0]), cos(PI * p[1]), cos(PI * p[2])];
+    return [PI * s[0] * (c[1] - c[2]), PI * s[1] * (c[2] - c[0]), PI * s[2] * (c[0] - c[1])];
+}
+
+// The L2 errors of u and of curl u against the manufactured field.
+fn edge_errors() -> f64, f64 {
+    var eu = 0.0;
+    var ec = 0.0;
+    let d = elements::dim;
+    for c in elements::cell_count() {
+        for q in elements::rich_count() {
+            let xi, w = elements::rich_point(q);
+            var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
+            for r in d {
+                l[r + 1] = xi[r];
+                l[0] -= xi[r];
+            }
+            var p: f64[3] = [0.0; 3];
+            for v in d + 1 {
+                for t in 3 { p[t] += l[v] * elements::node_x(elements::cell_node(c, v), t); }
+            }
+            let u = elements::edge_cell_value(c, l, false);
+            let cu = elements::edge_cell_value(c, l, true);
+            let dv = w * elements::cell_geometry(c, [0.0; 3]);
+            let ue = edge_exact(p);
+            let ce = edge_exact_curl(p);
+            for t in 3 {
+                eu += (u[t] - ue[t]) * (u[t] - ue[t]) * dv;
+                ec += (cu[t] - ce[t]) * (cu[t] - ce[t]) * dv;
+            }
+        }
+    }
+    return sqrt(eu), sqrt(ec);
+}
+
+// Solves curl(curl(u)) + c u = s on the unit box with n cells on each
+// side, u along the boundary as the manufactured field, with the tree gauge
+// if c = 0. It gives the L2 errors of u and curl u.
+fn edge_box(d: i64, n: i64, c: f64) -> f64, f64 {
+    elements::mesh_box(d, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, n, n, if d == 3 { n } else { 1 });
+    distort(n);
+    elements::edge(1.0, c, 0.0, 1.0);
+    let k = if d == 2 { PI * PI } else { 2.0 * PI * PI };
+    elements::current() { p =>
+        let u = edge_exact(p);
+        [(k + c) * u[0], (k + c) * u[1], (k + c) * u[2], 0.0, 0.0, 0.0]
+    };
+    elements::plane(elements::X, 0.0);
+    elements::also_plane(elements::X, 1.0);
+    elements::also_plane(elements::Y, 0.0);
+    elements::also_plane(elements::Y, 1.0);
+    if d == 3 {
+        elements::also_plane(elements::Z, 0.0);
+        elements::also_plane(elements::Z, 1.0);
+    }
+    elements::tangent() { p => edge_exact(p) };
+    if c == 0.0 && elements::gauge() <= 0 { failures++; print("FAIL edge: the tree gauge holds no edge"); }
+    if !elements::solve() { failures++; print("FAIL edge: GMRES does not converge on ", n, " cells"); }
+    return edge_errors();
+}
+
+// The manufactured solutions of the Nédélec element: the L2 errors of u
+// and of curl u fall as h^1 (implementation.md §10, level 2), in 2D and in
+// 3D, and with the tree gauge for c = 0.
+fn test_edge() {
+    for d in [2, 3] {
+        for c in [1.0, 0.0] {
+            let n0 = if d == 2 { 8 } else { 4 };
+            let eu0, ec0 = edge_box(d, n0, c);
+            let eu1, ec1 = edge_box(d, 2 * n0, c);
+            let ou = log(eu0 / eu1) / log(2.0);
+            let oc = log(ec0 / ec1) / log(2.0);
+            let what = str("nedelec ", d, "d c=", c);
+            // With the gauge, u differs from the field by a gradient, so
+            // only curl u converges.
+            if c != 0.0 && !(ou >= 0.7) { failures++; print("FAIL ", what, ": the L2 order of u is ", ou, ", want 1 - 0.3"); }
+            if !(oc >= 0.7) { failures++; print("FAIL ", what, ": the L2 order of curl u is ", oc, ", want 1 - 0.3"); }
+            print(what, ": L2 orders ", ou, " (u) and ", oc, " (curl u), errors ", eu1, " and ", ec1);
+        }
+    }
+}
+
+// E and H of a Hertzian dipole of moment 1 along z at the origin, with the
+// time factor exp(i omega t) (Balanis, Antenna Theory, §4.2).
+fn dipole_field(p: f64[3], k: f64, eta: f64) -> f64[6], f64[6] {
+    let r = sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+    let ct = p[2] / r;
+    let st = sqrt(p[0] * p[0] + p[1] * p[1]) / r;
+    let cp = if st > 0.0 { p[0] / (r * st) } else { 1.0 };
+    let sp = if st > 0.0 { p[1] / (r * st) } else { 0.0 };
+    let kr = k * r;
+    // exp(-i k r) times the bracket of each part.
+    let ph: f64[2] = [cos(kr), -sin(kr)];
+    let b1: f64[2] = [1.0, -1.0 / kr];                  // 1 + 1/(i k r)
+    let b2: f64[2] = [1.0 - 1.0 / (kr * kr), -1.0 / kr]; // 1 + 1/(i k r) - 1/(k r)^2
+    let er = elements::cmul(elements::cmul([eta * ct / (2.0 * PI * r * r), 0.0], b1), ph);
+    let eth = elements::cmul(elements::cmul([0.0, eta * k * st / (4.0 * PI * r)], b2), ph);
+    let hph = elements::cmul(elements::cmul([0.0, k * st / (4.0 * PI * r)], b1), ph);
+    let rh: f64[3] = [st * cp, st * sp, ct];
+    let th: f64[3] = [ct * cp, ct * sp, -st];
+    let phv: f64[3] = [-sp, cp, 0.0];
+    var e: f64[6] = [0.0; 6];
+    var h: f64[6] = [0.0; 6];
+    for t in 3 {
+        for part in 2 {
+            e[3 * part + t] = er[part] * rh[t] + eth[part] * th[t];
+            h[3 * part + t] = hph[part] * phv[t];
+        }
+    }
+    return e, h;
+}
+
+// The near-to-far-field transform of the exact field of a Hertzian dipole
+// on a cube of side 1 at k = 2 pi: the directivity 1.5 and the intensity
+// eta k^2/(32 pi^2) at theta = 90 degrees (gap G13).
+fn test_far_field() {
+    let k = 2.0 * PI;
+    let eta = 376.730313;
+    let m = 40;
+    elements::clear_samples();
+    for axis in 3 {
+        for side in [-1.0, 1.0] {
+            for i in m {
+                for j in m {
+                    var p: f64[3] = [0.0; 3];
+                    p[axis] = 0.5 * side;
+                    p[(axis + 1) % 3] = (i + 0.5) / m - 0.5;
+                    p[(axis + 2) % 3] = (j + 0.5) / m - 0.5;
+                    var n: f64[3] = [0.0; 3];
+                    n[axis] = side;
+                    let e, h = dipole_field(p, k, eta);
+                    elements::far_p.append(p);
+                    elements::far_n.append(n);
+                    elements::far_w.push(1.0 / (m * m));
+                    elements::far_e.append(e);
+                    elements::far_h.append(h);
+                }
+            }
+        }
+    }
+    let u = elements::far_intensity([1.0, 1.0, 0.0], k, eta);
+    let power = elements::surface_power();
+    expect_near("far field intensity", u, eta * k * k / (32.0 * PI * PI), 1.0e-2);
+    expect_near("far field directivity", 4.0 * PI * u / power, 1.5, 1.0e-2);
+    let u45 = elements::far_intensity([1.0, 0.0, 1.0], k, eta);
+    expect_near("far field at 45 degrees", u45, 0.5 * eta * k * k / (32.0 * PI * PI), 1.0e-2);
+}
+
+// --- the Raviart-Thomas element ------------------------------------------------------
+
+// The L2 errors of p and q against p = sin(pi x) sin(pi y), q = -grad(p).
+fn darcy_errors() -> f64, f64 {
+    var ep = 0.0;
+    var eq = 0.0;
+    for c in elements::cell_count() {
+        for qp in elements::rich_count() {
+            let xi, w = elements::rich_point(qp);
+            let p = elements::point_of(c, xi);
+            let v = elements::mixed_cell_value(c, p);
+            let dv = w * elements::cell_geometry(c, [0.0; 3]);
+            let pe = sin(PI * p[0]) * sin(PI * p[1]);
+            let qe: f64[2] = [-PI * cos(PI * p[0]) * sin(PI * p[1]), -PI * sin(PI * p[0]) * cos(PI * p[1])];
+            ep += (v[3] - pe) * (v[3] - pe) * dv;
+            eq += ((v[0] - qe[0]) * (v[0] - qe[0]) + (v[1] - qe[1]) * (v[1] - qe[1])) * dv;
+        }
+    }
+    return sqrt(ep), sqrt(eq);
+}
+
+// q + grad(p) = 0 and div(q) = 2 pi^2 sin(pi x) sin(pi y) on the unit square
+// of n cells on each side, with p = 0 on the boundary.
+fn darcy_square(n: i64) -> f64, f64 {
+    elements::mesh_box(2, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, n, n, 1);
+    distort(n);
+    elements::darcy(1.0, 0.0, 1.0);
+    elements::darcy_source() { p => 2.0 * PI * PI * sin(PI * p[0]) * sin(PI * p[1]) };
+    elements::plane(elements::X, 0.0);
+    elements::also_plane(elements::X, 1.0);
+    elements::also_plane(elements::Y, 0.0);
+    elements::also_plane(elements::Y, 1.0);
+    if !elements::pressure(0.0) { failures++; print("FAIL darcy: the boundary holds no facet"); }
+    if !elements::solve() { failures++; print("FAIL darcy: CG does not converge on ", n, " cells"); }
+    return darcy_errors();
+}
+
+// The manufactured solution of the Raviart-Thomas element: the L2 errors
+// of p and of q fall as h^1 (implementation.md §10, level 2). A flux
+// condition on a part of the boundary holds that flux.
+fn test_darcy() {
+    let ep0, eq0 = darcy_square(8);
+    let ep1, eq1 = darcy_square(16);
+    let op = log(ep0 / ep1) / log(2.0);
+    let oq = log(eq0 / eq1) / log(2.0);
+    if !(op >= 0.7) { failures++; print("FAIL raviart_thomas: the L2 order of p is ", op, ", want 1 - 0.3"); }
+    if !(oq >= 0.7) { failures++; print("FAIL raviart_thomas: the L2 order of q is ", oq, ", want 1 - 0.3"); }
+    print("raviart_thomas 2d: L2 orders ", op, " (p) and ", oq, " (q), errors ", ep1, " and ", eq1);
+    // A strip of length 2 with the flux 3 in at x = 0 and p = 0 at x = 2:
+    // p = 3 (2 - x), and the flux out at x = 2 is 3 times the height 1.
+    elements::mesh_box(2, 1, 0.0, 0.0, 0.0, 2.0, 1.0, 0.0, 8, 4, 1);
+    elements::darcy(1.0, 0.0, 1.0);
+    elements::plane(elements::X, 0.0);
+    elements::normal_flux(-3.0);
+    elements::plane(elements::X, 2.0);
+    elements::pressure(0.0);
+    if !elements::solve() { failures++; print("FAIL darcy strip: CG does not converge"); }
+    let p, found = elements::darcy_at(3, 0.5, 0.5, 0.0);
+    expect_near("darcy strip pressure", p, 3.0 * 1.5, 0.05);
+    expect_near("darcy strip flux", elements::boundary_flux(), 3.0, 1.0e-9);
+}
+
 fn main() {
     test_patches();
     test_kirsch();
@@ -694,6 +917,9 @@ fn main() {
     test_harmonic();
     test_pml();
     test_bloch();
+    test_edge();
+    test_far_field();
+    test_darcy();
     test_runs();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");

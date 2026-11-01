@@ -1,0 +1,52 @@
+// The near-to-far-field transform (gap G13) of a solved standing wave in a box of vacuum,
+// 200 mm by 200 mm in x and y and a quarter of the wavelength lambda = 1 m along z, on the
+// Nedelec elements of P1 tetrahedra. The wall holds E = (cos(k*z), 0, 0) V/m, so in the box
+// H = (0, -im*sin(k*z), 0)/eta. The time factor is exp(im*omega*t).
+// The closed form: the box holds no source, so the surface currents of E and H radiate no
+// power (the extinction theorem). With -H, the currents of the two end faces add along -z to
+// k^2*A^2*sin(k*L)^2/(8*pi^2*eta)*(1 V/m)^2 = 2.12355e-6 W, with A the area of an end face.
+
+model far_field_box_tet: 3d, SI
+
+let L: Length = 250 mm
+let f0: Frequency = 299.792458 MHz
+let e0: Mass*Length/(Time^3*Current) = 1 V/m
+let c0: Velocity = 299792458 m/s
+let mu0: Mass*Length/(Time^2*Current^2) = 1.25663706212e-6 V*s/(A*m)
+let eps0: Current^2*Time^4/(Mass*Length^3) = 1/(mu0*c0^2)
+let k0: Length^-1 = 2*pi*f0/c0
+
+scales L, c0, 1 V/m, 1 A
+
+let e_wave: Vector<Mass*Length/(Time^3*Current)> = e0*(cos(k0*z), 0, 0)
+
+let cell: Solid = box((-100, -100, 0) mm, (100, 100, 250) mm)
+let wall: Surface = boundary(cell, abs(x) == 100 mm || abs(y) == 100 mm || abs(z - 125 mm) == 125 mm)
+
+material vacuum {
+    eps: Current^2*Time^4/(Mass*Length^3) = eps0
+    mu: Mass*Length/(Time^2*Current^2) = mu0
+}
+
+mesh m on cell {
+    size: 25 mm
+    cell: tet
+}
+
+// H = curl(ef)/(-im*omega*mu) = im*hc/omega.
+physics em on cell solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
+    material vacuum
+    let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu
+    eq curl(hc) - omega^2*eps*ef = 0
+}
+
+method em: cg { mesh: m, order: 1, family: nedelec }
+
+step tone: harmonic(freq: [f0]) {
+    bc wall: cross(n, ef) = cross(n, e_wave)
+    report back = far_field(ef, -im*hc/omega, wall, (0, 0, -1))
+    report none = far_field(ef, im*hc/omega, wall, (1, 2, 2))
+}
+
+expect back: far_field(ef, -im*hc/omega, wall, (0, 0, -1)) == 2.12355e-6 W within 1%
+expect none: far_field(ef, im*hc/omega, wall, (1, 2, 2)) == 0 W within 2e-8 W

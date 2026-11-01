@@ -1021,6 +1021,7 @@ licences are not compatible with Apache 2.0.
 | 2D triangles | Delaunay refinement (Chew 1989, Ruppert 1995, Shewchuk 2002) on a boundary that the mesher samples from φ, with the sharp corners as fixed vertices |
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
+| 3D tetrahedra on a prism along z with a `cylinder` or an `extrude`, and with each `refine` target in its full z range | the triangles of the 2D case on its section, swept through layers of equal height, each prism cut into 3 tetrahedra along the diagonal of each side face from its point of smallest index (Dompierre et al. 1999) |
 | smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
 | `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ (and z) on a quarter of a ring or a tube: `(circle - circle) & rect` or `(cylinder - cylinder) & box`, with the corner of the rect or the box on the axis |
 | `quad` on another `Surface` | the triangles of the 2D case, then the merge of pairs of neighbour triangles into quads (Blossom-Quad, Remacle et al. 2012): a matching of the largest size (Edmonds 1965) on the pairs whose quad has an acceptable quality. A triangle stays where it has no such pair. |
@@ -1039,6 +1040,11 @@ cell through it.
 The sharp edges come from the CSG tree: each intersection of the surfaces
 of two primitives with a dihedral angle that `feature_angle` marks is a
 feature curve.
+
+Reason for the swept tetrahedra: femahoy gap G4. The stuffing cuts the
+sharp edge between the end plane and the curved wall of a coax line off
+by about one cell. That chamfer is in neither region, so the port does not
+touch the wall, and the port voltage floats.
 
 Reason for the `quad` and `hex` cells on a region that is not a union of
 boxes: femahoy gap G36. Femahoy meshes a ring about a hole, a tube, a rod
@@ -1318,11 +1324,25 @@ A `bc` names a region and states an equation on it. The checker sorts each
 | Left side | Kind |
 |---|---|
 | an unknown, or a component of it | essential (Dirichlet) |
+| `cross(n, u)` of a vector unknown `u` | essential, on the tangential part of `u` only |
 | `F*n` or `dot(F, n)`, where `div(F)` is in an equation of the physics | natural (Neumann). The right side may use the unknowns (Robin). |
+| `cross(n, F)`, where `curl(F)` is in an equation of the physics | natural, as `F*n` |
 | anything else | an error [`bc_form`] |
 
 A natural condition on the flux of the equation paired with unknown `u` is a
 condition for `u`.
+
+`cross(n, u) = cross(n, g)` holds the tangential part of `u` at the
+tangential part of `g`, and leaves the normal part free. On a wall with
+the normal `n`, `cross(n, ef) = 0` is a perfect electric conductor. A
+component such as `ef.x` is along an axis, so it cannot state this on a
+curved wall. Reason: the conductors of a coaxial line are curved
+(femahoy gap G4).
+
+```skein
+bc inner_wall: cross(n, ef) = 0
+bc port_out: cross(n, hc) = im*beta/mu*ef
+```
 
 The right side of an essential condition may be an unknown of another
 physics, with the same type, on the same points: a **tie**.
@@ -1503,7 +1523,7 @@ The kinds:
 
 | Kind | Settings | Notes |
 |---|---|---|
-| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple`, `pml` (`{ region, thickness }`) | continuous Galerkin FEM. `nedelec` is H(curl) and `raviart_thomas` is H(div). |
+| `cg` | `mesh`, `order` (Int or a record per field), `family` (`lagrange`, `serendipity`, `incompatible`, `nedelec`, `raviart_thomas`), `stabilize`, `quadrature` (`full`, `reduced`), `couple`, `pml` (`{ region, thickness }`), `gauge` (`tree`) | continuous Galerkin FEM. `nedelec` is H(curl) and `raviart_thomas` is H(div). |
 | `dg` | `mesh`, `order`, `flux` (`upwind`, `lax_friedrichs`, `roe`), `penalty` | interior penalty for second-order terms |
 | `fv` | `mesh`, `gradient` (`green_gauss`, `least_squares`), `flux` (`upwind`, `linear_upwind`, `central`), `limiter` (`none`, `minmod`, `van_leer`, `venkatakrishnan`), `pv_coupling` (`rhie_chow`) | cell-centred finite volume |
 | `rkpm` | `points`, `basis` (`linear`, `quadratic`), `support` (Real, times the spacing), `integrate` (`scni`, `gauss`), `bc` (`nitsche`) | Galerkin meshless |
@@ -1524,6 +1544,27 @@ The setting `family` of `cg` gives the cells of each order:
   that the cell passes the patch test (CPE4I, C3D8I). The modes
   1 - ξ² along each cell axis are internal to each cell, and the solver
   condenses them out. They remove the shear locking of order 1 in bending.
+- `nedelec`: the edge elements of Nédélec (1980), first kind, on
+  triangles and tetrahedra. Order 1 has one dof on each edge, the
+  integral of the tangential component of the vector unknown along it.
+  The tangential part is continuous between cells and the normal part is
+  not. A `bc` `cross(n, u) = cross(n, g)` holds these edge dofs.
+- `raviart_thomas`: the face elements of Raviart and Thomas (1977) for a
+  mixed physics with a vector `q` and a scalar `p`, such as
+  `q + k*grad(p) = 0` and `div(q) = f`. Order 1 has one dof on each facet,
+  the flux of `q` through it, and `p` is constant in each cell. The normal
+  part of `q` is continuous between cells. In the mixed form, `p = v` is
+  the natural condition and `dot(q, n) = g` is the essential one. A
+  boundary with neither has no flux.
+
+The setting `gauge: tree` of `nedelec` holds at zero the edges of a
+spanning tree of the cells where the coefficient of `u` in the equation
+is 0. There the curl-curl operator has the gradients in its null space,
+and the tree makes the solution unique. The edges of the essential
+conditions are in the tree first. Only `curl(u)` is unique there, not
+`u`. `gauge` with another family is an error [`method_setting`].
+Reason: an eddy current model has air and coils with no conductivity
+(femahoy gap G27).
 
 The setting `quadrature` takes `full` (the default), the Gauss rule that
 integrates the stiffness of an undistorted cell exactly, or `reduced`,
@@ -1704,7 +1745,8 @@ writes the solver, the iterations and the restart to stderr.
 file at the end of the step, or each `every k` time steps. `report e` prints
 a scalar or a vector to the run log in TOON. Functions for `report`:
 `reaction(r)`, `max(f, r)`, `min(f, r)`, `argmax(f, r)`, `integral(f, r)`,
-`mean(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)`.
+`mean(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)`,
+`far_field(E, H, s, d)`.
 
 `argmax(f, r)` is the point of `r` where the scalar `f` has its largest
 value, a `Vector<Length>` [`rank_mismatch`]. If `r` comes from a `pattern`
@@ -1757,6 +1799,25 @@ expect a_rms: rms(g - omega^2*mean(u.z, tip), 0.04/(1 Hz)) == 400925.4 mm/s^2 wi
 
 Reason: the random vibration model of femahoy checks the RMS acceleration
 of the tip of a cantilever for the PSD of a base acceleration (gap G2).
+
+`far_field(E, H, s, d)` is the radiation intensity, the power per unit
+solid angle, in the direction `d` far from the closed `Surface` `s`. `E`
+and `H` are the `Complex` electric and magnetic fields on `s`. The
+transform takes the surface currents n × H and -n × E on `s` into the
+medium outside `s` (Balanis 2016, §12.2), with the wave number and the
+impedance of the material on `s`. The result has the dimension of
+`E`·`H`·`Length^2`. The directivity is 4π times the intensity over the
+radiated power, `integral(re(dot(cross(E, conj(H)), n))/2, s)`. `d` is a
+constant vector, and only its direction counts. `far_field` is valid only
+in a `3d` model, in a `report` or an `expect` of a `harmonic` step, or in
+another `expect` whose last step is `harmonic` [`far_field_form`].
+
+```skein
+expect directivity: 4*pi*far_field(ef, hf, ntff, (1, 0, 0))/integral(re(dot(cross(ef, conj(hf)), n))/2, ntff) == 1.641 within 6%
+```
+
+Reason: the antenna model of femahoy checks the directivity and the
+efficiency of a dipole (gap G13).
 
 `report cd = expr` gives the value a name. A study (§20) uses the name as
 the column of its results table. A report with no name gets its source
@@ -2545,7 +2606,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `re(c)`, `imag(c)`, `abs(c)`, `arg(c)`, `conj(c)` | parts of a `Complex<D>`: `re`, `imag` and `abs` give `D`, `arg` gives `Angle`, `conj` gives `Complex<D>` |
 | `diff(W, A)` | symbolic derivative, for example `S = 2*diff(W, C)` from an energy |
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
-| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
+| `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)`, `far_field(E, H, s, d)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
 | `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
 | `radiation(eps)` | the gray diffuse radiation of a face to the other faces of its enclosure, in a natural condition (§12.1) |
 | `wall_distance()` | the distance to the nearest wall, a boundary with `v = 0`, in a turbulence model (§4.2) |

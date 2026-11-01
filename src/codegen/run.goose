@@ -66,6 +66,8 @@ let LANE_OPTIM = 5;
 // skein-p5-optim: a quad model of linear_elastic goes to src/optim/gen.goose.
 fn read_model(prog: i64) -> i64 {
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
+    // Edge and face elements go to the simplex generator, before flow claims a q and a p.
+    if elements_gen::family_claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
     if flow_gen::claims(prog) { return if flow_gen::read(prog) { LANE_FLOW } else { -1 }; }
     if grid_gen::claims(prog) { return if grid_gen::read(prog) { LANE_GRID } else { -1 }; }
     if optim_gen::claims(prog) { return if optim_gen::read(prog) { LANE_OPTIM } else { -1 }; }
