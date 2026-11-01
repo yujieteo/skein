@@ -50,5 +50,20 @@ study shape: topology(
     penalty: 3,
     filter: 2.4 mm,
 ) {
-    expect c: -(u.y at (0 mm, 20 mm))*1 N == 216.81 N*mm within 0.2%
+    expect loop_c: -(u.y at (0 mm, 20 mm))*1 N == 216.81 N*mm within 0.2%
+}
+
+// femahoy: validation/cases/topology-mbb-beam-cad
+// The solid of the last design: the cells with a density of 0.5 or more
+// get the full E, the others E_min. Reference: c = 193.27, the threshold
+// of the femahoy loop on the same cells (femahoy derivation.md).
+study solid: topology(
+    objective: compliance,
+    region: beam,
+    volume: 0.5,
+    penalty: 3,
+    filter: 2.4 mm,
+    threshold: 0.5,
+) {
+    expect solid_c: -(u.y at (0 mm, 20 mm))*1 N == 193.27 N*mm within 0.2%
 }

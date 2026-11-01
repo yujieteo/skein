@@ -109,3 +109,14 @@ fn topology(volume: f64, p: f64, r: f64, most: i64) -> bool {
     }
     return true;
 }
+
+// Makes the design a solid: density 1 in each cell at `level` or more,
+// and 0 (the modulus E_MIN E) in the others. Then solves again, so that u
+// is that of the solid. False if the solve finds that the conditions do
+// not hold the body. Reason: femahoy topology-mbb-beam-cad checks the
+// compliance of the threshold of the last design at 0.5.
+fn solid(level: f64) -> bool {
+    guard level > 0.0 && level < 1.0 && density.len == cell_count() else { abort("solid: 0 < level < 1 and a mesh"); }
+    for &x in density { x = if x >= level { 1.0 } else { 0.0 }; }
+    return solve();
+}

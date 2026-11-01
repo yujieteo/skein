@@ -453,6 +453,8 @@ fn test_studies() {
     expect_id("procedure_args", str(tp, "region: s, volume: 0.5, filter: 0.1) {\n}\n"));
     expect_id("procedure_args", str(tp, "region: s, volume: 0.5) {\n}\n"));
     expect_id("procedure_args", str(tp, "region: s, volume: 0.5, penalty: 0.5, filter: 0.1 m) {\n}\n"));
+    expect_clean("G1 the solid of a topology study", str(tp, "region: s, volume: 0.5, filter: 0.1 m, threshold: 0.5) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5, filter: 0.1 m, threshold: 1) {\n}\n"));
     // G10: an expect of a study, checked in each case, with a list of one
     // value for each case of a grid or a zip.
     let d = str(H, "param D: Length = 1 m in 0.1 m..2 m\nparam k: Real = 1\n");

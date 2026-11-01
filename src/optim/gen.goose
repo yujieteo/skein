@@ -135,6 +135,7 @@ var volume = 0.0;
 var penalty = 3.0;
 var filter = 0.0;
 var most = 200;
+var threshold = 0.0;           // 0: no solid
 
 fn reset() {
     syntax::errors.clear();
@@ -162,6 +163,7 @@ fn reset() {
     penalty = 3.0;
     filter = 0.0;
     most = 200;
+    threshold = 0.0;
 }
 
 // --- values ---------------------------------------------------------------------
@@ -571,6 +573,8 @@ fn topology_args() {
             filter = scalar_value(v);
         } else if word == "max_iterations" {
             most = scalar_value(v) as! i64;
+        } else if word == "threshold" {
+            threshold = scalar_value(v);
         }
         a = next(a);
     }
@@ -846,6 +850,13 @@ fn emit_step(out: u8[>..]&, results_dir: u8[:]) {
         lit(out, filter);
         format(out, ", ", most, "));\n");
         emit_volume_check(out);
+        if threshold > 0.0 {
+            out.append("    // the solid: the cells at the threshold or more\n    solved(");
+            quoted(out, s);
+            out.append(", optim::solid(");
+            lit(out, threshold);
+            out.append("));\n");
+        }
     } else {
         out.append("    solved(");
         quoted(out, s);

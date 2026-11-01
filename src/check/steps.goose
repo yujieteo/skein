@@ -385,7 +385,7 @@ fn scales_end() {
 // --- study (spec §20.2) --------------------------------------------------------------------
 
 let STUDIES = ["grid", "zip", "sample", "minimize", "topology"];
-let TOPOLOGY_ARGS = ["objective", "region", "volume", "penalty", "filter", "max_iterations"];
+let TOPOLOGY_ARGS = ["objective", "region", "volume", "penalty", "filter", "max_iterations", "threshold"];
 var objectives: i64[>..];
 
 fn check_study(n: i64) {
@@ -467,9 +467,11 @@ fn topology_arg(at: i64, word: u8[:], v: i64) {
     if word == "penalty" { good = good || is_dimless_scalar(t) && x >= 1.0; }
     if word == "filter" { good = good || t.kind == K_NUM && t.rank == 0 && t.dim == length && x > 0.0; }
     if word == "max_iterations" { good = good || is_int(t) && x >= 1.0; }
+    if word == "threshold" { good = good || is_dimless_scalar(t) && x > 0.0 && x < 1.0; }
     if !good {
         let fix = if word == "volume" { "write volume: 0.5" } else if word == "penalty" { "write penalty: 3" }
-                  else if word == "filter" { "write filter: 2.4 mm" } else { "write max_iterations: 200" };
+                  else if word == "filter" { "write filter: 2.4 mm" }
+                  else if word == "threshold" { "write threshold: 0.5" } else { "write max_iterations: 200" };
         error(first_tok(v), "procedure_args", str("the ", word, " of topology is not valid"), fix);
     }
 }
