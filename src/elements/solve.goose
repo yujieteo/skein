@@ -53,6 +53,12 @@ fn precondition(r: f64[:], z: f64[:]) {
 // rigid-body modes of an elastic K, the constant of a scalar field. A solve
 // with a key > 0 takes the levels of the last run of a page if they fit K
 // (solvers/warm.goose), and keeps its levels for the next run.
+// Reason: against the constant of each component, the modes take sample 01
+// (tet10, 319320 dofs, 4 threads) from 36.5 s to 30.6 s and 181 to 53 CG
+// iterations, and a thin plate (tet, 91809 dofs) from 32.0 s to 5.9 s and
+// 866 to 55 iterations. The memory estimate stays at or above the peak:
+// on sample 01, 3123 MB against 2776 MB with 4 threads, 2646 MB against
+// 2429 MB with 1 thread.
 fn setup_preconditioner(key: i64) -> bool {
     var free_val: f64[>..] = [];
     free_val.append(val);
@@ -196,6 +202,9 @@ fn radiation_solve(start: f64, key: i64, warm: bool) -> bool {
             load[d] = base[d] - r[d] + dg[d] * sol[d];
             last[d] = sol[d];
         }
+        // Reason: a step after the first keeps the AMG levels of step 0. On
+        // radiation_annulus_tri, the CG iterations stay at 210, the time
+        // falls from 1.46 s to 1.18 s, and the result agrees within 1e-10.
         guard cg_solve(start, if rad_steps == 0 { key } else { -1 }, warm && rad_steps == 0) else { return false; }
         its += last_iterations;
         rad_steps++;
