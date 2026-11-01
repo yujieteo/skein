@@ -905,7 +905,205 @@ fn test_darcy() {
     expect_near("darcy strip flux", elements::boundary_flux(), 3.0, 1.0e-9);
 }
 
+// --- the nonlinear solid (solid.goose, material.goose) ---------------------------
+
+// The largest difference of a and b, relative to the largest of a, or to
+// 1 if that is less.
+fn rel_diff(a: f64[:], b: f64[:]) -> f64 {
+    var d = 0.0;
+    var m = 0.0;
+    for x, i in a {
+        d = max(d, abs(x - b[i]));
+        m = max(m, abs(x));
+    }
+    return d / max(m, 1.0);
+}
+
+// The compressible neo-Hookean energy of the principal values of C:
+// μ/2 (I1 - 3) - μ ln J + λ/2 (ln J)², with μ = 80 and λ = 120.
+fn neo_hooke(c: elements::Hd[3]) -> elements::Hd {
+    let lnj = elements::hd_ln(elements::hd_mul(elements::hd_mul(c[0], c[1]), c[2])) * 0.5;
+    return (c[0] + c[1] + c[2] - elements::hd(3.0)) * 40.0 - lnj * 80.0 + elements::hd_mul(lnj, lnj) * 60.0;
+}
+
+// S of neo_hooke at C: μ (I - C⁻¹) + λ ln J C⁻¹.
+fn neo_hooke_s(cm: f64[9]) -> f64[6] {
+    let ci = elements::mat_inv(cm);
+    let lnj = 0.5 * log(elements::mat_det(cm));
+    return elements::to_voigt((elements::EYE - ci) * 80.0 + ci * (120.0 * lnj));
+}
+
+// S and the tangent dS/dE of neo_hooke at C by the spectral formulas.
+fn spectral_s(cm: f64[9], s: f64[6]&, t: f64[36]&) {
+    let c, e = elements::sym_eigen(cm);
+    var w1: f64[3] = [0.0; 3];
+    var w2: f64[9] = [0.0; 9];
+    elements::energy_derivatives(c, 3, w1, w2, neo_hooke);
+    elements::energy_stress(c, e, 3, w1, w2, s, t);
+}
+
+// Column w of the tangent of neo_hooke by central differences of S in E.
+fn tangent_column(cm: f64[9], w: i64) -> f64[6] {
+    let h = 1.0e-6;
+    var up = cm;
+    var down = cm;
+    let i = elements::VOIGT_I[w];
+    let j = elements::VOIGT_J[w];
+    // dE_ij = h (normal) or the engineering shear 2 dE_ij = h
+    let dc = if i == j { 2.0 * h } else { h };
+    up[3 * i + j] += dc;
+    down[3 * i + j] -= dc;
+    if i != j {
+        up[3 * j + i] += dc;
+        down[3 * j + i] -= dc;
+    }
+    return (neo_hooke_s(up) - neo_hooke_s(down)) * (0.5 / h);
+}
+
+fn test_solid_points() {
+    // Jacobi: A e_k = λ_k e_k
+    let a: f64[9] = [4.0, 1.0, 0.5, 1.0, 3.0, -0.2, 0.5, -0.2, 1.0];
+    let l, e = elements::sym_eigen(a);
+    var worst = 0.0;
+    for k in 3 {
+        for i in 3 {
+            var ae = 0.0;
+            for j in 3 { ae += a[3 * i + j] * e[3 * j + k]; }
+            worst = max(worst, abs(ae - l[k] * e[3 * i + k]));
+        }
+    }
+    print("solid: Jacobi residual ", worst);
+    if !(worst < 1.0e-12) { failures++; print("FAIL solid Jacobi: residual ", worst); }
+    // the energy: S and the tangent at a general C and at C = I
+    let cs: f64[9][2] = [[1.3, 0.2, -0.1, 0.2, 0.9, 0.15, -0.1, 0.15, 1.1], elements::EYE];
+    for cm, k in cs {
+        var s: f64[6] = [0.0; 6];
+        var t: f64[36] = [0.0; 36];
+        spectral_s(cm, s, t);
+        let exact = neo_hooke_s(cm);
+        let es = rel_diff(exact, s);
+        var et = 0.0;
+        for w in 6 {
+            let col = tangent_column(cm, w);
+            var tw: f64[6] = [0.0; 6];
+            for v in 6 { tw[v] = t[6 * v + w]; }
+            et = max(et, rel_diff(col, tw));
+        }
+        print("solid: neo-Hooke at C ", k, ": error of S ", es, ", of the tangent ", et);
+        if !(es < 1.0e-12 && et < 1.0e-6) { failures++; print("FAIL solid neo-Hooke at C ", k); }
+    }
+    test_j2_points();
+}
+
+// The tangent of J2 at small strain against central differences of the
+// stress, on a plastic state; and the plastic flow at finite strain keeps
+// det Cp = 1.
+fn test_j2_points() {
+    let m = elements::J2 { lame: 115384.6, shear: 76923.1, yield0: 250.0, hard: 1000.0 };
+    let eps: f64[9] = [0.004, 0.001, 0.0, 0.001, -0.002, 0.0005, 0.0, 0.0005, 0.0];
+    var ep: f64[6] = [0.0; 6];
+    var alpha = 0.0;
+    var s0: f64[6] = [0.0; 6];
+    var t: f64[36] = [0.0; 36];
+    elements::j2_small(m, eps, ep, alpha, s0, t);
+    var et = 0.0;
+    for w in 6 {
+        let h = 1.0e-8;
+        let i = elements::VOIGT_I[w];
+        let j = elements::VOIGT_J[w];
+        var up = eps;
+        var down = eps;
+        let de = if i == j { h } else { 0.5 * h };
+        up[3 * i + j] += de;
+        down[3 * i + j] -= de;
+        if i != j {
+            up[3 * j + i] += de;
+            down[3 * j + i] -= de;
+        }
+        var sp: f64[6] = [0.0; 6];
+        var sm: f64[6] = [0.0; 6];
+        var tt: f64[36] = [0.0; 36];
+        var ep2: f64[6] = [0.0; 6];
+        var a2 = 0.0;
+        elements::j2_small(m, up, ep2, a2, sp, tt);
+        ep2 = [0.0; 6];
+        a2 = 0.0;
+        elements::j2_small(m, down, ep2, a2, sm, tt);
+        var tw: f64[6] = [0.0; 6];
+        for v in 6 { tw[v] = t[6 * v + w]; }
+        // a local: Goose gives a slice of an expression a wrong length
+        let col = (sp - sm) * (0.5 / h);
+        et = max(et, rel_diff(col, tw));
+    }
+    var cpi: f64[6] = [1.0, 1.0, 1.0, 0.0, 0.0, 0.0];
+    var af = 0.0;
+    var tau: f64[6] = [0.0; 6];
+    let f: f64[9] = [1.3, 0.1, 0.0, 0.0, 0.85, 0.05, 0.0, 0.0, 0.9];
+    let p = elements::j2_finite(m, f, cpi, af, tau);
+    let det = elements::mat_det(elements::from_voigt(cpi));
+    print("solid: J2 alpha ", alpha, ", error of the tangent ", et, "; finite strain alpha ", af, ", det Cp⁻¹ ", det);
+    if !(alpha > 0.0 && et < 1.0e-5) { failures++; print("FAIL solid J2 tangent: ", et); }
+    if !(af > 0.0 && abs(det - 1.0) < 1.0e-12) { failures++; print("FAIL solid J2 finite: det Cp⁻¹ ", det); }
+}
+
+// u = G X on the faces of a box of P2 tetrahedra with the free nodes
+// inside: a homogeneous deformation. The reaction on the face x = 1 is
+// P e_x times its area, with P = F S of neo_hooke.
+fn g_x(x: f64, y: f64, z: f64) -> f64 { return 0.3 * x + 0.1 * y; }
+fn g_y(x: f64, y: f64, z: f64) -> f64 { return -0.1 * y + 0.05 * z; }
+fn g_z(x: f64, y: f64, z: f64) -> f64 { return 0.02 * x - 0.08 * z; }
+
+fn test_solid_energy() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2, 2, 2);
+    elements::hyperelastic(1.0);
+    for axis in 3 {
+        for side in 2 {
+            assert(elements::plane(axis, side * 1.0));
+            elements::fix_with(elements::X, g_x);
+            elements::fix_with(elements::Y, g_y);
+            elements::fix_with(elements::Z, g_z);
+        }
+    }
+    let done = elements::solve_energy(4, neo_hooke);
+    let f: f64[9] = [1.3, 0.1, 0.0, 0.0, 0.9, 0.05, 0.02, 0.0, 0.92];
+    let p = elements::mat_mul(f, elements::from_voigt(neo_hooke_s(elements::mat_mul(elements::mat_t(f), f))));
+    assert(elements::plane(elements::X, 1.0));
+    let rx, ry, rz = elements::reaction();
+    let r: f64[3] = [rx, ry, rz];
+    let pe: f64[3] = [p[0], p[3], p[6]];
+    let err = rel_diff(pe, r);
+    print("solid: neo-Hooke box ", elements::newton_iterations(), " Newton iterations, reaction (", rx, ", ", ry, ", ", rz,
+          "), P e_x (", p[0], ", ", p[3], ", ", p[6], ")");
+    if !(done && err < 1.0e-8) { failures++; print("FAIL solid neo-Hooke box: converged ", done, ", error ", err); }
+}
+
+// A bar of J2 at small strain pulled to the strain 0.01 with free sides:
+// the stress sy + Et (ε - εy), Et = E H / (E + H).
+fn test_solid_plastic() {
+    let E = 200000.0;
+    let sy = 250.0;
+    let H = 1000.0;
+    elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2, 2, 2);
+    elements::elastic(E, 0.3);
+    elements::plastic(sy, H, false);
+    for axis in 3 {
+        assert(elements::plane(axis, 0.0));
+        elements::fix(axis, 0.0);
+    }
+    assert(elements::plane(elements::X, 1.0));
+    elements::fix(elements::X, 0.01);
+    let done = elements::solve_plastic(5);
+    let rx, ry, rz = elements::reaction();
+    let want = sy + E * H / (E + H) * (0.01 - sy / E);
+    print("solid: J2 bar ", elements::newton_iterations(), " Newton iterations, stress ", rx, ", want ", want);
+    if !done { failures++; print("FAIL solid J2 bar: no convergence"); }
+    expect_near("solid J2 bar", rx, want, 1.0e-8);
+}
+
 fn main() {
+    test_solid_points();
+    test_solid_energy();
+    test_solid_plastic();
     test_patches();
     test_kirsch();
     test_heated_bar();

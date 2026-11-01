@@ -224,6 +224,7 @@ var assembled_source: f64[>..] = [];
 fn assemble(path: u8[:], vectors: i64) {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
+    internal.clear();
     solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), "");
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
@@ -367,6 +368,16 @@ fn fix_region(comp: i64, v: f64) {
     }
 }
 
+// Holds component `comp` of each node of the region at VALUE(x, y, z).
+fn fix_region_with<VALUE>(comp: i64) {
+    guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("fix_region_with: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
+    for n in node_count() {
+        if !on_region(n) { continue; }
+        fixed[ncomp * n + comp] = 1;
+        prescribed[ncomp * n + comp] = VALUE(node_x(n, 0), node_x(n, 1), node_x(n, 2));
+    }
+}
+
 // Adds ∫ g Ni dA over the facets of the region to component p of node i,
 // for g = gv[p].
 fn add_region_load(gv: f64[3]) {
@@ -426,6 +437,23 @@ fn clear_conditions() {
 
 // --- reactions -----------------------------------------------------------------
 
+// The internal force of each dof after a static step of the nonlinear
+// solid (solid.goose), in place of K u; empty after a linear solve.
+var internal: f64[>..] = [];
+
+// The force K u of dof d, or its internal force, and the sum of the sizes
+// of the terms of the sum K u (the size of its round-off).
+fn row_force(d: i64) -> f64, f64 {
+    if internal.len == sol.len { return internal[d], abs(internal[d]); }
+    var ku = 0.0;
+    var terms = 0.0;
+    for e in row_start[d]..row_start[d + 1] {
+        ku += val[e] * sol[col[e]];
+        terms += abs(val[e] * sol[col[e]]);
+    }
+    return ku, terms;
+}
+
 // The force of the supports on the body (or the heat that flows in through
 // them): K u - f on the fixed dofs of the region. With equilibrium, the
 // reactions and the applied loads sum to 0.
@@ -438,8 +466,7 @@ fn region_reaction() -> f64[3] {
         for p in ncomp {
             let d = ncomp * n + p;
             if fixed[d] != 1 { continue; }
-            var ku = 0.0;
-            for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+            let ku, terms = row_force(d);
             sum[p] += ku - load[d] - assembled_source[d];
         }
     }
@@ -453,8 +480,7 @@ fn all_reaction() -> f64[3] {
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
         if fixed[d] != 1 { continue; }
-        var ku = 0.0;
-        for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+        let ku, terms = row_force(d);
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
     }
     return sum;
@@ -475,11 +501,8 @@ fn load_magnitude() -> f64 {
     var terms = 0.0;
     for d in sol.len {
         if fixed[d] != 1 { continue; }
-        var ku = 0.0;
-        for e in row_start[d]..row_start[d + 1] {
-            ku += val[e] * sol[col[e]];
-            terms += abs(val[e] * sol[col[e]]);
-        }
+        let ku, t = row_force(d);
+        terms += t;
         sum += abs(ku - load[d] - assembled_source[d]);
     }
     return max(sum, terms);

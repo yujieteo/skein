@@ -36,6 +36,8 @@ import .radiation;
 import .explicit;
 import .edge;
 import .mixed;
+import .material;
+import .solid;
 
 let X = 0;
 let Y = 1;
@@ -335,6 +337,10 @@ fn also_surface(g: i64) -> bool {
 // the region.
 fn fix(comp: i64, v: f64) { fix_region(comp, v); }
 
+// Holds component `comp` of each node of the region at VALUE(x, y, z), a
+// function of the program: a fixed value that varies on the region.
+fn fix_with<VALUE>(comp: i64) { fix_region_with(comp, VALUE); }
+
 // Holds the unknown on the region at the field of the last `read_state`,
 // interpolated at each node with the shape functions of the other mesh. It
 // gives the number of nodes of the region outside the other mesh.
@@ -369,6 +375,36 @@ fn solve() -> bool {
     if physics == MIXED { return mixed_solve(); }
     return if physics == WAVE { wave_solve() } else { solve_system() };
 }
+
+// --- the nonlinear solid (solid.goose, spec §10.6) ----------------------------
+
+// J2 plasticity of the von Mises yield sy + hk α, with the E and nu of the
+// last `elastic` call: at small strain, or at finite strain with the
+// multiplicative split (`finite`).
+fn plastic(sy: f64, hk: f64, finite: bool) { set_solid(if finite { SOLID_J2_FINITE } else { SOLID_J2 }, sy, hk); }
+
+// An isotropic hyperelastic energy of the program (solve_energy), in 3d,
+// or in 2d in plane strain with the thickness t. It needs no E and nu.
+fn hyperelastic(t: f64) {
+    set_elastic(1.0, 0.0, PLANE_STRAIN, t);
+    set_solid(SOLID_ENERGY, 0.0, 0.0);
+}
+
+// A static step of J2 at small strain in `ramp` increments. False if an
+// increment does not converge.
+fn solve_plastic(ramp: i64) -> bool { return solve_solid(ramp, no_energy); }
+
+// A static step of the energy ENERGY in `ramp` increments. ENERGY takes
+// the principal values of C as hyper-dual numbers (hd_seed) and gives W.
+fn solve_energy<ENERGY>(ramp: i64) -> bool { return solve_solid(ramp, ENERGY); }
+
+// The explicit step of J2 at finite strain to `end` with the step dt (dt
+// <= 0 for the stable step), from the velocity (vx, vy, vz) of each free
+// node. False if the state is not finite.
+fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool { return solid_explicit(end, dt, [vx, vy, vz]); }
+
+// The Newton iterations of the last static step of the nonlinear solid.
+fn newton_iterations() -> i64 { return newton_steps; }
 
 // The transient step central_difference (explicit.goose) to the time
 // `end`, with the step dt, or the stable step for dt <= 0, from rest.

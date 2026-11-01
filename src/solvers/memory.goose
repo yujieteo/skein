@@ -106,6 +106,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex central_difference", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 12.0 },
+    MemoryPath { name: "simplex newton cg amg", entry_bytes: 32.0, dof_bytes: 1600.0, thread_bytes: 16.0 },
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
