@@ -38,6 +38,7 @@ struct BeamSection {
     iy: f64,     // ∫ z² dA, for bending in the x-z plane
     iz: f64,     // ∫ y² dA, for bending in the x-y plane
     j: f64,      // the torsion constant
+    rho: f64,    // the density, for a modal step (beam_density), or 0
 }
 
 var coords: f64[>..] = [];          // x, y and z of each node
@@ -100,7 +101,7 @@ fn add_shell(n0: i64, n1: i64, n2: i64, n3: i64, section: i64, ax: f64, ay: f64,
 }
 
 fn beam_section(e: f64, nu: f64, area: f64, iy: f64, iz: f64, j: f64) -> i64 {
-    beam_sections.push(BeamSection { e: e, g: e / (2.0 * (1.0 + nu)), area: area, iy: iy, iz: iz, j: j });
+    beam_sections.push(BeamSection { e: e, g: e / (2.0 * (1.0 + nu)), area: area, iy: iy, iz: iz, j: j, rho: 0.0 });
     return beam_sections.len - 1;
 }
 

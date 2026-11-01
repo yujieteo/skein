@@ -469,9 +469,216 @@ fn test_b787(nx: i64, nt: i64) {
     expect_near("C5 sum of y reactions against -p 2R x_end", sum[1], -B_PU * 2.0 * B_R * B_XEND, 0.001);
 }
 
+// --- modes and buckling of the beams ------------------------------------------------
+
+// Steel, SI units, and a rectangular section ty × tz.
+let ST_E = 210.0e9;
+let ST_NU = 0.3;
+let ST_RHO = 7850.0;
+
+fn steel_section(ty: f64, tz: f64) -> i64 {
+    let iy = ty * tz * tz * tz / 12.0;
+    let iz = tz * ty * ty * ty / 12.0;
+    let s = shells::beam_section(ST_E, ST_NU, ty * tz, iy, iz, iy + iz);
+    shells::beam_density(s, ST_RHO);
+    return s;
+}
+
+// n beams of section s from the origin to len dir, with y axis y and the
+// offset o at both ends of each beam.
+fn beam_line(n: i64, len: f64, dir: f64[3], y: f64[3], o: f64[3], s: i64) {
+    for i in n + 1 {
+        let x = len * i / n;
+        shells::add_node(x * dir[0], x * dir[1], x * dir[2]);
+    }
+    for i in n { shells::add_beam(i, i + 1, s, y, o, o); }
+}
+
+fn expect_eigen(what: u8[:], ok: bool) {
+    if !ok {
+        failures++;
+        print("FAIL ", what, ": ", shells::eigen_error);
+    }
+    print(what, ": ", shells::dof_count(), " dofs, ", shells::eigen_iterations, " iterations, ", shells::last_seconds, " s");
+}
+
+// The first root b of the frequency equation of a Timoshenko cantilever
+// (T. C. Huang, J. Appl. Mech. 28, 1961, 579-584; S. M. Han, H. Benaroya and
+// T. Wei, J. Sound Vib. 225, 1999, 935-988, eq. (75)), with b² = ρAL⁴ω²/(EI),
+// r2 = I/(AL²) and s2 = EI/(kGAL²): bisection on 0.5 .. 3.6.
+fn timoshenko_cantilever_b(r2: f64, s2: f64) -> f64 {
+    var lo = 0.5;
+    var hi = 3.6;
+    let flo = huang(lo, r2, s2);
+    guard flo * huang(hi, r2, s2) < 0.0 else { abort("timoshenko_cantilever_b: no root in 0.5 .. 3.6"); }
+    for it in 200 {
+        let mid = 0.5 * (lo + hi);
+        if huang(mid, r2, s2) * flo > 0.0 { lo = mid; } else { hi = mid; }
+    }
+    return 0.5 * (lo + hi);
+}
+
+fn huang(b: f64, r2: f64, s2: f64) -> f64 {
+    let root = sqrt((r2 - s2) * (r2 - s2) + 4.0 / (b * b));
+    let a = sqrt(0.5 * (root - r2 - s2));
+    let c = sqrt(0.5 * (root + r2 + s2));
+    return 2.0 + (b * b * (r2 - s2) * (r2 - s2) + 2.0) * 0.5 * (exp(b * a) + exp(-b * a)) * cos(b * c)
+         - b * (r2 + s2) / sqrt(1.0 - b * b * r2 * s2) * 0.5 * (exp(b * a) - exp(-b * a)) * sin(b * c);
+}
+
+// The first frequency of a Timoshenko cantilever of section ty × tz, length
+// len, in the x-z plane (I = Iy).
+fn timoshenko_cantilever_f(ty: f64, tz: f64, len: f64) -> f64 {
+    let a = ty * tz;
+    let i = ty * tz * tz * tz / 12.0;
+    let g = ST_E / (2.0 * (1.0 + ST_NU));
+    let b = timoshenko_cantilever_b(i / (a * len * len), ST_E * i / (5.0 / 6.0 * g * a * len * len));
+    return b * sqrt(ST_E * i / (ST_RHO * a * len * len * len * len)) / (2.0 * PI);
+}
+
+// The modes of a steel cantilever of n beams on the skew line dir, L = 1 m,
+// 15 × 10 mm, with ey normal to dir. Returns the first 3 frequencies, and
+// the parts along ez and ey of the tip translation of modes 1 and 2.
+fn skew_cantilever(n: i64) -> f64[3], f64, f64 {
+    shells::clear();
+    let dir: f64[3] = [1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0];
+    let ey: f64[3] = [-2.0 / sqrt(5.0), 1.0 / sqrt(5.0), 0.0];
+    let ez = shells::cross(dir, ey);
+    beam_line(n, 1.0, dir, ey, [0.0, 0.0, 0.0], steel_section(0.015, 0.01));
+    for d in 6 { shells::fix(0, d); }
+    let ok = shells::modes(3);
+    expect_eigen(str("skew steel cantilever, ", n, " Timoshenko beams, modal"), ok);
+    var part: f64[2] = [0.0, 0.0];
+    for k in 2 {
+        shells::show_mode(k + 1);
+        let t: f64[3] = [shells::displacement(n, 0), shells::displacement(n, 1), shells::displacement(n, 2)];
+        part[k] = abs(shells::dot3(t, if k == 0 { ez } else { ey })) / shells::norm(t);
+    }
+    return [shells::eigenvalue(1), shells::eigenvalue(2), shells::eigenvalue(3)], part[0], part[1];
+}
+
+// (a) and (d): bending in x-z (Iy) gives mode 1 and in x-y (Iz = 2.25 Iy)
+// mode 2, against the Timoshenko root (Huang) and Euler-Bernoulli,
+// 1.8751² √(EI/(ρAL⁴))/(2π). Mode 3 is the second x-z mode, 4.6941².
+fn test_beam_modes() {
+    let eb = 1.8751040687 * 1.8751040687 / (2.0 * PI) * sqrt(ST_E * 0.015 * 1.0e-6 / 12.0 / (ST_RHO * 1.5e-4));
+    let ref1 = timoshenko_cantilever_f(0.015, 0.01, 1.0);
+    let ref2 = timoshenko_cantilever_f(0.01, 0.015, 1.0);
+    print("  Timoshenko f1 ", ref1, " Hz, Euler-Bernoulli ", eb, " Hz");
+    var last = 1.0;
+    for n in [1, 2, 4, 8, 16] {
+        let f, along_z, along_y = skew_cantilever(n);
+        let err = abs(f[0] - ref1) / ref1;
+        print("  n = ", n, ": f1 ", f[0], " Hz, error ", 100.0 * err, " %");
+        if !(err < last) {
+            failures++;
+            print("FAIL the error of f1 does not fall with n");
+        }
+        last = err;
+        if n == 16 {
+            expect_near("cantilever f1 (Iy) against Timoshenko", f[0], ref1, 1.0e-4);
+            expect_near("cantilever f1 (Iy) against Euler-Bernoulli", f[0], eb, 1.0e-3);
+            expect_near("cantilever f2 (Iz) against Timoshenko", f[1], ref2, 1.0e-4);
+            expect_near("cantilever f2 (Iz) against 1.5 Euler-Bernoulli", f[1], 1.5 * eb, 1.0e-3);
+            expect_near("cantilever f3 against 4.6941² / 1.8751² Euler-Bernoulli", f[2], 4.6940911330 * 4.6940911330 / (1.8751040687 * 1.8751040687) * eb, 2.0e-3);
+            expect_near("mode 1 tip translation along ez", along_z, 1.0, 1.0e-6);
+            expect_near("mode 2 tip translation along ey", along_y, 1.0, 1.0e-6);
+        }
+    }
+    // A short beam, L/h = 5: the shear and the rotary inertia lower f1.
+    shells::clear();
+    beam_line(32, 0.1, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0], steel_section(0.03, 0.02));
+    for d in 6 { shells::fix(0, d); }
+    let ok = shells::modes(1);
+    expect_eigen("short steel cantilever L/h = 5, 32 Timoshenko beams, modal", ok);
+    let short_eb = 1.8751040687 * 1.8751040687 / (2.0 * PI) * sqrt(ST_E * 0.02 * 0.02 / 12.0 / ST_RHO) / 0.01;
+    print("  Euler-Bernoulli ", short_eb, " Hz");
+    expect_near("short cantilever f1 against Timoshenko", shells::eigenvalue(1), timoshenko_cantilever_f(0.03, 0.02, 0.1), 1.0e-4);
+}
+
+// (c) A uniform offset e of a clamped cantilever moves all of it, so the
+// frequencies stay. A simply supported beam held in x at both nodes gets
+// an axial restraint at e from its axis, so f1 goes up.
+fn offset_modes(e: f64, clamped: bool) -> f64[3] {
+    shells::clear();
+    beam_line(8, 1.0, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -e], steel_section(0.015, 0.01));
+    if clamped {
+        for d in 6 { shells::fix(0, d); }
+    } else {
+        fix_all(0, [shells::UX, shells::UY, shells::UZ, shells::RX]);
+        fix_all(8, [shells::UX, shells::UY, shells::UZ]);
+    }
+    let ok = shells::modes(3);
+    expect_eigen(str(if clamped { "clamped" } else { "simply supported" }, " beam, offset ", e, " m, modal"), ok);
+    return [shells::eigenvalue(1), shells::eigenvalue(2), shells::eigenvalue(3)];
+}
+
+fn test_offset_modes() {
+    let c0 = offset_modes(0.0, true);
+    let c1 = offset_modes(0.05, true);
+    for k in 3 { expect_near(str("clamped f", k + 1, " with offset against no offset"), c1[k], c0[k], 1.0e-9); }
+    let s0 = offset_modes(0.0, false);
+    let s1 = offset_modes(0.05, false);
+    let eb = PI / 2.0 * sqrt(ST_E * 0.015 * 1.0e-6 / 12.0 / (ST_RHO * 1.5e-4));
+    expect_near("simply supported f1 against π/2 √(EIy/(ρAL⁴))", s0[0], eb, 1.0e-3);
+    print("  simply supported f1 with offset 0.05 m: ", s1[0], " Hz, without: ", s0[0], " Hz");
+    if !(s1[0] > 1.01 * s0[0]) {
+        failures++;
+        print("FAIL the offset does not raise f1 of the simply supported beam");
+    }
+}
+
+// (b) Euler buckling of a steel column on x, L = 1 m, 15 × 10 mm, under
+// P0 = 1000 N: π² EIy/L² pinned-pinned, π² EIy/(4L²) fixed-free.
+fn column_buckling(n: i64, pinned: bool) -> f64 {
+    shells::clear();
+    beam_line(n, 1.0, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0], steel_section(0.015, 0.01));
+    if pinned {
+        fix_all(0, [shells::UX, shells::UY, shells::UZ, shells::RX]);
+        fix_all(n, [shells::UY, shells::UZ]);
+    } else {
+        for d in 6 { shells::fix(0, d); }
+    }
+    shells::force(n, shells::UX, -1000.0);
+    let what = str(if pinned { "pinned-pinned" } else { "fixed-free" }, " column, ", n, " Timoshenko beams");
+    expect_solve(what);
+    let ok = shells::buckling(2);
+    expect_eigen(str(what, ", buckling"), ok);
+    return shells::eigenvalue(1);
+}
+
+fn test_buckling() {
+    let pe = PI * PI * ST_E * 0.015 * 1.0e-6 / 12.0 / 1000.0;
+    for pinned in [true, false] {
+        let want = if pinned { pe } else { pe / 4.0 };
+        // The shear of the Timoshenko beam lowers the load (Engesser):
+        // P = P_E/(1 + P_E/(kGA)). The mesh converges to it.
+        let kga = 5.0 / 6.0 * ST_E / (2.0 * (1.0 + ST_NU)) * 1.5e-4;
+        let engesser = want / (1.0 + 1000.0 * want / kga);
+        print("  Euler ", want, ", Engesser ", engesser);
+        var last = 1.0;
+        for n in [1, 2, 4, 8, 16] {
+            if pinned && n == 1 { continue; }
+            let got = column_buckling(n, pinned);
+            let err = abs(got - engesser) / engesser;
+            print("  n = ", n, ": load factor ", got, ", error against Engesser ", 100.0 * err, " %");
+            if !(err < last) {
+                failures++;
+                print("FAIL the error of the load factor does not fall with n");
+            }
+            last = err;
+            if n == 8 { expect_near(if pinned { "pinned-pinned load factor against π² EI/(L² P0)" } else { "fixed-free load factor against π² EI/(4 L² P0)" }, got, want, 0.01); }
+            if n == 16 { expect_near("load factor against Engesser", got, engesser, 1.0e-5); }
+        }
+    }
+}
+
 fn main() {
     test_laminate();
     test_offset_beam();
+    test_beam_modes();
+    test_offset_modes();
+    test_buckling();
     test_thin_cylinder();
     test_scordelis_lo();
     test_pinched_cylinder();
