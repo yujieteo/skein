@@ -251,12 +251,15 @@ fn clear_solid_bcs() {
     for d in s_fixed.len { s_fixed[d] = 0; }
 }
 
-// Holds component comp of u at 0 on the selected solid nodes. Reason for
-// 0 only: the root of FSI1 is the one solid bc of the samples.
-fn fix_solid(comp: i64) {
-    guard (comp == 0 || comp == 1) && s_region.len == solid_nodes() else { abort("fix_solid: comp 0 or 1, and a solid"); }
+// Holds u at 0 on the selected solid nodes. Reason for 0 only: the root
+// of FSI1 is the one solid bc of the samples.
+fn fix_solid() {
+    guard s_region.len == solid_nodes() else { abort("fix_solid: a solid"); }
     for n in solid_nodes() {
-        if s_region[n] != 0 { s_fixed[2 * n + comp] = 1; }
+        if s_region[n] != 0 {
+            s_fixed[2 * n] = 1;
+            s_fixed[2 * n + 1] = 1;
+        }
     }
 }
 

@@ -1643,8 +1643,6 @@ typedef struct {
     int64_t flow_VALUE_VX_g4;
     int64_t flow_VALUE_VY_g4;
     int64_t flow_VALUE_P_g4;
-    int64_t flow_VALUE_K_g4;
-    int64_t flow_VALUE_W_g4;
     int64_t flow_VALUE_UX_g4;
     int64_t flow_VALUE_UY_g4;
     gs_rhdr reports_g;
@@ -12540,7 +12538,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
     if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->flow_sol_g4.len)))) == (int64_t)(GS_GL->flow_dof_total_g4)))) {
         t0.data = ((uint8_t *)gs_str105); t0.len = 18;
         t1 = t0;
-        gs_abort_msg(t1.data, t1.len, gs_file11, 64);
+        gs_abort_msg(t1.data, t1.len, gs_file11, 57);
     }
     uint8_t *t153 = GS(gs_sp + 1)->top;
     int64_t nodes_g = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->flow_coords_g4.len))))) / (uint64_t)((int64_t)(2)));
@@ -12572,7 +12570,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
             }
             L9:;
             int64_t t15 = t8;
-            t5 = (((double *)(t6))[GS_IDX((int64_t)(t15), t7, gs_file11, 67)]);
+            t5 = (((double *)(t6))[GS_IDX((int64_t)(t15), t7, gs_file11, 60)]);
         } else {
             t5 = 0.0;
         }
@@ -12587,21 +12585,21 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
     int64_t t19 = GS_GL->flow_per_cell_g4;
     int64_t t20 = gs_div_i64(t18, t19, gs_file0, 50);
     for (int64_t c_g = 0; c_g < t20; c_g++) {
-        int64_t t23 = gs_sub_i64((int64_t)(GS_GL->flow_per_cell_g4), 3, gs_file11, 69);
+        int64_t t23 = gs_sub_i64((int64_t)(GS_GL->flow_per_cell_g4), 3, gs_file11, 62);
         for (int64_t e_g = 0; e_g < t23; e_g++) {
             int64_t a_g;
-            int64_t t26 = gs_mul_i64((int64_t)(2), e_g, gs_file11, 70);
-            int64_t t27 = flow_cell_node_g4(c_g, GS_GL->flow_EDGES_g4.e[GS_IDX((int64_t)(t26), 6, gs_file11, 70)], gs_sp + 1);
+            int64_t t26 = gs_mul_i64((int64_t)(2), e_g, gs_file11, 63);
+            int64_t t27 = flow_cell_node_g4(c_g, GS_GL->flow_EDGES_g4.e[GS_IDX((int64_t)(t26), 6, gs_file11, 63)], gs_sp + 1);
             a_g = t27;
             int64_t b_g;
-            int64_t t28 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file11, 71)), 1, gs_file11, 71);
-            int64_t t29 = flow_cell_node_g4(c_g, GS_GL->flow_EDGES_g4.e[GS_IDX((int64_t)(t28), 6, gs_file11, 71)], gs_sp + 1);
+            int64_t t28 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file11, 64)), 1, gs_file11, 64);
+            int64_t t29 = flow_cell_node_g4(c_g, GS_GL->flow_EDGES_g4.e[GS_IDX((int64_t)(t28), 6, gs_file11, 64)], gs_sp + 1);
             b_g = t29;
             uint8_t *t30 = (pressure_g.base);
             int64_t t31 = (pressure_g.len);
-            int64_t t32 = flow_cell_node_g4(c_g, gs_add_i64((int64_t)(3), e_g, gs_file11, 72), gs_sp + 1);
+            int64_t t32 = flow_cell_node_g4(c_g, gs_add_i64((int64_t)(3), e_g, gs_file11, 65), gs_sp + 1);
             int64_t t33 = t32;
-            double *t34 = &((((double *)(t30))[GS_IDX((int64_t)(t33), t31, gs_file11, 72)]));
+            double *t34 = &((((double *)(t30))[GS_IDX((int64_t)(t33), t31, gs_file11, 65)]));
             double t35 = 0.5;
             uint8_t *t36 = (GS_GL->flow_sol_g4.base);
             int64_t t37 = (GS_GL->flow_sol_g4.len);
@@ -12624,7 +12622,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
             }
             L39:;
             int64_t t45 = t38;
-            double t46 = (((double *)(t36))[GS_IDX((int64_t)(t45), t37, gs_file11, 72)]);
+            double t46 = (((double *)(t36))[GS_IDX((int64_t)(t45), t37, gs_file11, 65)]);
             uint8_t *t47 = (GS_GL->flow_sol_g4.base);
             int64_t t48 = (GS_GL->flow_sol_g4.len);
             int64_t t49;
@@ -12646,7 +12644,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
             }
             L50:;
             int64_t t56 = t49;
-            (*t34) = ((double)(t35) * (double)(((double)(t46) + (double)((((double *)(t47))[GS_IDX((int64_t)(t56), t48, gs_file11, 72)])))));
+            (*t34) = ((double)(t35) * (double)(((double)(t46) + (double)((((double *)(t47))[GS_IDX((int64_t)(t56), t48, gs_file11, 65)])))));
         }
     }
     out_g.base = t153; out_g.len = 0;
@@ -12681,16 +12679,16 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
     out_g.len += t65;
     int64_t t66 = nodes_g;
     for (int64_t n_g_5 = 0; n_g_5 < t66; n_g_5++) {
-        int64_t t70 = gs_mul_i64((int64_t)(2), n_g_5, gs_file11, 79);
-        int64_t t69 = gs_fmt_f64(t153, (double)(((double)((double)(x_ref_g)) * (double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t70), (GS_GL->flow_coords_g4.len), gs_file11, 79)])))));
+        int64_t t70 = gs_mul_i64((int64_t)(2), n_g_5, gs_file11, 72);
+        int64_t t69 = gs_fmt_f64(t153, (double)(((double)((double)(x_ref_g)) * (double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t70), (GS_GL->flow_coords_g4.len), gs_file11, 72)])))));
         t153 += t69;
         out_g.len += t69;
         int64_t t71 = 1;
         gs_memcpy(t153, (const uint8_t *)(((uint8_t *)gs_str36)), (size_t)t71);
         t153 += t71;
         out_g.len += t71;
-        int64_t t73 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), n_g_5, gs_file11, 79)), 1, gs_file11, 79);
-        int64_t t72 = gs_fmt_f64(t153, (double)(((double)((double)(x_ref_g)) * (double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t73), (GS_GL->flow_coords_g4.len), gs_file11, 79)])))));
+        int64_t t73 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), n_g_5, gs_file11, 72)), 1, gs_file11, 72);
+        int64_t t72 = gs_fmt_f64(t153, (double)(((double)((double)(x_ref_g)) * (double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t73), (GS_GL->flow_coords_g4.len), gs_file11, 72)])))));
         t153 += t72;
         out_g.len += t72;
         int64_t t74 = 3;
@@ -12712,7 +12710,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
             int64_t t84 = gs_fmt_i64(t153, (int64_t)(t85));
             t153 += t84;
             out_g.len += t84;
-            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file11, 82))) < (int64_t)(GS_GL->flow_per_cell_g4))) {
+            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file11, 75))) < (int64_t)(GS_GL->flow_per_cell_g4))) {
                 t88.data = ((uint8_t *)gs_str36); t88.len = 1;
                 t87 = t88;
             } else {
@@ -12734,7 +12732,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
     int64_t t93 = GS_GL->flow_per_cell_g4;
     int64_t t94 = gs_div_i64(t92, t93, gs_file0, 50);
     for (int64_t c_g_3 = 0; c_g_3 < t94; c_g_3++) {
-        int64_t t97 = gs_fmt_i64(t153, (int64_t)(gs_mul_i64((int64_t)(GS_GL->flow_per_cell_g4), gs_add_i64((int64_t)(c_g_3), 1, gs_file11, 85), gs_file11, 85)));
+        int64_t t97 = gs_fmt_i64(t153, (int64_t)(gs_mul_i64((int64_t)(GS_GL->flow_per_cell_g4), gs_add_i64((int64_t)(c_g_3), 1, gs_file11, 78), gs_file11, 78)));
         t153 += t97;
         out_g.len += t97;
         int64_t t98 = 1;
@@ -12795,7 +12793,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
         }
         L118:;
         int64_t t124 = t117;
-        int64_t t113 = gs_fmt_f64(t153, (double)(((double)(t114) * (double)((((double *)(t115))[GS_IDX((int64_t)(t124), t116, gs_file11, 92)])))));
+        int64_t t113 = gs_fmt_f64(t153, (double)(((double)(t114) * (double)((((double *)(t115))[GS_IDX((int64_t)(t124), t116, gs_file11, 85)])))));
         t153 += t113;
         out_g.len += t113;
         int64_t t125 = 1;
@@ -12823,7 +12821,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
         }
         L131:;
         int64_t t137 = t130;
-        int64_t t126 = gs_fmt_f64(t153, (double)(((double)(t127) * (double)((((double *)(t128))[GS_IDX((int64_t)(t137), t129, gs_file11, 92)])))));
+        int64_t t126 = gs_fmt_f64(t153, (double)(((double)(t127) * (double)((((double *)(t128))[GS_IDX((int64_t)(t137), t129, gs_file11, 85)])))));
         t153 += t126;
         out_g.len += t126;
         int64_t t138 = 3;
@@ -12863,7 +12861,7 @@ static uint8_t flow_write_vtu_g4(void *path_g_data, int64_t path_g_len, double x
     GS(gs_sp + 1)->top = t153;
     GS(gs_sp + 1)->top = out_g.base;
     GS(gs_sp + 0)->top = pressure_g.base;
-    GS_UNREACHABLE(gs_file11, 63);
+    GS_UNREACHABLE(gs_file11, 56);
     uint8_t t152 = {0};
     return t152;
 }
@@ -13333,10 +13331,8 @@ static void gs_init_globals(void) {
     GS_GL->flow_VALUE_VX_g4 = 0;
     GS_GL->flow_VALUE_VY_g4 = 1;
     GS_GL->flow_VALUE_P_g4 = 2;
-    GS_GL->flow_VALUE_K_g4 = 3;
-    GS_GL->flow_VALUE_W_g4 = 4;
-    GS_GL->flow_VALUE_UX_g4 = 5;
-    GS_GL->flow_VALUE_UY_g4 = 6;
+    GS_GL->flow_VALUE_UX_g4 = 3;
+    GS_GL->flow_VALUE_UY_g4 = 4;
     gs_stack_init((&GS_GL->gs_gstk_reports_g));
     GS_GL->reports_g.base = (&GS_GL->gs_gstk_reports_g)->top;
     GS_GL->reports_g.len = 0;

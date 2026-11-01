@@ -345,7 +345,7 @@ struct Refine {
 
 let BC_V = 0;       // component comp of the velocity, or both for comp -1
 let BC_P = 1;
-let BC_U = 2;       // component comp of the displacement of the solid, or both, at 0
+let BC_U = 2;       // the displacement of the solid at 0
 
 // A `bc`: the region (an index in `named`), the target and the scaled value.
 struct Bc {
@@ -943,7 +943,7 @@ fn bc(n: i64) -> i64 {
     }
     var b = Bc { region: r, kind: BC_V, comp: -1, v: [0.0, 0.0], expr: -1 };
     let t = compact(target);
-    if solid_tok >= 0 && (t == displacement || t == str(displacement, ".x") || t == str(displacement, ".y")) { return solid_bc(n, b, t); }
+    if solid_tok >= 0 && t == displacement { return solid_bc(n, b); }
     if mentions_xy(v) && (t == velocity || t == str(velocity, ".x") || t == str(velocity, ".y")) {
         // a value of x and y: emit_bc writes it as Goose (emit_coordinate)
         if t == velocity && (kind(v) != syntax::N_VECTOR || syntax::child_count(v) != 2) { unsupported(tok(v), str(velocity, " is a vector"), "write v = (6*U*y*(H - y)/H^2, 0)"); }
@@ -983,14 +983,13 @@ fn on_solid(g: i64) -> bool {
 }
 
 // `bc root: u = 0`, on a boundary of the solid.
-fn solid_bc(n: i64, b: Bc, t: u8[:]) -> i64 {
+fn solid_bc(n: i64, b: Bc) -> i64 {
     let v = child(n, 2);
     let q = quantity(v);
     if q.v[0] != 0.0 || q.v[1] != 0.0 { unsupported(tok(v), "the flow generator holds the solid at 0", str("write bc root: ", displacement, " = 0")); }
     if !on_solid(b.region) { unsupported(tok(child(n, 0)), "the bc of the solid is not on a boundary of the solid", "write bc root: u = 0, with let root: Curve = boundary(bar, ...)"); }
     var c = b;
     c.kind = BC_U;
-    c.comp = if t == displacement { -1 } else if t[t.len - 1] == 'x' { 0 } else { 1 };
     use_region(b.region);
     bcs.push(c);
     return bcs.len - 1;
@@ -1085,9 +1084,9 @@ fn point_field(e: i64) -> i64, i64 {
     if f == str(velocity, ".x") { return 0, -1; }
     if f == str(velocity, ".y") { return 1, -1; }
     if f == pressure { return 2, -1; }
-    if solid_tok >= 0 && f == displacement { return 5, 6; }
-    if solid_tok >= 0 && f == str(displacement, ".x") { return 5, -1; }
-    if solid_tok >= 0 && f == str(displacement, ".y") { return 6, -1; }
+    if solid_tok >= 0 && f == displacement { return 3, 4; }
+    if solid_tok >= 0 && f == str(displacement, ".x") { return 3, -1; }
+    if solid_tok >= 0 && f == str(displacement, ".y") { return 4, -1; }
     return -1, -1;
 }
 
@@ -1549,7 +1548,7 @@ fn unit_of(d: i64[3]) -> u8[>..] {
 // The component of a velocity vector in a report, or -1.
 var vector_comp = -1;
 
-let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P", "flow::VALUE_K", "flow::VALUE_W", "flow::VALUE_UX", "flow::VALUE_UY"];
+let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P", "flow::VALUE_UX", "flow::VALUE_UY"];
 let VELOCITY_D: i64[3] = [2, 0, -2];
 let PRESSURE_D: i64[3] = [-2, 2, -4];
 let LENGTH_D: i64[3] = [2, 0, 0];
@@ -1563,7 +1562,7 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
         var what, other = point_field(e);
         if other >= 0 && vector_comp >= 0 { what += vector_comp; }
         let at = scaled(at_point(child(e, 1)));
-        let d = if what == 2 { PRESSURE_D } else if what >= 5 { LENGTH_D } else { VELOCITY_D };
+        let d = if what == 2 { PRESSURE_D } else if what >= 3 { LENGTH_D } else { VELOCITY_D };
         format(out, "at(", VALUE_NAMES[what], ", ");
         lit(out, at.v[0]);
         out.append(", ");
@@ -1611,7 +1610,9 @@ recursive fn emit_boundary(out: u8[>..]&, b: i64) {
     if is_union(b) {
         for k in 2 {
             out.append(if k == 0 { "(" } else { ") || (" });
-            emit_boundary(out, named[named_of(child(b, k), BOUNDARY)].value);
+            let c = child(b, k);
+            let r = named_of(c, BOUNDARY);
+            emit_boundary(out, if r >= 0 { named[r].value } else { c });
         }
         out.push(')');
         return;
@@ -1915,7 +1916,7 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     quoted(out, g.name);
     out.append(");\n");
     if b.kind == BC_U {
-        for j in 2 { if b.comp < 0 || b.comp == j { format(out, "    flow::fix_solid(", j, ");\n"); } }
+        out.append("    flow::fix_solid();\n");
         return;
     }
     if b.expr >= 0 {

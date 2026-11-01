@@ -81,8 +81,6 @@ fn poiseuille(what: u8[:], order: i64, navier_stokes: bool, stab: i64, tolerance
 }
 
 // A fully developed turbulent channel of half height 1 at Re_τ = 395,
-// driven by the body force ρ u_τ² / h with u_τ = 1, ρ = 1, ν = 1/395.
-// A fully developed turbulent channel of half height 1 at Re_τ = 395,
 // driven by the body force ρ u_τ² / h with u_τ = 1, ρ = 1, ν = 1/395,
 // with the k-ω SST model. The ends are periodic: the mesh is half the
 // channel and its mirror, so that the nodes of the ends match. The DNS of
@@ -160,8 +158,7 @@ fn cantilever() {
     flow::solid_from_arrays(xy, tri);
     flow::solid(e, nu);
     assert(flow::select_solid_boundary() { x, y => abs(x) <= 1.0e-9 });
-    flow::fix_solid(0);
-    flow::fix_solid(1);
+    flow::fix_solid();
     if !flow::factor_solid() { fail("cantilever: the stiffness is not positive definite"); }
     // the consistent load of a uniform shear on the edges at x = L
     var load: f64[>..] = [];
