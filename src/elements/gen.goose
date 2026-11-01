@@ -357,12 +357,15 @@ struct Expect {
     modal: bool,    // an eigenvalue of a modal step: a frequency
     surf: i64,      // the boundary of FIELD_MEAN and FIELD_REACTION, or -1
     scale: f64,     // the factor of the value: -1 for a minus sign or for the heat out of the body
+    inverse: bool,  // the value is scale / the field, as -V0/integral(dot(J, n), spot)
+    unit: u8[..64], // the unit of the value, for a reaction of a heat physics with no k; else ""
 }
 
 var geometry_names: u8[..64][>..];
 var geometry_nodes: i64[>..];
 var surface_lets: i64[>..];
 var point_lets: i64[>..];
+var conductivity_name: u8[..64] = [];  // the property of the flux of the heat physics: k, or eps of -eps*grad(phi)
 var geo = GEO_BOX;
 var lo: f64[3];
 var hi: f64[3];
@@ -432,6 +435,7 @@ fn reset() {
     geometry_nodes.clear();
     surface_lets.clear();
     point_lets.clear();
+    set64(conductivity_name, "k");
     geo = GEO_BOX;
     hole_r = 0.0;
     hole_name = [];
@@ -834,17 +838,20 @@ fn square(n: i64) -> i64, f64 {
     return axis_of(name(child(b, 0))), scalar_value(child(b, 1));
 }
 
-// `y^2 + z^2 == R^2` on a 3d shape: the surface at distance R from the
+// `y^2 + z^2 == R^2` or `sqrt(y^2 + z^2) == R` on a 3d shape: the surface at distance R from the
 // line along the third axis, as a cylinder of the mesher past the ends of
 // the body. It gives false when `cond` is no such condition.
 fn mantle(cond: i64, s: Surf&) -> bool {
     guard kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" else { return false; }
-    let sum = child(cond, 0);
+    // sqrt(y^2 + z^2) == R is the same surface.
+    let root = is_call(child(cond, 0), "sqrt") && syntax::child_count(child(cond, 0)) == 2;
+    let sum = if root { arg(child(cond, 0), 0) } else { child(cond, 0) };
     guard kind(sum) == syntax::N_BINARY && syntax::text(tok(sum)) == "+" else { return false; }
     let a, ca = square(child(sum, 0));
     let b, cb = square(child(sum, 1));
     guard a >= 0 && b >= 0 && a != b else { return false; }
-    let r2 = scalar_value(child(cond, 1));
+    let r = scalar_value(child(cond, 1));
+    let r2 = if root { r * r } else { r };
     if geo != GEO_SHAPE || dim != 3 || r2 <= 0.0 || s.shapes.len == s.shapes.cap {
         unsupported(tok(cond), "a round surface is a boundary only on a 3d shape of the mesher", SURF_FIX);
         return true;
@@ -956,7 +963,7 @@ fn read_law() {
     while p >= 0 {
         let w = name(p);
         // The eq of the wave physics names its properties.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || w == "k" || w == "q_v" };
+        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || w == conductivity_name || w == "q_v" };
         if !known && w != "rho" {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -975,7 +982,7 @@ fn read_law() {
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
         }
     } else if physics == HEAT {
-        let k = property("k");
+        let k = property(conductivity_name);
         if k >= 0 { conductivity = scalar_value(k); }
         if conductivity <= 0.0 {
             unsupported(tok(material_node), "the material needs k > 0", "give k: Conductivity = 50 W/(m*K)");
@@ -1047,7 +1054,15 @@ fn flux_let(n: i64) -> i64 {
     let fourier = is_call(v, "fourier") && syntax::child_count(v) == 3 && source_of(arg(v, 0)) == "k" &&
         source_of(arg(v, 1)) == u;
     if fourier || source_of(v) == str("-k*grad(", u, ")") { return HEAT; }
-    return -1;
+    // -eps*grad(phi) or -sigma_e*grad(phi): the heat physics with the
+    // property eps or sigma_e in place of k.
+    // The parser reads it as (-eps)*grad(phi).
+    let product = kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" && source_of(child(v, 1)) == str("grad(", u, ")");
+    let c = if product { child(v, 0) } else { -1 };
+    let scaled = c >= 0 && kind(c) == syntax::N_UNARY && syntax::text(tok(c)) == "-" && kind(first(c)) == syntax::N_NAME;
+    guard scaled else { return -1; }
+    set64(conductivity_name, name(first(c)));
+    return HEAT;
 }
 
 fn physics_item(n: i64) {
@@ -1719,7 +1734,8 @@ fn expect(n: i64, step: i64) {
     }
     var surf = -1;
     var scale = 1.0;
-    if what < 0 { what, comp, surf, scale = region_field(left); }
+    var inverse = false;
+    if what < 0 { what, comp, surf, scale, inverse = scaled_field(left); }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
     if what < 0 || comp < 0 {
@@ -1732,7 +1748,18 @@ fn expect(n: i64, step: i64) {
     let no_point = what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN;
     var x = Expect { name: [], what: what, comp: comp, at: if no_point { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
-                     modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale };
+                     modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale,
+                     inverse: inverse, unit: [] };
+    // A reaction of -eps*grad(phi) is no heat: the value takes the unit of
+    // the expected value.
+    let unit = if kind(right) == syntax::N_NUMBER { syntax::child_of_kind(right, syntax::N_UNIT) } else { -1 };
+    if what == FIELD_REACTION && conductivity_name != "k" && unit >= 0 {
+        let f = codegen::to_system(unit);
+        x.want /= f;
+        if !x.relative { x.within /= f; }
+        x.scale /= f;
+        set64(x.unit, source_of(unit));
+    }
     // A tolerance of a temperature is a difference, not a degC value.
     if kind(within) == syntax::N_NUMBER && first(within) >= 0 && source_of(first(within)) == "degC" {
         x.within -= 273.15;
@@ -1749,6 +1776,30 @@ fn named_surf(r: i64) -> i64 { return if kind(r) == syntax::N_NAME { find_surf(n
 fn fixed_surf(s: i64) -> bool {
     for b in bcs { if b.surf == s && b.kind == BC_FIX { return true; } }
     return false;
+}
+
+// region_field(e), or e / c, c / e or c * e with a constant c: the
+// field, the component, the boundary, the factor and whether the value is
+// the factor / the field.
+fn scaled_field(e: i64) -> i64, i64, i64, f64, bool {
+    var f = e;
+    var sign = 1.0;
+    if kind(f) == syntax::N_UNARY && syntax::text(tok(f)) == "-" {
+        sign = -1.0;
+        f = first(f);
+    }
+    let op = if kind(f) == syntax::N_BINARY { syntax::text(tok(f)) } else { "" };
+    if op == "/" || op == "*" {
+        let what, comp, surf, scale = region_field(child(f, 0));
+        if what >= 0 && op == "/" { return what, comp, surf, sign * scale / scalar_value(child(f, 1)), false; }
+        if what >= 0 { return what, comp, surf, sign * scale * scalar_value(child(f, 1)), false; }
+        let w2, c2, s2, k2 = region_field(child(f, 1));
+        if w2 >= 0 && op == "/" { return w2, c2, s2, sign * scalar_value(child(f, 0)) / k2, true; }
+        if w2 >= 0 { return w2, c2, s2, sign * k2 * scalar_value(child(f, 0)), false; }
+        return -1, -1, -1, 1.0, false;
+    }
+    let what, comp, surf, scale = region_field(e);
+    return what, comp, surf, scale, false;
 }
 
 // An expect of a value on a boundary: mean(T, r), mean(u.x, r),
@@ -1988,10 +2039,12 @@ fn quoted(out: u8[>..]&, s: u8[:]) { codegen::quoted(out, s); }
 // The unit of the unknown, of its reaction, and of the flux.
 // The wave physics prints its values with no unit: in the units of the
 // model.
-fn value_unit() -> const u8[:] { if physics == HEAT { "K" } else if physics == WAVE { "" } else { codegen::system.length } }
+fn value_unit() -> const u8[:] { if physics == HEAT && conductivity_name == "k" { "K" } else if physics == HEAT || physics == WAVE { "" } else { codegen::system.length } }
 
 fn reaction_unit() -> const u8[:] {
     guard physics == HEAT else { return codegen::system.force; }
+    // The flux of -eps*grad(phi) is no heat: its unit is not in the system.
+    if conductivity_name != "k" { return ""; }
     if codegen::system.pressure == "Pa" { return "W"; }
     if codegen::system.pressure == "MPa" { return "mW"; }
     return "kW";
@@ -2701,7 +2754,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         } else {
             format(out, "        let rx, ry, rz = ", api(), "reaction();\n        let r: f64[3] = [rx, ry, rz];\n        let v = ");
             lit(out, x.scale);
-            format(out, " * r[", x.comp, "];\n");
+            format(out, if x.inverse { " / r[" } else { " * r[" }, x.comp, "];\n");
         }
         out.append("        let found_v = true;\n");
     } else {
@@ -2715,7 +2768,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    let unit = if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
