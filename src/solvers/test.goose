@@ -6,6 +6,8 @@
 //    one at second order in h.
 // 2. GMRES with ILU(0) against CG with Jacobi on the grid cantilever of
 //    src/runtime/test.goose: the same tip deflection in fewer iterations.
+// 3. The near null space of each physics (modes.goose), and the AMG levels
+//    that a page keeps from one run to the next (warm.goose).
 import std;
 import math;
 import runtime from "../runtime";
@@ -211,10 +213,94 @@ fn test_memory() {
     }
 }
 
+// The modes of a scalar field, of a 2D and a 3D solid, and of a thin plate.
+fn test_modes() {
+    // The 8 corners of a box of sides 1, 1 and t.
+    var cube: f64[>..] = [];
+    var plate: f64[>..] = [];
+    for k in 8 {
+        for t in 3 { cube.push(((k >> t) & 1) as f64); }
+        plate.push((k & 1) as f64);
+        plate.push(((k >> 1) & 1) as f64);
+        plate.push(0.05 * ((k >> 2) & 1));
+    }
+    var fixed: u8[>..] = [];
+    for d in 24 { fixed.push(if d < 3 { 1 } else { 0 }); }
+    let m3, nb3 = solvers::near_null_space(solvers::ELASTIC_MODES, cube, 3, 3, fixed);
+    let mp, nbp = solvers::near_null_space(solvers::ELASTIC_MODES, plate, 3, 3, fixed);
+    let m2, nb2 = solvers::near_null_space(solvers::ELASTIC_MODES, cube[..12], 2, 2, fixed[..8]);
+    let ms, nbs = solvers::near_null_space(solvers::SCALAR_MODES, cube, 3, 1, fixed[..8]);
+    if nb3 != 6 || nbp != 9 || nb2 != 3 || nbs != 1 { fail(str("modes: ", nb3, ", ", nbp, ", ", nb2, " and ", nbs, " modes, want 6, 9, 3 and 1")); }
+    if solvers::mode_count(solvers::ELASTIC_MODES, plate, 3, 3) != nbp || solvers::mode_count(solvers::ELASTIC_MODES, cube, 3, 3) != nb3 {
+        fail("modes: mode_count differs from near_null_space");
+    }
+    for v in mp[..3 * nbp] { if v != 0.0 { fail("modes: a mode is not 0 on a fixed dof"); } }
+    // u = (-y, x, 0) about the centre (0.5, 0.5, ...): the rotation about z at node 7 (1, 1, 1).
+    if mp[nbp * 21 + 3] != -0.5 || mp[nbp * 22 + 3] != 0.5 || mp[nbp * 23 + 3] != 0.0 { fail("modes: the rotation about z"); }
+    // The curvature along x of the plate: u_z = x²/2 about the centre.
+    if mp[nbp * 23 + 6] != 0.125 { fail("modes: the bending mode of the plate"); }
+    if ms[2] != 0.0 || ms[3] != 1.0 { fail("modes: the constant of a scalar field"); }
+}
+
+// The AMG levels of amg_coarse, restored with amg_restore, give the same
+// V-cycle; arrays of another matrix do not restore.
+fn test_warm() {
+    // The 5-point Laplacian on 40 x 40 nodes.
+    let n = 40;
+    var rs: i64[>..] = [0];
+    var col: i32[>..] = [];
+    var val: f64[>..] = [];
+    for j in n {
+        for i in n {
+            let r = i + n * j;
+            if j > 0 { col.push((r - n) as i32); val.push(-1.0); }
+            if i > 0 { col.push((r - 1) as i32); val.push(-1.0); }
+            col.push(r as i32);
+            val.push(4.0);
+            if i < n - 1 { col.push((r + 1) as i32); val.push(-1.0); }
+            if j < n - 1 { col.push((r + n) as i32); val.push(-1.0); }
+            rs.push(col.len);
+        }
+    }
+    var b: f64[>..] = [];
+    var z1: f64[>..] = [];
+    var z2: f64[>..] = [];
+    for r in n * n {
+        b.push(sin(0.1 * r));
+        z1.push(0.0);
+        z2.push(0.0);
+    }
+    if !solvers::amg_setup(rs, col, val, 1) { fail("warm: amg_setup"); }
+    solvers::amg_apply(b, z1);
+    var ln: i64[>..] = [];
+    var lrs: i64[>..] = [];
+    var lcol: i32[>..] = [];
+    var lval: f64[>..] = [];
+    var prs: i64[>..] = [];
+    var pcol: i32[>..] = [];
+    var pval: f64[>..] = [];
+    var chol: f64[>..] = [];
+    solvers::amg_coarse(ln, lrs, lcol, lval, prs, pcol, pval, chol);
+    if ln.len < 2 { fail(str("warm: ", ln.len, " AMG levels, want 2 or more")); }
+    if !solvers::amg_restore(rs, col, val, ln, lrs, lcol, lval, prs, pcol, pval, chol) { fail("warm: amg_restore"); }
+    solvers::amg_apply(b, z2);
+    for v, i in z1 { if v != z2[i] { fail("warm: the restored levels give another V-cycle"); break; } }
+    if solvers::amg_restore(rs, col, val, ln, lrs[1..], lcol, lval, prs, pcol, pval, chol) { fail("warm: amg_restore takes arrays of the wrong size"); }
+    var moved: i32[>..] = [];
+    moved.append(col);
+    moved[1] = 2;
+    var free: u8[>..] = [];
+    for r in n * n { free.push(0); }
+    let sig = solvers::pattern_signature(rs, col, free);
+    if sig == solvers::pattern_signature(rs, moved, free) { fail("warm: pattern_signature of another pattern"); }
+}
+
 fn main() {
     test_newton();
     test_cantilever();
     test_memory();
+    test_modes();
+    test_warm();
     if failures > 0 { exit(1); }
     print("solvers: all tests pass");
 }

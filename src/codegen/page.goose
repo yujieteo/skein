@@ -298,6 +298,8 @@ let SOLVE_JS = """
 
     // The worker of one run: it runs the module with the words of --set,
     // with a GPU device if e.data.gpu.
+    // The files of /warm go from each run to the next (src/solvers/warm.goose):
+    // the last solution and AMG levels of each solve.
     function workerMain() {
       self.onmessage = async (e) => {
         const out = [], err = [];
@@ -305,11 +307,14 @@ let SOLVE_JS = """
         const send = (code) => {
           if (sent) return;
           sent = true;
-          const files = {};
+          const files = {}, warm = {};
           for (const p of resultPaths(out.join("\n"))) {
             try { files[p] = mod.FS.readFile(p, { encoding: "utf8" }); } catch (x) { err.push("cannot read " + p); }
           }
-          postMessage({ code, out: out.join("\n"), err: err.join("\n"), files });
+          try {
+            for (const p of mod.FS.readdir("/warm")) if (p !== "." && p !== "..") warm[p] = mod.FS.readFile("/warm/" + p);
+          } catch (x) { err.push("cannot read /warm"); }
+          postMessage({ code, out: out.join("\n"), err: err.join("\n"), files, warm });
         };
         let gpu = null;
         if (e.data.gpu && self.navigator.gpu) {
@@ -326,8 +331,11 @@ let SOLVE_JS = """
           preRun: [(m) => {
             mod = m;
             m.ENV.SKEIN_THREADS = "1";
+            m.ENV.SKEIN_WARM = "/warm";
             if (e.data.implicitGpu) m.ENV.SKEIN_GPU_IMPLICIT = "1";
             m.FS.mkdirTree(e.data.results);
+            m.FS.mkdirTree("/warm");
+            for (const [p, bytes] of Object.entries(e.data.warm)) m.FS.writeFile("/warm/" + p, bytes);
           }],
           onExit: (code) => send(code),
           onAbort: (why) => { err.push("abort: " + why); send(-1); },
@@ -340,6 +348,8 @@ let SOLVE_JS = """
     const HAS_GPU = !!(self.navigator && navigator.gpu);
 
     let running = null;
+    // The files of /warm of the last run that ended.
+    let warm = {};
 
     // The solve of the page: values holds a number for each param, in the
     // unit of the param (the default for a param that it does not hold).
@@ -360,9 +370,12 @@ let SOLVE_JS = """
           if (running && running.worker === worker) running = null;
           resolve({ ...r, seconds: (performance.now() - start) / 1000, sets });
         };
-        worker.onmessage = (e) => end(e.data);
+        worker.onmessage = (e) => {
+          if (e.data.code === 0) warm = e.data.warm;
+          end(e.data);
+        };
         worker.onerror = (e) => end({ code: -1, out: "", err: String(e.message), files: {} });
-        worker.postMessage({ args: sets, results: RESULTS, gpu: options.gpu ?? HAS_GPU, implicitGpu: !!options.implicitGpu });
+        worker.postMessage({ args: sets, results: RESULTS, warm, gpu: options.gpu ?? HAS_GPU, implicitGpu: !!options.implicitGpu });
       });
     }
     """;

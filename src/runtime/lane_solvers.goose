@@ -57,6 +57,10 @@ fn amg_precondition(r: f64[:], z: f64[:]) {
     for d in z.len { if fixed[d] != 0 { z[d] = 0.0; } }
 }
 
+// A page run takes the AMG levels and the solution of the last run if they
+// fit (solvers/warm.goose), and keeps its own for the next run. CG starts
+// from the multiple of the last solution with the least energy: a change
+// of the size of the loads alone then needs no iterations.
 fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 {
     var a: f64[>..] = [];
     a.append(val);
@@ -65,47 +69,52 @@ fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 
             if col[e] != d && (fixed[d] != 0 || fixed[col[e]] != 0) { a[e] = 0.0; }
         }
     }
-    guard rigid_setup(a) else {
-        write_stderr("runtime: the coarsest level of AMG is singular\n");
-        return true, false, 0;
+    let key = solvers::warm_key();
+    if !solvers::amg_reuse(key, row_start, col, a, fixed) {
+        guard rigid_setup(a) else {
+            write_stderr("runtime: the coarsest level of AMG is singular\n");
+            return true, false, 0;
+        }
+        solvers::amg_keep(key, row_start, col, fixed);
+    }
+    if solvers::warm_start(key, x, fixed) {
+        var ax = zeros(x.len);
+        free_operator(x, ax);
+        let xax = dot(x, ax);
+        let alpha = if xax > 0.0 { dot(x, b) / xax } else { 0.0 };
+        for d in x.len { if fixed[d] == 0 { x[d] *= alpha; } }
     }
     let converged, its = cg(b, x, tol, max_it, free_operator, amg_precondition);
+    if converged { solvers::warm_keep(key, x); }
     return true, converged, its;
 }
 
-// The AMG levels of the matrix a, with the rigid-body modes as the near
-// null space for a solid (3 dofs for each node), 0 on the fixed dofs.
+// The AMG levels of the matrix a, with the near null space of the physics
+// (solvers/modes.goose): the rigid-body modes of a solid (3 dofs for each
+// node), the constant of each component otherwise.
 // Reason: on warpage_thick_copper (44541 dofs, 1 cell through 20 um of
 // copper) the constant of each component needs 571 CG iterations and 21 s,
 // and the rigid-body modes need 88 iterations and 6.2 s.
 fn rigid_setup(a: f64[:]) -> bool {
-    guard dofs_per_node == 3 else { return solvers::amg_setup(row_start, col, a, dofs_per_node); }
-    var modes: f64[>..] = [];
-    for d in fixed.len {
-        let n = d / 3;
-        let c = d % 3;
-        let x = coords[3 * n];
-        let y = coords[3 * n + 1];
-        let z = coords[3 * n + 2];
-        // the translations, then the rotations about z, x and y
-        var m: f64[6] = [0.0; 6];
-        m[c] = 1.0;
-        if c == 0 { m[3] = -y; m[5] = z; }
-        if c == 1 { m[3] = x; m[4] = -z; }
-        if c == 2 { m[4] = y; m[5] = -x; }
-        for k in 6 { modes.push(if fixed[d] != 0 { 0.0 } else { m[k] }); }
-    }
-    return solvers::amg_setup_modes(row_start, col, a, 3, modes, 6);
+    let modes, nb = solvers::near_null_space(mode_kind(), coords, 3, dofs_per_node, fixed);
+    return solvers::amg_setup_modes(row_start, col, a, dofs_per_node, modes, nb);
 }
+
+// The near null space of the field: a solid has 3 dofs for each node.
+fn mode_kind() -> i64 { return if dofs_per_node == 3 { solvers::ELASTIC_MODES } else { solvers::SCALAR_MODES }; }
 
 // The memory check of a solve with solver_name and preconditioner_name,
 // after the pattern of `entries` entries (solvers::memory_check). The
-// vectors: r, z, p, q, b and inv_diag of cg, and the basis of gmres with
-// rhs, r, z, b, inv_diag and the i64 diag and `where` of ILU(0).
+// vectors: r, z, p, q, b and inv_diag of cg, with Ax of a warm start and
+// the modes of the AMG and their copy, and the basis of gmres with rhs, r, z, b, inv_diag and the
+// i64 diag and `where` of ILU(0).
 fn check_memory(entries: i64) {
-    let vectors = if solver_name == "gmres" { GMRES_RESTART + 8 } else { 6 };
+    let modes = if preconditioner_name == "amg" { solvers::mode_count(mode_kind(), coords, 3, dofs_per_node) } else { 0 };
+    let vectors = if solver_name == "gmres" { GMRES_RESTART + 8 } else { 7 + 2 * modes };
+    // The coarse levels of 9 modes hold more for each entry than those of 6.
+    let bending = if modes > 6 { " bending" } else { "" };
     let fix = if preconditioner_name == "jacobi" { "" } else { ", or write solve { linear: cg, precond: jacobi } in the step: it needs less memory, but it can need many more iterations" };
     // The mesh that each cell_worker copies at its spawn.
     let mesh = 8 * (coords.len + cell_start.len + cell_nodes.len + cell_young.len + cell_poisson.len) + cell_type.len;
-    solvers::memory_check(str("box ", solver_name, " ", preconditioner_name), entries, dof_total(), vectors, mesh, fix);
+    solvers::memory_check(str("box ", solver_name, " ", preconditioner_name, bending), entries, dof_total(), vectors, mesh, fix);
 }

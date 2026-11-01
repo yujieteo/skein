@@ -545,3 +545,91 @@ fn amg_apply(r: f64[:], z: f64[:]) {
     }
     for i in r.len { z[i] = amg_x[i]; }
 }
+
+// The levels of the last amg_setup without the fine level: the dofs of
+// each level in n, the matrices of the coarse levels (rs, col, val), the
+// prolongators (prs, pcol, pval) and the factor of the last level. Each
+// row start counts from its own level. warm.goose keeps them.
+fn amg_coarse(n: i64[>..]&, rs: i64[>..]&, col: i32[>..]&, val: f64[>..]&, prs: i64[>..]&, pcol: i32[>..]&,
+              pval: f64[>..]&, chol: f64[>..]&) {
+    guard amg_levels > 0 else { abort("amg_coarse: amg_setup"); }
+    n.clear();
+    n.append(amg_n);
+    rs.clear();
+    col.clear();
+    val.clear();
+    for l in 1..amg_levels {
+        rs.append(level_rs(l));
+        col.append(level_col(l));
+        val.append(level_val(l));
+    }
+    prs.clear();
+    prs.append(amg_prs);
+    pcol.clear();
+    pcol.append(amg_pcol);
+    pval.clear();
+    pval.append(amg_pval);
+    chol.clear();
+    chol.append(amg_chol);
+}
+
+// The levels of amg_coarse again, with the matrix (row_start, col, val) as
+// the fine level. False if the arrays do not make the levels.
+fn amg_restore(row_start: i64[:], col: i32[:], val: f64[:], n: i64[:], rs: i64[:], cl: i32[:], vl: f64[:],
+               prs: i64[:], pcol: i32[:], pval: f64[:], chol: f64[:]) -> bool {
+    guard n.len >= 1 && n.len <= AMG_MAX_LEVELS && n[0] == row_start.len - 1 && col.len == val.len else { return false; }
+    // The sizes first, so that a file of another program fails here.
+    var rows = 0;
+    var entries = 0;
+    var prows = 0;
+    var pentries = 0;
+    for l in n.len {
+        guard n[l] >= 1 else { return false; }
+        if l >= 1 {
+            guard rows + n[l] + 1 <= rs.len && rs[rows] == 0 && rs[rows + n[l]] >= 0 else { return false; }
+            entries += rs[rows + n[l]];
+            rows += n[l] + 1;
+        }
+        if l + 1 < n.len {
+            guard prows + n[l] + 1 <= prs.len && prs[prows] == 0 && prs[prows + n[l]] >= 0 else { return false; }
+            pentries += prs[prows + n[l]];
+            prows += n[l] + 1;
+        }
+    }
+    let last = n[n.len - 1];
+    guard rows == rs.len && entries == cl.len && cl.len == vl.len && prows == prs.len && pentries == pcol.len &&
+          pcol.len == pval.len && (chol.len == 0 || chol.len == last * last) else { return false; }
+    for l in n.len - 1 {
+        guard n[l + 1] < n[l] else { return false; }
+    }
+    clear_levels();
+    push_level(n[0], row_start, col, val);
+    rows = 0;
+    entries = 0;
+    for l in 1..n.len {
+        let r = rs[rows..rows + n[l] + 1];
+        let count = r[n[l]];
+        for e in entries..entries + count { guard cl[e] >= 0 && cl[e] < n[l] else { return false; } }
+        push_level(n[l], r, cl[entries..entries + count], vl[entries..entries + count]);
+        rows += n[l] + 1;
+        entries += count;
+    }
+    amg_pe_at.push(0);
+    prows = 0;
+    pentries = 0;
+    for l in n.len - 1 {
+        let r = prs[prows..prows + n[l] + 1];
+        let count = r[n[l]];
+        for e in pentries..pentries + count { guard pcol[e] >= 0 && pcol[e] < n[l + 1] else { return false; } }
+        amg_prs_at.push(amg_prs.len);
+        amg_prs.append(r);
+        amg_pcol.append(pcol[pentries..pentries + count]);
+        amg_pval.append(pval[pentries..pentries + count]);
+        amg_pe_at.push(amg_pcol.len);
+        prows += n[l] + 1;
+        pentries += count;
+    }
+    amg_chol.clear();
+    amg_chol.append(chol);
+    return true;
+}

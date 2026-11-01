@@ -53,7 +53,7 @@ Phase 3 is in three tasks: flow, solid, and the mesher with the task pool.
 | the task pool (§20.5) | done for the cases of a study, with the memory ledger (`src/codegen/run.goose`), and for the threads in a case (`src/solvers/pool.goose`) |
 | birth and death | done: `birth` and `death` regions of a step, `src/elements/gen.goose` |
 | submodels | done: `results(file, step:, case:)`, the cut values and `submodel_cut`, `src/elements/source.goose`. The femahoy gap G34 is closed. |
-| AMG | done: the default preconditioner of the elements solver, with the rigid-body modes for the eigen solves, `src/solvers/amg.goose` |
+| AMG | done: the default preconditioner of the elements solver and of the box runtime, with the near null space of each physics (`src/solvers/modes.goose`), `src/solvers/amg.goose` |
 | LOBPCG for modal and buckling | done: `modal` and `buckling` steps and `eigenvalue(k)`, `src/elements/eigen.goose` |
 
 Gate: `scripts/generated_c.sh` runs samples 02 and 06. Sample 02 passes

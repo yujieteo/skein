@@ -49,12 +49,11 @@ fn precondition(r: f64[:], z: f64[:]) {
 }
 
 // The AMG levels of K with the rows and the columns of the fixed dofs cut
-// off. With `rigid`, the near null space of an elastic K is the rigid-body
-// modes, 0 on the fixed dofs: LOBPCG (eigen.goose) needs it, 199 steps
-// fall to 36 on a cantilever. A static solve takes the constant of each
-// component: on sample 04 the rigid-body modes halve the CG iterations but
-// double the time of the setup.
-fn setup_preconditioner(rigid: bool) -> bool {
+// off, with the near null space of the physics (solvers/modes.goose): the
+// rigid-body modes of an elastic K, the constant of a scalar field. A solve
+// with a key > 0 takes the levels of the last run of a page if they fit K
+// (solvers/warm.goose), and keeps its levels for the next run.
+fn setup_preconditioner(key: i64) -> bool {
     var free_val: f64[>..] = [];
     free_val.append(val);
     for d in sol.len {
@@ -62,43 +61,63 @@ fn setup_preconditioner(rigid: bool) -> bool {
             if col[e] != d && (fixed[d] != 0 || fixed[col[e]] != 0) { free_val[e] = 0.0; }
         }
     }
-    guard rigid && physics == ELASTIC else { return solvers::amg_setup(row_start, col, free_val, ncomp); }
-    let nb = if dim == 3 { 6 } else { 3 };
-    var modes: f64[>..] = [];
-    for d in sol.len {
-        let n = d / ncomp;
-        let c = d % ncomp;
-        let x = node_x(n, 0);
-        let y = node_x(n, 1);
-        let z = node_x(n, 2);
-        // the translations, then the rotations about z, x and y
-        var m: f64[6] = [0.0; 6];
-        m[c] = 1.0;
-        if c == 0 { m[dim] = -y; }
-        if c == 1 { m[dim] = x; }
-        if dim == 3 && c == 1 { m[4] = -z; }
-        if dim == 3 && c == 2 { m[4] = y; }
-        if dim == 3 && c == 0 { m[5] = z; }
-        if dim == 3 && c == 2 { m[5] = -x; }
-        for k in nb { modes.push(if fixed[d] != 0 { 0.0 } else { m[k] }); }
-    }
-    return solvers::amg_setup_modes(row_start, col, free_val, ncomp, modes, nb);
+    if key > 0 && solvers::amg_reuse(key, row_start, col, free_val, fixed) { return true; }
+    let modes, nb = solvers::near_null_space(mode_kind(), coords, dim, ncomp, fixed);
+    guard solvers::amg_setup_modes(row_start, col, free_val, ncomp, modes, nb) else { return false; }
+    if key > 0 { solvers::amg_keep(key, row_start, col, fixed); }
+    return true;
 }
+
+fn mode_kind() -> i64 { return if physics == ELASTIC { solvers::ELASTIC_MODES } else { solvers::SCALAR_MODES }; }
+
+// The vectors of the near null space of the physics.
+fn mode_count() -> i64 { return solvers::mode_count(mode_kind(), coords, dim, ncomp); }
 
 fn solve_system() -> bool {
     guard physics >= 0 && dofs_sized() else { abort("solve_system: a physics and the arrays of the dofs"); }
     let start = clock();
-    // r, z, p, q and the source vector
-    assemble("simplex cg amg", 5);
+    // r, z, p, q, the source vector, w of a warm start, and the modes of the
+    // AMG with their copy
+    assemble(if physics == ELASTIC { "simplex elastic cg amg" } else { "simplex cg amg" }, 6 + 2 * mode_count());
     hold_dead_nodes();
     for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
-    if rad_count() > 0 { return radiation_solve(start); }
-    return cg_solve(start);
+    let key = solvers::warm_key();
+    let warm = solvers::warm_start(key, sol, fixed);
+    let converged = if rad_count() > 0 { radiation_solve(start, key, warm) } else { cg_solve(start, key, warm) };
+    if converged { solvers::warm_keep(key, sol); }
+    return converged;
+}
+
+// Scales the free dofs of sol, the last solution, by the factor with the
+// least energy, and r, the residual of sol, with it. z is scratch.
+fn warm_scale(r: f64[:], z: f64[:]) {
+    let n = sol.len;
+    var w = zeros(n);
+    for d in n { if fixed[d] == 0 { w[d] = sol[d]; } }
+    multiply(w, z);
+    var wr = 0.0;
+    var wkw = 0.0;
+    for d in n {
+        if fixed[d] != 0 { continue; }
+        wr += w[d] * r[d];
+        wkw += w[d] * z[d];
+    }
+    let alpha = if wkw > 0.0 { (wr + wkw) / wkw } else { 0.0 };
+    for d in n {
+        if fixed[d] != 0 { continue; }
+        sol[d] = alpha * w[d];
+        r[d] -= (alpha - 1.0) * z[d];
+    }
 }
 
 // CG on K du = f - K u from the u in sol, for the matrix and the loads of
-// the last assemble.
-fn cg_solve(start: f64) -> bool {
+// the last assemble. With a key >= 0, it builds the AMG levels of K
+// (setup_preconditioner); with -1, it keeps the levels of the last call.
+// With `warm`, the free dofs of sol hold the solution of the last run of a
+// page, and CG starts from the multiple of it with the least energy. On
+// sample 01, a change of the load from 2 kN to 3 kN then needs 9
+// iterations, not 53.
+fn cg_solve(start: f64, key: i64, warm: bool) -> bool {
     let n = sol.len;
     var r = zeros(n);
     var z = zeros(n);
@@ -114,7 +133,8 @@ fn cg_solve(start: f64) -> bool {
         f2 += f * f;
         r[d] = f - q[d];
     }
-    guard setup_preconditioner(false) else {
+    if warm { warm_scale(r, z); }
+    guard key < 0 || setup_preconditioner(key) else {
         last_iterations = 0;
         last_seconds = clock() - start;
         return false;
@@ -152,10 +172,11 @@ fn cg_solve(start: f64) -> bool {
 }
 
 // The Picard iteration of radiation.goose: each step solves
-// (K + D) T' = f - R(T) + D T with CG, from T. At the end `load` holds
+// (K + D) T' = f - R(T) + D T with CG, from T. The AMG levels of the first
+// step stay the preconditioner of the next steps: only D changes. At the end `load` holds
 // f - R(T), so the reactions and the check of the equilibrium hold the
 // radiated heat.
-fn radiation_solve(start: f64) -> bool {
+fn radiation_solve(start: f64, key: i64, warm: bool) -> bool {
     exchange_matrix();
     let n = sol.len;
     var base: f64[>..] = [];
@@ -175,7 +196,7 @@ fn radiation_solve(start: f64) -> bool {
             load[d] = base[d] - r[d] + dg[d] * sol[d];
             last[d] = sol[d];
         }
-        guard cg_solve(start) else { return false; }
+        guard cg_solve(start, if rad_steps == 0 { key } else { -1 }, warm && rad_steps == 0) else { return false; }
         its += last_iterations;
         rad_steps++;
         var change = 0.0;
