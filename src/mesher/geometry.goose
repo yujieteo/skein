@@ -87,8 +87,8 @@ fn fill(xy: f64[:]) -> i64 {
 
 // The region inside the NURBS curve of degree p (1 to 3) with the knots
 // `knots` and the points x, y, w of `xyw`, and the line from its end to
-// its start (spec §8.1). The knots do not fall, and the first and the
-// last are each p + 1 times. Knot insertion (Boehm) makes each inner knot
+// its start (spec §8.1). The knots do not fall, the first and the last
+// are each p + 1 times, and an inner knot is p times or fewer. Knot insertion (Boehm) makes each inner knot
 // p times: then each knot span is a rational Bézier curve of degree p,
 // which is raised to degree 3.
 fn fill_nurbs(p: i64, knots: f64[:], xyw: f64[:]) -> i64 {
@@ -156,9 +156,9 @@ fn bezier_span(p: i64, h: f64[:]) -> f64[12] {
     var c: f64[12] = default<f64[12]>();
     for d in 3 {
         fn at(i: i64) -> f64 { h[3 * i + d] }
-        var b: f64[4] = [at(0), at(1), at(2), at(3 % (p + 1))];
-        if p == 1 { b = [at(0), (2.0 * at(0) + at(1)) / 3.0, (at(0) + 2.0 * at(1)) / 3.0, at(1)]; }
-        if p == 2 { b = [at(0), (at(0) + 2.0 * at(1)) / 3.0, (2.0 * at(1) + at(2)) / 3.0, at(2)]; }
+        let b: f64[4] = if p == 1 { [at(0), (2.0 * at(0) + at(1)) / 3.0, (at(0) + 2.0 * at(1)) / 3.0, at(1)] }
+                        else if p == 2 { [at(0), (at(0) + 2.0 * at(1)) / 3.0, (2.0 * at(1) + at(2)) / 3.0, at(2)] }
+                        else { [at(0), at(1), at(2), at(3)] };
         c[4 * d] = b[0];
         c[4 * d + 1] = 3.0 * (b[1] - b[0]);
         c[4 * d + 2] = 3.0 * (b[2] - 2.0 * b[1] + b[0]);

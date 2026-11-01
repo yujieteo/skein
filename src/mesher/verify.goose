@@ -196,11 +196,12 @@ recursive fn read_nurbs(c: i64) -> Value {
     }
     var falls = false;
     for i in 1..n + p + 1 { if polygon_scratch[mark + i] < polygon_scratch[mark + i - 1] { falls = true; } }
+    for i in 1..n { if polygon_scratch[mark + i + p] == polygon_scratch[mark + i] { falls = true; } }
     let clamped = polygon_scratch[mark + p] == polygon_scratch[mark] && polygon_scratch[mark + n + p] == polygon_scratch[mark + n] &&
                   polygon_scratch[mark + n] > polygon_scratch[mark];
     guard syntax::errors.len == 0 && !falls && clamped else {
         if syntax::errors.len == 0 {
-            reader_fault(syntax::nodes[k].tok, "the knots of the nurbs fall, or the first and the last are not each degree + 1 times", "write knots(0, 0, 0, 1, 1, 1) for degree 2");
+            reader_fault(syntax::nodes[k].tok, "the knots of the nurbs fall, the first and the last are not each degree + 1 times, or an inner knot is more than degree times", "write knots(0, 0, 0, 1, 1, 1) for degree 2");
         }
         polygon_scratch.resize(mark);
         return number_value(0.0);

@@ -584,7 +584,8 @@ fn design_chain(path: u8[:], text: u8[:], z: f64[:]) -> f64[>..], bool {
 }
 
 // The objective `objective` and the gradient dJ/dz in the records of a
-// case. ran is false if a record is missing.
+// case. ran is false if a record is missing: the program of a case with a
+// fault prints no gradient, and a failed expect is not a fault.
 fn case_gradient(e: CaseEnd, objective: u8[:]) -> f64, f64[>..], bool {
     var j = 0.0;
     var found = false;
@@ -612,7 +613,7 @@ fn case_gradient(e: CaseEnd, objective: u8[:]) -> f64, f64[>..], bool {
             }
         }
     }
-    return j, g, found && got == varied.len && e.ended && e.built && e.status == 0;
+    return j, g, found && got == varied.len && e.ended && e.built;
 }
 
 // Builds and runs case c of the minimize loop at z, with `tail` at the end

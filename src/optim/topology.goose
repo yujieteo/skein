@@ -9,7 +9,8 @@
 // each density by the optimality criteria update. A bisection finds the
 // multiplier that keeps the volume at its limit. The loop stops when no
 // density changes by more than STOP_CHANGE. The densities start at the
-// volume limit. The update needs dJ/dx <= 0, as for a compliance.
+// volume limit. The update needs dJ/dx <= 0: the generator (gen.goose)
+// accepts only the compliance of the one point load as the objective.
 import std;
 import math;
 namespace optim;

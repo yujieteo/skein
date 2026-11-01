@@ -967,6 +967,41 @@ fn test_wave_values() {
     }
 }
 
+// An expect of the model that fails at the start of a gradient minimize
+// does not stop its loop: the loop reaches E* = 10 MPa, where the expect
+// passes, and the study exits with 0.
+fn test_minimize_expect() {
+    var c: u8[>..] = [];
+    format(c, "cd build && sed '/^study best/i expect stretch: (u.x at (100 mm, 5 mm)) == 10 mm within 1%' ",
+           "../examples/optim/stiffness_bar.skn > minimize_expect.skn && ./skein run minimize_expect.skn --study best >/dev/null 2>&1");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL a failed expect of the model at the start stops the gradient minimize");
+    }
+}
+
+// topology refuses an objective that is not the compliance of its point
+// load: here the report has the sign of -compliance.
+fn test_topology_objective() {
+    var text: u8[>..] = [];
+    read_file("examples/femahoy/topology_mbb_beam.skn", text);
+    let changed = replace(text, "report compliance = -(u.y at (0 mm, 20 mm))*1 N", "report compliance = (u.y at (0 mm, 20 mm))*1 N");
+    if changed == text || !write_file("build/topology_objective.skn", changed) {
+        failures++;
+        print("FAIL topology objective: cannot write build/topology_objective.skn");
+        return;
+    }
+    var c: u8[>..] = [];
+    format(c, "cd build && ./skein run topology_objective.skn --study shape 2>&1 | ",
+           "grep -qF \"the objective 'compliance' is not the compliance of the point load: topology supports only that objective now\"");
+    c.push(0);
+    if system(c[0]) != 0 {
+        failures++;
+        print("FAIL topology objective: skein run does not refuse an objective that is not a compliance");
+    }
+}
+
 fn main() {
     test_kernels(args().len > 1 && args()[1] == "write");
     test_grid_cantilever();
@@ -985,6 +1020,8 @@ fn main() {
     test_memory_stop();
     test_two_step_study();
     test_study_run();
+    test_minimize_expect();
+    test_topology_objective();
     test_convergence();
     test_case_threads();
     test_split();

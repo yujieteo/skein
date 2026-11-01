@@ -225,8 +225,8 @@ fn test_fill() {
 
 // fill of a nurbs (spec §8.1): the rational circle of radius 10 of 4
 // quarters (9 points, the weights 1 and sqrt(2)/2, each inner knot 2
-// times), and one quarter with the default knots, which the line from its
-// end to its start closes. A rational quadratic is a conic, so each point
+// times), one quarter with the default knots, which the line from its
+// end to its start closes, and a triangle of degree 1. A rational quadratic is a conic, so each point
 // of the curve is on the circle to the round-off.
 fn test_nurbs() {
     let r2 = sqrt(0.5);
@@ -253,6 +253,9 @@ fn test_nurbs() {
     let quarter = mesher::fill_nurbs(2, [0.0, 0.0, 0.0, 1.0, 1.0, 1.0], [1.0, 0.0, 1.0, 1.0, 1.0, r2, 0.0, 1.0, 1.0]);
     if abs(nurbs_area(quarter) - (0.25 * PI - 0.5)) > 1.0e-9 { fail(str("nurbs: the area of the quarter segment is ", nurbs_area(quarter))); }
     if !(mesher::phi(quarter, 0.6, 0.6, 0.0) < 0.0 && mesher::phi(quarter, 0.4, 0.4, 0.0) > 0.0) { fail("nurbs: the sign of phi of the quarter segment"); }
+    let corner = mesher::fill_nurbs(1, [0.0, 0.0, 1.0, 2.0, 2.0], [0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0]);
+    if mesher::shapes[corner].b != 3 { fail(str("nurbs: the polyline of degree 1 has ", mesher::shapes[corner].b - 1, " spans, not 2")); }
+    if abs(nurbs_area(corner) - 0.5) > 1.0e-12 { fail(str("nurbs: the area of the triangle of degree 1 is ", nurbs_area(corner))); }
 }
 
 // The area of fill node g: x dy on each span by Simpson's rule on 200
@@ -295,6 +298,7 @@ fn test_lint() {
     expect_mesh_lints("fill of a line", strip(" - fill(line((0.5, 0.01) m, (0.52, 0.04) m))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of a nurbs", strip(" - fill(nurbs(2, (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "mesh_feature_small\n");
     expect_mesh_lints("fill of a nurbs with knots that fall", strip(" - fill(nurbs(1, knots(0, 0, 2, 1, 1), (0.5, 0.01) m, 1, (0.52, 0.04) m, 1, (0.48, 0.04) m, 1))", "2"), "verify_unsupported\n");
+    expect_mesh_lints("fill of a nurbs with an inner knot degree + 1 times", strip(" - fill(nurbs(2, knots(0, 0, 0, 1, 1, 1, 2, 2, 2), (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of 2 points", strip(" - fill(spline((0.5, 0.01) m, (0.52, 0.04) m, (0.5, 0.01) m))", "2"), "verify_unsupported\n");
     // The copy of a pattern is a feature. The reader needs a whole copy
     // count of 1 or more, and has no pattern_polar of a 2D shape.

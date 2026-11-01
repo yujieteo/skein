@@ -2188,7 +2188,11 @@ run is a **case**. The procedure after the colon makes the cases:
   penalty is 3. With `threshold`, a cell at the threshold or more becomes
   solid (x = 1) and the others void (x = 0), and the step solves again: the
   reports and expects then give the solid. The objective is a `report` of
-  the form a u_c(p) of the one static step, for example the compliance.
+  the one static step that is the compliance of its one point load: a
+  u_c(p) + b, with the load at p, the load component c only, and a of the
+  sign of the load. `skein run` refuses another objective now. Reason: the
+  optimality criteria update needs a derivative of the objective by each
+  density of 0 or less.
   `objective`, `region`, `volume` and `filter` are necessary, `0 < volume
   <= 1`, `penalty >= 1`, `filter > 0`, `0 < threshold < 1`, and the study
   has no parameter entry [`procedure_args`]. `skein run` runs it for a 2d model with `cell: quad`

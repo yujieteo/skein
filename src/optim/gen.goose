@@ -571,6 +571,10 @@ fn topology_args() {
         if word == "objective" {
             for r, i in reports { if syntax::nodes[r.item].aux >= 0 && syntax::text(syntax::nodes[r.item].aux) == name(v) { objective = i; } }
             if objective < 0 || reports[objective].form.comp < 0 { unsupported(tok(v), "the objective is not a named report of u at a point", "write report compliance = ... in the step"); }
+            else if !compliance(reports[objective].form) {
+                unsupported(tok(v), str("the objective '", name(v), "' is not the compliance of the point load: topology supports only that objective now"),
+                            "write report compliance = -(u.y at (0 mm, 20 mm))*1 N for the load (0, -1) N at that point");
+            }
         } else if word == "region" {
             if kind(v) != syntax::N_NAME || find_name(shape_names, name(v)) != domain {
                 unsupported(tok(v), "the design region of this generator is the rect of the mesh", "write region: beam, the region of the mesh");
@@ -588,6 +592,19 @@ fn topology_args() {
         }
         a = next(a);
     }
+}
+
+// True if f is a compliance: a u_c(p) + b with one load of the model, a
+// point load at p with only the component c, and a of its sign. Reason:
+// the optimality criteria update needs dJ/dx <= 0.
+fn compliance(f: Form) -> bool {
+    var loads: i64[>..] = [];
+    for b in global_bcs { if bcs[b].load { loads.push(b); } }
+    for b in step_bcs { if bcs[b].load { loads.push(b); } }
+    guard loads.len == 1 else { return false; };
+    let b = bcs[loads[0]];
+    let r = regions[b.region];
+    return r.kind == POINT && r.at[0] == f.p[0] && r.at[1] == f.p[1] && b.v[1 - f.comp] == 0.0 && f.a * b.v[f.comp] > 0.0;
 }
 
 // Reads the program `prog`. False on an error, and `syntax::errors` holds
@@ -691,7 +708,9 @@ let PRELUDE = """
     var solve_count = 0;
     var results: u8[>..] = [];
     var result_count = 0;
+    // A fault of the model or of a solve, and a failed check.
     var failed = false;
+    var missed = false;
     var gradients: u8[>..] = [];
     var gradient_count = 0;
 
@@ -734,7 +753,7 @@ let PRELUDE = """
         toon(checks, limit);
         checks.push('\n');
         check_count++;
-        if !pass { failed = true; }
+        if !pass { missed = true; }
     }
 
     // A bc on a region that holds no node is a fault of the model.
@@ -810,7 +829,7 @@ let PRELUDE = """
         format(s, "solve[", solve_count, "]{step,cells,dofs,solves,seconds,converged}:\n", solves);
         format(s, "results[", result_count, "]:\n", results);
         if optim::history_objective.len > 0 { s.append(history()); }
-        if gradient_count > 0 { format(s, "gradient[", gradient_count, "]{param,value}:\n", gradients); }
+        if gradient_count > 0 && !failed { format(s, "gradient[", gradient_count, "]{param,value}:\n", gradients); }
         s.append(solvers::memory_records());
         write_stdout(s);
     }
@@ -1030,5 +1049,5 @@ fn generate(optim_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, ", ", if plane == 0 { "optim::PLANE_STRESS" } else { "optim::PLANE_STRAIN" }, ");\n");
     format(out, "    step_", steps[0], "();\n");
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
-    out.append("    print_records();\n    if failed { exit(1); }\n}\n");
+    out.append("    print_records();\n    if failed || missed { exit(1); }\n}\n");
 }
