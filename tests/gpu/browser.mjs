@@ -6,8 +6,8 @@
 //     (a GPU run that falls back to the CPU is a failure);
 //   - the page checks the expect values of the model (verify rows) on both
 //     runs, and each of them passes;
-//   - the value of the model agrees with its reference to the `within` of
-//     the expect (the reference is below, with its source).
+// The reference (below, with its source) only feeds the error column of
+// the table. The page verdict checks the expect values.
 // Chromium is driven over the DevTools protocol (global WebSocket of Node).
 // The WebGPU adapter must match SKEIN_ADAPTER (default "nvidia").
 //
