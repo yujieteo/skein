@@ -322,7 +322,7 @@ fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
         }
         if it > 0 && moved == 0.0 && sqrt(r2) <= NEWTON_TOL * sqrt(scale) { return true; }
         cg_tolerance = if it == 0 && !predicted { CG_TOLERANCE } else { 1.0e-2 };
-        let solved = if newton_direct { direct_solve(start) } else { cg_solve(start) };
+        let solved = if newton_direct { direct_solve(start) } else { cg_solve(start, 0, false) };
         cg_tolerance = CG_TOLERANCE;
         guard solved else { return false; };
         its += last_iterations;

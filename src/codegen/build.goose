@@ -6,8 +6,12 @@
 //     main.c          its C, from goose
 //     profile.c       main.c with the profile of the data stacks
 //     native.toon     the run of profile.c at the default values
+//     warm.toon       its run at the default values again, from the files
+//                     in warm/ of the run before
 //     corner.toon     its run at the corner of the ranges with the most dofs
+//     corner_warm.toon  the corner again, from the files in warm/
 //     end.toon        its run at the other end of each range, one at a time
+//     warm/           the files that a page keeps from one run to the next
 //     wasm.c          main.c with the regions of WebAssembly
 //     solve.html      the module and the solve of the page (skein report
 //                     puts it in its page)
@@ -21,7 +25,8 @@
 // largest peak of the stack in the native runs, times 1.5 (1 MB at least).
 // The runs are at the default values, at the corner of the param ranges
 // with the most dofs, and at the other end of each range with the other
-// params at their defaults, so that each end of each range has a run. A
+// params at their defaults, so that each end of each range has a run. The
+// default and the corner run again from the files of the run before. A
 // canary gap behind each region stops the run with an error if a stack
 // overruns it. The memory of the module grows to the regions and 1.5
 // times the largest heap peak of the runs. A model that needs
@@ -349,12 +354,14 @@ fn link_sources(dir: u8[:]) -> bool {
 }
 
 // Runs the profile of `dir` with the words of --set `sets`. Its standard
-// output goes to `out` in `dir`. It gives the peak of each data stack in
+// output goes to `out` in `dir`. The runs keep the files of a page in
+// `dir`/warm (src/solvers/warm.goose), so that a later run measures the
+// memory of a solve that starts from them. It gives the peak of each data stack in
 // `peaks` (MB), and the peak MB of the heap: the
 // peak resident MB less the data stacks. False, with an error, if the run
 // fails or gives no profile.
 fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> bool, i64 {
-    var command = str("cd ", shell_quoted(dir), " && SKEIN_THREADS=1 ./profile");
+    var command = str("cd ", shell_quoted(dir), " && SKEIN_THREADS=1 SKEIN_WARM=warm ./profile");
     for w in sets { format(command, " ", shell_quoted(w)); }
     format(command, " > ", out, " 2> profile.err");
     write_stderr(str("skein build: the native run", if sets.len > 0 { " at" } else { " at the default values" }));
@@ -375,6 +382,19 @@ fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> 
     var heap = rss[0];
     for p in peaks { heap -= p; }
     return true, max(heap, 0);
+}
+
+// Runs the profile as profile_run does, and takes the larger peaks of the
+// run into `peaks` and `heap`.
+fn profile_more(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&, heap: i64&) -> bool {
+    var more: i64[>..] = [];
+    let ran, h = profile_run(dir, sets, out, more);
+    guard ran else { return false; };
+    for p, i in more {
+        if i < peaks.len { peaks[i] = max(peaks[i], p); } else { peaks.push(p); }
+    }
+    heap = max(heap, h);
+    return true;
 }
 
 // Builds main.goose of `dir` to C, runs the profile at the default values,
@@ -400,18 +420,24 @@ fn build_page(path: u8[:], text: u8[:], dir: u8[:], model: u8[:], params: Contro
     };
     var peaks: i64[>..] = [];
     var heap = 0;
+    let none: u8[..256][>..] = [];
+    // The default values, then again from the files of the run before: a
+    // page solve after a slider move. Reason: on sample 01 the page stopped
+    // at a data stack of 6 MB that the cold runs did not fill.
+    guard shell(str("rm -rf ", q, "/warm && mkdir ", q, "/warm")) == 0 &&
+          profile_more(dir, none, "native.toon", peaks, heap) &&
+          profile_more(dir, none, "warm.toon", peaks, heap) else { return 1; };
     // The runs: n = 0 at the corner, 0 < n < ends at the word n - 1 of
     // `others` alone, and n = ends at the default values. The run at the
-    // default values is the last, so that its result files stay for the page.
+    // default values is the last and cold, so that its result files stay
+    // for the page.
     let ends = if corner.len > 0 { others.len + 1 } else { 0 };
     for n in 0..ends + 1 {
         var sets: u8[..256][>..] = [];
         if n < ends { if n == 0 { sets.append(corner); } else { sets.push(others[n - 1]); } }
-        var more: i64[>..] = [];
-        let ran, h = profile_run(dir, sets, if n == ends { "native.toon" } else if n == 0 { "corner.toon" } else { "end.toon" }, more);
-        guard ran && (n == 0 || more.len == peaks.len) else { return 1; };
-        heap = max(heap, h);
-        if n == 0 { peaks.append(more); } else { for p, i in more { peaks[i] = max(peaks[i], p); } }
+        guard n < ends || shell(str("rm -rf ", q, "/warm && mkdir ", q, "/warm")) == 0 else { return 1; };
+        guard profile_more(dir, sets, if n == ends { "native.toon" } else if n == 0 { "corner.toon" } else { "end.toon" }, peaks, heap) &&
+              (n != 0 || profile_more(dir, sets, "corner_warm.toon", peaks, heap)) else { return 1; };
     }
     var table: u8[>..] = [];
     // The memory of the module: the regions, 1.5 times the largest heap

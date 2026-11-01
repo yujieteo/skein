@@ -53,6 +53,9 @@ struct MemoryPath {
 //     box cg amg          closed cylinder 2 mm, 143,787 dofs: 57.9, and 0.8 more. Measured
 //                         again on 2026-11-01: the 6 rigid-body modes of the AMG setup
 //                         (#58) took the peak from 38.1.
+//     box cg amg bending  interposer_warpage, 139,449 dofs, on 2026-11-01: 86.7, with the 3
+//                         plate bending modes of a thin body (modes.goose) beside the 6
+//                         rigid-body modes
 //     box gmres ilu0      closed cylinder 5 mm, 10,251 dofs: 17.0 (the copy of K and its ILU(0)), and 0
 //     simplex cg amg      sample 01, 319,320 dofs (elastic, 79 entries for each dof): 47.0,
 //                         and 15.4 more. Measured again on 2026-11-01 with steady heat (a
@@ -61,6 +64,13 @@ struct MemoryPath {
 //                         part of the peak when each dof has fewer entries. The fit of
 //                         sample 01 and the heat at 1,257,525 dofs is 28.5 for each entry
 //                         and 1468 for each dof.
+//     simplex elastic cg amg
+//                         sample 01, 319,320 dofs, on 2026-11-01 after the rigid-body
+//                         modes went into the AMG of a static solve: peak 2429 MB on 1
+//                         thread, 77.7 for each entry, and 15.4 more on 4 threads, as
+//                         simplex cg amg. A scalar field keeps simplex cg amg. A thin
+//                         plate of 91,809 dofs with the 3 bending modes too: estimate
+//                         772 MB, peak 627 MB.
 //     simplex modal       frequency cantilever 1.5 mm, 54,675 dofs: 66.3, and 1.0 more
 //     simplex buckling    buckling column 3 mm, 32,805 dofs: 36.6, and 0 more. The static
 //                         step before it leaves pages that the buckling step uses again.
@@ -107,8 +117,10 @@ struct MemoryPath {
 let MEMORY_PATHS = [
     MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "box cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 1.0 },
+    MemoryPath { name: "box cg amg bending", entry_bytes: 95.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "box gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex cg amg", entry_bytes: 32.0, dof_bytes: 1600.0, thread_bytes: 16.0 },
+    MemoryPath { name: "simplex elastic cg amg", entry_bytes: 86.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "simplex modal lobpcg amg", entry_bytes: 73.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex buckling lobpcg amg", entry_bytes: 40.0, dof_bytes: 0.0, thread_bytes: 1.0 },
     MemoryPath { name: "simplex central_difference", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 12.0 },

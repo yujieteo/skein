@@ -400,12 +400,12 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     guard kind == MASS || held.len == sol.len else { abort("eigen_solve: the solution of a step before a buckling step"); }
     let start = clock();
     // The blocks of lobpcg of m = count + max(count / 2, 2) vectors: about
-    // 14 m, and the 6 rigid-body modes of the AMG.
+    // 14 m, and the modes of the AMG with their copy.
     let m = count + max(count / 2, 2);
-    assemble(if kind == MASS { "simplex modal lobpcg amg" } else { "simplex buckling lobpcg amg" }, 14 * m + 6);
+    assemble(if kind == MASS { "simplex modal lobpcg amg" } else { "simplex buckling lobpcg amg" }, 14 * m + 2 * mode_count());
     hold_dead_nodes();
     eigen_kind = kind;
-    let factored = setup_preconditioner(true);
+    let factored = setup_preconditioner(0);
     assemble_second(kind);
     let done = factored && lobpcg(count);
     last_iterations = eigen_its;
