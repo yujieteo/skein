@@ -330,7 +330,6 @@ fn value_at(n: i64, p: f64[3]) -> Val {
     return v;
 }
 
-
 // --- the model -------------------------------------------------------------------
 
 // A region: a curve of the shell (its edges in the mesh, gen_geo.goose), the
@@ -947,7 +946,6 @@ fn find_region(n: i64) -> i64 {
     }
     return -1;
 }
-
 
 fn value_item(n: i64) {
     let ty = child(n, 0);

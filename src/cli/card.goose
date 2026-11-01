@@ -167,7 +167,9 @@ let CARD = """
     - `F_b*n = P` is a force and `M_b*n = M` a moment on a `Point`.
     - On a shell, `pattern`, `pattern_polar`, `move`, `|` and `& box` make
       the beam lines. `offset: d*e_r` puts the axis off the skin. Tie the
-      beams with `bc beams: w_b = w` and `bc beams: theta_b = theta`.
+      beams with `bc beams: w_b = w` and `bc beams: theta_b = theta`. Cut
+      the beam lines with the same `Solid` as the shell (`- door_box(0 m)`).
+      A beam over a removed cell is an error.
 
     ## Boundary conditions
 
