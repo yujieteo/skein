@@ -444,6 +444,15 @@ fn test_studies() {
     expect_clean("G25 xtol and step", str(H, nm, "xtol: 0.001, step: 0.1) {\n    D: 0.1 m..2 m\n}\n"));
     expect_id("procedure_args", str(H, nm, "xtol: 1 mm) {\n    D: 0.1 m..2 m\n}\n"));
     expect_id("procedure_args", str(H, nm, "step: 1.5) {\n    D: 0.1 m..2 m\n}\n"));
+    // G1: a topology study needs an objective, a Surface, 0 < volume <= 1
+    // and a filter radius, and has no param.
+    let tp = str(H2, "let s: Surface = rect((0, 0) m, (2, 1) m)\nlet e: Curve = boundary(s, x == 0 m)\nstep go: static {\n    report r = 1 J\n}\nstudy t: topology(objective: r, ");
+    expect_clean("G1 a topology study", str(tp, "region: s, volume: 0.5, penalty: 3, filter: 0.1 m) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: e, volume: 0.5, filter: 0.1 m) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 1.5, filter: 0.1 m) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5, filter: 0.1) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5, penalty: 0.5, filter: 0.1 m) {\n}\n"));
     // G10: an expect of a study, checked in each case, with a list of one
     // value for each case of a grid or a zip.
     let d = str(H, "param D: Length = 1 m in 0.1 m..2 m\nparam k: Real = 1\n");

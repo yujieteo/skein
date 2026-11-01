@@ -1,0 +1,54 @@
+// femahoy: validation/cases/topology-mbb-beam
+// The half MBB beam of 60 x 20 square cells with 50 % of the volume: the
+// least compliance by SIMP, the sensitivity filter and the optimality
+// criteria update. Reference: c = 216.81 of E. Andreassen, A. Clausen,
+// M. Schevenels, B. S. Lazarov and O. Sigmund, "Efficient topology
+// optimization in MATLAB using 88 lines of code", Struct. Multidisc.
+// Optim. 43 (2011) 1-16, figure 3, top left.
+
+model topology_mbb_beam: 2d, mm_N_MPa_s
+
+scales 20 mm, 1 MPa
+
+let beam: Surface = rect((0, 0) mm, (60, 20) mm)
+// The left edge is a plane of symmetry of the whole beam.
+let mirror: Curve = boundary(beam, x == 0 mm)
+let roller: Point = point((60, 0) mm)
+let top_left: Point = point((0, 20) mm)
+
+material solid {
+    E: Pressure = 1 MPa
+    nu: Real = 0.3
+}
+
+mesh m on beam {
+    size: 1 mm
+    cell: quad
+}
+
+physics plate on beam: linear_elastic solves u: Vector<Length> {
+    material solid
+    assume plane_stress(1 mm)
+}
+
+step load: static {
+    bc mirror: u.x = 0
+    bc roller: u.y = 0
+    bc top_left: sigma*n = (0, -1) N
+    output u
+    // The work of the load.
+    report compliance = -(u.y at (0 mm, 20 mm))*1 N
+}
+
+// The loop stops when no density changes by more than 0.01. From
+// iteration 95 to 106 the compliance stays within 0.12 % of the reference
+// (femahoy derivation.md), so the limit is 0.2 %.
+study shape: topology(
+    objective: compliance,
+    region: beam,
+    volume: 0.5,
+    penalty: 3,
+    filter: 2.4 mm,
+) {
+    expect c: -(u.y at (0 mm, 20 mm))*1 N == 216.81 N*mm within 0.2%
+}

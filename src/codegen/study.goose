@@ -96,6 +96,13 @@ fn study_cases(prog: i64, s: i64) -> bool {
         if kind(c) == syntax::N_SETTING { entries.push(c); }
         c = syntax::nodes[c].next;
     }
+    // A topology study varies the density of each cell, in one case
+    // (src/optim/gen.goose).
+    if procedure == "topology" {
+        case_count = 1;
+        study_expects(body);
+        return true;
+    }
     guard entries.len > 0 else {
         unsupported(tok(s), "the study varies no param", "add an entry, for example Re: [10, 20]");
         return false;
@@ -128,7 +135,7 @@ fn study_cases(prog: i64, s: i64) -> bool {
         good = sample_cases(pr, entries);
     } else {
         unsupported(tok(pr), str("the study procedure ", procedure, " is not in this build"),
-                    "use grid, zip or sample");
+                    "use grid, zip, sample or topology");
     }
     if good { study_expects(body); }
     return good;

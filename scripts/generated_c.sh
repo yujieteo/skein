@@ -43,6 +43,7 @@ examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/scordelis_lo_roof.skn
+examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn
 examples/flow/cavity_coarse.skn
 examples/flow/channel_sst_tri.skn
