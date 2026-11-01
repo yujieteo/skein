@@ -1,4 +1,3 @@
-// blocked-by: G32
 // Boeing 787 forward fuselage under cabin pressure: the door-corner
 // submodel of the problem sheet (../problem.md, 6.4). A 0.600 m square
 // panel of the x-s plane, centred on the centre of the upper aft corner
@@ -17,15 +16,11 @@ scales R, p_U
 let x_c: Length = w_d/2 - r_c
 let s_c: Length = R*theta_d - h_d/2 + r_c
 let sub: Solid = panel(x_c, 0.300 m, s_c/R, 0.300 m)
-// gap G32: a Surface or a Curve & a Solid is a Solid in the checker, not
-// the part of the Surface or the Curve in the Solid.
 let skin: Surface = (wall & sub) - door_box(0 m)
 let pad: Surface = skin & door_box(pad_w)
 let plain: Surface = skin - door_box(pad_w)
 
-// gap G32: the & left & sub gives a Solid.
 let stringers: Curve = (pattern_polar(stringer_0, e_x, 90) & left & sub) - door_box(0 m)
-// gap G32: the & sub gives a Solid.
 let frames: Curve = pattern(
     move(ring_0, (f_pitch/2, 0 m, 0 m)),
     (f_pitch, 0 m, 0 m),
@@ -38,7 +33,6 @@ let door_edge: Curve = boundary(skin, door_box(0 m))
 // The aft part of the cutout edge in the panel: a part of the straight
 // aft edge and of the upper aft corner arc (sheet 6.2).
 let aft_of_x_c: Solid = box((x_c, 0 m, -2*R), (x_end, 2*R, 2*R))
-// gap G32: the & aft_of_x_c gives a Solid.
 let door_aft: Curve = door_edge & aft_of_x_c
 
 // The mid-points of the cut edges that have skin (sheet 7.2, C6).

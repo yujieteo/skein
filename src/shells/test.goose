@@ -43,6 +43,20 @@ fn expect_equilibrium(what: u8[:], scale: f64) {
 
 fn fix_all(n: i64, dofs: i64[:]) { for d in dofs { shells::fix(n, d); } }
 
+// n + 1 equal lines from a to b.
+fn lines(a: f64, b: f64, n: i64) -> f64[>..] {
+    var v: f64[>..] = [];
+    for i in n + 1 { v.push(a + (b - a) * i / n); }
+    return v;
+}
+
+// The section s for each of n cells.
+fn same(s: i64, n: i64) -> i64[>..] {
+    var v: i64[>..] = [];
+    for i in n { v.push(s); }
+    return v;
+}
+
 // --- the laminate --------------------------------------------------------------
 
 // T800S/3900 (docs/studies/b787/problem.md §1.2), SI units.
@@ -102,27 +116,44 @@ fn test_laminate() {
 // R = 25 ft, L = 50 ft, 40 deg on each side of the crown, t = 0.25 ft,
 // E = 4.32e8 lb/ft², nu = 0, a weight of 90 lb/ft², diaphragms at the ends.
 // The vertical displacement at the midside of the free edge is 0.3024 ft.
-// The quarter x in [0, 25], θ in [0, 40 deg].
-fn scordelis_lo(n: i64) -> f64 {
+// The quarter x in [0, 25], θ in [0, 40 deg], with n x n cells of order 1
+// (MITC4) or 2 (MITC9).
+fn scordelis_lo(n: i64, order: i64) -> f64 {
     shells::clear();
     let s = shells::isotropic_section(4.32e8, 0.0, 0.25);
-    let g = shells::mesh_cylinder(25.0, 0.0, 25.0, 0.0, radians(40.0), n, n, s, 1.0, 0.0, 0.0);
-    for k in n + 1 {
+    let g = shells::mesh_cylinder_lines(25.0, lines(0.0, 25.0, n), lines(0.0, radians(40.0), n), order, same(s, n * n), 1.0, 0.0, 0.0);
+    let m = order * n;
+    for k in m + 1 {
         fix_all(shells::grid_node(g, 0, k), [shells::UX, shells::RY, shells::RZ]);
-        fix_all(shells::grid_node(g, n, k), [shells::UY, shells::UZ]);
+        fix_all(shells::grid_node(g, m, k), [shells::UY, shells::UZ]);
         fix_all(shells::grid_node(g, k, 0), [shells::UY, shells::RX, shells::RZ]);
     }
     for c in shells::shells.len { shells::shell_load(c, 0.0, 0.0, -90.0, false); }
-    expect_solve(str("Scordelis-Lo roof ", n, " x ", n, " MITC4"));
+    expect_solve(str("Scordelis-Lo roof ", n, " x ", n, " ", element(order)));
     expect_equilibrium("Scordelis-Lo", 90.0 * 25.0 * 25.0);
-    return -shells::displacement(shells::grid_node(g, 0, n), shells::UZ);
+    return -shells::displacement(shells::grid_node(g, 0, m), shells::UZ);
 }
 
 fn test_scordelis_lo() {
-    for n in [8, 16] { print("  ", n, " x ", n, ": ", scordelis_lo(n), " ft"); }
+    for n in [8, 16] { print("  ", n, " x ", n, ": ", scordelis_lo(n, 1), " ft"); }
     // MITC4 converges to the reference from below. The error of a 32 x 32
     // quarter is about 0.6 %, so 1 % finds a wrong term but not mesh error.
-    expect_near("Scordelis-Lo uz at the free edge, 32 x 32", scordelis_lo(32), 0.3024, 0.01);
+    expect_near("Scordelis-Lo uz at the free edge, 32 x 32 MITC4", scordelis_lo(32, 1), 0.3024, 0.01);
+    // MITC9 gives 0.3001, 0.3009 and 0.3013 ft. MITC4 32 x 32 and MITC9
+    // 16 x 16 agree to 0.2 %: each converges to about 0.3015 ft.
+    var last = 1.0;
+    var uz = 0.0;
+    for n in [4, 8, 16] {
+        uz = scordelis_lo(n, 2);
+        let err = abs(uz - 0.3024) / 0.3024;
+        print("  MITC9 ", n, " x ", n, ": ", uz, " ft, error ", 100.0 * err, " %");
+        if err >= last {
+            failures++;
+            print("FAIL Scordelis-Lo MITC9: the error does not fall with the cell size");
+        }
+        last = err;
+    }
+    expect_near("Scordelis-Lo uz at the free edge, 16 x 16 MITC9", uz, 0.3024, 0.006);
 }
 
 // --- the pinched cylinder --------------------------------------------------------
@@ -131,27 +162,30 @@ fn test_scordelis_lo() {
 // nu = 0.3, rigid diaphragms at the ends, two forces P = 1 lb at mid-length.
 // The radial displacement under a force is 1.8248e-5 in. The octant
 // x in [0, 300] (x = 0 is a diaphragm), θ in [0, 90 deg].
-fn pinched_cylinder(n: i64) -> f64 {
+fn pinched_cylinder(n: i64, order: i64) -> f64 {
     shells::clear();
     let s = shells::isotropic_section(3.0e6, 0.3, 3.0);
-    let g = shells::mesh_cylinder(300.0, 0.0, 300.0, 0.0, radians(90.0), n, n, s, 1.0, 0.0, 0.0);
-    for k in n + 1 {
+    let g = shells::mesh_cylinder_lines(300.0, lines(0.0, 300.0, n), lines(0.0, radians(90.0), n), order, same(s, n * n), 1.0, 0.0, 0.0);
+    let m = order * n;
+    for k in m + 1 {
         fix_all(shells::grid_node(g, 0, k), [shells::UY, shells::UZ, shells::RX]);
-        fix_all(shells::grid_node(g, n, k), [shells::UX, shells::RY, shells::RZ]);
+        fix_all(shells::grid_node(g, m, k), [shells::UX, shells::RY, shells::RZ]);
         fix_all(shells::grid_node(g, k, 0), [shells::UY, shells::RX, shells::RZ]);
-        fix_all(shells::grid_node(g, k, n), [shells::UZ, shells::RX, shells::RY]);
+        fix_all(shells::grid_node(g, k, m), [shells::UZ, shells::RX, shells::RY]);
     }
-    shells::force(shells::grid_node(g, n, 0), shells::UZ, -0.25);
-    expect_solve(str("pinched cylinder ", n, " x ", n, " MITC4"));
+    shells::force(shells::grid_node(g, m, 0), shells::UZ, -0.25);
+    expect_solve(str("pinched cylinder ", n, " x ", n, " ", element(order)));
     expect_equilibrium("pinched cylinder", 0.25);
-    return -shells::displacement(shells::grid_node(g, n, 0), shells::UZ);
+    return -shells::displacement(shells::grid_node(g, m, 0), shells::UZ);
 }
 
 fn test_pinched_cylinder() {
-    for n in [8, 16] { print("  ", n, " x ", n, ": ", pinched_cylinder(n), " in"); }
+    for n in [8, 16] { print("  ", n, " x ", n, ": ", pinched_cylinder(n, 1), " in"); }
     // The point load converges slowly. The error of a 32 x 32 octant is about
     // 1.1 %, so 2 % finds a wrong term but not mesh error.
-    expect_near("pinched cylinder radial displacement, 32 x 32", pinched_cylinder(32), 1.8248e-5, 0.02);
+    expect_near("pinched cylinder radial displacement, 32 x 32 MITC4", pinched_cylinder(32, 1), 1.8248e-5, 0.02);
+    for n in [4, 8] { print("  MITC9 ", n, " x ", n, ": ", pinched_cylinder(n, 2), " in"); }
+    expect_near("pinched cylinder radial displacement, 16 x 16 MITC9", pinched_cylinder(16, 2), 1.8248e-5, 0.02);
 }
 
 // --- the thin cylinder under pressure ----------------------------------------------
@@ -162,24 +196,26 @@ fn test_pinched_cylinder() {
 // a21 Nx + a22 Nθ with a = A⁻¹. The quarter θ in [0, 90 deg] of a bay
 // x in [0, 1.2192 m], with symmetry at x = 0 and the closure load pR/2 per
 // length at x = 1.2192 m.
-fn test_thin_cylinder() {
+fn test_thin_cylinder(order: i64) {
     let r = 2.883;
     let p = 97.5e3;
     let len = 1.2192;
-    let nx = 8;
-    let nt = 24;
+    let nx = 8 / order;
+    let nt = 24 / order;
     shells::clear();
     let s = quasi_isotropic(3);
     let h = shells::sections[s].h;
-    let g = shells::mesh_cylinder(r, 0.0, len, 0.0, radians(90.0), nx, nt, s, 1.0, 0.0, 0.0);
-    for j in nt + 1 { fix_all(shells::grid_node(g, 0, j), [shells::UX, shells::RY, shells::RZ]); }
-    for i in nx + 1 {
+    let g = shells::mesh_cylinder_lines(r, lines(0.0, len, nx), lines(0.0, radians(90.0), nt), order, same(s, nx * nt), 1.0, 0.0, 0.0);
+    let la = order * nx;
+    let lb = order * nt;
+    for j in lb + 1 { fix_all(shells::grid_node(g, 0, j), [shells::UX, shells::RY, shells::RZ]); }
+    for i in la + 1 {
         fix_all(shells::grid_node(g, i, 0), [shells::UY, shells::RX, shells::RZ]);
-        fix_all(shells::grid_node(g, i, nt), [shells::UZ, shells::RX, shells::RY]);
+        fix_all(shells::grid_node(g, i, lb), [shells::UZ, shells::RX, shells::RY]);
     }
     for c in shells::shells.len { shells::shell_load(c, p, 0.0, 0.0, true); }
-    for j in nt { shells::edge_load(shells::grid_node(g, nx, j), shells::grid_node(g, nx, j + 1), p * r / 2.0, 0.0, 0.0); }
-    expect_solve(str("thin cylinder ", nx, " x ", nt, " MITC4, 24-ply skin"));
+    for j in nt { closure_load(g, la, order, j, p * r / 2.0); }
+    expect_solve(str("thin cylinder ", nx, " x ", nt, " ", element(order), ", 24-ply skin"));
     expect_equilibrium("thin cylinder", p * r * len);
     // The cell at x = 0.61 m, θ = 45 deg.
     let c = shells::grid_cell(g, nx / 2, nt / 2);
@@ -200,6 +236,19 @@ fn test_thin_cylinder() {
     let a = shells::membrane_compliance(s);
     expect_near("hoop strain against A⁻¹ (pR/2, pR)", hoop_eps, a[3] * p * r / 2.0 + a[4] * p * r, 0.005);
 }
+
+// The force per length f along x on the side of cell row j of grid g at
+// the x lattice line la: a 2-node edge for order 1, a 3-node edge for 2.
+fn closure_load(g: i64, la: i64, order: i64, j: i64, f: f64) {
+    let b = order * j;
+    if order == 1 {
+        shells::edge_load(shells::grid_node(g, la, b), shells::grid_node(g, la, b + 1), f, 0.0, 0.0);
+    } else {
+        shells::edge_load3(shells::grid_node(g, la, b), shells::grid_node(g, la, b + 1), shells::grid_node(g, la, b + 2), f, 0.0, 0.0);
+    }
+}
+
+fn element(order: i64) -> u8[>..] { return if order == 1 { str("MITC4") } else { str("MITC9") }; }
 
 // --- the offset beam --------------------------------------------------------------
 
@@ -319,96 +368,117 @@ fn in_door(x: f64, s: f64, g: f64) -> bool {
     return cx <= 0.0 || cs <= 0.0 || cx * cx + cs * cs <= r * r;
 }
 
-fn barrel_node(nx: i64, i: i64, j: i64) -> i64 { return i + (nx + 1) * j; }
-
 fn e_r(t: f64) -> f64[3] { return [0.0, sin(t), cos(t)]; }
 
 fn scaled(v: f64[3], k: f64) -> f64[3] { return [k * v[0], k * v[1], k * v[2]]; }
 
-// nx and nt are the cells along x and θ: nx a multiple of 20 (frames) and
-// nt a multiple of 90 (stringers).
-fn test_b787(nx: i64, nt: i64) {
+var b_stringers: i64[>..] = [];
+var b_frames: i64[>..] = [];
+var b_hole = 0;
+
+// The barrel with nx x nt cells of order 1 or 2 (mesh_cylinder_lines): nx
+// a multiple of 20 (frames) and nt a multiple of 90 (stringers). Returns
+// the grid. A beam line on a grid of order 2 has 2 beams on each cell side.
+fn b787_model(nx: i64, nt: i64, order: i64) -> i64 {
     shells::clear();
     let skin = quasi_isotropic(3);
     let pad_sec = quasi_isotropic(6);
-    let t_skin = shells::sections[skin].h;
+    let dx = B_XEND / nx;
+    let dt = PI / nt;
+    var secs: i64[>..] = [];
+    b_hole = 0;
+    for j in nt {
+        for i in nx {
+            let xc = dx * (i + 0.5);
+            let sc = B_R * dt * (j + 0.5);
+            let cut = in_door(xc, sc, 0.0);
+            if cut { b_hole++; }
+            secs.push(if cut { -1 } else if in_door(xc, sc, B_PAD) { pad_sec } else { skin });
+        }
+    }
+    let g = shells::mesh_cylinder_lines(B_R, lines(0.0, B_XEND, nx), lines(0.0, PI, nt), order, secs, 1.0, 0.0, 0.0);
+    for c in shells::shells.len { shells::shell_load(c, B_PU, 0.0, 0.0, true); }
+    b787_door(g, nx, nt, order);
+    b787_beams(g, nx, nt, order);
+    // Symmetry at x = 0 and y = 0, one point at the bottom along z, and
+    // the end closure load p_U R/2 per length at x = 6.096 m.
+    let la = order * nx;
+    let lb = order * nt;
+    for j in lb + 1 { fix_all(shells::grid_node(g, 0, j), [shells::UX, shells::RY, shells::RZ]); }
+    for i in la + 1 {
+        fix_all(shells::grid_node(g, i, 0), [shells::UY, shells::RX, shells::RZ]);
+        fix_all(shells::grid_node(g, i, lb), [shells::UY, shells::RX, shells::RZ]);
+    }
+    shells::fix(shells::grid_node(g, 0, lb), shells::UZ);
+    for j in nt { closure_load(g, la, order, j, B_PU * B_R / 2.0); }
+    return g;
+}
+
+// The door load: the pressure of the cutout cells of row j, on the aft
+// edge of the cutout in the row (problem.md §6.2), with the weights of the
+// edge (1/2, 1/2 or 1/6, 4/6, 1/6).
+fn b787_door(g: i64, nx: i64, nt: i64, order: i64) {
+    let dx = B_XEND / nx;
+    let dt = PI / nt;
+    let w = if order == 1 { [0.5, 0.5, 0.0] } else { [1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0] };
+    for j in nt {
+        var aft = -1;
+        var door: f64[3] = [0.0, 0.0, 0.0];
+        for i in nx {
+            if !in_door(dx * (i + 0.5), B_R * dt * (j + 0.5), 0.0) { continue; }
+            aft = i + 1;
+            let t0 = dt * j;
+            let t1 = dt * (j + 1);
+            for k in 3 { door[k] += B_PU * dx * B_R * [0.0, cos(t0) - cos(t1), sin(t1) - sin(t0)][k]; }
+        }
+        if aft < 0 { continue; }
+        for e in order + 1 {
+            for k in 3 { shells::force(shells::grid_node(g, order * aft, order * j + e), k, w[e] * door[k]); }
+        }
+    }
+}
+
+// Stringers at θ = 2 deg + 4 deg k, frames at x = 0.3048 m + 0.6096 m k,
+// offset inward along the radius, except in the cutout: one beam between
+// each two next nodes of the lattice on the line.
+fn b787_beams(g: i64, nx: i64, nt: i64, order: i64) {
     let stringer = shells::beam_section(55.85e9, 0.326, 2.016e-4, 4.908e-8, 3.639e-8, 1.569e-10);
     let frame = shells::beam_section(55.85e9, 0.326, 7.148e-4, 8.305e-8, 2.237e-6, 2.225e-9);
     let dx = B_XEND / nx;
     let dt = PI / nt;
-    // The nodes, x first: the profile is about 6 (nx + 1) wide.
-    for j in nt + 1 {
-        for i in nx + 1 {
-            let t = dt * j;
-            let n = shells::add_node(dx * i, B_R * sin(t), B_R * cos(t));
-            shells::set_director(n, 0.0, sin(t), cos(t));
-        }
-    }
-    var cell: i64[>..] = [];
-    var hole = 0;
-    for j in nt {
-        // The door load: the pressure of the cutout cells of row j, on the
-        // aft edge of the cutout in the row (problem.md §6.2).
-        var aft = -1;
-        var door: f64[3] = [0.0, 0.0, 0.0];
-        for i in nx {
-            let xc = dx * (i + 0.5);
-            let sc = B_R * dt * (j + 0.5);
-            if in_door(xc, sc, 0.0) {
-                cell.push(-1);
-                hole++;
-                aft = i + 1;
-                let t0 = dt * j;
-                let t1 = dt * (j + 1);
-                for k in 3 { door[k] += B_PU * dx * B_R * [0.0, cos(t0) - cos(t1), sin(t1) - sin(t0)][k]; }
-            } else {
-                let sec = if in_door(xc, sc, B_PAD) { pad_sec } else { skin };
-                let c = shells::add_shell(barrel_node(nx, i, j), barrel_node(nx, i + 1, j), barrel_node(nx, i + 1, j + 1), barrel_node(nx, i, j + 1), sec, 1.0, 0.0, 0.0);
-                shells::shell_load(c, B_PU, 0.0, 0.0, true);
-                cell.push(c);
-            }
-        }
-        if aft >= 0 {
-            for k in 3 {
-                shells::force(barrel_node(nx, aft, j), k, 0.5 * door[k]);
-                shells::force(barrel_node(nx, aft, j + 1), k, 0.5 * door[k]);
-            }
-        }
-    }
-    // Stringers at θ = 2 deg + 4 deg k, frames at x = 0.3048 m + 0.6096 m k,
-    // offset inward along the radius, except in the cutout.
-    var stringers: i64[>..] = [];
-    var frames: i64[>..] = [];
+    b_stringers.clear();
+    b_frames.clear();
     for k in 45 {
         let j = (nt / 90) * (1 + 2 * k);
-        let t = dt * j;
+        let o = scaled(e_r(dt * j), -0.01750);
         for i in nx {
-            if in_door(dx * (i + 0.5), B_R * t, 0.0) { continue; }
-            let o = scaled(e_r(t), -0.01750);
-            stringers.push(shells::add_beam(barrel_node(nx, i, j), barrel_node(nx, i + 1, j), stringer, e_r(t), o, o));
+            if in_door(dx * (i + 0.5), B_R * dt * j, 0.0) { continue; }
+            for e in order {
+                let a = order * i + e;
+                b_stringers.push(shells::add_beam(shells::grid_node(g, a, order * j), shells::grid_node(g, a + 1, order * j), stringer, e_r(dt * j), o, o));
+            }
         }
     }
     for k in 10 {
         let i = (nx / 20) * (1 + 2 * k);
         for j in nt {
-            let t0 = dt * j;
-            let t1 = dt * (j + 1);
             if in_door(dx * i, B_R * dt * (j + 0.5), 0.0) { continue; }
-            frames.push(shells::add_beam(barrel_node(nx, i, j), barrel_node(nx, i, j + 1), frame, e_r(0.5 * (t0 + t1)),
-                                         scaled(e_r(t0), -0.07415), scaled(e_r(t1), -0.07415)));
+            for e in order {
+                let b = order * j + e;
+                let t0 = dt * b / order;
+                let t1 = dt * (b + 1) / order;
+                b_frames.push(shells::add_beam(shells::grid_node(g, order * i, b), shells::grid_node(g, order * i, b + 1), frame,
+                                               e_r(0.5 * (t0 + t1)), scaled(e_r(t0), -0.07415), scaled(e_r(t1), -0.07415)));
+            }
         }
     }
-    // Symmetry at x = 0 and y = 0, one point at the bottom along z, and
-    // the end closure load p_U R/2 per length at x = 6.096 m.
-    for j in nt + 1 { fix_all(barrel_node(nx, 0, j), [shells::UX, shells::RY, shells::RZ]); }
-    for i in nx + 1 {
-        fix_all(barrel_node(nx, i, 0), [shells::UY, shells::RX, shells::RZ]);
-        fix_all(barrel_node(nx, i, nt), [shells::UY, shells::RX, shells::RZ]);
-    }
-    shells::fix(barrel_node(nx, 0, nt), shells::UZ);
-    for j in nt { shells::edge_load(barrel_node(nx, nx, j), barrel_node(nx, nx, j + 1), B_PU * B_R / 2.0, 0.0, 0.0); }
-    expect_solve(str("787 barrel ", nx, " x ", nt, " MITC4, ", hole, " cutout cells, ",
-        stringers.len, " stringer and ", frames.len, " frame beams"));
+}
+
+fn test_b787(nx: i64, nt: i64, order: i64) {
+    let g = b787_model(nx, nt, order);
+    let t_skin = shells::sections[0].h;
+    expect_solve(str("787 barrel ", nx, " x ", nt, " ", element(order), ", ", b_hole, " cutout cells, ",
+        b_stringers.len, " stringer and ", b_frames.len, " frame beams"));
     // The reactions by axis: only x = 0 takes x, only y = 0 takes y, only
     // the bottom point takes z.
     let r = shells::reactions();
@@ -416,7 +486,7 @@ fn test_b787(nx: i64, nt: i64) {
     for d in r.len { if d % 6 < 3 { sum[d % 6] += r[d]; } }
     // The membrane stress at P (x = 4.8768 m, θ = 140 deg): the mean of the
     // 4 cells at the node.
-    let ip = floor(4.8768 / dx + 0.5) as i64;
+    let ip = floor(4.8768 / (B_XEND / nx) + 0.5) as i64;
     let jp = floor(140.0 / 180.0 * nt + 0.5) as i64;
     let tp = radians(140.0);
     let et: f64[3] = [0.0, cos(tp), -sin(tp)];
@@ -424,23 +494,12 @@ fn test_b787(nx: i64, nt: i64) {
     var axial = 0.0;
     for a in 2 {
         for b in 2 {
-            let n, eps = shells::shell_resultants(cell[(ip - 1 + a) + nx * (jp - 1 + b)]);
+            let n, eps = shells::shell_resultants(shells::grid_cell(g, ip - 1 + a, jp - 1 + b));
             for i in 3 { for j in 3 { hoop += 0.25 * et[i] * n[3 * i + j] * et[j]; } }
             axial += 0.25 * n[0];
         }
     }
-    var wr_max = 0.0;
-    for j in nt + 1 {
-        for i in nx + 1 {
-            let t = dt * j;
-            let w = shells::displacement(barrel_node(nx, i, j), shells::UY) * sin(t) + shells::displacement(barrel_node(nx, i, j), shells::UZ) * cos(t);
-            wr_max = max(wr_max, w);
-        }
-    }
-    var s_max = 0.0;
-    for b in stringers { s_max = max(s_max, abs(shells::beam_axial_force(b))); }
-    var f_max = 0.0;
-    for b in frames { f_max = max(f_max, abs(shells::beam_axial_force(b))); }
+    let wr_max, s_max, f_max = b787_maxima();
     let s_hoop = hoop / t_skin;
     let s_axial = axial / t_skin;
     let hi = B_PU * B_R / t_skin;
@@ -467,16 +526,273 @@ fn test_b787(nx: i64, nt: i64) {
         print("FAIL C4: the z reaction is not near 0");
     }
     expect_near("C5 sum of y reactions against -p 2R x_end", sum[1], -B_PU * 2.0 * B_R * B_XEND, 0.001);
+    if order == 2 { expect_same_as_skyline(); }
+}
+
+// The largest radial displacement, and the largest |Nx| of the stringers
+// and of the frames.
+fn b787_maxima() -> f64, f64, f64 {
+    var wr_max = 0.0;
+    for n in shells::node_count() {
+        let p = shells::node_point(n);
+        let t = atan2(p[1], p[2]);
+        wr_max = max(wr_max, shells::displacement(n, shells::UY) * sin(t) + shells::displacement(n, shells::UZ) * cos(t));
+    }
+    var s_max = 0.0;
+    for b in b_stringers { s_max = max(s_max, abs(shells::beam_axial_force(b))); }
+    var f_max = 0.0;
+    for b in b_frames { f_max = max(f_max, abs(shells::beam_axial_force(b))); }
+    return wr_max, s_max, f_max;
+}
+
+// --- the nested dissection ---------------------------------------------------------
+
+// The solve of the model now, which must be the nested dissection
+// (dissect.goose), against the skyline: a residual |K u - f| / |f| below
+// 1e-10, and the same displacements to 1e-9 of the largest.
+fn expect_same_as_skyline() {
+    guard shells::last_method == shells::SOLVE_DISSECTION else { abort("expect_same_as_skyline: the last solve is the dissection"); }
+    let res = shells::relative_residual();
+    print("  nested dissection: ", shells::front_entries, " entries, relative residual ", res);
+    if !(res < 1.0e-10) {
+        failures++;
+        print("FAIL dissection: the relative residual is not below 1e-10");
+    }
+    var u: f64[>..] = [];
+    for v in shells::disp { u.push(v); }
+    shells::solve_method = shells::SOLVE_SKYLINE;
+    expect_solve("  the same model with the skyline");
+    shells::solve_method = shells::SOLVE_AUTO;
+    var diff = 0.0;
+    var size = 0.0;
+    for d in u.len {
+        diff = max(diff, abs(shells::disp[d] - u[d]));
+        size = max(size, abs(u[d]));
+    }
+    print("  skyline: ", shells::profile_size(), " entries; largest difference of the displacements: ", diff / size, " of the largest");
+    if diff > 1.0e-9 * size {
+        failures++;
+        print("FAIL dissection: the displacements differ from the skyline");
+    }
+}
+
+// --- modes and buckling of the beams ------------------------------------------------
+
+// Steel, SI units, and a rectangular section ty × tz.
+let ST_E = 210.0e9;
+let ST_NU = 0.3;
+let ST_RHO = 7850.0;
+
+fn steel_section(ty: f64, tz: f64) -> i64 {
+    let iy = ty * tz * tz * tz / 12.0;
+    let iz = tz * ty * ty * ty / 12.0;
+    let s = shells::beam_section(ST_E, ST_NU, ty * tz, iy, iz, iy + iz);
+    shells::beam_density(s, ST_RHO);
+    return s;
+}
+
+// n beams of section s from the origin to len dir, with y axis y and the
+// offset o at both ends of each beam.
+fn beam_line(n: i64, len: f64, dir: f64[3], y: f64[3], o: f64[3], s: i64) {
+    for i in n + 1 {
+        let x = len * i / n;
+        shells::add_node(x * dir[0], x * dir[1], x * dir[2]);
+    }
+    for i in n { shells::add_beam(i, i + 1, s, y, o, o); }
+}
+
+fn expect_eigen(what: u8[:], ok: bool) {
+    if !ok {
+        failures++;
+        print("FAIL ", what, ": ", shells::eigen_error);
+    }
+    print(what, ": ", shells::dof_count(), " dofs, ", shells::eigen_iterations, " iterations, ", shells::last_seconds, " s");
+}
+
+// The first root b of the frequency equation of a Timoshenko cantilever
+// (T. C. Huang, J. Appl. Mech. 28, 1961, 579-584; S. M. Han, H. Benaroya and
+// T. Wei, J. Sound Vib. 225, 1999, 935-988, eq. (75)), with b² = ρAL⁴ω²/(EI),
+// r2 = I/(AL²) and s2 = EI/(kGAL²): bisection on 0.5 .. 3.6.
+fn timoshenko_cantilever_b(r2: f64, s2: f64) -> f64 {
+    var lo = 0.5;
+    var hi = 3.6;
+    let flo = huang(lo, r2, s2);
+    guard flo * huang(hi, r2, s2) < 0.0 else { abort("timoshenko_cantilever_b: no root in 0.5 .. 3.6"); }
+    for it in 200 {
+        let mid = 0.5 * (lo + hi);
+        if huang(mid, r2, s2) * flo > 0.0 { lo = mid; } else { hi = mid; }
+    }
+    return 0.5 * (lo + hi);
+}
+
+fn huang(b: f64, r2: f64, s2: f64) -> f64 {
+    let root = sqrt((r2 - s2) * (r2 - s2) + 4.0 / (b * b));
+    let a = sqrt(0.5 * (root - r2 - s2));
+    let c = sqrt(0.5 * (root + r2 + s2));
+    return 2.0 + (b * b * (r2 - s2) * (r2 - s2) + 2.0) * 0.5 * (exp(b * a) + exp(-b * a)) * cos(b * c)
+         - b * (r2 + s2) / sqrt(1.0 - b * b * r2 * s2) * 0.5 * (exp(b * a) - exp(-b * a)) * sin(b * c);
+}
+
+// The first frequency of a Timoshenko cantilever of section ty × tz, length
+// len, in the x-z plane (I = Iy).
+fn timoshenko_cantilever_f(ty: f64, tz: f64, len: f64) -> f64 {
+    let a = ty * tz;
+    let i = ty * tz * tz * tz / 12.0;
+    let g = ST_E / (2.0 * (1.0 + ST_NU));
+    let b = timoshenko_cantilever_b(i / (a * len * len), ST_E * i / (5.0 / 6.0 * g * a * len * len));
+    return b * sqrt(ST_E * i / (ST_RHO * a * len * len * len * len)) / (2.0 * PI);
+}
+
+// The modes of a steel cantilever of n beams on the skew line dir, L = 1 m,
+// 15 × 10 mm, with ey normal to dir. Returns the first 3 frequencies, and
+// the parts along ez and ey of the tip translation of modes 1 and 2.
+fn skew_cantilever(n: i64) -> f64[3], f64, f64 {
+    shells::clear();
+    let dir: f64[3] = [1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0];
+    let ey: f64[3] = [-2.0 / sqrt(5.0), 1.0 / sqrt(5.0), 0.0];
+    let ez = shells::cross(dir, ey);
+    beam_line(n, 1.0, dir, ey, [0.0, 0.0, 0.0], steel_section(0.015, 0.01));
+    for d in 6 { shells::fix(0, d); }
+    let ok = shells::modes(3);
+    expect_eigen(str("skew steel cantilever, ", n, " Timoshenko beams, modal"), ok);
+    var part: f64[2] = [0.0, 0.0];
+    for k in 2 {
+        shells::show_mode(k + 1);
+        let t: f64[3] = [shells::displacement(n, 0), shells::displacement(n, 1), shells::displacement(n, 2)];
+        part[k] = abs(shells::dot3(t, if k == 0 { ez } else { ey })) / shells::norm(t);
+    }
+    return [shells::eigenvalue(1), shells::eigenvalue(2), shells::eigenvalue(3)], part[0], part[1];
+}
+
+// (a) and (d): bending in x-z (Iy) gives mode 1 and in x-y (Iz = 2.25 Iy)
+// mode 2, against the Timoshenko root (Huang) and Euler-Bernoulli,
+// 1.8751² √(EI/(ρAL⁴))/(2π). Mode 3 is the second x-z mode, 4.6941².
+fn test_beam_modes() {
+    let eb = 1.8751040687 * 1.8751040687 / (2.0 * PI) * sqrt(ST_E * 0.015 * 1.0e-6 / 12.0 / (ST_RHO * 1.5e-4));
+    let ref1 = timoshenko_cantilever_f(0.015, 0.01, 1.0);
+    let ref2 = timoshenko_cantilever_f(0.01, 0.015, 1.0);
+    print("  Timoshenko f1 ", ref1, " Hz, Euler-Bernoulli ", eb, " Hz");
+    var last = 1.0;
+    for n in [1, 2, 4, 8, 16] {
+        let f, along_z, along_y = skew_cantilever(n);
+        let err = abs(f[0] - ref1) / ref1;
+        print("  n = ", n, ": f1 ", f[0], " Hz, error ", 100.0 * err, " %");
+        if !(err < last) {
+            failures++;
+            print("FAIL the error of f1 does not fall with n");
+        }
+        last = err;
+        if n == 16 {
+            expect_near("cantilever f1 (Iy) against Timoshenko", f[0], ref1, 1.0e-4);
+            expect_near("cantilever f1 (Iy) against Euler-Bernoulli", f[0], eb, 1.0e-3);
+            expect_near("cantilever f2 (Iz) against Timoshenko", f[1], ref2, 1.0e-4);
+            expect_near("cantilever f2 (Iz) against 1.5 Euler-Bernoulli", f[1], 1.5 * eb, 1.0e-3);
+            expect_near("cantilever f3 against 4.6941² / 1.8751² Euler-Bernoulli", f[2], 4.6940911330 * 4.6940911330 / (1.8751040687 * 1.8751040687) * eb, 2.0e-3);
+            expect_near("mode 1 tip translation along ez", along_z, 1.0, 1.0e-6);
+            expect_near("mode 2 tip translation along ey", along_y, 1.0, 1.0e-6);
+        }
+    }
+    // A short beam, L/h = 5: the shear and the rotary inertia lower f1.
+    shells::clear();
+    beam_line(32, 0.1, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0], steel_section(0.03, 0.02));
+    for d in 6 { shells::fix(0, d); }
+    let ok = shells::modes(1);
+    expect_eigen("short steel cantilever L/h = 5, 32 Timoshenko beams, modal", ok);
+    let short_eb = 1.8751040687 * 1.8751040687 / (2.0 * PI) * sqrt(ST_E * 0.02 * 0.02 / 12.0 / ST_RHO) / 0.01;
+    print("  Euler-Bernoulli ", short_eb, " Hz");
+    expect_near("short cantilever f1 against Timoshenko", shells::eigenvalue(1), timoshenko_cantilever_f(0.03, 0.02, 0.1), 1.0e-4);
+}
+
+// (c) A uniform offset e of a clamped cantilever moves all of it, so the
+// frequencies stay. A simply supported beam held in x at both nodes gets
+// an axial restraint at e from its axis, so f1 goes up.
+fn offset_modes(e: f64, clamped: bool) -> f64[3] {
+    shells::clear();
+    beam_line(8, 1.0, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -e], steel_section(0.015, 0.01));
+    if clamped {
+        for d in 6 { shells::fix(0, d); }
+    } else {
+        fix_all(0, [shells::UX, shells::UY, shells::UZ, shells::RX]);
+        fix_all(8, [shells::UX, shells::UY, shells::UZ]);
+    }
+    let ok = shells::modes(3);
+    expect_eigen(str(if clamped { "clamped" } else { "simply supported" }, " beam, offset ", e, " m, modal"), ok);
+    return [shells::eigenvalue(1), shells::eigenvalue(2), shells::eigenvalue(3)];
+}
+
+fn test_offset_modes() {
+    let c0 = offset_modes(0.0, true);
+    let c1 = offset_modes(0.05, true);
+    for k in 3 { expect_near(str("clamped f", k + 1, " with offset against no offset"), c1[k], c0[k], 1.0e-9); }
+    let s0 = offset_modes(0.0, false);
+    let s1 = offset_modes(0.05, false);
+    let eb = PI / 2.0 * sqrt(ST_E * 0.015 * 1.0e-6 / 12.0 / (ST_RHO * 1.5e-4));
+    expect_near("simply supported f1 against π/2 √(EIy/(ρAL⁴))", s0[0], eb, 1.0e-3);
+    print("  simply supported f1 with offset 0.05 m: ", s1[0], " Hz, without: ", s0[0], " Hz");
+    if !(s1[0] > 1.01 * s0[0]) {
+        failures++;
+        print("FAIL the offset does not raise f1 of the simply supported beam");
+    }
+}
+
+// (b) Euler buckling of a steel column on x, L = 1 m, 15 × 10 mm, under
+// P0 = 1000 N: π² EIy/L² pinned-pinned, π² EIy/(4L²) fixed-free.
+fn column_buckling(n: i64, pinned: bool) -> f64 {
+    shells::clear();
+    beam_line(n, 1.0, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0], steel_section(0.015, 0.01));
+    if pinned {
+        fix_all(0, [shells::UX, shells::UY, shells::UZ, shells::RX]);
+        fix_all(n, [shells::UY, shells::UZ]);
+    } else {
+        for d in 6 { shells::fix(0, d); }
+    }
+    shells::force(n, shells::UX, -1000.0);
+    let what = str(if pinned { "pinned-pinned" } else { "fixed-free" }, " column, ", n, " Timoshenko beams");
+    expect_solve(what);
+    let ok = shells::buckling(2);
+    expect_eigen(str(what, ", buckling"), ok);
+    return shells::eigenvalue(1);
+}
+
+fn test_buckling() {
+    let pe = PI * PI * ST_E * 0.015 * 1.0e-6 / 12.0 / 1000.0;
+    for pinned in [true, false] {
+        let want = if pinned { pe } else { pe / 4.0 };
+        // The shear of the Timoshenko beam lowers the load (Engesser):
+        // P = P_E/(1 + P_E/(kGA)). The mesh converges to it.
+        let kga = 5.0 / 6.0 * ST_E / (2.0 * (1.0 + ST_NU)) * 1.5e-4;
+        let engesser = want / (1.0 + 1000.0 * want / kga);
+        print("  Euler ", want, ", Engesser ", engesser);
+        var last = 1.0;
+        for n in [1, 2, 4, 8, 16] {
+            if pinned && n == 1 { continue; }
+            let got = column_buckling(n, pinned);
+            let err = abs(got - engesser) / engesser;
+            print("  n = ", n, ": load factor ", got, ", error against Engesser ", 100.0 * err, " %");
+            if !(err < last) {
+                failures++;
+                print("FAIL the error of the load factor does not fall with n");
+            }
+            last = err;
+            if n == 8 { expect_near(if pinned { "pinned-pinned load factor against π² EI/(L² P0)" } else { "fixed-free load factor against π² EI/(4 L² P0)" }, got, want, 0.01); }
+            if n == 16 { expect_near("load factor against Engesser", got, engesser, 1.0e-5); }
+        }
+    }
 }
 
 fn main() {
     test_laminate();
     test_offset_beam();
-    test_thin_cylinder();
+    test_beam_modes();
+    test_offset_modes();
+    test_buckling();
+    test_thin_cylinder(1);
+    test_thin_cylinder(2);
     test_scordelis_lo();
     test_pinched_cylinder();
     test_pagano_thin();
-    test_b787(40, 90);
+    test_b787(40, 90, 1);
+    test_b787(20, 90, 2);
     if failures > 0 { exit(1); }
     print("shells: all tests pass");
 }

@@ -90,14 +90,15 @@ fn nearest_of(name: u8[:], names: const u8[:][:]) -> u8[>..] {
 
 // --- physics (spec §10) ----------------------------------------------------------------------
 
-// Records `div(F)` in the equation of unknown `k` (spec §12.1).
+// Records `div(F)` and `along(F)` in the equation of unknown `k` (spec §12.1).
 recursive fn note_fluxes(n: i64, k: i64) {
     let nd = syntax::nodes[n];
     if nd.kind == syntax::N_CALL {
         let callee = nd.first;
         let arg = syntax::nodes[callee].next;
-        if syntax::nodes[callee].kind == syntax::N_NAME && tok_text(syntax::nodes[callee].tok) == "div" && arg >= 0 {
-            fluxes.push(Flux { phys: cur_phys, node: syntax::nodes[arg].first, unknown: k });
+        let f = if syntax::nodes[callee].kind == syntax::N_NAME { tok_text(syntax::nodes[callee].tok) } else { "" };
+        if (f == "div" || f == "along") && arg >= 0 {
+            fluxes.push(Flux { phys: cur_phys, node: syntax::nodes[arg].first, unknown: k, curve: f == "along" });
         }
     }
     var c = nd.first;
@@ -546,6 +547,15 @@ fn flux_unknown(f: i64) -> i64 {
     return -1;
 }
 
+// Whether the flux `f` comes from `along(F)` of a Curve physics.
+fn flux_on_curve(f: i64) -> bool {
+    let text = norm_text(f);
+    for fl in fluxes {
+        if norm_text(fl.node) == text { return fl.curve; }
+    }
+    return false;
+}
+
 // For `F*n` or `dot(F, n)`, the node of F, else -1.
 fn flux_of(n: i64) -> i64 {
     let k = syntax::nodes[n];
@@ -617,12 +627,14 @@ fn check_bc(n: i64) {
         unknown = unknown_of(syntax::nodes[lhs].first);
         if unknown >= 0 { comp = key(tok_text(syntax::nodes[lhs].tok)); }
     }
+    var curve = false;
     if unknown < 0 || moment {
         unknown = -1;
         let f = flux_of(lhs);
         if f >= 0 {
             unknown = flux_unknown(f);
             natural = unknown >= 0;
+            curve = natural && !moment && flux_on_curve(f);
         }
     }
     guard unknown >= 0 else {
@@ -635,8 +647,16 @@ fn check_bc(n: i64) {
         return;
     };
     cur_phys = syms[unknown].phys;
-    let l = expr_ty(lhs);
     let point = rt.kind == K_GEOM && rt.geo == 0;
+    // On the end Point of a Curve physics, `F*n = P` is the force P: n is
+    // the outward tangent, so F*n is F (spec §12.1).
+    if curve && !point {
+        cur_phys = -1;
+        error(first_tok(lhs), "bc_form", str("'", node_text(lhs), "' of a Curve physics stands only on a Point"),
+              "put the load on an end point, for example bc tip: F_b*n = (0, 0, -1)*P");
+        return;
+    }
+    let l = expr_ty(if curve { flux_of(lhs) } else { lhs });
     if moment {
         comp = key("moment");
         guard point && is_rigid_point(region) else {
@@ -656,7 +676,7 @@ fn check_bc(n: i64) {
         in_natural = false;
         if natural {
             var lt = l;
-            if point && is_num(lt) {
+            if point && is_num(lt) && !curve {
                 // Gap G16: on a Point, `F*n = P` is the force P.
                 lt.dim = lt.dim + dim_pow(LENGTH, space - 1 + depth());
                 // Gap G17: the moment is a scalar in 2D, and a vector in 3D.

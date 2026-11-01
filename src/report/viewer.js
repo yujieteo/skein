@@ -226,7 +226,10 @@ function buildMesh(vtu) {
     for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[i + k]); hi[k] = Math.max(hi[k], p[i + k]); }
   }
   const size = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1;
-  return { vtu, cells, faces: boundary, tris: Int32Array.from(tris), triCell: Int32Array.from(triCell), lo, hi, size,
+  // the line cells (VTK 3): beams
+  const beams = [];
+  cells.forEach((cell, c) => { if (cell.type === 3) beams.push(c); });
+  return { vtu, cells, faces: boundary, beams, tris: Int32Array.from(tris), triCell: Int32Array.from(triCell), lo, hi, size,
     fields: fieldsOf(vtu), disp: displacement(vtu), regions: new Map() };
 }
 
@@ -862,17 +865,17 @@ class View {
     }
     gl.uniform1f(L.uPointSize, 12 * dpr);
     let base = 1;
-    for (const name of ['surface', 'cut', 'lines', 'points']) {
+    for (const name of ['surface', 'cut', 'beams', 'lines', 'points']) {
       const p = this.parts[name];
       if (!p || !p.count || (name === 'lines' && (!this.lines || mode === 'pick'))) continue;
-      if (name === 'points' && mode === 'pick') continue;
+      if ((name === 'points' || name === 'beams') && mode === 'pick') continue;
       gl.uniform1i(L.uClipOn, this.clip && name !== 'cut' && name !== 'points' ? 1 : 0);
       gl.uniform1i(L.uMode, mode === 'pick' ? 2 : p.mode);
       gl.uniform1i(L.uIdBase, base);
       gl.uniform3fv(L.uColor, name === 'lines' ? [0.15, 0.15, 0.15] : name === 'points' ? [1, 0.1, 0.75] : [0.8, 0.8, 0.8]);
       if (name === 'surface' || name === 'cut') { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1); } else gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.bindVertexArray(p.vao);
-      gl.drawArrays(name === 'lines' ? gl.LINES : name === 'points' ? gl.POINTS : gl.TRIANGLES, 0, p.count);
+      gl.drawArrays(name === 'lines' || name === 'beams' ? gl.LINES : name === 'points' ? gl.POINTS : gl.TRIANGLES, 0, p.count);
       base += p.count / 3;
     }
     gl.bindVertexArray(null);
@@ -1420,6 +1423,17 @@ function refresh() {
     }
   }
   view.setPart('surface', pos, disp, val, mk, vals ? 0 : 1);
+  // the beams, in the colours of the field
+  const bp = []; const bd = []; const bv = []; const bm = [];
+  for (const c of mesh.beams) {
+    const m = mark.cells.has(c) ? 1 : 0;
+    for (const n of mesh.cells[c].nodes) {
+      for (let k = 0; k < 3; k++) { bp.push(p[3 * n + k]); bd.push(u ? u[3 * n + k] : 0); }
+      bv.push(valAt(n, c));
+      bm.push(m);
+    }
+  }
+  view.setPart('beams', Float32Array.from(bp), Float32Array.from(bd), Float32Array.from(bv), Float32Array.from(bm), vals ? 0 : 1);
   // the cut
   view.clip = null;
   S.cutMesh = null;

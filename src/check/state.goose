@@ -126,8 +126,9 @@ var physics: Phys[>..];
 struct PhysMat { phys: i64, mat: i64 }
 var phys_mats: PhysMat[>..];
 // The fluxes: `div(F)` in equation `k` of a physics makes `F*n` a natural
-// condition for unknown `k` (spec §12.1).
-struct Flux { phys: i64, node: i64, unknown: i64 }
+// condition for unknown `k` (spec §12.1). `along(F)` of a Curve physics
+// does too, with `curve` set.
+struct Flux { phys: i64, node: i64, unknown: i64, curve: bool }
 var fluxes: Flux[>..];
 // The pairs (physics, property name) that already have a `material_prop_*` error.
 struct PropSeen { phys: i64, name: Name }

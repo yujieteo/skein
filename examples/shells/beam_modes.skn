@@ -1,0 +1,63 @@
+// The free vibration of a steel cantilever of an IPE 300 section: the
+// beam template (spec §4.3) with the density rho of its material, and a
+// modal step. The beam is slender (L/r = 80), so the shear and the
+// rotary inertia of the Timoshenko beam lower the frequencies only a
+// little. The reference is the Euler-Bernoulli value, Blevins (1979),
+// Table 8-1: f1 = 1.87510407^2/(2 pi L^2) sqrt(E I_y/(rho A)).
+
+model beam_modes: 3d, SI
+
+let L: Length = 10 m
+let E_s: Pressure = 210 GPa
+let rho_s: Density = 7850 kg/m^3
+let A_s: Area = 53.8e-4 m^2
+let I_ys: Length^4 = 8356e-8 m^4
+
+scales L, E_s, rho_s
+
+let bar: Curve = line((0, 0, 0) m, (L, 0 m, 0 m))
+let root: Point = point((0, 0, 0) m)
+
+material ipe300 {
+    E: Pressure = E_s
+    nu: Real = 0.3
+    rho: Density = rho_s
+    A: Area = A_s
+    I_y: Length^4 = I_ys
+    I_z: Length^4 = 604e-8 m^4
+    J: Length^4 = 20.1e-8 m^4
+}
+
+mesh m on bar {
+    size: 100 mm
+}
+
+physics beam on bar: timoshenko(
+    A: A,
+    I_y: I_y,
+    I_z: I_z,
+    J: J,
+    y_axis: (0, 1, 0),
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material ipe300
+}
+
+method beam: cg { mesh: m, order: 1 }
+
+bc root: w = 0
+bc root: theta = 0
+
+step modes: modal(count: 4) {
+    output w
+    report eigenvalue(1)
+    report eigenvalue(2)
+}
+
+// Mode 1 bends about the weak axis z (I_z), mode 2 about the strong axis y.
+let f_z: Frequency = 1.87510407^2/(2*pi*L^2)*sqrt(E_s*604e-8 m^4/(rho_s*A_s))
+let f_y: Frequency = 1.87510407^2/(2*pi*L^2)*sqrt(E_s*I_ys/(rho_s*A_s))
+
+expect f1: eigenvalue(1) == f_z within 1%
+
+expect f2: eigenvalue(2) == f_y within 1%

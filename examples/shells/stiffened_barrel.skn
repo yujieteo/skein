@@ -1,0 +1,148 @@
+// One half of a two-bay barrel of the 787 study under cabin pressure:
+// the composite skin of the thin cylinder, with offset beams for the
+// stringers and the frames, tied to the skin (spec §4.3 and §12.1). The
+// values are those of docs/studies/b787/problem.md (sheets 1 to 3). The
+// skin takes the hoop load with the frames, and the axial load with the
+// stringers. Sheet 7.3 gives the axial stress of the skin from the same
+// axial strain in the skin and the stringers.
+
+model stiffened_barrel: 3d, SI
+
+let R: Length = 2.883 m
+let p_U: Pressure = 97.5 kPa
+let t_skin: Length = 24*0.191 mm
+let f_pitch: Length = 0.6096 m
+let x_end: Length = 2*f_pitch
+let s_pitch: Length = 2*pi*R/90
+let A_s: Area = 2.016e-4 m^2
+let A_f: Area = 7.148e-4 m^2
+
+scales R, p_U
+
+let barrel: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, x_end)
+let wall: Surface = boundary(barrel, y^2 + z^2 == R^2 && y >= 0 m)
+let sym_x: Curve = boundary(wall, x == 0 m)
+let end: Curve = boundary(wall, x == x_end)
+let sym_y: Curve = boundary(wall, y == 0 m)
+let bottom: Point = point((0 m, 0 m, -R))
+
+// One stringer every 4 deg from 2 deg, cut to the half y >= 0 (gap G32:
+// a Curve & a Solid is a Curve). One frame in the middle of each bay.
+let stringer_0: Curve = line((0 m, R*sin(2 deg), R*cos(2 deg)), (x_end, R*sin(2 deg), R*cos(2 deg)))
+let left: Solid = box((0 m, 0 m, -2*R), (x_end, 2*R, 2*R))
+let stringers: Curve = pattern_polar(stringer_0, (1, 0, 0), 90) & left
+let ring_0: Curve = boundary(wall, x == 0 m)
+let frames: Curve = pattern(move(ring_0, (f_pitch/2, 0 m, 0 m)), (f_pitch, 0 m, 0 m), 2)
+let beams: Curve = stringers | frames
+
+// Unit vectors at a skin point: axial, radial (outward) and hoop.
+let e_x: Vector<Real> = (1, 0, 0)
+let e_r: Vector<Real> = (0, y/R, z/R)
+let e_t: Vector<Real> = (0, z/R, -y/R)
+
+// The check point P: between the two frames and between two stringers.
+let P: Vector<Length> = (f_pitch, R*sin(140 deg), R*cos(140 deg))
+
+// Plies from the outer surface. The base sequence repeats, then mirrors,
+// to the laminate thickness h of the material.
+table quasi{angle: Angle in deg}:
+    45
+    0
+    -45
+    90
+
+// T800S/3900 tape (sheet 1.2).
+material skin_lam {
+    E1: Pressure = 148 GPa
+    E2: Pressure = 10.1 GPa
+    G12: Pressure = 3.94 GPa
+    nu12: Real = 0.32
+    t_ply: Length = 0.191 mm
+    h: Length = t_skin
+}
+
+// The stringer and the frame sections of sheet 3 have one modulus. This
+// slice gives one section to all the beams: the stringer section.
+material stringer_sec {
+    E: Pressure = 55.85 GPa
+    nu: Real = 0.326
+    A: Area = A_s
+    I_y: Length^4 = 4.908e-8 m^4
+    I_z: Length^4 = 3.639e-8 m^4
+    J: Length^4 = 1.569e-10 m^4
+}
+
+mesh m on wall | beams {
+    size: 100 mm
+    cell: quad
+}
+
+physics skin on wall: reissner_mindlin(
+    layup: quasi.angle,
+    mirror: true,
+    axis: e_x,
+    top: e_r,
+    q: p_U*e_r,
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material skin_lam
+    let s_axial: Pressure = dot(e_x, N*e_x)/h
+    let s_hoop: Pressure = dot(e_t, N*e_t)/h
+}
+
+// The axis of each beam is 17.5 mm inside the skin.
+physics beam on beams: timoshenko(
+    A: A,
+    I_y: I_y,
+    I_z: I_z,
+    J: J,
+    y_axis: e_r,
+    offset: -17.5 mm*e_r,
+) solves w_b: Vector<Length>,
+    theta_b: Vector<Angle> {
+    material stringer_sec
+}
+
+method skin: cg { mesh: m, order: 1 }
+
+method beam: cg { mesh: m, order: 1 }
+
+// The tie: the beams share the skin points on their lines.
+bc beams: w_b = w
+bc beams: theta_b = theta
+// Symmetry about x = 0 and y = 0, and one point against motion along z.
+bc sym_x: w.x = 0
+bc sym_x: theta.y = 0
+bc sym_x: theta.z = 0
+bc sym_y: w.y = 0
+bc sym_y: theta.x = 0
+bc sym_y: theta.z = 0
+bc bottom: w.z = 0
+
+step pressurize: static {
+    // The end closure load p_U R/2 per length of the edge.
+    bc end: N*n = p_U*R/2*e_x
+    output w
+    report s_hoop at P
+    report s_axial at P
+    report Nx at (f_pitch, R*sin(138 deg), R*cos(138 deg))
+    report reaction(sym_x)
+}
+
+// Sheet 7.2: the frames take a part of the hoop load, so the hoop stress
+// is between pR/(t + A_f/f_pitch) and pR/t.
+let s_hoop_lo: Pressure = p_U*R/(t_skin + A_f/f_pitch)
+let s_hoop_hi: Pressure = p_U*R/t_skin
+
+expect c1_hoop: s_hoop at P == (s_hoop_lo + s_hoop_hi)/2 within (s_hoop_hi - s_hoop_lo)/2
+
+// Sheet 7.3: the same axial strain in the skin and the stringers, with the
+// Poisson term of the skin, nu = 0.326.
+expect c2_axial: s_axial at P ==
+    (p_U*R/2 + 0.326*s_hoop_hi*A_s/s_pitch)/(t_skin + A_s/s_pitch) within 5%
+
+// The closure load on the half of the end: pR/2 on the arc R*pi.
+expect end_reaction: (reaction(sym_x)).x == -p_U*R/2*R*pi within 0.1%
+
+// Only bottom takes z.
+expect bottom_z: (reaction(bottom)).z == 0 N within p_U*R^2/1000

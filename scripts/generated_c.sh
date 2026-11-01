@@ -57,7 +57,12 @@ examples/lame_profile.skn
 examples/meshless/mms_gfd.skn
 examples/meshless/mms_rkpm.skn
 examples/optim/stiffness_bar.skn
+examples/shells/beam_buckling.skn
+examples/shells/beam_modes.skn
+examples/shells/cantilever_beam.skn
+examples/shells/stiffened_barrel.skn
 examples/shells/thin_cylinder_shell.skn
+examples/shells/window_barrel.skn
 samples/02_cavity.skn
 samples/05_meshless_plate.skn
 samples/06_cylinder_sweep.skn

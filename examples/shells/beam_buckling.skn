@@ -1,0 +1,61 @@
+// The buckling of a steel column of an IPE 300 section, fixed at the base
+// and free at the top: the beam template (spec §4.3) with a static step
+// that gives the axial force, then a buckling step. The column buckles
+// about the weak axis z. The reference is Timoshenko and Gere (1961),
+// Art. 2.1: P_cr = pi^2 E I_z/(4 L^2). The load is 1 kN, so the load
+// factor is P_cr/(1 kN).
+
+model beam_buckling: 3d, SI
+
+let L: Length = 4 m
+let E_s: Pressure = 210 GPa
+let I_zs: Length^4 = 604e-8 m^4
+let P: Force = 1 kN
+
+scales L, E_s
+
+let column: Curve = line((0, 0, 0) m, (0 m, 0 m, L))
+let base: Point = point((0, 0, 0) m)
+let top: Point = point((0 m, 0 m, L))
+
+material ipe300 {
+    E: Pressure = E_s
+    nu: Real = 0.3
+    A: Area = 53.8e-4 m^2
+    I_y: Length^4 = 8356e-8 m^4
+    I_z: Length^4 = I_zs
+    J: Length^4 = 20.1e-8 m^4
+}
+
+mesh m on column {
+    size: 100 mm
+}
+
+physics beam on column: timoshenko(
+    A: A,
+    I_y: I_y,
+    I_z: I_z,
+    J: J,
+    y_axis: (0, 1, 0),
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material ipe300
+}
+
+method beam: cg { mesh: m, order: 1 }
+
+bc base: w = 0
+bc base: theta = 0
+
+step preload: static {
+    bc top: F_b*n = (0, 0, -1)*P
+}
+
+step buckle: buckling(count: 2) {
+    output w
+    report eigenvalue(1)
+}
+
+let P_cr: Force = pi^2*E_s*I_zs/(4*L^2)
+
+expect p1: eigenvalue(1) == P_cr/P within 1%
