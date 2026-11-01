@@ -369,7 +369,7 @@ fn add_result(work: u8[:], vtu: u8[:]) -> i64, i64 {
     var mesh: u8[>..] = [];
     var fields: u8[>..] = [];
     guard small_vtu(text_of(vtu), mesh, fields) else {
-        write_stderr(str("skein report: cannot read the VTU file '", vtu, "'\n"));
+        write_stderr(str("skein: cannot read the VTU file '", vtu, "'\n"));
         return -1, -1;
     };
     var m = -1;
@@ -403,7 +403,7 @@ fn add_blob(work: u8[:], bytes: u8[:]) -> i64 {
 fn write_blob(work: u8[:], bytes: u8[:]) -> bool {
     let path = str(work, "/", files, ".vtu");
     guard write_file(path, bytes) && shell(str("gzip -9 -n -f ", quoted(path), " -c > ", quoted(str(path, ".gz")))) == 0 else {
-        write_stderr(str("skein report: gzip cannot compress '", path, "'\n"));
+        write_stderr(str("skein: gzip cannot compress '", path, "'\n"));
         return false;
     };
     return true;

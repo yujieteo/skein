@@ -1037,11 +1037,11 @@ async function solveCase(values) {
   document.body.dataset.solve = String(r.code);
   const results = Object.entries(r.files).map(([path, text]) => ({ path, text }));
   if (!results.length) {
-    note.textContent = 'The solve in the page failed with exit ' + r.code + ': ' + (r.err.trim().split('\n').pop() || 'no result file');
+    note.textContent = failure(r);
     return null;
   }
   note.textContent = '';
-  const c = { id: 'page ' + ++solves, values, run: r.out, results, seconds: r.seconds, code: r.code };
+  const c = { id: 'page ' + ++solves, values, run: r.out, results, seconds: r.seconds, code: r.code, failure: r.code === 0 ? null : failure(r) };
   D.cases.push(c);
   caseToons.push(parseToon(r.out));
   return c;
@@ -1389,6 +1389,7 @@ function renderTables() {
   if (S.foreign) { box.append(el('p', { class: 'note' }, 'This view shows ', S.foreign, ', a VTU file of another solver: it has no source links and no solver tables.')); return; }
   const c = D.cases[S.caseIndex];
   box.append(el('h2', {}, c.values ? `Solve in the page (${c.seconds.toFixed(1)} s, exit ${c.code})` : studyTable ? `Case ${c.id}` : 'Run'));
+  if (c.failure) box.append(el('p', { class: 'note' }, c.failure));
   const v = caseValues(S.caseIndex);
   if (Object.keys(v).length) box.append(el('p', {}, Object.entries(v).map(([p, t]) => `${p} = ${t}`).join(', ')));
   // the solver

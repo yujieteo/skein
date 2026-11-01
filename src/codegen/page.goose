@@ -275,6 +275,16 @@ let SOLVE_JS = """
       return "This model is too large for the memory of the browser: it needs " + MEMORY_MB + " MB, and the page has " + MAX_MEMORY_MB + " MB.";
     }
 
+    // The message of a run that failed: the memory limit for a run that
+    // the browser cannot give the memory, else the last line of its log.
+    function failure(r) {
+      if (/memory|OOM|RangeError|allocat/i.test(r.err)) {
+        return "The browser could not give this run the memory that it can need, up to " + MEMORY_MB + " MB. Close other tabs or programs " +
+          "and solve again, or run the model natively with skein run" + r.sets.map((w) => ' --set "' + w + '"').join("") + ".";
+      }
+      return "The solve in the page failed with exit " + r.code + ": " + (r.err.trim().split("\n").pop() || "no result file");
+    }
+
     // The files of the records `results[n]:` of a run.
     function resultPaths(toon) {
       const lines = toon.split("\n"), paths = [];
