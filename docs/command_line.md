@@ -374,7 +374,8 @@ Current limits:
 The page has a function `skeinSolve(values, options)` for other pages:
 `values` holds a number for each param, in the unit of its default value.
 `options.gpu` (default: the browser has WebGPU) gives the run the GPU,
-and `options.implicitGpu` puts the implicit solves on it. It gives
+and `options.implicitGpu` puts the implicit solves on it.
+`options.gpu` exists for the comparison of the CPU and GPU runs in one page. It gives
 a promise of `{ code, out, err, files, seconds, sets }`: the exit status
 (section 10), the records in TOON, standard error, the VTU text of each
 result file, the time and the words of `--set`.

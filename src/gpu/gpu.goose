@@ -14,6 +14,8 @@
 //     solve                elements::solve: an implicit step, on the GPU
 //                          only with the control of the page on
 //                          (SKEIN_GPU_IMPLICIT=1), else CG with AMG
+//     grid_static, modal,  grid::solve_static, elements::modal and
+//     buckling             elements::buckling: on the CPU
 //
 // Each falls back to the CPU solve when the page has no WebGPU. This
 // package sets up the GPU: it converts the arrays of the CPU solve to f32
@@ -298,10 +300,6 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     let k, steps = grid::transient_start(end, dt);
     let n = grid::dof_count();
     let fv = grid::method == grid::FV;
-    var src: f64[>..] = [];
-    var g: f64[>..] = [];
-    solvers::zeros(src, if fv { n } else { 0 });
-    solvers::zeros(g, if fv { 4 * n } else { 0 });
     skein_gpu_reset();
     let c0 = [0.0, 0.75, 1.0 / 3.0];
     let c1 = [1.0, 0.25, 2.0 / 3.0];
@@ -310,8 +308,6 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     for s in 3 { ps[s] = grid_params(c0[s], c1[s], k); }
     // the solution in xs[0] or xs[1], and the second stage in xs[2]
     let xs = [upload(grid::sol), zeros(n), zeros(n)];
-    var weights: f64[>..] = [];
-    for d in n { weights.push(grid::stage_weight(d)); }
     let f = zeros(n);
     // fv: the face values and then the source of each cell
     let gf = zeros(if fv { 5 * n } else { 1 });
@@ -334,7 +330,7 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     let vals = skein_gpu_buffer(4 * grid::val.len);
     put_start(vals);
     for d in if fv { 0 } else { n } {
-        for e in grid::row_start[d]..grid::row_start[d + 1] { put(weights[d] * grid::val[e]); }
+        for e in grid::row_start[d]..grid::row_start[d + 1] { put(grid::stage_weight(d) * grid::val[e]); }
     }
     flush();
     for parity in 2 {
@@ -359,15 +355,8 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
         let parity = i % 2;
         let ins = [parity, 1 - parity, 2];
         for s in 3 {
-            grid::stage_terms(t0 + (i + at[s]) * k, src, g, SRC, BC);
-            if fv {
-                put_start(gf);
-                for x in g { put(x); }
-                for x in src { put(x); }
-            } else {
-                put_start(f);
-                for d in n { put(weights[d] * grid::rhs[d]); }
-            }
+            put_start(if fv { gf } else { f });
+            grid::stage_terms(t0 + (i + at[s]) * k, SRC, BC, put);
             flush();
             if fv && grid::flux == grid::LINEAR_UPWIND {
                 dispatch(gr.grads[ins[s]], n);
@@ -384,6 +373,23 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     let done = grid::transient_end(end, steps);
     grid::last_seconds = clock() - start;
     return ok && done;
+}
+
+// The static step of fv or dg, and the modal and buckling steps of
+// elements: on the CPU, with a record of the device.
+fn grid_static<SRC, BC>(rtol: f64) -> bool {
+    note("gmres ilu0", false);
+    return grid::solve_static(rtol, SRC, BC);
+}
+
+fn modal(count: i64) -> bool {
+    note("lobpcg", false);
+    return elements::modal(count);
+}
+
+fn buckling(count: i64) -> bool {
+    note("lobpcg", false);
+    return elements::buckling(count);
 }
 
 // ---- the implicit solve ----
@@ -459,7 +465,7 @@ fn cg_pass(c: Cg, n: i64, r: f64[:], out: f64[:]) -> i64, bool {
 // on, else elements::solve.
 fn solve() -> bool {
     let wave = elements::physics == elements::WAVE;
-    guard present() && implicit_on() && !wave else {
+    guard present() && implicit_on() && !wave && elements::rad_count() == 0 else {
         note(if wave { "gmres ilu0" } else { "cg amg" }, false);
         return elements::solve();
     };

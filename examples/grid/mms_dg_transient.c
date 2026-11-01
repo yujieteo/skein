@@ -3559,7 +3559,7 @@ static uint8_t grid_solve_transient_g4(double end_g, double dt_g, int64_t gs_sp)
     if (!((memcmp(&t24, &sizes_g, 120) == 0))) {
         t25.data = ((uint8_t *)gs_str49); t25.len = 61;
         t26 = t25;
-        gs_abort_msg(t26.data, t26.len, gs_file1, 221);
+        gs_abort_msg(t26.data, t26.len, gs_file1, 224);
     }
     int64_t t27 = gs_os_clock_ns();
     double t28 = (double)(t27);
@@ -3568,7 +3568,7 @@ static uint8_t grid_solve_transient_g4(double end_g, double dt_g, int64_t gs_sp)
     uint8_t t30;
     t30 = finite_g;
     return t30;
-    GS_UNREACHABLE(gs_file1, 209);
+    GS_UNREACHABLE(gs_file1, 212);
     uint8_t t31 = {0};
     return t31;
 }
@@ -3592,7 +3592,7 @@ static double grid_transient_start_g4(double end_g, double dt_g, int64_t *gs_r1,
     {
         t4.data = ((uint8_t *)gs_str50); t4.len = 81;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file1, 188);
+        gs_abort_msg(t5.data, t5.len, gs_file1, 191);
     }
     L0:;
     t6.data = ((uint8_t *)gs_str51); t6.len = 11;
@@ -3680,7 +3680,7 @@ static double grid_transient_start_g4(double end_g, double dt_g, int64_t *gs_r1,
     t30 = steps_g;
     *gs_r1 = t30;
     return t29;
-    GS_UNREACHABLE(gs_file1, 187);
+    GS_UNREACHABLE(gs_file1, 190);
     double t31 = {0};
     return t31;
 }

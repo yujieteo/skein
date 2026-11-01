@@ -165,19 +165,22 @@ fn stage<SRC, BC>(u0: f64[:], v: f64[:], t: f64, dt: f64, c0: f64, c1: f64, out:
 }
 
 // The terms of a stage at time t that the GPU path of the page
-// (src/gpu/) takes from the CPU: b(t) in rhs (dg), or the source times
-// the volume of each cell in src and the value of each boundary face with
-// a condition in g, 4 for each cell (fv).
-fn stage_terms<SRC, BC>(t: f64, src: f64[:], g: f64[:]) {
+// (src/gpu/) takes from the CPU, one value at a time through OUT: b(t)
+// times the stage weight of each dof (dg), or the value of each boundary
+// face with a condition, 4 for each cell, and then the source times the
+// volume of each cell (fv).
+fn stage_terms<SRC, BC, OUT>(t: f64) {
     if method == DG {
         dg_rhs(t, rhs, SRC, BC);
+        for d in dof_count() { OUT(stage_weight(d) * rhs[d]); }
         return;
     }
-    guard src.len == cell_count() && g.len == 4 * cell_count() else { abort("stage_terms: src and g of the cells"); }
+    for c in cell_count() {
+        for s in 4 { OUT(if face_bc[4 * c + s] >= 0 { face_value(c, s, t, BC) } else { 0.0 }); }
+    }
     for c in cell_count() {
         let p = centre(c);
-        src[c] = SRC(p[0], p[1], t) * hx * hy;
-        for s in 4 { g[4 * c + s] = if face_bc[4 * c + s] >= 0 { face_value(c, s, t, BC) } else { 0.0 }; }
+        OUT(SRC(p[0], p[1], t) * hx * hy);
     }
 }
 

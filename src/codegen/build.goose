@@ -128,6 +128,9 @@ let GPU_CALLS = [
     ["elements::solve()", "gpu::solve()"],
     ["elements::central_difference(", "gpu::central_difference("],
     ["grid::solve_transient(", "gpu::grid_transient("],
+    ["grid::solve_static(", "gpu::grid_static("],
+    ["elements::modal(", "gpu::modal("],
+    ["elements::buckling(", "gpu::buckling("],
 ];
 
 // `line` with each call of GPU_CALLS replaced.
