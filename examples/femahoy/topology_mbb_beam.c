@@ -1488,6 +1488,9 @@ typedef struct {
     gs_stack gs_gstk_results_g;
     int64_t result_count_g;
     uint8_t failed_g;
+    gs_rhdr gradients_g;
+    gs_stack gs_gstk_gradients_g;
+    int64_t gradient_count_g;
 } gs_globals_t;
 static gs_globals_t gs_globals_main;
 #define GS_GL ((gs_globals_t *)gs_gl)
@@ -1973,7 +1976,7 @@ static void main_g(int64_t gs_sp) {
                     gs_memcpy(t105, (const uint8_t *)(((uint8_t *)gs_str11)), (size_t)t54);
                     t105 += t54;
                     s_g_2.len += t54;
-                    int64_t t55 = gs_fmt_i64(t105, (int64_t)(gs_add_i64((int64_t)(i_g), 1, gs_file1, 108)));
+                    int64_t t55 = gs_fmt_i64(t105, (int64_t)(gs_add_i64((int64_t)(i_g), 1, gs_file1, 110)));
                     t105 += t55;
                     s_g_2.len += t55;
                     int64_t t56 = 1;
@@ -1988,7 +1991,7 @@ static void main_g(int64_t gs_sp) {
                     t105 += t58;
                     s_g_2.len += t58;
                     int64_t t60 = i_g;
-                    int64_t t59 = gs_fmt_f64(t105, (double)((((double *)((GS_GL->optim_history_volume_g5.base)))[GS_IDX((int64_t)(t60), (GS_GL->optim_history_volume_g5.len), gs_file1, 108)])));
+                    int64_t t59 = gs_fmt_f64(t105, (double)((((double *)((GS_GL->optim_history_volume_g5.base)))[GS_IDX((int64_t)(t60), (GS_GL->optim_history_volume_g5.len), gs_file1, 110)])));
                     t105 += t59;
                     s_g_2.len += t59;
                     int64_t t61 = 1;
@@ -1996,7 +1999,7 @@ static void main_g(int64_t gs_sp) {
                     t105 += t61;
                     s_g_2.len += t61;
                     int64_t t63 = i_g;
-                    int64_t t62 = gs_fmt_f64(t105, (double)((((double *)((GS_GL->optim_history_change_g5.base)))[GS_IDX((int64_t)(t63), (GS_GL->optim_history_change_g5.len), gs_file1, 108)])));
+                    int64_t t62 = gs_fmt_f64(t105, (double)((((double *)((GS_GL->optim_history_change_g5.base)))[GS_IDX((int64_t)(t63), (GS_GL->optim_history_change_g5.len), gs_file1, 110)])));
                     t105 += t62;
                     s_g_2.len += t62;
                     int64_t t64 = 1;
@@ -2685,7 +2688,7 @@ static void step_load_g(int64_t gs_sp) {
         gs_memcpy(t249, (const uint8_t *)(((uint8_t *)gs_str13)), (size_t)t130);
         t249 += t130;
         GS_GL->solves_g.len += t130;
-        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file1, 82);
+        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file1, 84);
         if ((uint8_t)(!regular_g)) {
             uint8_t *t250 = GS(gs_sp + 0)->top;
             t131.base = t250; t131.len = 0;
@@ -2874,7 +2877,7 @@ static void step_load_g(int64_t gs_sp) {
             *(uint8_t *)t253 = t200;
             t253 += 1;
             GS_GL->reports_g.len++;
-            GS_GL->report_count_g = gs_add_i64(GS_GL->report_count_g, 1, gs_file1, 44);
+            GS_GL->report_count_g = gs_add_i64(GS_GL->report_count_g, 1, gs_file1, 46);
             (&GS_GL->gs_gstk_reports_g)->top = t253;
         }
         GS(gs_sp + 0)->top = t142.base;
@@ -2928,7 +2931,7 @@ static void step_load_g(int64_t gs_sp) {
         gs_memcpy(t254, (const uint8_t *)(((uint8_t *)gs_str13)), (size_t)t218);
         t254 += t218;
         GS_GL->results_g.len += t218;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 101);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 103);
         (&GS_GL->gs_gstk_results_g)->top = t254;
     }
     L204:;
@@ -6458,11 +6461,16 @@ static void gs_init_globals(void) {
     GS_GL->results_g.len = 0;
     GS_GL->result_count_g = 0;
     GS_GL->failed_g = 0;
+    gs_stack_init((&GS_GL->gs_gstk_gradients_g));
+    GS_GL->gradients_g.base = (&GS_GL->gs_gstk_gradients_g)->top;
+    GS_GL->gradients_g.len = 0;
+    GS_GL->gradients_g.len = 0;
+    GS_GL->gradient_count_g = 0;
 }
 
 static void gs_program_init(int argc, char **argv) {
     if (gs_program_initialized) return;
-    gs_rt_init(argc, argv, 5, 39, 0);
+    gs_rt_init(argc, argv, 5, 40, 0);
     gs_qinit(&gs_q_solvers_RowsY_g7);
     gs_qinit(&gs_q_solvers_XEven_g7);
     gs_qinit(&gs_q_solvers_XOdd_g7);
