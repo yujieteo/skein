@@ -624,8 +624,8 @@ study re_sweep: grid {
 }
 ```
 
-The procedures are `grid`, `zip`, `sample` and `minimize`. Each case runs
-all the steps. Cases run at the same time on worker threads. A named
+The procedures are `grid`, `zip`, `sample`, `minimize` and `topology`.
+Each case runs all the steps. Cases run at the same time on worker threads. A named
 `report cd = …` and each `expect` give a column of the results table. An
 `expect` in the study checks each case.
 
