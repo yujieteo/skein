@@ -320,10 +320,10 @@ in the browser (implementation.md §8). The page has a control for each
 `param` with a range of literals, for example `param L: Length = 200 mm
 in 100 mm..400 mm`. When a control changes, the page meshes the model
 again, solves it with the new values, and shows the records of the run
-in TOON, the `mesh_quality` record of a `tri` or `tet` mesh and the deformed mesh. The run in the
-page gives the same records and VTU file as `skein run --set` with the
-same values. The page also shows the records of a native run at the
-default values.
+in TOON, the `mesh_quality` record of a `tri` or `tet` mesh and the
+deformed mesh. The run in the page gives the same records and VTU file
+as `skein run --set` with the same values. The page also shows the
+records of a native run at the default values.
 
 It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
 `emcc` on `PATH`. It runs the model natively twice: at the default values
