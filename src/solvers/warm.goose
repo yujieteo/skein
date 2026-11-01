@@ -105,27 +105,25 @@ fn amg_reuse(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:]
 }
 
 // Keeps the AMG levels of the last amg_setup as the levels of solve `key`.
+// Each file comes from the levels themselves, with no copy of all of them.
+// Reason: the copy of all the levels took the peak of a cold page run of
+// sample 01 (8 mm, 90,546 dofs, 1 thread) to 789 MB, above its estimate
+// of 757 MB.
 fn amg_keep(key: i64, row_start: i64[:], col: i32[:], fixed: u8[:]) {
     guard warm_dir().len > 0 else { return; }
+    guard amg_levels > 0 else { abort("amg_keep: amg_setup"); }
     var sig: i64[>..] = [];
     sig.append(pattern_signature(row_start, col, fixed));
-    var n: i64[>..] = [];
-    var rs: i64[>..] = [];
-    var cl: i32[>..] = [];
-    var vl: f64[>..] = [];
-    var prs: i64[>..] = [];
-    var pcol: i32[>..] = [];
-    var pval: f64[>..] = [];
-    var chol: f64[>..] = [];
-    amg_coarse(n, rs, cl, vl, prs, pcol, pval, chol);
-    write_file(warm_path(key, "amg.n"), to_bytes(n));
-    write_file(warm_path(key, "amg.rs"), to_bytes(rs));
-    write_file(warm_path(key, "amg.col"), to_bytes(cl));
-    write_file(warm_path(key, "amg.val"), to_bytes(vl));
-    write_file(warm_path(key, "amg.prs"), to_bytes(prs));
-    write_file(warm_path(key, "amg.pcol"), to_bytes(pcol));
-    write_file(warm_path(key, "amg.pval"), to_bytes(pval));
-    write_file(warm_path(key, "amg.chol"), to_bytes(chol));
+    let rs_at = if amg_levels > 1 { amg_rs_at[1] } else { amg_rs.len };
+    let e_at = amg_e_at[1];
+    write_file(warm_path(key, "amg.n"), to_bytes(amg_n[..]));
+    write_file(warm_path(key, "amg.rs"), to_bytes(amg_rs[rs_at..]));
+    write_file(warm_path(key, "amg.col"), to_bytes(amg_col[e_at..]));
+    write_file(warm_path(key, "amg.val"), to_bytes(amg_val[e_at..]));
+    write_file(warm_path(key, "amg.prs"), to_bytes(amg_prs[..]));
+    write_file(warm_path(key, "amg.pcol"), to_bytes(amg_pcol[..]));
+    write_file(warm_path(key, "amg.pval"), to_bytes(amg_pval[..]));
+    write_file(warm_path(key, "amg.chol"), to_bytes(amg_chol[..]));
     // The signature last: a run stopped before it leaves no levels to use.
     write_file(warm_path(key, "amg.sig"), to_bytes(sig));
 }
