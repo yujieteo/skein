@@ -244,7 +244,7 @@ The browser runs the same Goose code, compiled to WebAssembly:
 | `check`, `fmt`, `lint` | planned, in the editor, with no server |
 | mesher | yes, in the page of `skein build --target wasm` |
 | solve | yes, for the simplex and hex models and the `fv` and `dg` grids whose memory fits in 15 GB. On the GPU with WebGPU: the explicit steps always, the implicit solves with the control of the page. |
-| viewer | planned, WebGL. The page draws the deformed surface mesh on a 2D canvas. |
+| viewer | yes, WebGL 2: the page is the page of `skein report` (command_line.md §12), with its viewer. |
 
 The browser target compiles the C that Goose writes with `emcc`, as earlier
 Goose projects do (spec §18.1). `skein build --target wasm`
@@ -280,7 +280,8 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    growth that the browser refuses stops the run, and the page shows an
    error with that limit. The page cannot catch the kernel OOM killer: a
    host with no free memory can still stop the tab.
-5. It writes one HTML page with the module in it. Each run has a Web
+5. It writes one HTML page with the module in it: the page of `skein
+   report`, with the native run at the default values. Each run has a Web
    Worker and a module of its own. Thus a new value stops the run before
    it, and the memory of a run goes back when it ends.
 

@@ -11,7 +11,9 @@
 //     wasm.c          main.c with the regions of WebAssembly
 //     solve.html      the module and the solve of the page (skein report
 //                     puts it in its page)
-//     <model>.html    the page, with solve.html in it
+//     <n>.vtu         blob n of the page: the mesh or the fields of a result
+//     <model>.html    the page: the page of skein report (src/report), with
+//                     native.toon as its one case and solve.html in it
 //
 // A Goose data stack is a region of reserved address space with a guard
 // gap behind it. WebAssembly memory has no reservation and no guard
@@ -36,6 +38,7 @@ import .study;
 import .run;
 import .web;
 import .page;
+import report from "../report";
 
 let BUILD_USAGE = "usage: skein build <file.skn> --target wasm\n";
 
@@ -331,7 +334,7 @@ fn build(args: const u8[:][:]) -> i64 {
         write_stderr(str("skein build: cannot write '", dir, "/main.goose'\n"));
         return 1;
     };
-    return build_page(dir, model, params, corner, others);
+    return build_page(path, text, dir, model, params, corner, others);
 }
 
 // Links each part of the compiler in `dir`, beside main.goose: the program
@@ -346,40 +349,39 @@ fn link_sources(dir: u8[:]) -> bool {
 
 // Runs the profile of `dir` with the words of --set `sets`. Its standard
 // output goes to `out` in `dir`. It gives the peak of each data stack in
-// `peaks` (MB), the seconds of the run, and the peak MB of the heap: the
+// `peaks` (MB), and the peak MB of the heap: the
 // peak resident MB less the data stacks. False, with an error, if the run
 // fails or gives no profile.
-fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> bool, f64, i64 {
+fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> bool, i64 {
     var command = str("cd ", shell_quoted(dir), " && SKEIN_THREADS=1 ./profile");
     for w in sets { format(command, " ", shell_quoted(w)); }
     format(command, " > ", out, " 2> profile.err");
     write_stderr(str("skein build: the native run", if sets.len > 0 { " at" } else { " at the default values" }));
     for w in sets { write_stderr(str(" ", w)); }
     write_stderr("\n");
-    let start = clock();
     let status = shell(command);
-    let seconds = clock() - start;
     var err: u8[>..] = [];
     read_file(str(dir, "/profile.err"), err);
     guard status == 0 else {
         write_stderr(str("skein build: the native run failed with exit status ", status, ":\n", err));
-        return false, seconds, 0;
+        return false, 0;
     };
     var rss: i64[>..] = [];
     guard profile_numbers(err, "skein-profile: ", peaks) && profile_numbers(err, "skein-rss: ", rss) && rss.len == 1 else {
         write_stderr(str("skein build: the native run gave no profile:\n", err));
-        return false, seconds, 0;
+        return false, 0;
     };
     var heap = rss[0];
     for p in peaks { heap -= p; }
-    return true, seconds, max(heap, 0);
+    return true, max(heap, 0);
 }
 
 // Builds main.goose of `dir` to C, runs the profile at the default values,
-// at `corner` and at each word of `others` alone, and writes the page.
+// at `corner` and at each word of `others` alone, and writes the page of
+// the model `text` at `path`.
 // goose gets the absolute path of main.goose, so that each link resolves
 // to one path.
-fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:], others: u8[..256][:]) -> i64 {
+fn build_page(path: u8[:], text: u8[:], dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:], others: u8[..256][:]) -> i64 {
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
     let q = shell_quoted(dir);
@@ -397,7 +399,7 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
     };
     var peaks: i64[>..] = [];
     let none: u8[..256][>..] = [];
-    let ran, seconds, first_heap = profile_run(dir, none, "native.toon", peaks);
+    let ran, first_heap = profile_run(dir, none, "native.toon", peaks);
     guard ran else { return 1; };
     var heap = first_heap;
     // The end runs: n = 0 at the corner, n > 0 at the word n - 1 of
@@ -406,7 +408,7 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
         var sets: u8[..256][>..] = [];
         if n == 0 { sets.append(corner); } else { sets.push(others[n - 1]); }
         var more: i64[>..] = [];
-        let end_ran, _, h = profile_run(dir, sets, if n == 0 { "corner.toon" } else { "end.toon" }, more);
+        let end_ran, h = profile_run(dir, sets, if n == 0 { "corner.toon" } else { "end.toon" }, more);
         guard end_ran && more.len == peaks.len else { return 1; };
         heap = max(heap, h);
         for p, i in more { peaks[i] = max(peaks[i], p); }
@@ -437,8 +439,10 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
         return 3;
     };
     let solve = solve_html(model, params, glue, total, wgsl, gpu_js);
+    let html = report::web_page(path, text, model, dir, native, solve);
+    guard html.len > 0 else { return 3; };
     let page = str(dir, "/", model, ".html");
-    guard write_file(str(dir, "/solve.html"), solve) && write_file(page, page_html(model, solve, native, seconds)) else {
+    guard write_file(str(dir, "/solve.html"), solve) && write_file(page, html) else {
         write_stderr(str("skein build: cannot write '", page, "'\n"));
         return 1;
     };
