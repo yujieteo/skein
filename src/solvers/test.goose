@@ -242,57 +242,60 @@ fn test_modes() {
     if ms[2] != 0.0 || ms[3] != 1.0 { fail("modes: the constant of a scalar field"); }
 }
 
-// The AMG levels of amg_coarse, restored with amg_restore, give the same
-// V-cycle; arrays of another matrix do not restore.
+// The 5-point Laplacian on 40 x 40 nodes, for test_warm.
+var lap_rs: i64[>..] = [0];
+var lap_col: i32[>..] = [];
+var lap_val: f64[>..] = [];
+
+fn lap_multiply(x: f64[:], y: f64[:]) { solvers::multiply(lap_rs, lap_col, lap_val, x, y); }
+
+fn lap_amg(r: f64[:], z: f64[:]) { solvers::amg_apply(r, z); }
+
+// CG with the AMG levels that amg_reuse reads from the files of amg_keep
+// gives the solution and the iterations of CG with the levels of
+// amg_setup; the levels do not fit a matrix of another pattern. It needs
+// SKEIN_WARM, which ./build.sh test sets to an empty directory.
 fn test_warm() {
-    // The 5-point Laplacian on 40 x 40 nodes.
+    if solvers::warm_dir().len == 0 { fail("warm: SKEIN_WARM is not set"); return; }
     let n = 40;
-    var rs: i64[>..] = [0];
-    var col: i32[>..] = [];
-    var val: f64[>..] = [];
     for j in n {
         for i in n {
             let r = i + n * j;
-            if j > 0 { col.push((r - n) as i32); val.push(-1.0); }
-            if i > 0 { col.push((r - 1) as i32); val.push(-1.0); }
-            col.push(r as i32);
-            val.push(4.0);
-            if i < n - 1 { col.push((r + 1) as i32); val.push(-1.0); }
-            if j < n - 1 { col.push((r + n) as i32); val.push(-1.0); }
-            rs.push(col.len);
+            if j > 0 { lap_col.push((r - n) as i32); lap_val.push(-1.0); }
+            if i > 0 { lap_col.push((r - 1) as i32); lap_val.push(-1.0); }
+            lap_col.push(r as i32);
+            lap_val.push(4.0);
+            if i < n - 1 { lap_col.push((r + 1) as i32); lap_val.push(-1.0); }
+            if j < n - 1 { lap_col.push((r + n) as i32); lap_val.push(-1.0); }
+            lap_rs.push(lap_col.len);
         }
     }
     var b: f64[>..] = [];
-    var z1: f64[>..] = [];
-    var z2: f64[>..] = [];
+    var x1: f64[>..] = [];
+    var x2: f64[>..] = [];
+    var free: u8[>..] = [];
     for r in n * n {
         b.push(sin(0.1 * r));
-        z1.push(0.0);
-        z2.push(0.0);
+        x1.push(0.0);
+        x2.push(0.0);
+        free.push(0);
     }
-    if !solvers::amg_setup(rs, col, val, 1) { fail("warm: amg_setup"); }
-    solvers::amg_apply(b, z1);
-    var ln: i64[>..] = [];
-    var lrs: i64[>..] = [];
-    var lcol: i32[>..] = [];
-    var lval: f64[>..] = [];
-    var prs: i64[>..] = [];
-    var pcol: i32[>..] = [];
-    var pval: f64[>..] = [];
-    var chol: f64[>..] = [];
-    solvers::amg_coarse(ln, lrs, lcol, lval, prs, pcol, pval, chol);
-    if ln.len < 2 { fail(str("warm: ", ln.len, " AMG levels, want 2 or more")); }
-    if !solvers::amg_restore(rs, col, val, ln, lrs, lcol, lval, prs, pcol, pval, chol) { fail("warm: amg_restore"); }
-    solvers::amg_apply(b, z2);
-    for v, i in z1 { if v != z2[i] { fail("warm: the restored levels give another V-cycle"); break; } }
-    if solvers::amg_restore(rs, col, val, ln, lrs[1..], lcol, lval, prs, pcol, pval, chol) { fail("warm: amg_restore takes arrays of the wrong size"); }
+    let key = solvers::warm_key();
+    if !solvers::amg_setup(lap_rs, lap_col, lap_val, 1) { fail("warm: amg_setup"); return; }
+    if solvers::amg_levels < 2 { fail(str("warm: ", solvers::amg_levels, " AMG levels, want 2 or more")); }
+    let ok1, its1 = runtime::cg(b, x1, 1.0e-10, 500, lap_multiply, lap_amg);
+    solvers::amg_keep(key, lap_rs, lap_col, free);
+    var other: f64[>..] = [];
+    for v in lap_val { other.push(if v > 0.0 { 5.0 } else { v }); }
+    if !solvers::amg_setup(lap_rs, lap_col, other, 1) { fail("warm: amg_setup of another matrix"); return; }
+    if !solvers::amg_reuse(key, lap_rs, lap_col, lap_val, free) { fail("warm: amg_reuse of the levels of amg_keep"); return; }
+    let ok2, its2 = runtime::cg(b, x2, 1.0e-10, 500, lap_multiply, lap_amg);
+    if !ok1 || !ok2 || its1 != its2 { fail(str("warm: CG takes ", its1, " iterations, and ", its2, " with the reused levels")); }
+    for v, i in x1 { if v != x2[i] { fail("warm: the reused levels give another solution"); break; } }
     var moved: i32[>..] = [];
-    moved.append(col);
+    moved.append(lap_col);
     moved[1] = 2;
-    var free: u8[>..] = [];
-    for r in n * n { free.push(0); }
-    let sig = solvers::pattern_signature(rs, col, free);
-    if sig == solvers::pattern_signature(rs, moved, free) { fail("warm: pattern_signature of another pattern"); }
+    if solvers::amg_reuse(key, lap_rs, moved, lap_val, free) { fail("warm: amg_reuse of another pattern"); }
 }
 
 fn main() {

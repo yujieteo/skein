@@ -546,35 +546,11 @@ fn amg_apply(r: f64[:], z: f64[:]) {
     for i in r.len { z[i] = amg_x[i]; }
 }
 
-// The levels of the last amg_setup without the fine level: the dofs of
-// each level in n, the matrices of the coarse levels (rs, col, val), the
-// prolongators (prs, pcol, pval) and the factor of the last level. Each
-// row start counts from its own level. warm.goose keeps them.
-fn amg_coarse(n: i64[>..]&, rs: i64[>..]&, col: i32[>..]&, val: f64[>..]&, prs: i64[>..]&, pcol: i32[>..]&,
-              pval: f64[>..]&, chol: f64[>..]&) {
-    guard amg_levels > 0 else { abort("amg_coarse: amg_setup"); }
-    n.clear();
-    n.append(amg_n);
-    rs.clear();
-    col.clear();
-    val.clear();
-    for l in 1..amg_levels {
-        rs.append(level_rs(l));
-        col.append(level_col(l));
-        val.append(level_val(l));
-    }
-    prs.clear();
-    prs.append(amg_prs);
-    pcol.clear();
-    pcol.append(amg_pcol);
-    pval.clear();
-    pval.append(amg_pval);
-    chol.clear();
-    chol.append(amg_chol);
-}
-
-// The levels of amg_coarse again, with the matrix (row_start, col, val) as
-// the fine level. False if the arrays do not make the levels.
+// The levels that amg_keep (warm.goose) writes: the dofs of each level in
+// n, the matrices of the coarse levels (rs, col, val), the prolongators
+// (prs, pcol, pval) and the factor of the last level, each row start from
+// its own level. The matrix (row_start, col, val) is the fine level. False
+// if the arrays do not make the levels.
 fn amg_restore(row_start: i64[:], col: i32[:], val: f64[:], n: i64[:], rs: i64[:], cl: i32[:], vl: f64[:],
                prs: i64[:], pcol: i32[:], pval: f64[:], chol: f64[:]) -> bool {
     guard n.len >= 1 && n.len <= AMG_MAX_LEVELS && n[0] == row_start.len - 1 && col.len == val.len else { return false; }
