@@ -154,7 +154,7 @@ A sparse matrix is CSR in three arrays. The solvers use no other storage.
 | GMRES(m) | restarted, right preconditioned |
 | Newton | with a backtracking line search and the load ramp of `static(ramp:)` |
 | LOBPCG | for `modal` and `buckling` |
-| AMG | smoothed aggregation |
+| AMG | smoothed aggregation, with the near null space of each physics (`src/solvers/modes.goose`): the constant of a scalar field, the rigid-body modes of a solid, and 3 plate bending modes more for a thin 3D solid |
 | threads | assembly and the matrix-vector products of CG and of the flow GMRES(m) run in Goose workers (`src/solvers/pool.goose`) |
 
 Goose threads share no memory. A worker gets a range of cells as a flat
@@ -262,12 +262,17 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    the generator, the mesher and the solvers. For the values of the page,
    it generates the program again, takes the literals of the slots from
    it, and runs the program with them. A program that differs in another
-   place than a slot stops the run with an error. Thus the run in the page
-   gives the records and the VTU file of `skein run --set`, bit for bit.
+   place than a slot stops the run with an error. Thus the first run in
+   the page gives the records and the VTU file of `skein run --set`, bit
+   for bit. A later run starts each solve from the files that the last
+   run left in `/warm` (`src/solvers/warm.goose`): the solution, and the
+   AMG levels if the matrix has the same pattern. Its records agree within
+   the solver tolerance.
 3. It runs that program natively at the default values, at the corner
    of the ranges with the most dofs, and at the other end of each range
    with the other params at their defaults. Thus each end of each range
-   has a run. It measures the peak of each Goose data stack and the peak
+   has a run. The default and the corner run again from the files of the
+   run before. It measures the peak of each Goose data stack and the peak
    resident memory. A run that fails stops the build with an error.
 4. It compiles the C with `emcc` to 64-bit WebAssembly (memory64). Each
    data stack gets a fixed region: 1.5 times the largest peak of the

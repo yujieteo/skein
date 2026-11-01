@@ -38,9 +38,14 @@ run_tests() {
             status=1
             continue
         fi
-        if ! (cd "$root" && "$out/test_$part"); then
+        # The solvers test keeps AMG levels in SKEIN_WARM (test_warm). Only
+        # that test gets it: the runs of the other tests must not warm start.
+        warm=
+        if [ "$part" = solvers ]; then warm=$(mktemp -d); fi
+        if ! (cd "$root" && SKEIN_WARM="$warm" "$out/test_$part"); then
             status=1
         fi
+        if [ -n "$warm" ]; then rm -rf "$warm"; fi
     done
     if ! "$root/scripts/generated_c.sh"; then
         status=1

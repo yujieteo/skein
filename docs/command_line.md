@@ -324,8 +324,13 @@ page has a slider for each `param` with a range of literals, for example
 other values meshes the model again in the page, solves it with the new
 values, and the viewer and the tables show that run: the deformed mesh,
 its records in TOON with the `mesh_quality` record of its mesh, and its
-log. The run in the page gives the same records and VTU file as `skein
-run --set` with the same values, on the CPU.
+log. The first run in the page gives the same records and VTU file as
+`skein run --set` with the same values, on the CPU. Each later solve
+starts from the last solution of the page, and keeps the AMG levels of
+the last run when the matrix has the same dofs, pattern and fixed dofs:
+a change of a load or a material, not of the mesh. Its records then
+agree with `skein run --set` within the solver tolerance, with fewer
+iterations.
 
 When the browser has WebGPU, the page uses the GPU (src/gpu/):
 
@@ -353,10 +358,11 @@ It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
 `emcc` on `PATH`. It runs the model natively at the default values, at
 the corner of the param ranges with the most dofs, and at the other end
 of each range with the other params at their defaults. Thus each end of
-each range has a native run. A native run that fails stops `build` with
-an error. The peak memory of these runs sets the memory limit of the
-page: the author sets nothing. The memory of a run starts at 64 MB and
-grows to that limit. If the browser cannot give
+each range has a native run. The default and the corner run again from
+the solution of the run before, as a page does. A native run that fails
+stops `build` with an error. The peak memory of these runs sets the
+memory limit of the page: the author sets nothing. The memory of a run
+starts at 64 MB and grows to that limit. If the browser cannot give
 the memory, the run stops and the page shows an error with the limit. A
 model that needs more than 15 GB gets a page with the native results only,
 and the page gives the size of the model.
