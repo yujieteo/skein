@@ -113,7 +113,7 @@ The core choices that each section tests:
 | Free surface (level set, VOF) | a level set is a PDE | reinitialization is a process, not an equation | out of scope for v1. No `process` statement until a real model shows which processes are necessary (G4.7). |
 | Meshless (large deformation, fracture) | `rkpm`, `gfd` | fragmentation needs particle methods with contact. That is closer to DEM, which is not a PDE. | out of scope for v1 |
 | Parameter studies | `param`, `study` (§20) | each case is a whole run | §20.4 reuses the mesh. Each case runs, with no reuse of similar cases (G2.3). |
-| Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | adjoint gradients from the SIR, phase 5 (G3.3) |
+| Optimization | `study … minimize` (§20.2) | gradient-free methods need many cases. Shape and topology optimization need adjoint gradients. | the optim lane has adjoint gradients for `minimize` and `topology` (2D linear elastic Q4). A general adjoint from the SIR stays a plan (G3.3). |
 | Uncertainty quantification | `study … sample` with `lhs` or `sobol` | no statistics of the results in the tool | the table is TOON. Other tools compute the statistics (G3.4). |
 | General PDEs with no physics | a `nondim` model (§6.5) | no dimension checks | accepted cost, the check report states it |
 

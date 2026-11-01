@@ -164,6 +164,53 @@ recursive fn eval_value(n: i64) -> Value {
     return number_value(0.0);
 }
 
+// fill(nurbs(degree, [knots(k...),] p1, w1, ..., pn, wn)) (spec §8.1).
+// The knots are 0 (degree + 1 times), 1, 2, ..., n - degree (degree + 1
+// times) when the model gives none. The values go on polygon_scratch: a
+// local array cannot live across the recursive call of eval_value.
+recursive fn read_nurbs(c: i64) -> Value {
+    let args = syntax::child_count(c) - 1;
+    let p = eval_value(argument(c, 0)).v[0] as! i64;
+    let k = argument(c, 1);
+    let given = syntax::nodes[k].kind == syntax::N_CALL && node_text(syntax::child(k, 0)) == "knots";
+    let s = if given { 2 } else { 1 };
+    let n = (args - s) / 2;
+    guard p >= 1 && p <= 3 && (args - s) % 2 == 0 && n >= p + 1 && (!given || syntax::child_count(k) - 1 == n + p + 1) else {
+        reader_fault(syntax::nodes[c].tok, "the nurbs has no degree of 1 to 3, a point and a weight for each control point, or n + degree + 1 knots",
+                     "write nurbs(2, (1, 0) mm, 1, (1, 1) mm, 0.7071, (0, 1) mm, 1)");
+        return number_value(0.0);
+    }
+    let mark = polygon_scratch.len;
+    for i in n + p + 1 {
+        if given { polygon_scratch.push(eval_value(argument(k, i)).v[0]); } else { polygon_scratch.push(min(max(i - p, 0), n - p)); }
+    }
+    for i in n {
+        let q = eval_value(argument(c, s + 2 * i));
+        let w = eval_value(argument(c, s + 2 * i + 1));
+        if q.n != 2 || w.n != 1 || !(w.v[0] > 0.0) {
+            reader_fault(syntax::nodes[argument(c, s + 2 * i)].tok, str("control point ", i + 1, " of nurbs is not a vector of 2 with a weight above 0"), "write (x, y), w");
+        }
+        polygon_scratch.push(q.v[0]);
+        polygon_scratch.push(q.v[1]);
+        polygon_scratch.push(w.v[0]);
+    }
+    var falls = false;
+    for i in 1..n + p + 1 { if polygon_scratch[mark + i] < polygon_scratch[mark + i - 1] { falls = true; } }
+    for i in 1..n { if polygon_scratch[mark + i + p] == polygon_scratch[mark + i] { falls = true; } }
+    let clamped = polygon_scratch[mark + p] == polygon_scratch[mark] && polygon_scratch[mark + n + p] == polygon_scratch[mark + n] &&
+                  polygon_scratch[mark + n] > polygon_scratch[mark];
+    guard syntax::errors.len == 0 && !falls && clamped else {
+        if syntax::errors.len == 0 {
+            reader_fault(syntax::nodes[k].tok, "the knots of the nurbs fall, the first and the last are not each degree + 1 times, or an inner knot is more than degree times", "write knots(0, 0, 0, 1, 1, 1) for degree 2");
+        }
+        polygon_scratch.resize(mark);
+        return number_value(0.0);
+    }
+    let g = fill_nurbs(p, polygon_scratch[mark..mark + n + p + 1], polygon_scratch[mark + n + p + 1..]);
+    polygon_scratch.resize(mark);
+    return Value { n: 0, v: [0.0, 0.0, 0.0], g: g };
+}
+
 recursive fn shape_call(n: i64) -> Value {
     let t = syntax::nodes[n].tok;
     let name = node_text(syntax::child(n, 0));
@@ -212,9 +259,10 @@ recursive fn shape_call(n: i64) -> Value {
     }
     if name == "fill" && count == 1 {
         let c = argument(n, 0);
+        if syntax::nodes[c].kind == syntax::N_CALL && node_text(syntax::child(c, 0)) == "nurbs" { return read_nurbs(c); }
         guard syntax::nodes[c].kind == syntax::N_CALL && node_text(syntax::child(c, 0)) == "spline" else {
-            reader_fault(syntax::nodes[argument(n, 0)].tok, "fill of a Curve that is not a spline is not in the mesher",
-                         "fill a spline through the points");
+            reader_fault(syntax::nodes[argument(n, 0)].tok, "fill of a Curve that is not a spline or a nurbs is not in the mesher",
+                         "fill a spline through the points, or a nurbs");
             return number_value(0.0);
         }
         let mark = polygon_scratch.len;

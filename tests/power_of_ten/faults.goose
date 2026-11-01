@@ -9,6 +9,7 @@ import shells from "../../src/shells";
 import flow from "../../src/flow";
 import grid from "../../src/grid";
 import meshless from "../../src/meshless";
+import optim from "../../src/optim";
 import solvers from "../../src/solvers";
 import mesher from "../../src/mesher";
 
@@ -88,6 +89,20 @@ fn main() {
         meshless::points_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
         meshless::equation(1.0, 0.0, 1.0);
         meshless::fix_selected(0);
+    } else if call == "optim_mesh" {
+        optim::mesh_rect(0.0, 0.0, 1.0, 1.0, 0, 2);
+    } else if call == "optim_elastic" {
+        optim::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        optim::elastic(1.0, 0.5, 1.0, optim::PLANE_STRESS);
+    } else if call == "optim_fix" {
+        optim::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        optim::fix_line(5, 0.0, optim::X, 0.0);
+    } else if call == "optim_solve" {
+        optim::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        optim::solve();
+    } else if call == "optim_topology" {
+        optim::mesh_rect(0.0, 0.0, 1.0, 1.0, 2, 2);
+        optim::topology(0.5, 3.0, 1.5, 10);
     } else if call == "flow_value" {
         flow::value_at(flow::VALUE_P, 0.0, 0.0);
     } else if call == "solvers_multiply" {

@@ -107,6 +107,11 @@ meshless_points|points_rect: xb > xa, yb > ya, and nx, ny >= 1
 meshless_equation|equation: a cloud and d > 0
 meshless_gfd|gfd: the scalar physics, and 6 <= points < the points of the cloud
 meshless_fix|fix_component: k >= 0, a component of the unknown, and a method
+optim_mesh|mesh_rect: xb > xa, yb > ya, and cx, cy >= 1
+optim_elastic|elastic: a mesh, E > 0, -1 < nu < 0.5, t > 0 and a plane assumption
+optim_fix|fix_line: a mesh, clear_bcs, and an axis and a component X or Y
+optim_solve|solve: elastic and clear_bcs
+optim_topology|topology: 0 < volume <= 1, p >= 1, r > 0, most >= 1 and an objective
 solvers_multiply|multiply: row_start has y.len + 1 entries, col and val one size, x and y one size
 solvers_ilu0_apply|ilu0_apply: row_start has r.len + 1 entries, z and diag r.len, lu col.len
 CALLS

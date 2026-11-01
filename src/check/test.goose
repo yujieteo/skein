@@ -231,6 +231,16 @@ fn test_types() {
     expect_clean("fill of a spline", str(H, "let s: Solid = extrude(fill(spline((0, 0) m, (1, 0) m, (1, 1) m, (0, 0) m)), 1 m)\n"));
     expect_id("type_mismatch", str(H, "let s: Solid = extrude(fill(rect((0, 0) m, (1, 1) m)), 1 m)\n"));
     expect_id("geometry_space", str(H, "let s: Surface = fill(spline((0, 0, 0) m, (1, 0, 0) m, (1, 1, 0) m))\n"));
+    // nurbs: a degree, a point and a weight for each control point, and
+    // n + degree + 1 knots when the model gives them.
+    expect_clean("a nurbs", str(H2, "let s: Surface = fill(nurbs(2, (1, 0) m, 1, (1, 1) m, 0.7071, (0, 1) m, 1))\n"));
+    expect_clean("a nurbs with knots", str(H2, "let s: Curve = nurbs(1, knots(0, 0, 1, 2, 2), (0, 0) m, 1, (1, 0) m, 2, (1, 1) m, 1)\n"));
+    expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(4, (0, 0) m, 1, (1, 0) m, 1)\n"));
+    expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, (0, 0) m, 1, (1, 0) m)\n"));
+    expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, knots(0, 0, 1), (0, 0) m, 1, (1, 0) m, 1)\n"));
+    expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, (0, 0) m, 1 m, (1, 0) m, 1)\n"));
+    expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, (0, 0) m, 0, (1, 0) m, 1)\n"));
+    expect_id("geometry_space", str(H, "let s: Curve = nurbs(1, (0, 0, 0) m, 1, (1, 0, 0) m, 1)\n"));
     expect_id("nondim_unit", "model m: 2d, nondim\nlet a: Real = 1 m\n");
     // Gaps G7, G12, G29, G30: these are valid.
     expect_clean("G7 re, imag, arg, conj", str(H, "let w: Complex<Real> = 1 + 2*im\nlet a: Real = re(w) + imag(w) + abs(w)\nlet b: Angle = arg(conj(w))\n"));
@@ -455,6 +465,17 @@ fn test_studies() {
     expect_clean("G25 xtol and step", str(H, nm, "xtol: 0.001, step: 0.1) {\n    D: 0.1 m..2 m\n}\n"));
     expect_id("procedure_args", str(H, nm, "xtol: 1 mm) {\n    D: 0.1 m..2 m\n}\n"));
     expect_id("procedure_args", str(H, nm, "step: 1.5) {\n    D: 0.1 m..2 m\n}\n"));
+    // G1: a topology study needs an objective, a Surface, 0 < volume <= 1
+    // and a filter radius, and has no param.
+    let tp = str(H2, "let s: Surface = rect((0, 0) m, (2, 1) m)\nlet e: Curve = boundary(s, x == 0 m)\nstep go: static {\n    report r = 1 J\n}\nstudy t: topology(objective: r, ");
+    expect_clean("G1 a topology study", str(tp, "region: s, volume: 0.5, penalty: 3, filter: 0.1 m) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: e, volume: 0.5, filter: 0.1 m) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 1.5, filter: 0.1 m) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5, filter: 0.1) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5, penalty: 0.5, filter: 0.1 m) {\n}\n"));
+    expect_clean("G1 the solid of a topology study", str(tp, "region: s, volume: 0.5, filter: 0.1 m, threshold: 0.5) {\n}\n"));
+    expect_id("procedure_args", str(tp, "region: s, volume: 0.5, filter: 0.1 m, threshold: 1) {\n}\n"));
     // G10: an expect of a study, checked in each case, with a list of one
     // value for each case of a grid or a zip.
     let d = str(H, "param D: Length = 1 m in 0.1 m..2 m\nparam k: Real = 1\n");

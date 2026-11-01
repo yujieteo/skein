@@ -28,6 +28,17 @@ var case_count = 0;
 var case_expects: u8[>..];
 var expect_at: i64[>..];
 
+// The ranges of a `minimize` study: param k varies from range_lo[k] to
+// range_hi[k] in the unit range_unit[k], from its default. z is the value
+// in 0..1 of the range. run.goose runs the loop.
+var range_lo: f64[>..];
+var range_hi: f64[>..];
+var range_unit: u8[..64][>..];
+var range_start: f64[>..];
+var max_cases = 50;
+var xtol = 0.001;
+var first_step = 0.1;
+
 fn case_value(c: i64, p: i64) -> const u8[:] { return case_values[c * varied.len + p]; }
 
 // The `study` item named `name` of program `prog`, or -1.
@@ -96,6 +107,13 @@ fn study_cases(prog: i64, s: i64) -> bool {
         if kind(c) == syntax::N_SETTING { entries.push(c); }
         c = syntax::nodes[c].next;
     }
+    // A topology study varies the density of each cell, in one case
+    // (src/optim/gen.goose).
+    if procedure == "topology" {
+        case_count = 1;
+        study_expects(body);
+        return true;
+    }
     guard entries.len > 0 else {
         unsupported(tok(s), "the study varies no param", "add an entry, for example Re: [10, 20]");
         return false;
@@ -126,9 +144,17 @@ fn study_cases(prog: i64, s: i64) -> bool {
         good = list_cases(procedure == "grid", entries);
     } else if procedure == "sample" {
         good = sample_cases(pr, entries);
+    } else if procedure == "minimize" && minimize_ranges(prog, pr, entries) {
+        // The loop of run.goose adds each case.
+        case_count = 1;
+        study_expects(body);
+        case_count = 0;
+        return true;
+    } else if procedure == "minimize" {
+        return false;
     } else {
         unsupported(tok(pr), str("the study procedure ", procedure, " is not in this build"),
-                    "use grid, zip or sample");
+                    "use grid, zip, sample or topology");
     }
     if good { study_expects(body); }
     return good;
@@ -279,6 +305,47 @@ recursive fn literal(n: i64) -> f64, const u8[:], bool {
     return v, if u >= 0 { source_of(u) } else { "" }, true;
 }
 
+// The ranges, the start and the stop settings of `minimize(objective,
+// method: gradient, max_cases, xtol, step)`. Each range and the default of
+// its param are numbers in one unit. False on an error.
+fn minimize_ranges(prog: i64, pr: i64, entries: i64[:]) -> bool {
+    let method = proc_arg(pr, "method");
+    guard method >= 0 && kind(method) == syntax::N_NAME && name(method) == "gradient" else {
+        unsupported(tok(pr), "minimize runs only with method: gradient in this build", "write minimize(r, method: gradient)");
+        return false;
+    };
+    range_lo.clear();
+    range_hi.clear();
+    range_unit.clear();
+    range_start.clear();
+    for e in entries {
+        let range = syntax::nodes[e].first;
+        let lo, lo_unit, lo_ok = literal(syntax::nodes[range].first);
+        let hi, hi_unit, hi_ok = literal(syntax::nodes[syntax::nodes[range].first].next);
+        let d, d_unit, d_ok = literal(syntax::nodes[syntax::nodes[find_param(prog, name(e))].first].next);
+        guard kind(range) == syntax::N_RANGE && lo_ok && hi_ok && d_ok && lo_unit == hi_unit && d_unit == lo_unit && hi > lo else {
+            unsupported(tok(e), "minimize takes a range of two numbers in the unit of the default of the param", "write the default and the range in one unit, for example D: Length = 1 m in 0.1 m..2 m");
+            return false;
+        };
+        range_lo.push(lo);
+        range_hi.push(hi);
+        var w: u8[..64] = [];
+        set64(w, lo_unit);
+        range_unit.push(w);
+        range_start.push(min(1.0, max(0.0, (d - lo) / (hi - lo))));
+    }
+    max_cases = 50;
+    xtol = 0.001;
+    first_step = 0.1;
+    let mc = proc_arg(pr, "max_cases");
+    if mc >= 0 && kind(mc) == syntax::N_NUMBER { max_cases = number(tok(mc)) as! i64; }
+    let xt = proc_arg(pr, "xtol");
+    if xt >= 0 && kind(xt) == syntax::N_NUMBER { xtol = number(tok(xt)); }
+    let st = proc_arg(pr, "step");
+    if st >= 0 && kind(st) == syntax::N_NUMBER { first_step = number(tok(st)); }
+    return true;
+}
+
 // The cases of `sample(n: Int, method: lhs | sobol, seed: Int)`: each value
 // is `lo + t*(hi - lo)` for a point t in [0, 1), in the unit of the range.
 fn sample_cases(pr: i64, entries: i64[:]) -> bool {
@@ -338,6 +405,12 @@ fn sample_cases(pr: i64, entries: i64[:]) -> bool {
 // The model `text` of case `c`: the case values in place of the defaults,
 // and the `expect` lines of the study at the end.
 fn case_source(text: u8[:], c: i64) -> u8[>..] {
+    return values_source(text, case_values[c * varied.len..(c + 1) * varied.len], case_expects[expect_at[c]..expect_at[c + 1]]);
+}
+
+// The model `text` with `values` in place of the defaults of the varied
+// params, and `tail` at the end.
+fn values_source(text: u8[:], values: u8[..256][:], tail: u8[:]) -> u8[>..] {
     var order: i64[>..] = [];
     for p in 0..varied.len { order.push(p); }
     sort(order) { a, b => varied[a].lo < varied[b].lo }
@@ -345,11 +418,11 @@ fn case_source(text: u8[:], c: i64) -> u8[>..] {
     var at = 0;
     for p in order {
         out.append(text[at..varied[p].lo]);
-        format(out, "(", case_value(c, p), ")");
+        format(out, "(", values[p], ")");
         at = varied[p].hi;
     }
     out.append(text[at..]);
-    out.append(case_expects[expect_at[c]..expect_at[c + 1]]);
+    out.append(tail);
     return out;
 }
 
@@ -618,8 +691,10 @@ fn read_case(e: CaseEnd) -> u8[>..], bool {
 // for each case, then the diagnostic `case_failed` for each case that
 // stopped. `at` is the token of the study, and `prog` the model. It puts
 // the TOON in `toon`, and what to print in `out`. The result is the exit
-// status (command_line.md §10).
-fn study_table(study: u8[:], at: i64, jobs: i64, prog: i64, ends: CaseEnd[:], json: bool, out: u8[>..]&, toon: u8[>..]&) -> i64 {
+// status (command_line.md §10). `best` is the best case of a minimize
+// study, or -1: only its verification records set the status, and `stop`
+// says why the loop stopped.
+fn study_table(study: u8[:], at: i64, jobs: i64, prog: i64, ends: CaseEnd[:], best: i64, stop: u8[:], json: bool, out: u8[>..]&, toon: u8[>..]&) -> i64 {
     result_columns(prog, find_study(prog, study));
     var verify: bool[>..] = [];
     var msgs: u8[..1024][>..] = [];
@@ -632,11 +707,13 @@ fn study_table(study: u8[:], at: i64, jobs: i64, prog: i64, ends: CaseEnd[:], js
         msgs.push(m);
         verify.push(msg.len == 0 && pass);
         if msg.len > 0 { failed.push(c); }
-        if !verify[c] { exit = 1; }
+        if msg.len > 0 || (!verify[c] && (best < 0 || c == best)) { exit = 1; }
     }
     let t = syntax::tokens[at];
     let file = syntax::files[t.file].path;
-    format(toon, "study: ", study, "\njobs: ", jobs, "\ncases[", ends.len, "]{case");
+    format(toon, "study: ", study, "\njobs: ", jobs, "\n");
+    if best >= 0 { format(toon, "best: ", best + 1, "\nstop: ", stop, "\n"); }
+    format(toon, "cases[", ends.len, "]{case");
     for p in varied { format(toon, ",", p.name); }
     toon.append(",status,verify");
     for col in columns { format(toon, ",", col); }
@@ -673,7 +750,12 @@ fn study_table(study: u8[:], at: i64, jobs: i64, prog: i64, ends: CaseEnd[:], js
     }
     out.append("{\"study\":");
     check::quoted(out, study);
-    format(out, ",\"jobs\":", jobs, ",\"cases\":[");
+    format(out, ",\"jobs\":", jobs);
+    if best >= 0 {
+        format(out, ",\"best\":", best + 1, ",\"stop\":");
+        check::quoted(out, stop);
+    }
+    out.append(",\"cases\":[");
     for e, c in ends {
         if c > 0 { out.push(','); }
         format(out, "{\"case\":", c + 1);

@@ -225,7 +225,7 @@ fn own_curves(g: i64, tx: f64, ty: f64) -> bool {
 }
 
 // The cubics of span curve c (geometry.goose).
-fn span_of(c: i64) -> f64[8] { span(curves[c].p[2] as i64, curves[c].p[3] as i64) }
+fn span_of(c: i64) -> f64[12] { span(curves[c].p[2] as i64, curves[c].p[3] as i64) }
 
 fn curve_point(c: i64, t: f64) -> f64, f64 {
     let p = curves[c].p;

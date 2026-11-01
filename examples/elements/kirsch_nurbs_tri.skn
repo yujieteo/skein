@@ -1,0 +1,75 @@
+// A quarter of a wide plate with a round hole under a tension of 100 MPa
+// along x, in plane stress on P2 triangles, as kirsch_plate_tri.skn, but
+// the hole is an exact NURBS circle (spec §8.1). The reference is the
+// Kirsch solution: 300 MPa at the top of the hole and -100 MPa at its
+// side.
+
+model kirsch_nurbs_tri: 2d, mm_N_MPa_s
+
+let a: Length = 1 mm
+let w: Length = 40 mm
+let S: Pressure = 100 MPa
+
+scales a, S
+
+// The hole is the rational circle of 4 quarters: degree 2, the weight
+// sqrt(2)/2 at each corner of the square, each inner knot 2 times.
+let c: Real = 0.7071067811865476
+let bore: Surface = fill(
+    nurbs(
+        2,
+        knots(0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4),
+        (1, 0) mm,
+        1,
+        (1, 1) mm,
+        c,
+        (0, 1) mm,
+        1,
+        (-1, 1) mm,
+        c,
+        (-1, 0) mm,
+        1,
+        (-1, -1) mm,
+        c,
+        (0, -1) mm,
+        1,
+        (1, -1) mm,
+        c,
+        (1, 0) mm,
+        1,
+    ),
+)
+let plate: Surface = rect((0, 0) mm, (w, w)) - bore
+let hole: Curve = boundary(plate, bore)
+let x_cut: Curve = boundary(plate, x == 0 mm)
+let y_cut: Curve = boundary(plate, y == 0 mm)
+let far_end: Curve = boundary(plate, x == w)
+
+material steel {
+    E: Pressure = 200 GPa
+    nu: Real = 0.3
+}
+
+mesh m on plate {
+    size: 4 mm
+    cell: tri
+    refine hole: 0.1 mm
+}
+
+physics solid on plate: linear_elastic solves u: Vector<Length> {
+    material steel
+    assume plane_stress(1 mm)
+}
+
+step pull: static {
+    // The 2 cut planes are planes of symmetry.
+    bc x_cut: u.x = 0
+    bc y_cut: u.y = 0
+    bc far_end: sigma*n = (S, 0)
+    output u
+    report reaction(x_cut)
+}
+
+expect top_sxx: sigma.xx at (0 mm, a) == 300 MPa within 1%
+
+expect side_syy: sigma.yy at (a, 0 mm) == -100 MPa within 1%

@@ -223,6 +223,60 @@ fn test_fill() {
               1.0e-4);
 }
 
+// fill of a nurbs (spec §8.1): the rational circle of radius 10 of 4
+// quarters (9 points, the weights 1 and sqrt(2)/2, each inner knot 2
+// times), one quarter with the default knots, which the line from its
+// end to its start closes, and a triangle of degree 1. A rational quadratic is a conic, so each point
+// of the curve is on the circle to the round-off.
+fn test_nurbs() {
+    let r2 = sqrt(0.5);
+    let ring: f64[27] = [10.0, 0.0, 1.0, 10.0, 10.0, r2, 0.0, 10.0, 1.0, -10.0, 10.0, r2, -10.0, 0.0, 1.0,
+                         -10.0, -10.0, r2, 0.0, -10.0, 1.0, 10.0, -10.0, r2, 10.0, 0.0, 1.0];
+    let disc = mesher::fill_nurbs(2, [0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0], ring[..]);
+    if mesher::shapes[disc].b != 5 { fail(str("nurbs: the circle has ", mesher::shapes[disc].b - 1, " spans, not 4")); }
+    var worst = 0.0;
+    for i in mesher::shapes[disc].b - 1 {
+        let c = mesher::span(disc, i);
+        for k in 101 {
+            let x, _, _ = mesher::cubic(c, 0, k / 100.0);
+            let y, _, _ = mesher::cubic(c, 1, k / 100.0);
+            worst = max(worst, abs(sqrt(x * x + y * y) - 10.0));
+        }
+    }
+    if worst > 1.0e-12 { fail(str("nurbs: a point of the circle is ", worst, " from the radius")); }
+    if abs(mesher::phi(disc, 0.0, 0.0, 0.0) + 10.0) > 1.0e-9 || abs(mesher::phi(disc, 12.0, 1.0, 0.0) - (sqrt(145.0) - 10.0)) > 1.0e-9 ||
+       abs(mesher::phi(disc, 6.0, -7.0, 0.0) - (sqrt(85.0) - 10.0)) > 1.0e-9 {
+        fail("nurbs: phi of the circle is not the distance to it");
+    }
+    if abs(nurbs_area(disc) / (PI * 100.0) - 1.0) > 1.0e-9 { fail(str("nurbs: the area of the circle is ", nurbs_area(disc))); }
+    mesh_case("fill of a nurbs circle", disc, 0.5, PI * 100.0, 2.0 * PI * 10.0 * 0.25 / 120.0 / (PI * 100.0));
+    let quarter = mesher::fill_nurbs(2, [0.0, 0.0, 0.0, 1.0, 1.0, 1.0], [1.0, 0.0, 1.0, 1.0, 1.0, r2, 0.0, 1.0, 1.0]);
+    if abs(nurbs_area(quarter) - (0.25 * PI - 0.5)) > 1.0e-9 { fail(str("nurbs: the area of the quarter segment is ", nurbs_area(quarter))); }
+    if !(mesher::phi(quarter, 0.6, 0.6, 0.0) < 0.0 && mesher::phi(quarter, 0.4, 0.4, 0.0) > 0.0) { fail("nurbs: the sign of phi of the quarter segment"); }
+    let corner = mesher::fill_nurbs(1, [0.0, 0.0, 1.0, 2.0, 2.0], [0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0]);
+    if mesher::shapes[corner].b != 3 { fail(str("nurbs: the polyline of degree 1 has ", mesher::shapes[corner].b - 1, " spans, not 2")); }
+    if abs(nurbs_area(corner) - 0.5) > 1.0e-12 { fail(str("nurbs: the area of the triangle of degree 1 is ", nurbs_area(corner))); }
+}
+
+// The area of fill node g: x dy on each span by Simpson's rule on 200
+// pieces, and on the closing line.
+fn nurbs_area(g: i64) -> f64 {
+    let n = mesher::shapes[g].b;
+    var area = 0.0;
+    for i in n - 1 {
+        let c = mesher::span(g, i);
+        for k in 201 {
+            let x, _, _ = mesher::cubic(c, 0, k / 200.0);
+            let _, dy, _ = mesher::cubic(c, 1, k / 200.0);
+            let f = if k == 0 || k == 200 { 1.0 } else if k % 2 == 1 { 4.0 } else { 2.0 };
+            area += f * x * dy / 600.0;
+        }
+    }
+    let p = mesher::fill_point(g, n - 1);
+    let q = mesher::fill_point(g, 0);
+    return area + 0.5 * (p[0] + q[0]) * (q[1] - p[1]);
+}
+
 // The lint rules that need the mesh (docs/checks.md §3) on a strip of
 // 1 m by 50 mm, in plane stress, with a load on its tip.
 fn test_lint() {
@@ -242,6 +296,9 @@ fn test_lint() {
     // closes it. It has no fill of another Curve.
     expect_mesh_lints("fill of a spline", strip(" - fill(spline((0.4, 0.015) m, (0.5, 0.01) m, (0.6, 0.025) m, (0.5, 0.04) m, (0.4, 0.015) m))", "2"), "");
     expect_mesh_lints("fill of a line", strip(" - fill(line((0.5, 0.01) m, (0.52, 0.04) m))", "2"), "verify_unsupported\n");
+    expect_mesh_lints("fill of a nurbs", strip(" - fill(nurbs(2, (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "mesh_feature_small\n");
+    expect_mesh_lints("fill of a nurbs with knots that fall", strip(" - fill(nurbs(1, knots(0, 0, 2, 1, 1), (0.5, 0.01) m, 1, (0.52, 0.04) m, 1, (0.48, 0.04) m, 1))", "2"), "verify_unsupported\n");
+    expect_mesh_lints("fill of a nurbs with an inner knot degree + 1 times", strip(" - fill(nurbs(2, knots(0, 0, 0, 1, 1, 1, 2, 2, 2), (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of 2 points", strip(" - fill(spline((0.5, 0.01) m, (0.52, 0.04) m, (0.5, 0.01) m))", "2"), "verify_unsupported\n");
     // The copy of a pattern is a feature. The reader needs a whole copy
     // count of 1 or more, and has no pattern_polar of a 2D shape.
@@ -862,6 +919,7 @@ fn main() {
               (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
 
     test_fill();
+    test_nurbs();
     test_interfaces();
     test_refine();
 

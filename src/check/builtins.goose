@@ -82,6 +82,46 @@ fn want_dimless(tok: i64, name: u8[:], a: Args, i: i64) {
 // Checks one point argument after the first MAX_ARGS of a geometry function.
 fn extra_point(name: u8[:], t: Ty, node: i64, i: i64) {
     if name == "polygon" || name == "spline" { want_point(name, t, node, i); }
+    if name == "nurbs" && !is_dimless_scalar(t) { want_point(name, t, node, i); }
+    if name == "knots" { want_weight(name, t, node, i); }
+}
+
+// A dimensionless Real argument: a weight or a knot of nurbs.
+fn want_weight(name: u8[:], t: Ty, node: i64, i: i64) {
+    if is_any(t) || is_dimless_scalar(t) { return; }
+    error(first_tok(node), "type_mismatch", str("argument ", i + 1, " of ", name, " is ", ty_str(t), ", not a Real"),
+          if name == "knots" { "give each knot as a Real, for example knots(0, 0, 0, 1, 1, 1)" } else { "give the weight of each point as a Real, for example (1, 0) mm, 0.7071" });
+}
+
+// nurbs(degree, [knots(k...),] p1, w1, ..., pn, wn) (spec §8.1): a
+// degree of 1 to 3, a point of Length and a weight above 0 for each
+// control point, and n + degree + 1 knots that do not fall. Without
+// knots, the knots are 0 (degree + 1 times), 1, 2, ..., n - degree
+// (degree + 1 times).
+fn nurbs_ty(tok: i64, name: u8[:], a: Args) -> Ty {
+    space_2d(tok, name);
+    guard arity(tok, name, a, 3, 100000) else { return any_ty(); }
+    let d, known = const_value(a.node[0]);
+    if !is_any(a.ty[0]) && !(is_dimless_scalar(a.ty[0]) && (!known || (d == round(d) && d >= 1.0 && d <= 3.0))) {
+        error(first_tok(a.node[0]), "type_mismatch", "the degree of nurbs is 1, 2 or 3", "write nurbs(2, ...) for a conic");
+    }
+    let knots = syntax::nodes[a.node[1]].kind == syntax::N_CALL && call_name(syntax::nodes[a.node[1]].first) == "knots";
+    let s = if knots { 2 } else { 1 };
+    for i in s..min(a.count, MAX_ARGS) {
+        if (i - s) % 2 == 0 { want_point(name, a.ty[i], a.node[i], i); } else { want_weight(name, a.ty[i], a.node[i], i); }
+        let w, wk = const_value(a.node[i]);
+        if (i - s) % 2 == 1 && wk && w <= 0.0 { error(first_tok(a.node[i]), "type_mismatch", "a weight of nurbs is above 0", "write a weight above 0, for example 1"); }
+    }
+    let n = (a.count - s) / 2;
+    if (a.count - s) % 2 != 0 || (known && n < d + 1.0) {
+        error(tok, "type_mismatch", str("nurbs has ", a.count - s, " values after the degree: give a point and a weight for each of degree + 1 or more control points"),
+              "write nurbs(2, (1, 0) mm, 1, (1, 1) mm, 0.7071, (0, 1) mm, 1)");
+    }
+    if knots && known && syntax::child_count(a.node[1]) - 1 != n + (d as! i64) + 1 {
+        error(first_tok(a.node[1]), "type_mismatch", str("nurbs of degree ", d as! i64, " with ", n, " points needs ", n + (d as! i64) + 1, " knots, not ", syntax::child_count(a.node[1]) - 1),
+              "give n + degree + 1 knots");
+    }
+    return geom_ty(1);
 }
 
 fn space_2d(tok: i64, name: u8[:]) {
@@ -589,6 +629,14 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         guard arity(tok, name, a, lo, 3) else { return any_ty(); }
         if name == "loft" && !(want_geom(tok, name, a, 0) && want_geom(tok, name, a, 1)) { return any_ty(); }
         return geom_ty(3);
+    }
+    if name == "nurbs" { return nurbs_ty(tok, name, a); }
+    if name == "knots" {
+        guard arity(tok, name, a, 2, 100000) else { return any_ty(); }
+        for i in min(a.count, MAX_ARGS) { want_weight(name, a.ty[i], a.node[i], i); }
+        var t = num_ty(NO_DIM, 0);
+        t.list = true;
+        return t;
     }
     if name == "line" || name == "arc" || name == "spline" {
         guard arity(tok, name, a, 2, 100000) else { return any_ty(); }

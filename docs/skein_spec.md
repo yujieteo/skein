@@ -842,6 +842,7 @@ function, so that the mesher can find sharp edges (§9.2).
 | `revolve(s, angle)` | `Solid` | about the y axis |
 | `sweep(s, path)` | `Solid` | `path` is a `Curve` |
 | `line(p0, p1)`, `arc(c, r, a0, a1)`, `spline(p…)` | `Curve` | `spline` passes through the points in order |
+| `nurbs(d, knots(k…), p1, w1, …, pn, wn)` | `Curve` | 2D only. The NURBS curve of degree `d` with the control points `pi` and their weights `wi`. `knots(k…)` is optional |
 | `point(p)` | `Point` | |
 | `shell(a, t)` | same as `a` | a wall of constant thickness `t` inside the surface of `a`: `max(φa, −φa − t)` |
 | `loft(s1, s2, h)` | `Solid` | from 2D section `s1` at z = 0 to `s2` at z = `h` |
@@ -863,6 +864,26 @@ let hole: Surface = fill(spline(rim(0), rim(1), rim(2), rim(3), rim(4))) | polyg
 Reason: femahoy gap G24. The airfoils of naca0012-ladson and naca23012-flap
 and the superellipse hole of shape-hole-biaxial are splines through
 points. A polygon through the points has a different boundary.
+
+`nurbs(d, knots(k1, …, km), p1, w1, …, pn, wn)` is the NURBS curve
+(Piegl and Tiller 1997) of degree `d` (1, 2 or 3) with n ≥ d + 1 control
+points `pi`, each with its weight `wi` > 0 (a `Real`). The m = n + d + 1
+knots do not fall, the first and the last are each d + 1 times, and an
+inner knot is d times or fewer [`type_mismatch`]. Without `knots`, the
+knots are 0 (d + 1 times), 1, 2, …, n − d (d + 1 times). `fill(nurbs(…))` closes the curve with a line
+from its end to its start, as for `spline`. A rational curve of degree 2
+is a conic, so a circle is exact:
+
+```skein
+let c: Real = 0.7071067811865476
+let bore: Surface = fill(nurbs(2, knots(0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4),
+    (1, 0) mm, 1, (1, 1) mm, c, (0, 1) mm, 1, (-1, 1) mm, c, (-1, 0) mm, 1,
+    (-1, -1) mm, c, (0, -1) mm, 1, (1, -1) mm, c, (1, 0) mm, 1))
+```
+
+The mesher cuts the curve at each knot into rational Bézier spans of
+degree 3. Reason: a CAD curve is a NURBS curve, and a spline through
+points of a circle is not the circle.
 
 Operators and modifiers:
 
@@ -2189,16 +2210,27 @@ run is a **case**. The procedure after the colon makes the cases:
 | `grid` | a list for each parameter | the Cartesian product of the lists |
 | `zip` | lists of one length | case `i` takes value `i` of each list |
 | `sample(n: Int, method: lhs \| sobol, seed: Int)` | a range `lo..hi` for each parameter | `n` points in the box of the ranges |
-| `minimize(objective, method: nelder_mead \| bobyqa, max_cases: Int, xtol: Real, step: Real)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
+| `minimize(objective, method: nelder_mead \| bobyqa \| gradient, max_cases: Int, xtol: Real, step: Real)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
+| `topology(objective, region: Surface, volume: Real, penalty: Real, filter: Length, max_iterations: Int, threshold: Real)` | no parameter, only `expect` entries | 1 case: the loop of topology optimization on the cells of `region` |
 
 - Each entry names a `param` [`study_param`]. Each value has the type of the
   parameter [`type_mismatch`] and is in its range [`param_range`].
 - A study does not change the steps. Each case runs all the steps.
 - A model may hold many studies. `skein run model.skn` runs the model once,
   with the defaults. `skein run model.skn --study re_sweep` runs the study.
-- `minimize` is gradient-free. Gradients by adjoint are in the roadmap
-  (phase 5). `objective` names a scalar `report` of the last step
-  [`study_objective`].
+- `objective` names a scalar `report` of the last step
+  [`study_objective`]. `nelder_mead` and `bobyqa` are gradient-free.
+- `method: gradient` gets the derivative of the objective by each
+  parameter from one adjoint solve in each case. It moves the values z in
+  0..1 of the ranges by a projected gradient: the first step moves the
+  parameter with the largest derivative by `step` of its range, each next
+  step is that of Barzilai and Borwein, and a step that does not lower the
+  objective (the Armijo rule) is halved. A parameter can change E, nu, the
+  thickness, a load and the objective, but not the mesh, a region or a
+  fixed value. `skein run` runs it for the models of `topology` below, with
+  a range and a default in one unit. The defaults: `max_cases: 50`, `xtol:
+  0.001`, `step: 0.1`. Reason: an objective of 4 parameters needs 8 more
+  solves for each central difference, and the adjoint needs 1.
 - `xtol` and `step` are fractions of the range of each parameter, above 0
   and at most 1 [`procedure_args`]. The first simplex of `nelder_mead` is
   the start and, for each parameter, the start moved by `step` of its
@@ -2207,6 +2239,28 @@ run is a **case**. The procedure after the colon makes the cases:
   `max_cases` cases. Reason: femahoy gap G25. The case shape-hole-biaxial
   stops at 0.001 from a simplex of 0.1, and its tolerance comes from that
   stop rule.
+- `topology` gives each cell of the mesh a density x in 0..1, and the
+  modulus E (1e-9 + (1 - 1e-9) x^penalty) (SIMP). From x = `volume` in
+  each cell, each iteration solves the step, gets the derivative of the
+  objective by each density from one adjoint solve, filters it over the
+  radius `filter`, and moves x by the optimality criteria update with the
+  mean of x equal to `volume`. The loop stops when no density changes by
+  more than 0.01, or after `max_iterations` (default 200). The default
+  penalty is 3. With `threshold`, a cell at the threshold or more becomes
+  solid (x = 1) and the others void (x = 0), and the step solves again: the
+  reports and expects then give the solid. The objective is a `report` of
+  the one static step that is the compliance of its one point load: a
+  u_c(p) + b, with the load at p, the load component c only, and a of the
+  sign of the load. `skein run` refuses another objective now. Reason: the
+  optimality criteria update needs a derivative of the objective by each
+  density of 0 or less.
+  `objective`, `region`, `volume` and `filter` are necessary, `0 < volume
+  <= 1`, `penalty >= 1`, `filter > 0`, `0 < threshold < 1`, and the study
+  has no parameter entry [`procedure_args`]. `skein run` runs it for a 2d model with `cell: quad`
+  on a `rect` and `linear_elastic`. The case records hold the table
+  `topology` of each iteration, and the VTU holds `rho` in each cell.
+  Reason: femahoy gap G1, the cases topology-mbb-beam and
+  topology-mbb-beam-cad.
 - An entry can be an `expect` (§15.3). The cases of a `grid` are in the
   order of the Cartesian product, with the last entry the fastest.
 

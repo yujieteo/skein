@@ -384,7 +384,8 @@ fn scales_end() {
 
 // --- study (spec §20.2) --------------------------------------------------------------------
 
-let STUDIES = ["grid", "zip", "sample", "minimize"];
+let STUDIES = ["grid", "zip", "sample", "minimize", "topology"];
+let TOPOLOGY_ARGS = ["objective", "region", "volume", "penalty", "filter", "max_iterations", "threshold"];
 var objectives: i64[>..];
 
 fn check_study(n: i64) {
@@ -396,22 +397,32 @@ fn check_study(n: i64) {
         error(syntax::nodes[pr].tok, "procedure_args", str("'", pname, "' is not a study procedure"),
               str("use one of: ", join(STUDIES)));
     }
+    let optimizes = pname == "minimize" || pname == "topology";
     var a = syntax::nodes[pr].first;
     while a >= 0 {
         let v = syntax::nodes[a].first;
-        if pname == "minimize" && syntax::nodes[a].aux < 0 && syntax::nodes[v].kind == syntax::N_NAME {
+        let word = if syntax::nodes[a].aux >= 0 { tok_text(syntax::nodes[a].aux) } else { "objective" };
+        if optimizes && word == "objective" && syntax::nodes[v].kind == syntax::N_NAME {
             objectives.push(syntax::nodes[v].tok);
-        } else if pname == "minimize" && syntax::nodes[a].aux >= 0 && (tok_text(syntax::nodes[a].aux) == "xtol" || tok_text(syntax::nodes[a].aux) == "step") {
-            fraction_arg(tok_text(syntax::nodes[a].aux), v);
+        } else if pname == "minimize" && (word == "xtol" || word == "step") {
+            fraction_arg(word, v);
+        } else if pname == "topology" {
+            topology_arg(syntax::nodes[a].aux, word, v);
         } else {
             setting_ty(v);
         }
         a = syntax::nodes[a].next;
     }
+    if pname == "topology" { topology_needs(pr); }
     var c = syntax::nodes[b].first;
     while c >= 0 {
         let s = syntax::nodes[c];
-        if s.kind == syntax::N_SETTING { study_entry(s.tok, s.first); }
+        if s.kind == syntax::N_SETTING && pname == "topology" {
+            error(s.tok, "procedure_args", "a topology study varies the density of each cell, not a param",
+                  "remove the entry, or make a second study");
+        } else if s.kind == syntax::N_SETTING {
+            study_entry(s.tok, s.first);
+        }
         if s.kind == syntax::N_EXPECT { check_expect(c, study_case_count(pname, b)); }
         c = s.next;
     }
@@ -425,6 +436,61 @@ fn fraction_arg(name: u8[:], v: i64) {
     if !(is_any(t) || (is_dimless_scalar(t) && (!known || (x > 0.0 && x <= 1.0)))) {
         error(first_tok(v), "procedure_args", str(name, " of minimize is a fraction of each range, above 0 and at most 1"),
               str("write ", name, ": ", if name == "xtol" { "0.001" } else { "0.1" }));
+    }
+}
+
+// An argument of topology (femahoy gap G1): the region of the design, the
+// volume fraction above 0 and at most 1, the SIMP power of 1 or more, the
+// filter radius, a Length above 0, and the largest number of iterations.
+fn topology_arg(at: i64, word: u8[:], v: i64) {
+    let where = if at >= 0 { at } else { first_tok(v) };
+    if !contains_name(TOPOLOGY_ARGS, word) {
+        error(where, "procedure_args", str("'", word, "' is not an argument of topology"), str("use: ", join(TOPOLOGY_ARGS)));
+        return;
+    }
+    if word == "objective" {
+        error(first_tok(v), "procedure_args", "the objective of topology names a report", "write objective: compliance");
+        return;
+    }
+    if word == "region" {
+        let t = region_ty(v);
+        if !is_any(t) && t.geo != 2 {
+            error(first_tok(v), "procedure_args", "the region of topology is a Surface", "name the Surface of the mesh");
+        }
+        return;
+    }
+    let t = setting_ty(v);
+    let x, known = const_value(v);
+    let length, _ = named_dim("Length");
+    var good = is_any(t) || !known;
+    if word == "volume" { good = good || is_dimless_scalar(t) && x > 0.0 && x <= 1.0; }
+    if word == "penalty" { good = good || is_dimless_scalar(t) && x >= 1.0; }
+    if word == "filter" { good = good || t.kind == K_NUM && t.rank == 0 && t.dim == length && x > 0.0; }
+    if word == "max_iterations" { good = good || is_int(t) && x >= 1.0; }
+    if word == "threshold" { good = good || is_dimless_scalar(t) && x > 0.0 && x < 1.0; }
+    if !good {
+        let fix = if word == "volume" { "write volume: 0.5" } else if word == "penalty" { "write penalty: 3" }
+                  else if word == "filter" { "write filter: 2.4 mm" }
+                  else if word == "threshold" { "write threshold: 0.5" } else { "write max_iterations: 200" };
+        error(first_tok(v), "procedure_args", str("the ", word, " of topology is not valid"), fix);
+    }
+}
+
+// The arguments that topology needs: the objective, the region, the
+// volume and the filter.
+fn topology_needs(pr: i64) {
+    for word in ["objective", "region", "volume", "filter"] {
+        var found = false;
+        var a = syntax::nodes[pr].first;
+        while a >= 0 {
+            let aux = syntax::nodes[a].aux;
+            if (aux >= 0 && tok_text(aux) == word) || (aux < 0 && word == "objective") { found = true; }
+            a = syntax::nodes[a].next;
+        }
+        if !found {
+            error(syntax::nodes[pr].tok, "procedure_args", str("topology needs the argument ", word),
+                  "write topology(objective: compliance, region: beam, volume: 0.5, filter: 2.4 mm)");
+        }
     }
 }
 
