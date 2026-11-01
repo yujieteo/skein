@@ -12,6 +12,9 @@
 // GMRES(50) with ILU(0) did not converge in 5000 iterations on a P2
 // cavity of 24174 dofs. With the dofs of each node together and the
 // preconditioner of solve.goose, it converged.
+//
+// A turbulent flow (rans.goose) has P1 cells, and each vertex then has 5
+// dofs: vx, vy, p, k and w.
 import std;
 import math;
 import dictionary;
@@ -21,12 +24,15 @@ namespace flow;
 let EDGES: i64[6] = [0, 1, 1, 2, 2, 0];
 
 var order = 1;          // the order of the velocity; the pressure has order 1
+var turbulent = false;  // the k-ω SST unknowns k and w at each vertex
 var per_cell = 3;
 var vertex_count = 0;
 var coords: f64[>..] = [];      // x and y of each node
 var conn: i64[>..] = [];        // the per_cell nodes of each cell
 var on_boundary: u8[>..] = [];  // 1 for a node on the boundary of the mesh
 var first_dof: i64[>..] = [];   // the first dof of each node
+var twin: i64[>..] = [];        // the node whose dofs a node shares (periodic), or -1
+var dof_total = 0;
 var diameter = 0.0;             // of the bounding box
 
 // The sparsity of the Jacobian: CSR, with the columns of each row in
@@ -37,9 +43,13 @@ var col: i32[>..] = [];
 // The region of the last select call: a flag for each node.
 var region: u8[>..] = [];
 
+// A turbulent flow has the unknowns k and w. Call it before the mesh.
+fn set_turbulent(on: bool) { turbulent = on; }
+
 fn node_count() -> i64 { return coords.len / 2; }
 fn cell_count() -> i64 { return conn.len / per_cell; }
-fn dof_count() -> i64 { return 3 * vertex_count + 2 * (node_count() - vertex_count); }
+fn vertex_dofs() -> i64 { return if turbulent { 5 } else { 3 }; }
+fn dof_count() -> i64 { return dof_total; }
 
 fn vdof(n: i64, comp: i64) -> i64 {
     guard n >= 0 && n < first_dof.len && (comp == 0 || comp == 1) else { abort("vdof: n < node_count() and comp 0 or 1"); }
@@ -51,13 +61,20 @@ fn pdof(n: i64) -> i64 {
     return first_dof[n] + 2;
 }
 
+// The dof of k (which 0) or w (which 1) at vertex n of a turbulent flow.
+fn turbulence_dof(n: i64, which: i64) -> i64 {
+    guard turbulent && n >= 0 && n < vertex_count && n < first_dof.len && (which == 0 || which == 1) else { abort("turbulence_dof: a turbulent flow, n < vertex_count and which 0 or 1"); }
+    return first_dof[n] + 3 + which;
+}
+
 fn cell_node(c: i64, l: i64) -> i64 {
     guard c >= 0 && c < cell_count() && l >= 0 && l < per_cell else { abort("cell_node: c < cell_count() and l < per_cell"); }
     return conn[per_cell * c + l];
 }
 
 // The dofs of cell c in the local sequence of cell.goose: vx and vy of
-// each node, then p of each vertex.
+// each node, then p of each vertex, then for a turbulent flow k and then w
+// of each vertex.
 fn cell_dofs(c: i64, dofs: i64[15]&) {
     guard c >= 0 && c < cell_count() else { abort("cell_dofs: c < cell_count()"); }
     for l in per_cell {
@@ -65,16 +82,21 @@ fn cell_dofs(c: i64, dofs: i64[15]&) {
         dofs[2 * l + 1] = vdof(cell_node(c, l), 1);
     }
     for k in 3 { dofs[2 * per_cell + k] = pdof(cell_node(c, k)); }
+    guard turbulent else { return; }
+    for k in 3 {
+        dofs[2 * per_cell + 3 + k] = turbulence_dof(cell_node(c, k), 0);
+        dofs[2 * per_cell + 6 + k] = turbulence_dof(cell_node(c, k), 1);
+    }
 }
 
-fn cell_dof_count() -> i64 { return 2 * per_cell + 3; }
+fn cell_dof_count() -> i64 { return 2 * per_cell + (if turbulent { 9 } else { 3 }); }
 
 // Takes the vertices `xy` (x and y of each) and the triangles `tri` (3
 // vertices each), turns each triangle to positive orientation, and adds
 // the edge nodes for order 2.
 fn mesh_from_arrays(xy: f64[:], tri: i64[:], ord: i64) {
-    guard (ord == 1 || ord == 2) && xy.len % 2 == 0 && tri.len % 3 == 0 && tri.len > 0 else {
-        abort("mesh_from_arrays: order 1 or 2, and triangles");
+    guard (ord == 1 || ord == 2) && (ord == 1 || !turbulent) && xy.len % 2 == 0 && tri.len % 3 == 0 && tri.len > 0 else {
+        abort("mesh_from_arrays: order 1 or 2 (1 for a turbulent flow), and triangles");
     }
     order = ord;
     per_cell = if ord == 1 { 3 } else { 6 };
@@ -110,6 +132,8 @@ fn mesh_from_arrays(xy: f64[:], tri: i64[:], ord: i64) {
         }
     }
     mark_boundary(count, mid);
+    twin.clear();
+    for n in node_count() { twin.push(-1); }
     order_nodes();
     build_pattern();
 }
@@ -241,9 +265,37 @@ fn order_nodes() {
     var d = 0;
     for i in n {
         let v = seq[n - 1 - i];
+        if twin[v] >= 0 { continue; }
         first_dof[v] = d;
-        d += if v < vertex_count { 3 } else { 2 };
+        d += if v < vertex_count { vertex_dofs() } else { 2 };
     }
+    for v in n {
+        if twin[v] >= 0 { first_dof[v] = first_dof[twin[v]]; }
+    }
+    dof_total = d;
+}
+
+// Ties each node of the region to the boundary node at its position minus
+// (px, py): the two share their dofs (a `bloch` symmetry with k = 0,
+// spec §12). Call it before clear_bcs. False if a node of the region has
+// no such node.
+fn periodic(px: f64, py: f64) -> bool {
+    guard region.len == node_count() && twin.len == node_count() && cell_count() > 0 else { abort("periodic: a mesh and a region"); }
+    let tol = tolerance();
+    for n in node_count() {
+        if region[n] == 0 { continue; }
+        let x = coords[2 * n] - px;
+        let y = coords[2 * n + 1] - py;
+        var found = -1;
+        for m in node_count() {
+            if m != n && on_boundary[m] != 0 && region[m] == 0 && twin[m] < 0 && abs(coords[2 * m] - x) <= tol && abs(coords[2 * m + 1] - y) <= tol { found = m; }
+        }
+        guard found >= 0 && (n < vertex_count) == (found < vertex_count) else { return false; }
+        twin[n] = found;
+    }
+    order_nodes();
+    build_pattern();
+    return true;
 }
 
 // The CSR pattern: each dof of a cell couples with each dof of the cell.
