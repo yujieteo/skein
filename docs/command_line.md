@@ -332,7 +332,8 @@ When the browser has WebGPU, the page uses the GPU (src/gpu/):
 - an implicit solve runs on the GPU only when the control "Implicit
   solves on the GPU" is on. It is off by default. The GPU path is CG with
   the Jacobi preconditioner, in a defect correction that keeps the
-  tolerance of the CPU solve;
+  tolerance of the CPU solve. A model with radiation or a `Complex` unknown
+  uses the CPU;
 - a run without WebGPU uses the CPU. A WebGPU error stops the GPU solve,
   and its solve record says that it did not converge.
 
@@ -375,10 +376,10 @@ The page has a function `skeinSolve(values, options)` for other pages:
 `values` holds a number for each param, in the unit of its default value.
 `options.gpu` (default: the browser has WebGPU) gives the run the GPU,
 and `options.implicitGpu` puts the implicit solves on it.
-`options.gpu` exists for the comparison of the CPU and GPU runs in one page. It gives
-a promise of `{ code, out, err, files, seconds, sets }`: the exit status
-(section 10), the records in TOON, standard error, the VTU text of each
-result file, the time and the words of `--set`.
+`options.gpu` exists for the comparison of the CPU and GPU runs in one
+page. It gives a promise of `{ code, out, err, files, seconds, sets }`:
+the exit status (section 10), the records in TOON, standard error, the
+VTU text of each result file, the time and the words of `--set`.
 
 The planned `build --target native` writes the executable of `run`.
 

@@ -284,11 +284,13 @@ The page uses WebGPU as goosestrike does: WGSL compute kernels do the
 work (`src/gpu/kernels.wgsl`), and Goose sets up and controls the GPU
 (`src/gpu/gpu.goose`):
 
-1. The program of the page calls `gpu::central_difference`,
-   `gpu::grid_transient` and `gpu::solve` in place of the solves of
-   `elements` and `grid`. Each takes the CPU path when the page has no
-   GPU device. Only the program of the page imports `gpu`, so `skein run`
-   links no GPU code.
+1. The program of the page calls the solves of `gpu` in place of the
+   solves of `elements`, `grid` and `meshless` (`GPU_CALLS` in
+   `src/codegen/build.goose`). Each solve writes the device row of its
+   step, and takes the CPU path when the page has no GPU device. Modal,
+   buckling and the static steps of `fv`, `dg` and `rkpm` always use the
+   CPU. Only the program of the page imports `gpu`, so `skein run` links
+   no GPU code.
 2. Goose converts the matrix and the vectors to f32 buffers, binds them to
    the kernels and records the dispatches. The GPU keeps the state
    between two read-backs. Each kernel binds at most 8 storage buffers,
