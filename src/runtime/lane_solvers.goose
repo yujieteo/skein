@@ -5,7 +5,7 @@
 //
 // "cg" with "amg" is CG with the smoothed aggregation AMG of
 // solvers/amg.goose, built on K with the couplings of the fixed dofs
-// removed, and with the rigid-body modes of a solid (rigid_setup).
+// removed, and with the near null space of the physics (rigid_setup).
 //
 // "gmres" with "ilu0" is GMRES(m) with ILU(0) on K with the fixed dofs as
 // identity rows and columns (solvers::constrain). It is for small models
@@ -91,7 +91,8 @@ fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 
 
 // The AMG levels of the matrix a, with the near null space of the physics
 // (solvers/modes.goose): the rigid-body modes of a solid (3 dofs for each
-// node), the constant of each component otherwise.
+// node) and the bending modes of a thin solid, the constant of each
+// component otherwise.
 // Reason: on warpage_thick_copper (44541 dofs, 1 cell through 20 um of
 // copper) the constant of each component needs 571 CG iterations and 21 s,
 // and the rigid-body modes need 88 iterations and 6.2 s.

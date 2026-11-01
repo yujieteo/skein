@@ -50,7 +50,8 @@ fn precondition(r: f64[:], z: f64[:]) {
 
 // The AMG levels of K with the rows and the columns of the fixed dofs cut
 // off, with the near null space of the physics (solvers/modes.goose): the
-// rigid-body modes of an elastic K, the constant of a scalar field. A solve
+// rigid-body modes of an elastic K (and the bending modes of a thin body),
+// the constant of a scalar field. A solve
 // with a key > 0 takes the levels of the last run of a page if they fit K
 // (solvers/warm.goose), and keeps its levels for the next run.
 // Reason: against the constant of each component, the modes take sample 01
