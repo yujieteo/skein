@@ -26,8 +26,9 @@ let BUILTIN_FNS = [
     // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
     "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
     // rms of a harmonic step (§14.5, gap G2), radiation of a natural bc (§12.1),
-    // the wall distance of a turbulence model (§4.2), copy of a pattern (§8.1, gap G35).
-    "rms", "radiation", "wall_distance", "copy",
+    // the wall distance of a turbulence model (§4.2), the far field of an antenna (§14.5, gap G13),
+    // copy of a pattern (§8.1, gap G35).
+    "rms", "radiation", "wall_distance", "far_field", "copy",
 ];
 let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "omega"];
 

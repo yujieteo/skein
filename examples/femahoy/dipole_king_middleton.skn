@@ -1,5 +1,4 @@
 // femahoy: validation/cases/dipole-king-middleton/omega12.5/openems.py
-// blocked-by: G13
 // A centre-fed strip dipole in free space, half length 77.7 mm, width 1.2 mm (equivalent
 // radius 0.3 mm, Omega = 12.5), with a delta-gap feed. Time-harmonic Maxwell equations for E.
 // Reference: King and Middleton, X = -185.7 ohm at beta*h = 1.2, R = 71.02 ohm at 1.5.
@@ -34,6 +33,8 @@ let lp_s: Curve = line((-2, -2, 1) mm, (2, -2, 1) mm)
 let lp_e: Curve = line((2, -2, 1) mm, (2, 2, 1) mm)
 let lp_n: Curve = line((-2, 2, 1) mm, (2, 2, 1) mm)
 let lp_w: Curve = line((-2, -2, 1) mm, (-2, 2, 1) mm)
+// The closed surface of the near-to-far-field transform: the faces of the air, inside the PML.
+let ntff: Surface = boundary(air)
 
 material vacuum {
     mu: Mass*Length/(Time^2*Current^2) = mu0
@@ -52,6 +53,8 @@ physics em on world solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
     material vacuum
     let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu
     let th: Tensor2<Complex<Current/(Time*Length)>> = outer(cross(ex, hc), ex) + outer(cross(ey, hc), ey) + outer(cross(ez, hc), ez)
+    // The magnetic field H = curl(ef)/(-im*omega*mu).
+    let hf: Vector<Complex<Current/Length>> = im*hc/omega
     eq div(th) - omega^2*eps*ef = 0
 }
 
@@ -94,5 +97,12 @@ study resistance: grid {
         integral(hc.x, lp_n) - integral(hc.y, lp_w)))) == 71.02 V/A within 6%
 }
 
-// gap G13: no far field. The checks need the directivity 1.641 at bh = pi/2 within 6%, and the
-// radiated power over the power into the feed, 1 within 6%.
+// The directivity at broadside, 4*pi times the intensity over the radiated power, and the radiated
+// power over the power into the feed, 0.5*re(v0*conj(i_in)) with the loop current i_in. femahoy
+// checks each within 6%.
+study far: grid {
+    bh: [pi/2]
+    expect directivity: 4*pi*far_field(ef, hf, ntff, (1, 0, 0))/integral(re(dot(cross(ef, conj(hf)), n))/2, ntff) == 1.641 within 6%
+    expect efficiency: integral(re(dot(cross(ef, conj(hf)), n))/2, ntff)/(re(v0*conj(integral(hf.x, lp_s) +
+        integral(hf.y, lp_e) - integral(hf.x, lp_n) - integral(hf.y, lp_w)))/2) == 1 within 6%
+}

@@ -514,6 +514,21 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         r.base = t0.base;
         return r;
     }
+    if name == "far_field" {
+        // far_field(E, H, s, d): the radiation intensity, the power per solid angle, in the direction d, from E and H on
+        // the closed surface s by a near-to-far-field transform (spec §14.5, gap G13).
+        guard arity(tok, name, a, 4, 4) && want_geom(tok, name, a, 2) && !is_any(t0) && !is_any(t1) && !is_any(a.ty[3]) else { return any_ty(); }
+        let fields = is_num(t0) && is_num(t1) && t0.rank == 1 && t1.rank == 1 && t0.num == NS_COMPLEX && t1.num == NS_COMPLEX;
+        let d = a.ty[3];
+        let proc = if in_expect && cur_step < 0 { last_proc } else { cur_proc };
+        if !fields || !is_num(d) || d.rank != 1 || d.num == NS_COMPLEX || d.varying || space != 3 || a.ty[2].geo != 2 ||
+           proc != "harmonic" || (!in_expect && !in_report) {
+            error(tok, "far_field_form", "far_field needs a Complex E and H, a closed Surface, a constant direction, and a harmonic step of a 3d model",
+                  "write far_field(ef, hf, box_face, (1, 0, 0)) in a report or an expect of a harmonic step");
+            return any_ty();
+        }
+        return num_ty(t0.dim + t1.dim + dim_pow(LENGTH, 2), 0);
+    }
     // Complex parts (gap G7).
     if name == "re" || name == "imag" || name == "arg" || name == "conj" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }

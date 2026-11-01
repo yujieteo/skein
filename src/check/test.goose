@@ -423,6 +423,17 @@ fn test_steps() {
     expect_id("method_setting", str(wave, "Pressure", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 0.5 m } }\n"));
     expect_id("method_setting", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer } }\n"));
     expect_id("unit_mismatch", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 2 s } }\n"));
+    // G4, G13 and G27: edge elements (spec §12.1, §13, §14.5).
+    let em = "model m: 3d, SI\nscales 1 m, 1 V/m, 1 A, 1 ns\nlet b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet w: Surface = boundary(b, x == 0 m)\nlet s: Surface = boundary(b)\nlet g: Vector<Mass*Length/(Time^3*Current)> = (0, 1, 0) V/m\nmaterial air {\n    mu: Mass*Length/(Time^2*Current^2) = 1.25e-6 V*s/(A*m)\n    eps: Current^2*Time^4/(Mass*Length^3) = 8.85e-12 A*s/(V*m)\n}\nmesh m1 on b { size: 0.1 m }\nphysics e on b solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {\n    material air\n    let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu\n    let hf: Vector<Complex<Current/Length>> = im*hc/omega\n    eq curl(hc) - omega^2*eps*ef = 0\n}\n";
+    let tone = "step go: harmonic(freq: [1 GHz]) {\n    bc w: cross(n, ef) = cross(n, g)\n    bc s: cross(n, hc) = im*omega/(1 m/s)/mu*ef\n    report far_field(ef, hf, s, (1, 0, 0))\n}\n";
+    expect_clean("G4 and G13 a tangential bc, a natural cross(n, h) and far_field", str(em, "method e: cg { mesh: m1, order: 1, family: nedelec }\n", tone));
+    expect_clean("G27 gauge: tree", str(em, "method e: cg { mesh: m1, order: 1, family: nedelec, gauge: tree }\n", tone));
+    expect_id("method_setting", str(em, "method e: cg { mesh: m1, order: 1, gauge: tree }\n", tone));
+    expect_id("method_setting", str(em, "method e: cg { mesh: m1, order: 1, family: nedelec, gauge: cotree }\n", tone));
+    expect_id("unit_mismatch", str(em, "step go: harmonic(freq: [1 GHz]) {\n    bc w: cross(n, ef) = cross(n, hc)\n}\n"));
+    expect_id("bc_form", str(em, "step go: harmonic(freq: [1 GHz]) {\n    bc w: cross(n, g) = 0\n}\n"));
+    expect_id("far_field_form", str(em, "step go: static {\n    bc w: cross(n, ef) = 0\n    report far_field(ef, hf, s, (1, 0, 0))\n}\n"));
+    expect_id("far_field_form", str(em, "step go: harmonic(freq: [1 GHz]) {\n    bc w: cross(n, ef) = 0\n    report far_field(ef, hf, b, (1, 0, 0))\n}\n"));
     expect_id("allow_reason", str(H, "allow rigid_body: \"\"\n"));
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"no_such_file.skn\", step: \"load\")\n"));

@@ -31,6 +31,8 @@ examples/elements/bloch_cell_tri.skn
 examples/elements/buckling_column_tet.skn
 examples/elements/column_weight_tet.skn
 examples/elements/conduction_slab_tet.skn
+examples/elements/darcy_annulus_tri.skn
+examples/elements/far_field_box_tet.skn
 examples/elements/frequency_cantilever_tet.skn
 examples/elements/harmonic_duct_tri.skn
 examples/elements/heated_bar_study_tet.skn
@@ -42,6 +44,7 @@ examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
+examples/femahoy/grid_coax_tem.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/scordelis_lo_roof.skn
 examples/femahoy/topology_mbb_beam.skn

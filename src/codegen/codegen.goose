@@ -126,6 +126,11 @@ let BASE_UNITS = [
     BaseUnit { name: "K", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
     // The frequency of eigenvalue(k) of a modal step (src/elements/eigen.goose).
     BaseUnit { name: "Hz", u: Unit { f: 1.0, l: 0, m: 0, t: -2 } },
+    // The units of the edge physics (src/elements/gen_edge.goose). Each system uses the ampere,
+    // so A has no exponent here, and V is W/A. deg is an angle in rad.
+    BaseUnit { name: "A", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
+    BaseUnit { name: "V", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
+    BaseUnit { name: "deg", u: Unit { f: 0.017453292519943295, l: 0, m: 0, t: 0 } },
 ];
 
 let PREFIX_CHARS = "numckMG";
@@ -172,7 +177,7 @@ fn unit_name(t: i64) -> Unit {
         }
     }
     unsupported(t, str("the unit '", word, "' is not in this slice"),
-                "use m, g, t, s, N, Pa, bar, W, K or Hz, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
+                "use m, g, t, s, N, Pa, bar, W, K, Hz, A, V or deg, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
     return Unit { f: 1.0, l: 0, m: 0, t: 0 };
 }
 
@@ -322,6 +327,15 @@ recursive fn eval(n: i64) -> Val {
             return r;
         }
         if op == "^" && a.n == 1 && b.n == 1 { return scalar(pow(a.v[0], b.v[0])); }
+    }
+    // The functions of one scalar.
+    for f in ["sqrt", "exp", "ln", "sin", "cos", "tan", "abs"] {
+        if !call_args(n, f, 1) { continue; }
+        let a = eval(syntax::nodes[syntax::child(n, 1)].first);
+        if a.n != 1 { unsupported(tok(n), str(f, " of a vector"), str("write ", f, " of a scalar")); }
+        let x = a.v[0];
+        return scalar(if f == "sqrt" { sqrt(x) } else if f == "exp" { exp(x) } else if f == "ln" { log(x) } else if f == "sin" { sin(x) }
+                      else if f == "cos" { cos(x) } else if f == "tan" { tan(x) } else { abs(x) });
     }
     // A Point is its position.
     if call_args(n, "point", 1) { return eval(syntax::nodes[syntax::child(n, 1)].first); }
