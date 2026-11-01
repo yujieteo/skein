@@ -369,7 +369,7 @@ fn add_result(work: u8[:], vtu: u8[:]) -> i64, i64 {
     var mesh: u8[>..] = [];
     var fields: u8[>..] = [];
     guard small_vtu(text_of(vtu), mesh, fields) else {
-        write_stderr(str("skein report: cannot read the VTU file '", vtu, "'\n"));
+        write_stderr(str("skein: cannot read the VTU file '", vtu, "'\n"));
         return -1, -1;
     };
     var m = -1;
@@ -403,21 +403,22 @@ fn add_blob(work: u8[:], bytes: u8[:]) -> i64 {
 fn write_blob(work: u8[:], bytes: u8[:]) -> bool {
     let path = str(work, "/", files, ".vtu");
     guard write_file(path, bytes) && shell(str("gzip -9 -n -f ", quoted(path), " -c > ", quoted(str(path, ".gz")))) == 0 else {
-        write_stderr(str("skein report: gzip cannot compress '", path, "'\n"));
+        write_stderr(str("skein: gzip cannot compress '", path, "'\n"));
         return false;
     };
     return true;
 }
 
-// Adds the case with the run output `toon` to the page.
-fn add_case(work: u8[:], id: i64, toon: u8[:]) -> bool {
+// Adds the case with the run output `toon` to the page. Its result files
+// are at their paths in `toon` under `root` ("" or a directory with `/`).
+fn add_case(work: u8[:], root: u8[:], id: i64, toon: u8[:]) -> bool {
     if cases > 0 { json.push(','); }
     cases++;
     format(json, "{\"id\":", id, ",");
     json_field(json, "run", toon);
     json.append("\"results\":[");
     for vtu, i in result_files(toon) {
-        let m, k = add_result(work, vtu);
+        let m, k = add_result(work, str(root, vtu));
         if m < 0 || k < 0 { return false; }
         format(json, if i > 0 { "," } else { "" }, "{\"mesh\":", m, ",\"blob\":", k, ",");
         json_field(json, "path", vtu);
@@ -455,6 +456,18 @@ fn last_run(model: u8[:], study: u8[:], toon: u8[:]) -> i64 {
     return if find(last, ",fail,") >= 0 { 1 } else { 0 };
 }
 
+// Fills the fields check and verify of `json` with the records of `skein
+// check` and `skein verify` of the model at `path`. Their files are in `work`.
+fn add_checks(path: u8[:], work: u8[:]) {
+    var me: u8[>..] = [];
+    arg(0, me);
+    for key in ["check", "verify"] {
+        let file = str(work, "/", key, ".toon");
+        shell(str(quoted(me), " ", key, " ", quoted(path), " > ", quoted(file), " 2>&1"));
+        json_field(json, key, text_of(file));
+    }
+}
+
 // Fills `page` with the run of the model at `path`, and of its study
 // `study` if that is not "". It gives the exit status of the run, or 3.
 // With `no_run`, it reads the table of the last run of the study from
@@ -464,8 +477,6 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
     var me: u8[>..] = [];
     arg(0, me);
     let skein = quoted(me);
-    shell(str(skein, " check ", quoted(path), " > ", quoted(str(work, "/check.toon")), " 2>&1"));
-    shell(str(skein, " verify ", quoted(path), " > ", quoted(str(work, "/verify.toon")), " 2>&1"));
     let toon = str(work, "/run.toon");
     let study_arg = if study.len > 0 { str(" --study ", quoted(study)) } else { str("") };
     var status = 0;
@@ -476,18 +487,17 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
         write_stderr(text_of(str(work, "/run.err")));
     }
     if status > 1 { return status; }
-    json_field(json, "check", text_of(str(work, "/check.toon")));
-    json_field(json, "verify", text_of(str(work, "/verify.toon")));
+    add_checks(path, work);
     json_field(json, "study", study);
     let table: u8[>..] = if study.len > 0 { text_of(toon) } else { "" };
     json_field(json, "table", table);
     json.append("\"cases\":[");
     if study.len == 0 {
-        if !add_case(work, 1, text_of(toon)) { return 3; }
+        if !add_case(work, "", 1, text_of(toon)) { return 3; }
     } else {
         for c in 1..case_count(text_of(toon)) + 1 {
             let case_toon = str(".skein/studies/", model, "/", study, "/", c, "/run.toon");
-            if !add_case(work, c, text_of(case_toon)) { return 3; }
+            if !add_case(work, "", c, text_of(case_toon)) { return 3; }
         }
     }
     json.append("]}");
@@ -555,6 +565,54 @@ fn token_classes(out: u8[>..]&) {
     out.append("]");
 }
 
+// The page of `model` from the files of src/report: the data `json` and
+// `blobs`, and the solve `solve` (solve_html of src/codegen/page.goose, or
+// ""). It gives "", with an error, if page.html is missing.
+fn page(model: u8[:], solve: u8[:]) -> u8[>..] {
+    let dir = str(resource_dir(), "../src/report/");
+    var html = text_of(str(dir, "page.html"));
+    guard html.len > 0 else {
+        write_stderr(str("skein: cannot read '", dir, "page.html'\n"));
+        return html;
+    };
+    put(html, "<!--title-->", model);
+    // kowalski.css is the file of the site as it is. Its two font urls become data URIs.
+    var css = text_of(str(dir, "kowalski.css"));
+    css.append(text_of(str(dir, "viewer.css")));
+    var inter: u8[>..] = [];
+    base64::encode(inter, text_of(str(dir, "fonts/inter.woff2")));
+    put(css, "/fonts/inter.woff2", str("data:font/woff2;base64,", inter));
+    var plex: u8[>..] = [];
+    base64::encode(plex, text_of(str(dir, "fonts/ibm-plex-mono.woff2")));
+    put(css, "/fonts/ibm-plex-mono.woff2", str("data:font/woff2;base64,", plex));
+    put(html, "/*css*/", css);
+    put(html, "/*js*/", text_of(str(dir, "viewer.js")));
+    put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs, solve));
+    return html;
+}
+
+// The page of `skein build --target wasm` (src/codegen/build.goose) for
+// the model `model` of the source `text` at `path`: the page of the report,
+// with the native run `toon` at the default values as its one case, and
+// the solve `solve`. The result files of `toon` and the blobs are in `dir`.
+// It gives "", with an error, if a part is missing.
+fn web_page(path: u8[:], text: u8[:], model: u8[:], dir: u8[:], toon: u8[:], solve: u8[:]) -> u8[>..] {
+    syntax::parse_model(path, text);
+    var classes: u8[>..] = [];
+    token_classes(classes);
+    json.push('{');
+    json_field(json, "model", model);
+    json_field(json, "file", path);
+    json_field(json, "source", text);
+    format(json, "\"tokens\":", classes, ",");
+    add_checks(path, dir);
+    for key in ["study", "table"] { json_field(json, key, ""); }
+    json.append("\"cases\":[");
+    guard add_case(dir, str(dir, "/"), 1, toon) else { return ""; };
+    json.append("]}");
+    return page(model, solve);
+}
+
 // `skein report`. `args` are the words after `report`. F(prog) tells if the
 // page of `skein build --target wasm` can take the program `prog`: if not,
 // the report does not run `build`. It gives the exit status (command_line.md §10).
@@ -620,25 +678,8 @@ fn run<F>(args: const u8[:][:]) -> i64 {
         solve.append(page);
         solve_in_page = in_page;
     }
-    let dir = str(resource_dir(), "../src/report/");
-    var html = text_of(str(dir, "page.html"));
-    guard html.len > 0 else {
-        write_stderr(str("skein report: cannot read '", dir, "page.html'\n"));
-        return 3;
-    };
-    put(html, "<!--title-->", model);
-    // kowalski.css is the file of the site as it is. Its two font urls become data URIs.
-    var css = text_of(str(dir, "kowalski.css"));
-    css.append(text_of(str(dir, "viewer.css")));
-    var inter: u8[>..] = [];
-    base64::encode(inter, text_of(str(dir, "fonts/inter.woff2")));
-    put(css, "/fonts/inter.woff2", str("data:font/woff2;base64,", inter));
-    var plex: u8[>..] = [];
-    base64::encode(plex, text_of(str(dir, "fonts/ibm-plex-mono.woff2")));
-    put(css, "/fonts/ibm-plex-mono.woff2", str("data:font/woff2;base64,", plex));
-    put(html, "/*css*/", css);
-    put(html, "/*js*/", text_of(str(dir, "viewer.js")));
-    put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs, solve));
+    let html = page(model, solve);
+    guard html.len > 0 else { return 3; };
     guard write_file(out_path, html) else {
         write_stderr(str("skein report: cannot write '", out_path, "'\n"));
         return 1;

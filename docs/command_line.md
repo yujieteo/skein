@@ -316,14 +316,16 @@ skein build samples/01_cantilever.skn --target wasm
 
 `build --target wasm` writes one HTML page,
 `.skein/build/<model>/web/<model>.html`, that meshes and solves the model
-in the browser (implementation.md §8). The page has a control for each
-`param` with a range of literals, for example `param L: Length = 200 mm
-in 100 mm..400 mm`. When a control changes, the page meshes the model
-again, solves it with the new values, and shows the records of the run
-in TOON, the `mesh_quality` record of a `tri` or `tet` mesh and the
-deformed mesh. The run in the page gives the same records and VTU file
-as `skein run --set` with the same values, on the CPU. The page also
-shows the records of a native run at the default values.
+in the browser (implementation.md §8). The page is the page of `report`
+(§12), with the look of §12.1: the source, the viewer and the solver
+tables. Its one stored case is the native run at the default values. The
+page has a slider for each `param` with a range of literals, for example
+`param L: Length = 200 mm in 100 mm..400 mm`. A slider that stops at
+other values meshes the model again in the page, solves it with the new
+values, and the viewer and the tables show that run: the deformed mesh,
+its records in TOON with the `mesh_quality` record of its mesh, and its
+log. The run in the page gives the same records and VTU file as `skein
+run --set` with the same values, on the CPU.
 
 When the browser has WebGPU, the page uses the GPU (src/gpu/):
 
@@ -582,7 +584,10 @@ in the repository yujieteo/site), light only: a near-white background,
 16 px Inter for the text, IBM Plex Mono for the source, the tables and the
 legend, quiet underlined links. There are no themes and no dark mode.
 Reason: the captain asked on 2026-10-31 that the HTML reports obey the same
-principles as his website.
+principles as his website. The rules of §12.1 also apply to the page of
+`build --target wasm` (§7), because that page is the page of the report.
+Reason: the captain asked on 2026-11-01 that the in-browser solve page use
+the report template too.
 
 `src/report/kowalski.css` is the file `public/shared/kowalski.css` of the site
 as it is. `report` puts it before `viewer.css` in the page. It has the tokens,
