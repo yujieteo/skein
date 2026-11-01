@@ -298,8 +298,8 @@ fn plane(axis: i64, value: f64) -> bool {
 // Adds a plane to the region of the last `plane` or `hole` call, so the
 // region is their union. It gives false when the plane holds no node.
 fn also_plane(axis: i64, value: f64) -> bool {
-    guard axis >= 0 && axis < 3 && region.len < 8 else { abort("also_plane: 0 <= axis < 3 and at most 8 parts"); }
-    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
+    guard axis >= 0 && axis < 3 && region.len < 16 else { abort("also_plane: 0 <= axis < 3 and at most 16 parts"); }
+    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
@@ -310,7 +310,7 @@ fn also_plane(axis: i64, value: f64) -> bool {
 fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
-    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1 });
+    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1 });
     return region_node_count() > 0;
 }
 
@@ -324,12 +324,45 @@ fn surface(g: i64) -> bool {
 // Adds the surface of the shape g to the region of the last call that
 // selects a region. It gives false when the surface holds no node.
 fn also_surface(g: i64) -> bool {
-    guard g >= 0 && region.len < 8 else { abort("also_surface: a shape and at most 8 parts"); }
-    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    guard g >= 0 && region.len < 16 else { abort("also_surface: a shape and at most 16 parts"); }
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
 }
+
+// Selects the node nearest to the point (x, y, z).
+fn point(x: f64, y: f64, z: f64) -> bool {
+    region.clear();
+    return also_point(x, y, z);
+}
+
+// Adds the node nearest to the point (x, y, z) to the region of the last
+// call that selects a region.
+fn also_point(x: f64, y: f64, z: f64) -> bool {
+    guard region.len < 16 && node_count() > 0 else { abort("also_point: a mesh and at most 16 parts"); }
+    var best = 0;
+    var least = 1.0e300;
+    for n in node_count() {
+        let d = (node_x(n, 0) - x) * (node_x(n, 0) - x) + (node_x(n, 1) - y) * (node_x(n, 1) - y) + (node_x(n, 2) - z) * (node_x(n, 2) - z);
+        if d < least {
+            least = d;
+            best = n;
+        }
+    }
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: -1, node: best });
+    return true;
+}
+
+// The traction sigma*n = s*n on the region, with n the normal out of the
+// body: s = -p for a pressure p.
+fn pressure_load(s: f64) { add_region_pressure(s); }
+
+// The force (fx, fy, fz) on each node of the region.
+fn node_force(fx: f64, fy: f64, fz: f64) { add_node_force([fx, fy, fz]); }
+
+// The mean of the stress component (i, j) over the body.
+fn mean_stress(i: i64, j: i64) -> f64 { return body_mean(FIELD_STRESS, 3 * i + j); }
 
 // Holds component `comp` (X, Y, Z, or ALL) of u, or T (comp 0), at `v` on
 // the region.

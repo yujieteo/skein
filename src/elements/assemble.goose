@@ -318,9 +318,9 @@ fn add_cell(c: i64, k: f64[:], f: f64[:]) {
 
 // A region of the boundary: a union of parts. A part is the plane where
 // coordinate `axis` is `value`, the surface of the hole at distance
-// `radius` from the z axis through (cx, cy), or the surface of the shape
-// `shape` of src/mesher/. On the mesh of a shape (csg.goose), a plane
-// holds only the nodes on the surface of that shape.
+// `radius` from the z axis through (cx, cy), the surface of the shape
+// `shape` of src/mesher/, or the one node `node`. On the mesh of a shape
+// (csg.goose), a plane holds only the nodes on the surface of that shape.
 struct Part {
     hole: bool,
     axis: i64,
@@ -328,14 +328,16 @@ struct Part {
     c: f64[2],
     r: f64,
     shape: i64,
+    node: i64,
 }
 
-var region: Part[..8] = [];
+var region: Part[..16] = [];
 
 fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
     let tol = geometry_tolerance();
     let p = region[k];
+    if p.node >= 0 { return n == p.node; }
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
@@ -384,6 +386,12 @@ fn region_facet(c: i64, f: i64) -> bool {
 // The shape functions of the nodes of facet f of cell c at its quadrature
 // point qp, in fn_shape, and the weight of the point times dA.
 fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[10]&) -> f64 {
+    var normal: f64[3] = [0.0; 3];
+    return facet_normal(c, f, qp, fn_shape, normal);
+}
+
+// As facet_point, and the unit normal of the facet out of cell c.
+fn facet_normal(c: i64, f: i64, qp: i64, fn_shape: f64[10]&, normal: f64[3]&) -> f64 {
     let fd = dim - 1;
     var fn_dref: f64[30] = [0.0; 30];
     let xi, w = quad_point(fd, qp);
@@ -396,11 +404,65 @@ fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[10]&) -> f64 {
             for t in 3 { tan[3 * r + t] += fn_dref[3 * l + r] * node_x(n, t); }
         }
     }
-    if fd == 1 { return w * sqrt(tan[0] * tan[0] + tan[1] * tan[1]) * thickness; }
-    let nx = tan[1] * tan[5] - tan[2] * tan[4];
-    let ny = tan[2] * tan[3] - tan[0] * tan[5];
-    let nz = tan[0] * tan[4] - tan[1] * tan[3];
-    return w * sqrt(nx * nx + ny * ny + nz * nz);
+    var nv: f64[3] = if fd == 1 { [tan[1], -tan[0], 0.0] } else {
+        [tan[1] * tan[5] - tan[2] * tan[4], tan[2] * tan[3] - tan[0] * tan[5], tan[0] * tan[4] - tan[1] * tan[3]]
+    };
+    let size = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    // Out of the cell: away from its vertex that is not on the facet.
+    var inner: f64[3] = [0.0; 3];
+    for v in dim + 1 {
+        for t in 3 { inner[t] += node_x(cell_node(c, v), t) / (dim + 1); }
+    }
+    var away = 0.0;
+    for t in 3 { away += nv[t] * (node_x(cell_node(c, facet_node(dim, f, 0)), t) - inner[t]); }
+    for t in 3 { normal[t] = (if away < 0.0 { -nv[t] } else { nv[t] }) / size; }
+    return w * size * (if fd == 1 { thickness } else { 1.0 });
+}
+
+// Adds ∫ s n_p Ni dA over the facets of the region to component p of node
+// i, with n the normal out of the body: the traction sigma*n = s*n.
+fn add_region_pressure(s: f64) {
+    guard physics == ELASTIC && dofs_sized() else { abort("add_region_pressure: an elastic physics and the arrays of the dofs"); }
+    var fn_shape: f64[10] = [0.0; 10];
+    var normal: f64[3] = [0.0; 3];
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(c, f) { continue; }
+            for qp in quad_count(dim - 1) {
+                let wda = facet_normal(c, f, qp, fn_shape, normal);
+                for l in node_count_of(dim - 1, order) {
+                    let n = cell_node(c, facet_node(dim, f, l));
+                    for p in ncomp { load[ncomp * n + p] += s * normal[p] * fn_shape[l] * wda; }
+                }
+            }
+        }
+    }
+}
+
+// Adds the force f to each node of the region.
+fn add_node_force(f: f64[3]) {
+    guard physics >= 0 && dofs_sized() else { abort("add_node_force: a physics and the arrays of the dofs"); }
+    for n in node_count() {
+        if !on_region(n) { continue; }
+        for p in ncomp { load[ncomp * n + p] += f[p]; }
+    }
+}
+
+// The mean ∫ v dV / ∫ dV over the live cells of the field `what`,
+// component `comp`, as cell_field gives it.
+fn body_mean(what: i64, comp: i64) -> f64 {
+    var sum = 0.0;
+    var volume = 0.0;
+    for c in cell_count() {
+        if !is_live(c) { continue; }
+        for qp in quad_count(dim) {
+            let xi, w = quad_point(dim, qp);
+            let dv = cell_geometry(c, xi) * w;
+            sum += cell_field(c, xi, what, comp) * dv;
+            volume += dv;
+        }
+    }
+    return if volume > 0.0 { sum / volume } else { 0.0 };
 }
 
 // Adds ∫ g Ni dA over the facets of the region to component p of node i,
