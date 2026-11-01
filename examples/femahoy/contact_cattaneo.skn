@@ -1,5 +1,4 @@
 // femahoy: validation/cases/contact-cattaneo/job.inp
-// blocked-by: G23
 // A cylindrical steel pad (R = 20 mm) on a steel block, plane strain, 1 mm thick, friction
 // 0.3. The pad gets P = 4500 N, then Q = 0.75*mu*P. The centre of the contact sticks and its
 // edges slip (Cattaneo 1938). References: p0 = 2874.69 MPa, q(0) = 431.203 MPa.
@@ -32,10 +31,10 @@ material steel {
     nu: Real = 0.3
 }
 
-// The CPE4 of ccx: order-1 quads.
+// P2 triangles (ccx uses CPE4 quads).
 mesh m on parts {
     size: 2 mm
-    cell: quad
+    cell: tri
     refine zone: 0.04 mm
 }
 
@@ -44,15 +43,15 @@ physics solid on parts: linear_elastic solves u: Vector<Length> {
     assume plane_strain(th)
 }
 
-method solid: cg { mesh: m, order: 1 }
+method solid: cg { mesh: m, order: 2 }
 
 // Master: the block. Slave: the pad.
 contact rough: block_face, pad_face {
     friction: mu_f
     enforce: penalty
     stiffness: 1e7 MPa/mm
+    stick_stiffness: 1e7 MPa/mm
 }
-// gap G23: no stick stiffness for the friction (ccx: 1e7 MPa/mm).
 
 bc bottom: u = 0
 

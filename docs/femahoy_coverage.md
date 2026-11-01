@@ -143,17 +143,18 @@ gives the roadmap phase that closes the gap:
   on another `Surface`, a swept grid on a prism along z, and a mapped grid
   on another `Solid`. The ring of
   [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn),
-  the parts of
-  [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn), the
-  flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn)
+  the flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn)
   and the package of
   [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) use
   the cells of femahoy. The ring of
-  [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn) and
-  the rod of
-  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) use
-  quadratic triangles and tetrahedra: the nonlinear solid of phase 5
-  (`src/elements/solid.goose`) runs on simplices only.
+  [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn), the
+  rod of
+  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) and
+  the parts of
+  [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn) use
+  quadratic triangles and tetrahedra: the nonlinear solid and the contact
+  of phase 5 (`src/elements/solid.goose`, `contact.goose`) run on
+  simplices only.
 - Phase 5 closes G32 and G35. The captain put them in phase 5 on
   2026-10-31. Spec [§8.4](skein_spec.md#84-region-algebra) gives `a & b`
   the lower dimension of `a` and `b`, so the 787 models
@@ -223,7 +224,7 @@ result, or the mesh or the solve is less efficient.
 | G20 | Quarter-point cells at a crack tip. | `validation/cases/fracture-centre-crack/derivation.md:38` | No mesh setting moves the mid-side nodes (§9.1). The model uses a fine mesh. | A mesh entry `crack_tip r: size`. | 2, closed by [§9.1](skein_spec.md#91-mesh) |
 | G21 | The stable increment of an explicit step, chosen by the solver. | `validation/cases/dynamics-bar-step/job.inp:14` | `transient` needs `dt` (§14.2). The model gives a `dt` below the stable limit. | Accept `dt: stable` with an explicit scheme. | 2, closed by [§14.2](skein_spec.md#142-procedures) |
 | G22 | Finite-strain J2 plasticity with a multiplicative split (plastic strain up to 3.24). | `validation/cases/taylor-bar-impact/job.inp:12` | §10.6 states `plastic` with an additive plastic strain. Under `finite_strain` this is a different law at large strain. | One rule in §10.6: under `finite_strain`, the `strain` state is `Fp`, the elastic part is `defgrad(u)*inv(Fp)`, and the return map is the exponential map. | 5, closed by [§10.6](skein_spec.md#106-inelastic-materials) |
-| G23 | The stick stiffness of penalty friction. It changes the reference traction by 0.34 % to 3.4 %. | `validation/cases/contact-cattaneo/job.inp:15` | `contact` has only `friction`, `enforce` and `stiffness` (§12.4). | A `contact` setting `stick_stiffness`. | 5 |
+| G23 | The stick stiffness of penalty friction. It changes the reference traction by 0.34 % to 3.4 %. | `validation/cases/contact-cattaneo/job.inp:15` | `contact` has only `friction`, `enforce` and `stiffness` (§12.4). | A `contact` setting `stick_stiffness`. | 5, closed by [§12.4](skein_spec.md#124-contact) |
 | G24 | Smooth closed shapes from points or parameters: the airfoil splines, a superellipse hole. | `validation/cases/naca0012-ladson/a4.04/system/blockMeshDict:67`, `validation/cases/shape-hole-biaxial/L40/mesh.geo:9` | `spline` gives a `Curve`, and no function makes a `Surface` from a closed curve (§8.1). The models use polygons. | A geometry function `fill(c: Curve)` for a closed curve. | 2, closed by [§8.1](skein_spec.md#81-distance-functions) |
 | G25 | The stop rule and the first simplex of Nelder-Mead. The case tolerance comes from the stop rule. | `validation/cases/shape-hole-biaxial/derivation.md:50` | `minimize` has only `objective`, `method` and `max_cases` (§20.2). | `minimize` arguments `xtol` and `step`. | 2, closed by [§20.2](skein_spec.md#202-study) |
 | G26 | An open boundary: a PML, or a map of a shell to infinity. | `validation/cases/team7-eddy-current/50hz/case.pro:50`, `validation/cases/dipole-king-middleton/omega12.5/openems.py:39`, `validation/cases/optics-mie-cylinder/res40/meep_case.py:38` | §8 and §13 have no absorbing layer and no infinite map. The models put a first-order absorbing `bc`, or a zero field, on a far boundary. | A method setting `pml: { region, thickness }`. | 4, closed by [§13](skein_spec.md#13-methods) |
@@ -426,7 +427,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | A fixed temperature | heat-fin and the grid heat cases | `bc r: T = 100 degC` | [§6.3](skein_spec.md#63-units), [§12.1](skein_spec.md#121-form) |
 | An adiabatic face, a free face, a magnetic wall | each case | no `bc`: the natural condition with zero right side | [§12.3](skein_spec.md#123-completeness) |
 | `*EQUATION`: a face stays straight and can turn | contact-cattaneo | `bc top: u = rigid(c)`, and the force and the `moment` on `c` | [§12.1](skein_spec.md#121-form) |
-| `*CONTACT PAIR`, `*SURFACE INTERACTION`, `*FRICTION` | contact-hertz, contact-cattaneo | `contact c: master, slave { friction, enforce: penalty, stiffness }` | [§12.4](skein_spec.md#124-contact), gap [G23](#gaps-that-change-the-discretization-or-the-physics) |
+| `*CONTACT PAIR`, `*SURFACE INTERACTION`, `*FRICTION` | contact-hertz, contact-cattaneo | `contact c: master, slave { friction, enforce: penalty, stiffness, stick_stiffness }` | [§12.4](skein_spec.md#124-contact), gap [G23](#gaps-that-change-the-discretization-or-the-physics) (closed) |
 | A periodic cell | grid-laminate-cell, grid-fibre-composite-cell | `symmetry s: bloch { low, high, period, k: 0 }` | [§12.6](skein_spec.md#126-symmetry-groups) |
 | A free body with no support | grid-free-block-modes-ccx | no `bc`, `allow rigid_body: "reason"` | [checks.md](checks.md) |
 | No slip, inlet velocity, outlet pressure, slip wall, symmetry plane | cavity-devahldavis, cht-heated-channel, naca0012-ladson, wedge-oblique-shock, turek-hron-fsi1 | `bc r: v = ...`, `sigma*n = -p*n`, `dot(v, n) = 0` | [§12.1](skein_spec.md#121-form) |
@@ -448,7 +449,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | `*EL PRINT` S at an integration point | submodel-kirsch-hole, laminate-pagano | `sigma.xx at (...)` | [§7.5](skein_spec.md#75-at), [§15.3](skein_spec.md#153-expect) |
 | `op = "mean"` and `op = "max"` over a set | bar-pressure, heat-fin, taylor-bar-impact, contact-hertz | `mean(f, r)`, `max(f, r)` | [§14.5](skein_spec.md#145-output-and-report), [§15.3](skein_spec.md#153-expect) |
 | `RF` with `op = "sum"` | bar-pressure, hyperelastic-tube, grid-bimetal-strip | `reaction(r)` | [§14.5](skein_spec.md#145-output-and-report) |
-| `CSTR` contact pressure | contact-hertz, contact-cattaneo | `max(-sigma.zz, face)` | [§14.5](skein_spec.md#145-output-and-report) |
+| `CSTR` contact pressure | contact-hertz, contact-cattaneo | `max(-sigma.zz, face)`, with σ at a node the mean of its cells | [§14.5](skein_spec.md#145-output-and-report) |
 | `FREQ` and `BUCKLE` | frequency-cantilever, buckling-column, grid-frequency-cantilever, grid-free-block-modes-ccx, grid-cavity-te101 | `eigenvalue(k)` in an `expect` | [§14.5](skein_spec.md#145-output-and-report) |
 | `A_RMS` | random-vibration-cantilever | `rms(f, psd)` in an `expect` | [§14.5](skein_spec.md#145-output-and-report) |
 | Heat flow through a face (`energy.txt`) | grid-pipe-wall, grid-radiation-slab | `integral(dot(q, n), r)` | [§14.5](skein_spec.md#145-output-and-report) |

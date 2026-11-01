@@ -108,6 +108,7 @@ function difference(a, b) {
 const cases = [
   { model: "examples/elements/bar_wave_tri.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
   { model: "examples/elements/taylor_bar_tet.skn", implicit: false, tolerance: 1e-3, seconds: 120 },
+  { model: "examples/elements/bar_contact_tri.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
   { model: "examples/grid/mms_fv_transient.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
   { model: "examples/grid/mms_dg_transient.skn", implicit: false, tolerance: 1e-3, seconds: 60 },
   { model: "examples/elements/kirsch_plate_tri.skn", implicit: true, tolerance: 1e-6, seconds: 60 },

@@ -7,6 +7,7 @@
 //
 //   central_difference  cd_drift, cd_kick (src/elements/explicit.goose)
 //   explicit_solid      cd_drift, sd_point, sd_kick (src/elements/solid.goose)
+//   contact             ct_pair, ct_kick after the kick of either (src/elements/contact.goose)
 //   ssprk3, dg          rk_stage (src/grid/solve.goose)
 //   ssprk3, fv          fv_grad, fv_minmax, fv_venkat, fv_stage (src/grid/fv.goose)
 //   cg, Jacobi          cg_start, cg_matvec, cg_update, cg_direction, cg_shift, reduce
@@ -209,6 +210,62 @@ fn sd_kick(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) nw:
     for (var e = rows[n]; e < rows[n + 1u]; e++) { s += pf[3u * cols[e] + k]; }
     acc[i] = f[i] - w[i] * s;
     v[i] += 0.5 * P[1] * acc[i];
+}
+
+// ---- the contact of an explicit step: elements::contact_terms and
+// commit_contact. ct_pair has P = (points, components of a node), conn and
+// w the 12 slots of each point (an empty slot has w = 0), geo (n, the area,
+// g0, kn, kt, mu) of each point, and pst (t, r) of each point. ----
+
+// The force w_k A (t - p n) of each slot of point i into pf, with the
+// return map of Coulomb friction, and the new t and r of the point.
+@compute @workgroup_size(WG)
+fn ct_pair(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) nw: vec3u) {
+    let i = thread(g, nw);
+    if (i >= count()) { return; }
+    let nc = u32(P[1]);
+    var r = vec3f(0.0);
+    for (var k = 0u; k < 12u; k++) {
+        let nd = conn[12u * i + k];
+        for (var t = 0u; t < nc; t++) { r[t] += w[12u * i + k] * u[nc * nd + t]; }
+    }
+    let d = 8u * i;
+    let n = vec3f(geo[d], geo[d + 1u], geo[d + 2u]);
+    let kn = geo[d + 5u];
+    let kt = geo[d + 6u];
+    let mu = geo[d + 7u];
+    let s = 6u * i;
+    let dr = r - vec3f(pst[s + 3u], pst[s + 4u], pst[s + 5u]);
+    let tr = vec3f(pst[s], pst[s + 1u], pst[s + 2u]) + kt * (dr - dot(n, dr) * n);
+    let gap = geo[d + 4u] + dot(n, r);
+    let p = select(0.0, -kn * gap, gap < 0.0);
+    let size = length(tr);
+    var tt = vec3f(0.0);
+    if (p > 0.0 && mu > 0.0) { tt = select(tr, mu * p * tr / size, size > mu * p); }
+    for (var t = 0u; t < 3u; t++) {
+        pst[s + t] = tt[t];
+        pst[s + 3u + t] = r[t];
+    }
+    let f = geo[d + 3u] * (tt - p * n);
+    for (var k = 0u; k < 12u; k++) {
+        for (var t = 0u; t < 3u; t++) { pf[3u * (12u * i + k) + t] = w[12u * i + k] * f[t]; }
+    }
+}
+
+// The contact part of a and of the half kick of v: rows and cols list the
+// (point, slot) pairs of each node, and w holds M⁻¹. P = (n, dt,
+// components of a node).
+@compute @workgroup_size(WG)
+fn ct_kick(@builtin(global_invocation_id) g: vec3u, @builtin(num_workgroups) nw: vec3u) {
+    let i = thread(g, nw);
+    if (i >= count()) { return; }
+    let nc = u32(P[2]);
+    let n = i / nc;
+    let k = i % nc;
+    var s = 0.0;
+    for (var e = rows[n]; e < rows[n + 1u]; e++) { s += pf[3u * cols[e] + k]; }
+    acc[i] -= w[i] * s;
+    v[i] -= 0.5 * P[1] * w[i] * s;
 }
 
 // ---- a stage of ssprk3 of dg: R(xv) = A xv - b, P = (n, c0, c1, dt) ----

@@ -23,6 +23,7 @@ import .assemble;
 import .solve;
 import .eigen;
 import .stages;
+import .contact;
 import solvers from "../solvers";
 
 let CD_SAFETY = 0.9;    // the fraction of Gershgorin's stable step that `dt: stable` takes
@@ -53,6 +54,10 @@ fn cd_prepare(end: f64, dt: f64) -> bool {
         for e in row_start[d]..row_start[d + 1] { total[d % ncomp] += val_b[e]; }
         diagonal[d % ncomp] += val_b[entry(d, d)];
     }
+    // the rows of the contact terms
+    var tie: f64[>..] = [];
+    solvers::zeros(tie, n);
+    contact_rows(tie);
     var rate = 0.0;
     for d in n {
         sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 };
@@ -61,7 +66,7 @@ fn cd_prepare(end: f64, dt: f64) -> bool {
         guard m > 0.0 else { return false; };
         minv[d] = 1.0 / m;
         force[d] = load[d] + assembled_source[d];
-        var s = 0.0;
+        var s = tie[d];
         for e in row_start[d]..row_start[d + 1] { s += abs(val[e]); }
         rate = max(rate, s * minv[d]);
     }
@@ -69,6 +74,14 @@ fn cd_prepare(end: f64, dt: f64) -> bool {
     cd_steps = max(1, ceil(end / h - 1.0e-9) as! i64);
     cd_dt = end / cd_steps;
     return true;
+}
+
+// K u and the contact forces at u into out, with the state of the
+// contact updated.
+fn cd_force(u: f64[:], out: f64[:]) {
+    multiply(u, out);
+    contact_terms(u, out, false);
+    commit_contact();
 }
 
 // a = M⁻¹ (f - K u), from the product K u in accel.
@@ -81,14 +94,14 @@ fn cd_run() -> bool {
     let n = sol.len;
     let h = cd_dt;
     solvers::rows_start(row_start, col, val);
-    multiply(sol, accel);
+    cd_force(sol, accel);
     cd_accel();
     for i in cd_steps {
         for d in n {
             velocity[d] += 0.5 * h * accel[d];
             sol[d] += h * velocity[d];
         }
-        multiply(sol, accel);
+        cd_force(sol, accel);
         cd_accel();
         for d in n { velocity[d] += 0.5 * h * accel[d]; }
     }

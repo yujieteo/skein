@@ -142,6 +142,36 @@ fn region_max_von_mises() -> f64 {
     return most;
 }
 
+// The largest sign σ_ij at the nodes of the region, with σ at a node the
+// mean of the stress of the live cells at the node. NaN if the region
+// holds no node. Reason: at a corner of a P2 cell the stress of one cell
+// is an extrapolation, and in contact-cattaneo the largest of them is
+// 3 % above the mean.
+fn region_max_stress(i: i64, j: i64, sign: f64) -> f64 {
+    guard physics == ELASTIC && sol.len == dof_total() && i >= 0 && i < 3 && j >= 0 && j < 3 else { abort("region_max_stress: an elastic model, a solution and 0 <= i, j < 3"); }
+    var sum: f64[>..] = [];
+    var count: f64[>..] = [];
+    for n in node_count() {
+        sum.push(0.0);
+        count.push(0.0);
+    }
+    for c in cell_count() {
+        if !is_live(c) { continue; }
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if !on_region(n) { continue; }
+            let b = barycentric(c, [node_x(n, 0), node_x(n, 1), node_x(n, 2)]);
+            sum[n] += sign * cell_field(c, [b[1], b[2], b[3]], FIELD_STRESS, 3 * i + j);
+            count[n] += 1.0;
+        }
+    }
+    var most = 0.0 / 0.0;
+    for n in node_count() {
+        if count[n] > 0.0 && !(most >= sum[n] / count[n]) { most = sum[n] / count[n]; }
+    }
+    return most;
+}
+
 // --- VTU -----------------------------------------------------------------------
 
 // VTK cell types: the triangle, the quadratic triangle, the tetrahedron and

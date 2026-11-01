@@ -31,6 +31,7 @@ import codegen.codegen;
 import mesher from "../mesher";   // the reader of the geometry, and its shapes
 import .gen_edge;                  // the edge physics and the Darcy flow
 import .gen_solid;                 // plasticity, finite strain and hyperelastic energies
+import .gen_contact;               // contact and the rigid face
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }
@@ -246,7 +247,7 @@ let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosu
 let BC_PRESSURE = 4; // `bc inner: sigma*n = -p*n`: v[0] holds p
 let BC_FILM = 5;    // `bc skin: dot(q, n) = h*(T - T_air)`: v holds h and T_air
 
-fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE; }
+fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE || b.kind == BC_MOMENT; }
 
 // The pressure p of the traction value -p*n, or NaN.
 fn pressure_of(v: i64) -> f64 {
@@ -268,6 +269,7 @@ struct Surf {
     shapes: i64[..6],
     points: f64[..48],  // x, y and z of each point of a Point let: the node nearest to each
     minus: i64,     // the boundary whose nodes a - b removes, or -1
+    body: i64,      // the body of a contact that holds the boundary, or -1 (gen_contact.goose)
 }
 
 // A refine line of the mesh of a shape: the shape, the size, and whether
@@ -356,6 +358,7 @@ let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PART
 let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
 let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
 let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
+let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
 
 struct Expect {
     name: u8[..64],
@@ -502,6 +505,7 @@ fn reset() {
     bloch_theta = 0.0;
     edge_reset();
     solid_reset();
+    contact_reset();
 }
 
 fn set64(into: u8[..64]&, s: u8[:]) { codegen::set64(into, s); }
@@ -604,7 +608,7 @@ recursive fn add_points(v: i64, s: Surf&) {
 
 // `let tip: Point = pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3)`.
 fn point_surf(n: i64) {
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: -1 };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: -1, body: -1 };
     set64(s.name, name(n));
     add_points(child(n, 1), s);
     surfs.push(s);
@@ -901,11 +905,13 @@ fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
 // `let root: Surface = boundary(plate, x == 0 mm)`.
 fn surface(n: i64) {
     let v = child(n, 1);
-    if syntax::child_count(v) != 3 || kind(arg(v, 0)) != syntax::N_NAME || name(arg(v, 0)) != body_name {
+    let of = if syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { "" };
+    let k = find_body(of);
+    if of != body_name && k < 0 {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: -1 };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: -1, body: k };
     set64(s.name, name(n));
     if !surf_parts(arg(v, 1), s) { return; }
     if s.hole && s.axes.len > 0 || s.shapes.len > 0 && s.axes.len > 0 {
@@ -1389,6 +1395,10 @@ fn bc(n: i64) -> i64 {
     }
     if physics == EDGE || physics == DARCY { return edge_bc(n, s); }
     var b = Bc { surf: s, kind: BC_FIX, comp: -1, v: [0.0, 0.0, 0.0], tok: tok(n), node: -1 };
+    if rigid_bc(target, v, b) {
+        bcs.push(b);
+        return bcs.len - 1;
+    }
     let t = source_of(target);
     let member = kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
         name(first(target)) == unknown_name;
@@ -1488,6 +1498,8 @@ fn step(n: i64) {
             }
         } else if k == syntax::N_EXPECT {
             expect(c, steps.len);
+        } else if k == syntax::N_RELEASE {
+            release(c);
         } else if k == syntax::N_BIRTH || k == syntax::N_DEATH {
             var r = first(c);
             while r >= 0 {
@@ -1501,7 +1513,7 @@ fn step(n: i64) {
                 r = next(r);
             }
         } else {
-            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report, expect, birth and death");
+            unsupported(tok(c), "the step statement is not in this generator", "use only bc, output, report, expect, release, birth and death");
         }
         c = next(c);
     }
@@ -1873,6 +1885,16 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
         guard i >= 0 && j >= 0 else { return -1, -1, -1, 1.0; }
         return FIELD_BODY_MEAN, 3 * i + j, -1, scale;
     }
+    if is_call(f, "max") && syntax::child_count(f) == 3 && region_surf(arg(f, 1)) >= 0 && physics == ELASTIC {
+        var v = arg(f, 0);
+        let minus = kind(v) == syntax::N_UNARY && syntax::text(tok(v)) == "-";
+        if minus { v = first(v); }
+        let m = if kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME && name(first(v)) == flux_name { name(v) } else { "" };
+        let i = if m.len == 2 { axis_of(m[..1]) } else { -1 };
+        let j = if m.len == 2 { axis_of(m[1..]) } else { -1 };
+        guard i >= 0 && j >= 0 else { return -1, -1, -1, 1.0; }
+        return FIELD_MAX, 3 * i + j + (if minus { 9 } else { 0 }), region_surf(arg(f, 1)), scale;
+    }
     if is_call(f, "mean") && syntax::child_count(f) == 3 && region_surf(arg(f, 1)) >= 0 {
         let v = arg(f, 0);
         if physics == HEAT && source_of(v) == unknown_name { return FIELD_MEAN, 0, region_surf(arg(f, 1)), scale; }
@@ -1925,6 +1947,8 @@ fn read(prog: i64) -> bool {
             methods.push(c);
         } else if k == syntax::N_SYMMETRY {
             symmetries.push(c);
+        } else if k == syntax::N_CONTACT {
+            contact_items.push(c);
         } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY && k != syntax::N_FN {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this generator"),
                         "remove it: this generator runs one linear static or steady heat model");
@@ -1939,8 +1963,11 @@ fn read(prog: i64) -> bool {
     mesher::read_geometry(prog);
     physics_item(physics_node);
     if !ok() { return false; }
+    contact_bodies(prog);
+    if !ok() { return false; }
     for s in surface_lets { surface(s); }
     for s in point_lets { point_surf(s); }
+    for n in contact_items { contact_item(n); }
     if material_node < 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     read_material();
     heat_source();
@@ -2001,15 +2028,31 @@ fn symmetry(n: i64) {
     for j in 3 { bloch_theta += kv[j] * bloch_period[j]; }
 }
 
-// Puts `b` in `set`, in place of a bc on the same region and target.
+// Puts `b` in `set`, in place of the bcs that it replaces.
 fn merge(set: Bc[>..]&, b: Bc) {
-    for i in 0..set.len {
-        if set[i].surf == b.surf && set[i].kind == b.kind && set[i].comp == b.comp {
-            set[i] = b;
-            return;
+    var kept: Bc[>..] = [];
+    var placed = false;
+    for c in set {
+        if !replaces(b, c) {
+            kept.push(c);
+        } else if !placed {
+            kept.push(b);
+            placed = true;
         }
     }
-    set.push(b);
+    if !placed { kept.push(b); }
+    set.clear();
+    set.append(kept);
+}
+
+// Whether b replaces c: the same region and target. A rigid face replaces
+// each fixed component of u on its region, and a fixed u replaces a rigid
+// face.
+fn replaces(b: Bc, c: Bc) -> bool {
+    guard b.surf == c.surf else { return false; }
+    let held = (b.kind == BC_FIX || b.kind == BC_RIGID) && (c.kind == BC_FIX || c.kind == BC_RIGID);
+    if held && (b.kind == BC_RIGID || c.kind == BC_RIGID) { return true; }
+    return b.kind == c.kind && b.comp == c.comp;
 }
 
 // The bcs that hold in each step (spec §12.2), as in src/codegen.
@@ -2018,6 +2061,7 @@ fn step_bcs() {
     for g in global_bcs { merge(set, bcs[g]); }
     for i in 0..steps.len {
         let s = steps[i];
+        release_bcs(i, set);
         for b in bcs[s.first_own..s.first_own + s.own_count] { merge(set, b); }
         steps[i].first_bc = active.len;
         steps[i].bc_count = set.len;
@@ -2104,7 +2148,7 @@ fn reaction_unit() -> const u8[:] {
 
 fn field_unit(what: i64) -> const u8[:] {
     if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_MEAN { return value_unit(); }
-    if what == FIELD_STRESS || what == FIELD_BODY_MEAN { return codegen::system.pressure; }
+    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX { return codegen::system.pressure; }
     if what == FIELD_REACTION { return reaction_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
     if codegen::system.pressure == "MPa" { return "mW/mm^2"; }
@@ -2484,6 +2528,7 @@ fn emit_region(out: u8[>..]&, si: i64) {
         }
         for g in m.shapes { format(out, " && elements::except_surface(", g, ")"); }
     }
+    if s.body >= 0 { format(out, " && elements::in_body(", s.body, ")"); }
     out.append(", ");
     quoted(out, s.name);
     out.append(");\n");
@@ -2493,7 +2538,9 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     let s = surfs[b.surf];
     format(out, "    // bc ", s.name, "\n");
     emit_region(out, b.surf);
-    if b.kind == BC_SOURCE {
+    if b.kind == BC_RIGID || b.kind == BC_MOMENT {
+        emit_rigid(out, b);
+    } else if b.kind == BC_SOURCE {
         format(out, "    cut_outside(elements::fix_state(), \"", s.name, "\");\n");
     } else if physics == WAVE {
         // The value at the omega of the frequency that the generator writes.
@@ -2621,6 +2668,10 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             out.append(");\n");
         } else if solid_law > 0 {
             emit_solid_solve(out, s);
+        } else if has_ties() {
+            out.append("    nonlinear(");
+            quoted(out, s.name);
+            format(out, ", elements::solve_contact(", max(1, s.count), "));\n");
         } else {
             out.append("    solve(");
             quoted(out, s.name);
@@ -2752,10 +2803,13 @@ fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3])
         out.append(");\n");
         return;
     }
-    if what == FIELD_REACTION || what == FIELD_MEAN {
+    if what == FIELD_REACTION || what == FIELD_MEAN || what == FIELD_MAX {
         out.append("    ");
         emit_region(out, at[0] as! i64);
-        if what == FIELD_MEAN {
+        if what == FIELD_MAX {
+            let c = comp % 9;
+            format(out, "        let ", var_name, " = elements::max_stress(", AXES[c / 3], ", ", AXES[c % 3], ", ", if comp >= 9 { "-1.0" } else { "1.0" }, ");\n");
+        } else if what == FIELD_MEAN {
             format(out, "        let ", var_name, " = elements::mean_value(", AXES[comp], ");\n");
         } else {
             format(out, "        let r_x, r_y, r_z = ", api(), "reaction();\n        let ", var_name, " = r_", AXIS_NAMES[comp], ";\n");
@@ -2830,6 +2884,11 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         out.append("        let v = ");
         lit(out, x.scale);
         format(out, " * elements::mean_stress(", x.comp / 3, ", ", x.comp % 3, ");\n        let found_v = true;\n");
+    } else if x.what == FIELD_MAX {
+        emit_sample(out, "m", x.what, x.comp, [x.surf * 1.0, 0.0, 0.0]);
+        out.append("        let v = ");
+        lit(out, x.scale);
+        out.append(" * m;\n        let found_v = found_m;\n");
     } else if x.surf >= 0 {
         out.append("    ");
         emit_region(out, x.surf);
@@ -2962,7 +3021,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
     if physics == EDGE || physics == DARCY { out.append(EDGE_PRELUDE); }
-    if solid_law > 0 { emit_energy(out); }
+    if solid_law > 0 || has_ties() { emit_energy(out); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
     let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
@@ -2971,7 +3030,9 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
     } else {
         format(out, "    // mesh on ", body_name, ": P", order, " ", cell, " of at most ", mesh_size, " ", sys.length);
-        if geo == GEO_SHAPE {
+        if body_shapes.len > 0 {
+            emit_bodies(out);
+        } else if geo == GEO_SHAPE {
             format(out, ", by the mesher\n    if !elements::mesh_shape(", dim, ", ", order, ", ", body_shape, ", ");
             lit(out, mesh_size);
             out.append(") {\n        write_stderr(\"skein run: the mesher did not finish in its budget of points: give a larger size\\n\");\n");
@@ -3068,6 +3129,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         }
     }
     if cut_source >= 0 { emit_source(out); }
+    emit_contacts(out);
     for s in steps { format(out, "    step_", s.name, "();\n"); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for x in probes { if x.step < 0 { emit_edge_expect(out, x); } }

@@ -39,6 +39,7 @@ import .edge;
 import .mixed;
 import .material;
 import .solid;
+import .contact;
 
 let X = 0;
 let Y = 1;
@@ -70,6 +71,14 @@ fn mesh_hole(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: 
 fn mesh_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
     physics = -1;
     return build_shape(d, ord, g, size);
+}
+
+// Meshes each shape of `shapes` alone, as mesh_shape, for the bodies of a
+// contact: two bodies share no node. g is their union. False if the
+// mesher does not finish.
+fn mesh_bodies(d: i64, ord: i64, shapes: i64[:], g: i64, size: f64) -> bool {
+    physics = -1;
+    return build_bodies(d, ord, shapes, g, size);
 }
 
 // Meshes with the cells `vertices` of dimension `d` (d + 1 nodes each, in
@@ -296,6 +305,7 @@ fn write_darcy(path: const u8[:], p_name: const u8[:], q_name: const u8[:]) -> b
 fn plane(axis: i64, value: f64) -> bool {
     region.clear();
     region_out.clear();
+    region_body = -1;
     return also_plane(axis, value);
 }
 
@@ -315,6 +325,7 @@ fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
     region_out.clear();
+    region_body = -1;
     region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1 });
     return region_node_count() > 0;
 }
@@ -324,6 +335,7 @@ fn hole(cx: f64, cy: f64, r: f64) -> bool {
 fn surface(g: i64) -> bool {
     region.clear();
     region_out.clear();
+    region_body = -1;
     return also_surface(g);
 }
 
@@ -341,6 +353,7 @@ fn also_surface(g: i64) -> bool {
 fn point(x: f64, y: f64, z: f64) -> bool {
     region.clear();
     region_out.clear();
+    region_body = -1;
     return also_point(x, y, z);
 }
 
@@ -359,6 +372,14 @@ fn also_point(x: f64, y: f64, z: f64) -> bool {
     }
     region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: -1, node: best });
     return true;
+}
+
+// Keeps only the nodes of body k of mesh_bodies in the region of the last
+// call that selects a region. It gives false when the region holds no node.
+fn in_body(k: i64) -> bool {
+    guard k >= 0 && k < body_shapes.len else { abort("in_body: a body of mesh_bodies"); }
+    region_body = k;
+    return region_node_count() > 0;
 }
 
 // The force (fx, fy, fz) on each node of the region.
@@ -418,6 +439,7 @@ fn radiate(eps: f64, sb: f64) { add_radiation(eps, sb); }
 // the value of the nodes that no live cell holds.
 fn clear_bcs() {
     clear_conditions();
+    clear_rigid();
     clear_films();
     clear_radiation();
     clear_impedance();
@@ -432,6 +454,33 @@ fn solve() -> bool {
     if physics == MIXED { return mixed_solve(); }
     return if physics == WAVE { wave_solve() } else { solve_system() };
 }
+
+// --- contact and the rigid face (contact.goose, spec §12.4, §12.1) -------------
+
+// The facets of the region are the master of the next contact_slave. It
+// gives false when the region holds no facet.
+fn contact_master() -> bool { return set_master() > 0; }
+
+// Pairs each quadrature point of the facets of the region, the slave, with
+// the master of the last contact_master: penalty contact with the normal
+// stiffness kn, the stick stiffness kt and the friction coefficient mu (kn
+// and kt are a pressure per length). It gives the points paired.
+fn contact_slave(kn: f64, kt: f64, mu: f64) -> i64 { return add_slave(kn, kt, mu); }
+
+// The region is the rigid face of the step (`u = rigid(p)`): its nodes
+// move as a rigid body. It gives false when the region holds no node.
+fn rigid_face() -> bool { return set_rigid() > 0; }
+
+// The moment (mx, my, mz) on the rigid face of the step: about z in 2D.
+fn rigid_moment(mx: f64, my: f64, mz: f64) { add_rigid_moment([mx, my, mz]); }
+
+// A static step of the linear law with the contact and the rigid face in
+// `ramp` increments of Newton's method (solid.goose). False if an
+// increment does not converge.
+fn solve_contact(ramp: i64) -> bool { return solve_solid(ramp, no_energy); }
+
+// The largest contact pressure of the last solve.
+fn contact_pressure() -> f64 { return max_contact_pressure(); }
 
 // --- the nonlinear solid (solid.goose, spec §10.6) ----------------------------
 
@@ -517,6 +566,9 @@ fn cut_difference() -> f64, f64 {
 
 // The largest von Mises stress at the nodes of the region.
 fn max_von_mises() -> f64 { return region_max_von_mises(); }
+
+// The largest sign σ_ij at the nodes of the region.
+fn max_stress(i: i64, j: i64, sign: f64) -> f64 { return region_max_stress(i, j, sign); }
 
 // The sum of the reactions on all fixed dofs, for the check `equilibrium`.
 fn total_reaction() -> f64, f64, f64 {

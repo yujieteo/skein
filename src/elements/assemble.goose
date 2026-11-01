@@ -9,6 +9,7 @@ import std;
 import math;
 namespace elements;
 import .shape;
+import .contact;
 import .mesh;
 import .kernels;   // cell_matrix
 import .csg;
@@ -79,6 +80,7 @@ fn start_physics(kind: i64, comps: i64) {
         sol.push(0.0);
     }
     clear_matrix();
+    clear_contact();
 }
 
 fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
@@ -111,31 +113,35 @@ fn cell_node(c: i64, l: i64) -> i64 {
     return conn[per_cell * c + l];
 }
 
-// Fills shp and grad at reference point xi of cell c, and gives the
-// determinant of the Jacobian.
-fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
-    guard c >= 0 && c < cell_count() && per_cell <= shp.len && 3 * per_cell <= grad.len else { abort("cell_geometry: c < cell_count() and shp and grad hold the nodes of a cell"); }
-    shape(dim, order, xi, shp, dref);
-    // jac[3 r + t] = dx_t / dxi_r
-    var jac: f64[9] = [0.0; 9];
+// The Jacobian jac[3 r + t] = dx_t / dxi_r of cell c from the dref that
+// shape() filled, and its determinant.
+fn cell_jacobian(c: i64, jac: f64[9]&) -> f64 {
     for l in per_cell {
         let n = cell_node(c, l);
         for r in dim {
             for t in dim { jac[3 * r + t] += dref[3 * l + r] * node_x(n, t); }
         }
     }
+    if dim == 2 { return jac[0] * jac[4] - jac[1] * jac[3]; }
+    return jac[0] * (jac[4] * jac[8] - jac[5] * jac[7])
+         - jac[1] * (jac[3] * jac[8] - jac[5] * jac[6])
+         + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
+}
+
+// Fills shp and grad at reference point xi of cell c, and gives the
+// determinant of the Jacobian.
+fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
+    guard c >= 0 && c < cell_count() && per_cell <= shp.len && 3 * per_cell <= grad.len else { abort("cell_geometry: c < cell_count() and shp and grad hold the nodes of a cell"); }
+    shape(dim, order, xi, shp, dref);
+    var jac: f64[9] = [0.0; 9];
+    let det = cell_jacobian(c, jac);
     var inv: f64[9] = [0.0; 9];
-    var det = 0.0;
     if dim == 2 {
-        det = jac[0] * jac[4] - jac[1] * jac[3];
         inv[0] = jac[4] / det;
         inv[1] = -jac[1] / det;
         inv[3] = -jac[3] / det;
         inv[4] = jac[0] / det;
     } else {
-        det = jac[0] * (jac[4] * jac[8] - jac[5] * jac[7])
-            - jac[1] * (jac[3] * jac[8] - jac[5] * jac[6])
-            + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
         inv[0] = (jac[4] * jac[8] - jac[5] * jac[7]) / det;
         inv[1] = (jac[2] * jac[7] - jac[1] * jac[8]) / det;
         inv[2] = (jac[1] * jac[5] - jac[2] * jac[4]) / det;
@@ -178,6 +184,7 @@ fn build_pattern() {
             for b in per_cell { keys.push(cell_node(c, a) * nn + cell_node(c, b)); }
         }
     }
+    if physics == ELASTIC { tie_keys(keys); }
     sort(keys);
     row_start.push(0);
     var first = 0;
@@ -354,6 +361,7 @@ struct Part {
 
 var region: Part[..16] = [];
 var region_out: Part[..8] = [];    // the parts whose nodes are not in the region
+var region_body = -1;               // the body of build_bodies that holds the region, or -1
 
 fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
@@ -364,7 +372,8 @@ fn part_holds(p: Part, n: i64) -> bool {
     if p.node >= 0 { return n == p.node; }
     let tol = geometry_tolerance();
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
-    if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
+    let g = if region_body >= 0 { body_shapes[region_body] } else { body_shape };
+    if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (g < 0 || shape_gap(g, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
     let dy = node_x(n, 1) - p.c[1];
     return abs(sqrt(dx * dx + dy * dy) - p.r) <= tol;
@@ -372,6 +381,7 @@ fn part_holds(p: Part, n: i64) -> bool {
 
 fn on_region(n: i64) -> bool {
     guard n >= 0 && n < node_count() else { abort("on_region: n < node_count()"); }
+    if region_body >= 0 && node_body[n] != region_body { return false; }
     for p in region_out { if part_holds(p, n) { return false; } }
     for k in region.len { if on_part(n, k) { return true; } }
     return false;
@@ -481,8 +491,9 @@ fn add_facet_load(gv: f64[3], p: f64) {
 
 // Whether facet f of cell c is on the region. A facet with its vertices
 // on two parts can cut a corner of the body, so all vertices must be on
-// one part.
+// one part, and in the body of the region.
 fn region_facet(c: i64, f: i64) -> bool {
+    if region_body >= 0 && cell_body[c] != region_body { return false; }
     for k in region.len {
         var all = true;
         for l in dim { if !on_part(cell_node(c, facet_node(dim, f, l)), k) { all = false; } }
