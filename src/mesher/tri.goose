@@ -96,18 +96,12 @@ struct Refine {
 }
 
 var refines: Refine[>..] = [];
-var grade = 1.3;
 
 // The calls before mesh_2d that set the refines and the grade. mesh_2d
 // keeps them.
 fn clear_refines() {
     refines.clear();
     grade = 1.3;
-}
-
-fn set_grade(g: f64) {
-    guard g > 1.0 else { abort("set_grade: g > 1"); }
-    grade = g;
 }
 
 fn refine_segment(x0: f64, y0: f64, x1: f64, y1: f64, h: f64) {

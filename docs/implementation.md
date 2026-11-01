@@ -216,14 +216,26 @@ code or text from Gmsh, Triangle, TetGen or CGAL.
 
 The 3D path:
 
-1. Build an octree over the bounding box. The cell size follows `size`,
-   `refine` and `grade`.
+1. Build the body-centred cubic lattice of isosurface stuffing over the
+   bounding box. Each axis-aligned plane of a `box` in the CSG tree is a
+   lattice plane. Between two neighbour planes, the lattice has the fewest
+   equal steps that are not longer than `size`. Then bisect the lattice
+   tetrahedra at their longest edge (Rivara 1984) to the size of `refine`,
+   with the slope `grade - 1` away from each target.
+   Reason for no octree: the bisection already grades the lattice, and it
+   keeps the cells conforming.
 2. Find the feature curves from the CSG tree, and place protecting balls on
-   them.
-3. Fill the octree with the body-centred cubic lattice of isosurface
-   stuffing, and cut the lattice at φ = 0.
-4. Smooth by optimal Delaunay triangulation, and refuse a move that makes a
-   cell worse.
+   them. Not built: an axis-aligned box edge is on 2 lattice planes, and
+   thus has no error. A curved or an oblique sharp edge loses about 0.3
+   cells. Build this step only when a case needs it.
+3. Cut the lattice at φ = 0.
+4. Improve each cell with γ < 0.35 (γ = 1 / `max_aspect`): move a vertex
+   that is not on the surface, then remove an edge or flip a face (2-3),
+   again until no change helps (`src/mesher/improve.goose`). Refuse a
+   change that makes the worst cell of its cavity worse. The nodes and the
+   faces of the surface do not change.
+   Reason for this step in place of smoothing alone: smoothing stops at a
+   local optimum, and the flips get past it.
 5. Measure each cell. Give the worst cells to the check `mesh_quality`.
 
 The 2D mesher has a size field for `refine`: the size at a point is
