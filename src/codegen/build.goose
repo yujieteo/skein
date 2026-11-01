@@ -176,6 +176,7 @@ fn goose_string(out: u8[>..]&, s: u8[:]) {
 let GPU_CALLS = [
     ["elements::solve()", "gpu::solve()"],
     ["elements::central_difference(", "gpu::central_difference("],
+    ["elements::explicit_solid(", "gpu::explicit_solid("],
     ["grid::solve_transient(", "gpu::grid_transient("],
     ["grid::solve_static(", "gpu::grid_static("],
     ["elements::modal(", "gpu::modal("],

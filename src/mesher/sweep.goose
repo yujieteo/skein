@@ -283,6 +283,91 @@ fn turn_nodes(shift: i64) {
     }
 }
 
+// The centre and the radii r0 < r1 of an octant of a spherical shell,
+// (sphere - sphere) & box with the corner of the box at the centre, or
+// r1 = 0.
+fn shell_parts(g: i64) -> f64[3], f64, f64 {
+    let o, i, c = sector_parts(g);
+    guard o >= 0 && shapes[o].kind == SPHERE && shapes[i].kind == SPHERE && shapes[c].kind == BOX else { return [0.0; 3], 0.0, 0.0; };
+    let po = shapes[o].p;
+    let pn = shapes[i].p;
+    let cb = bounds(c);
+    let tol = 1.0e-9 * po[3];
+    for a in 3 {
+        guard abs(po[a] - pn[a]) < tol && abs(cb[a] - po[a]) < tol && cb[3 + a] >= po[a] + po[3] - tol else { return [0.0; 3], 0.0, 0.0; };
+    }
+    guard pn[3] < po[3] else { return [0.0; 3], 0.0, 0.0; };
+    return [po[0], po[1], po[2]], pn[3], po[3];
+}
+
+// The unit vector of point (s, t) of patch k of the octant of the unit
+// sphere: the 3 patches of a cubed sphere, each from an axis e_k to the
+// middles of its two arcs and the centre of the octant, with the bilinear
+// point of the flat quad moved out onto the sphere.
+fn shell_direction(k: i64, s: f64, t: f64) -> f64[3] {
+    var e: f64[3] = [0.0; 3];
+    e[k] = 1.0;
+    var a = e;
+    a[(k + 1) % 3] = 1.0;
+    var b = e;
+    b[(k + 2) % 3] = 1.0;
+    let c: f64[3] = [1.0, 1.0, 1.0];
+    let q = e * ((1.0 - s) * (1.0 - t)) + a * (s * (1.0 - t)) + c * (s * t) + b * ((1.0 - s) * t);
+    return q * (1.0 / sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]));
+}
+
+// Meshes an octant of a spherical shell (shell_parts) with tetrahedra: the
+// triangles of the 3 patches of a cubed sphere (shell_direction) swept
+// through radial layers of equal depth, each prism cut into 3 tetrahedra
+// (add_prism). Each node on an arc or a face of the shell is on it, so the
+// sharp edges stay sharp. False if g is not such a shell.
+fn shell_tets(g: i64, size: f64) -> bool {
+    let centre, r0, r1 = shell_parts(g);
+    guard r1 > 0.0 && targets.len == 0 else { return false; };
+    let n = max(1, ceil(0.25 * PI * r1 / size - 1.0e-9) as! i64);
+    let nr = max(1, ceil((r1 - r0) / size - 1.0e-9) as! i64);
+    // The directions of the nodes of the surface, each once, and the node
+    // of each point (s, t) of each patch.
+    var dirs: f64[>..] = [];
+    var at: i64[>..] = [];
+    for k in 3 {
+        for j in n + 1 {
+            for i in n + 1 {
+                let d = shell_direction(k, i * 1.0 / n, j * 1.0 / n);
+                var found = -1;
+                for v in dirs.len / 3 {
+                    let w: f64[3] = [dirs[3 * v], dirs[3 * v + 1], dirs[3 * v + 2]];
+                    if abs(w[0] - d[0]) + abs(w[1] - d[1]) + abs(w[2] - d[2]) < 1.0e-12 { found = v; }
+                }
+                if found < 0 {
+                    found = dirs.len / 3;
+                    dirs.append(d);
+                }
+                at.push(found);
+            }
+        }
+    }
+    let m = dirs.len / 3;
+    clear_mesh(3);
+    for l in nr + 1 {
+        let r = r0 + (r1 - r0) * l / nr;
+        for v in m { add_point(centre[0] + r * dirs[3 * v], centre[1] + r * dirs[3 * v + 1], centre[2] + r * dirs[3 * v + 2]); }
+    }
+    fn node(k: i64, i: i64, j: i64) -> i64 { return at[k * (n + 1) * (n + 1) + j * (n + 1) + i]; }
+    for l in nr {
+        for k in 3 {
+            for j in n {
+                for i in n {
+                    let q: i64[4] = [node(k, i, j), node(k, i + 1, j), node(k, i + 1, j + 1), node(k, i, j + 1)];
+                    add_prism(q[0] + m * l, q[1] + m * l, q[2] + m * l, q[0] + m * (l + 1), q[1] + m * (l + 1), q[2] + m * (l + 1));
+                    add_prism(q[0] + m * l, q[2] + m * l, q[3] + m * l, q[0] + m * (l + 1), q[2] + m * (l + 1), q[3] + m * (l + 1));
+                }
+            }
+        }
+    }
+    return true;
+}
+
 // Meshes g with the grid of the planes of its bounds and of the boxes of
 // `planes`, and moves each node on the boundary of the cells onto the
 // boundary of g.

@@ -1,0 +1,50 @@
+// Cook's membrane at finite strain in plane strain: a tapered cantilever,
+// clamped on the left, with a shear traction p0 on the right. The energy is
+// psi1 of the SPP 1748 benchmark collection (J. Schroeder et al., Cook's
+// membrane: hyperelasticity and finite elastoplasticity, 2020, section 2.3).
+// Its reference is u_y = 10.5953 mm at the top right corner A (p-FEM, table
+// 2.3). Its quadratic triangles (T2) give 10.5868 mm with 20,200 dofs, 0.08 %
+// low. This mesh has 24,264 dofs.
+
+model cook_membrane_tri: 2d, mm_N_MPa_s
+
+let lam: Pressure = 432.099 MPa
+let mu: Pressure = 185.185 MPa
+let p0: Pressure = 20 MPa
+
+scales 48 mm, mu
+
+let membrane: Surface = polygon((0, 0) mm, (48, 44) mm, (48, 60) mm, (0, 44) mm)
+let clamp: Curve = boundary(membrane, x == 0 mm)
+let edge: Curve = boundary(membrane, x == 48 mm)
+
+material rubber {
+    lam: Pressure = lam
+    mu: Pressure = mu
+}
+
+mesh m on membrane {
+    size: 1 mm
+    cell: tri
+}
+
+physics cook on membrane solves u: Vector<Length> {
+    material rubber
+    assume finite_strain, isotropic, plane_strain(1 mm)
+    let C: Tensor2<Real> = transpose(defgrad(u))*defgrad(u)
+    let W: Energy/Volume = mu/2*(tr(C) - 3) + lam/4*(det(C) - 1) - (lam/2 + mu)*ln(sqrt(det(C)))
+    let S: Tensor2<Pressure> = 2*diff(W, C)
+    eq div(defgrad(u)*S) = 0
+}
+
+method cook: cg { mesh: m, order: 2 }
+
+bc clamp: u = 0
+
+// p0 is a dead load: the traction on the reference edge.
+step load: static(ramp: 10) {
+    bc edge: defgrad(u)*S*n = (0 MPa, p0)
+    output u, S
+}
+
+expect tip: u.y at (48 mm, 60 mm) == 10.5953 mm within 0.2%

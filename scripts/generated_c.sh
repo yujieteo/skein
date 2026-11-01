@@ -32,6 +32,7 @@ examples/elements/bloch_cell_tri.skn
 examples/elements/buckling_column_tet.skn
 examples/elements/column_weight_tet.skn
 examples/elements/conduction_slab_tet.skn
+examples/elements/cook_membrane_tri.skn
 examples/elements/darcy_annulus_tri.skn
 examples/elements/far_field_box_tet.skn
 examples/elements/frequency_cantilever_tet.skn
@@ -43,9 +44,9 @@ examples/elements/kirsch_nurbs_tri.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
+examples/elements/taylor_bar_tet.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/bar_pressure.skn
-examples/femahoy/buckling_column.skn
 examples/femahoy/cantilever_2step.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_coax_capacitor.skn
@@ -55,6 +56,8 @@ examples/femahoy/grid_lame_cylinder.skn
 examples/femahoy/grid_pipe_wall.skn
 examples/femahoy/grid_round_cantilever.skn
 examples/femahoy/heat_fin.skn
+examples/femahoy/hyperelastic_tube.skn
+examples/femahoy/plasticity_sphere.skn
 examples/femahoy/scordelis_lo_roof.skn
 examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn

@@ -5,7 +5,7 @@
 //
 // The reader evaluates the geometry of the model: numbers with a length
 // or an angle unit, vectors, + - * / and the names of `let` items, the
-// shapes box, cylinder, rect, circle, polygon, fill of a spline, extrude,
+// shapes box, cylinder, sphere, rect, circle, polygon, fill of a spline, extrude,
 // revolve, loft, pattern and pattern_polar, and the operators |, & and -. Each length is
 // in the length unit of the header (m for SI, mm for the mm systems), and
 // each angle is in radians.
@@ -235,6 +235,10 @@ recursive fn shape_call(n: i64) -> Value {
         let a = arg(1, 3);
         return shape(cylinder(c.v[0], c.v[1], c.v[2], a.v[0], a.v[1], a.v[2], arg(2, 1).v[0], arg(3, 1).v[0]));
     }
+    if name == "sphere" && count == 2 {
+        let c = arg(0, 3);
+        return shape(sphere(c.v[0], c.v[1], c.v[2], arg(1, 1).v[0]));
+    }
     if name == "rect" && count == 2 {
         let a = arg(0, 2);
         let b = arg(1, 2);
@@ -324,7 +328,7 @@ recursive fn shape_call(n: i64) -> Value {
         return shape(pattern_polar(a.g, v.v[0], v.v[1], v.v[2], copies as i64));
     }
     reader_fault(t, str("the shape '", name, "' with ", count, " arguments is not in the mesher"),
-                 "use box, cylinder, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -");
+                 "use box, cylinder, sphere, rect, circle, polygon, fill, extrude, revolve, loft, pattern or pattern_polar, with |, & and -");
     return number_value(0.0);
 }
 

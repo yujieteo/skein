@@ -224,6 +224,7 @@ var assembled_source: f64[>..] = [];
 fn assemble(path: u8[:], vectors: i64) {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
+    internal.clear();
     solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), "");
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
@@ -332,12 +333,16 @@ struct Part {
 }
 
 var region: Part[..16] = [];
+var region_out: Part[..8] = [];    // the parts whose nodes are not in the region
 
 fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
-    let tol = geometry_tolerance();
-    let p = region[k];
+    return part_holds(region[k], n);
+}
+
+fn part_holds(p: Part, n: i64) -> bool {
     if p.node >= 0 { return n == p.node; }
+    let tol = geometry_tolerance();
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (body_shape < 0 || shape_gap(body_shape, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
@@ -347,6 +352,7 @@ fn on_part(n: i64, k: i64) -> bool {
 
 fn on_region(n: i64) -> bool {
     guard n >= 0 && n < node_count() else { abort("on_region: n < node_count()"); }
+    for p in region_out { if part_holds(p, n) { return false; } }
     for k in region.len { if on_part(n, k) { return true; } }
     return false;
 }
@@ -371,6 +377,88 @@ fn fix_region(comp: i64, v: f64) {
     }
 }
 
+// Holds component `comp` of each node of the region at VALUE(p), with p
+// the point of the node.
+fn fix_region_with<VALUE>(comp: i64) {
+    guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("fix_region_with: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
+    for n in node_count() {
+        if !on_region(n) { continue; }
+        fixed[ncomp * n + comp] = 1;
+        prescribed[ncomp * n + comp] = VALUE([node_x(n, 0), node_x(n, 1), node_x(n, 2)]);
+    }
+}
+
+// Adds ∫ g Ni dA over the facets of the region to component p of node i,
+// for g = gv[p].
+fn add_region_load(gv: f64[3]) { add_facet_load(gv, 0.0); }
+
+// Adds the pressure p on the boundary facets of the region: the traction
+// -p n, with n the outward normal of the facet in the undeformed mesh.
+fn add_region_pressure(p: f64) { add_facet_load([0.0; 3], p); }
+
+// The unit outward normal of facet f of cell c at the point x, from the
+// tangents tan of the facet: it points away from the centre of the cell.
+fn facet_normal(c: i64, x: f64[3], tan: f64[6]) -> f64[3] {
+    var nv: f64[3] = if dim == 2 { [tan[1], -tan[0], 0.0] } else {
+        [tan[1] * tan[5] - tan[2] * tan[4], tan[2] * tan[3] - tan[0] * tan[5], tan[0] * tan[4] - tan[1] * tan[3]] };
+    let count = node_count_of(dim, order);
+    var side = 0.0;
+    for l in count {
+        let n = cell_node(c, l);
+        for t in 3 { side += nv[t] * (x[t] - node_x(n, t)) / count; }
+    }
+    let size = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    let s = if side < 0.0 { -1.0 / size } else { 1.0 / size };
+    return [s * nv[0], s * nv[1], s * nv[2]];
+}
+
+// Adds the traction gv - p n on the boundary facets of the region.
+fn add_facet_load(gv: f64[3], p: f64) {
+    guard physics >= 0 && ncomp <= gv.len && dofs_sized() else { abort("add_region_load: a physics and the arrays of the dofs"); }
+    let fd = dim - 1;
+    let fnodes = node_count_of(fd, order);
+    var fn_shape: f64[10] = [0.0; 10];
+    var fn_dref: f64[30] = [0.0; 30];
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(c, f) { continue; }
+            for qp in quad_count(fd) {
+                let xi, w = quad_point(fd, qp);
+                shape(fd, order, xi, fn_shape, fn_dref);
+                // The tangents dx/dxi_r of the facet.
+                var tan: f64[6] = [0.0; 6];
+                for l in fnodes {
+                    let n = cell_node(c, facet_node(dim, f, l));
+                    for r in fd {
+                        for t in 3 { tan[3 * r + t] += fn_dref[3 * l + r] * node_x(n, t); }
+                    }
+                }
+                var da = 0.0;
+                if fd == 1 {
+                    da = sqrt(tan[0] * tan[0] + tan[1] * tan[1]) * thickness;
+                } else {
+                    let nx = tan[1] * tan[5] - tan[2] * tan[4];
+                    let ny = tan[2] * tan[3] - tan[0] * tan[5];
+                    let nz = tan[0] * tan[4] - tan[1] * tan[3];
+                    da = sqrt(nx * nx + ny * ny + nz * nz);
+                }
+                var tv = gv;
+                if p != 0.0 {
+                    var x: f64[3] = [0.0; 3];
+                    for l in fnodes {
+                        for t in 3 { x[t] += fn_shape[l] * node_x(cell_node(c, facet_node(dim, f, l)), t); }
+                    }
+                    tv = gv - p * facet_normal(c, x, tan);
+                }
+                for l in fnodes {
+                    let n = cell_node(c, facet_node(dim, f, l));
+                    for k in ncomp { load[ncomp * n + k] += tv[k] * fn_shape[l] * w * da; }
+                }
+            }
+        }
+    }
+}
+
 // Whether facet f of cell c is on the region. A facet with its vertices
 // on two parts can cut a corner of the body, so all vertices must be on
 // one part.
@@ -386,12 +474,6 @@ fn region_facet(c: i64, f: i64) -> bool {
 // The shape functions of the nodes of facet f of cell c at its quadrature
 // point qp, in fn_shape, and the weight of the point times dA.
 fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[10]&) -> f64 {
-    var normal: f64[3] = [0.0; 3];
-    return facet_normal(c, f, qp, fn_shape, normal);
-}
-
-// As facet_point, and the unit normal of the facet out of cell c.
-fn facet_normal(c: i64, f: i64, qp: i64, fn_shape: f64[10]&, normal: f64[3]&) -> f64 {
     let fd = dim - 1;
     var fn_dref: f64[30] = [0.0; 30];
     let xi, w = quad_point(fd, qp);
@@ -404,39 +486,11 @@ fn facet_normal(c: i64, f: i64, qp: i64, fn_shape: f64[10]&, normal: f64[3]&) ->
             for t in 3 { tan[3 * r + t] += fn_dref[3 * l + r] * node_x(n, t); }
         }
     }
-    var nv: f64[3] = if fd == 1 { [tan[1], -tan[0], 0.0] } else {
-        [tan[1] * tan[5] - tan[2] * tan[4], tan[2] * tan[3] - tan[0] * tan[5], tan[0] * tan[4] - tan[1] * tan[3]]
-    };
-    let size = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
-    // Out of the cell: away from its vertex that is not on the facet.
-    var inner: f64[3] = [0.0; 3];
-    for v in dim + 1 {
-        for t in 3 { inner[t] += node_x(cell_node(c, v), t) / (dim + 1); }
-    }
-    var away = 0.0;
-    for t in 3 { away += nv[t] * (node_x(cell_node(c, facet_node(dim, f, 0)), t) - inner[t]); }
-    for t in 3 { normal[t] = (if away < 0.0 { -nv[t] } else { nv[t] }) / size; }
-    return w * size * (if fd == 1 { thickness } else { 1.0 });
-}
-
-// Adds ∫ s n_p Ni dA over the facets of the region to component p of node
-// i, with n the normal out of the body: the traction sigma*n = s*n.
-fn add_region_pressure(s: f64) {
-    guard physics == ELASTIC && dofs_sized() else { abort("add_region_pressure: an elastic physics and the arrays of the dofs"); }
-    var fn_shape: f64[10] = [0.0; 10];
-    var normal: f64[3] = [0.0; 3];
-    for c in cell_count() {
-        for f in facet_count(dim) {
-            if !region_facet(c, f) { continue; }
-            for qp in quad_count(dim - 1) {
-                let wda = facet_normal(c, f, qp, fn_shape, normal);
-                for l in node_count_of(dim - 1, order) {
-                    let n = cell_node(c, facet_node(dim, f, l));
-                    for p in ncomp { load[ncomp * n + p] += s * normal[p] * fn_shape[l] * wda; }
-                }
-            }
-        }
-    }
+    if fd == 1 { return w * sqrt(tan[0] * tan[0] + tan[1] * tan[1]) * thickness; }
+    let nx = tan[1] * tan[5] - tan[2] * tan[4];
+    let ny = tan[2] * tan[3] - tan[0] * tan[5];
+    let nz = tan[0] * tan[4] - tan[1] * tan[3];
+    return w * sqrt(nx * nx + ny * ny + nz * nz);
 }
 
 // Adds the force f to each node of the region.
@@ -463,45 +517,6 @@ fn body_mean(what: i64, comp: i64) -> f64 {
         }
     }
     return if volume > 0.0 { sum / volume } else { 0.0 };
-}
-
-// Adds ∫ g Ni dA over the facets of the region to component p of node i,
-// for g = gv[p].
-fn add_region_load(gv: f64[3]) {
-    guard physics >= 0 && ncomp <= gv.len && dofs_sized() else { abort("add_region_load: a physics and the arrays of the dofs"); }
-    var fn_shape: f64[10] = [0.0; 10];
-    for c in cell_count() {
-        for f in facet_count(dim) {
-            if !region_facet(c, f) { continue; }
-            for qp in quad_count(dim - 1) {
-                let wda = facet_point(c, f, qp, fn_shape);
-                for l in node_count_of(dim - 1, order) {
-                    let n = cell_node(c, facet_node(dim, f, l));
-                    for p in ncomp { load[ncomp * n + p] += gv[p] * fn_shape[l] * wda; }
-                }
-            }
-        }
-    }
-}
-
-// The mean ∫ v dA / ∫ dA over the facets of the region of component p of
-// the unknown, or 0 if the region holds no facet.
-fn region_mean(p: i64) -> f64 {
-    guard physics >= 0 && p >= 0 && p < ncomp && sol.len == ncomp * node_count() else { abort("region_mean: a physics, p < ncomp and a solution"); }
-    var fn_shape: f64[10] = [0.0; 10];
-    var sum = 0.0;
-    var area = 0.0;
-    for c in cell_count() {
-        for f in facet_count(dim) {
-            if !region_facet(c, f) { continue; }
-            for qp in quad_count(dim - 1) {
-                let wda = facet_point(c, f, qp, fn_shape);
-                area += wda;
-                for l in node_count_of(dim - 1, order) { sum += fn_shape[l] * sol[ncomp * cell_node(c, facet_node(dim, f, l)) + p] * wda; }
-            }
-        }
-    }
-    return if area > 0.0 { sum / area } else { 0.0 };
 }
 
 // The facets of the film conditions dot(q, n) = h (T - T_inf) of the step:
@@ -573,6 +588,23 @@ fn clear_conditions() {
 
 // --- reactions -----------------------------------------------------------------
 
+// The internal force of each dof after a static step of the nonlinear
+// solid (solid.goose), in place of K u; empty after a linear solve.
+var internal: f64[>..] = [];
+
+// The force K u of dof d, or its internal force, and the sum of the sizes
+// of the terms of the sum K u (the size of its round-off).
+fn row_force(d: i64) -> f64, f64 {
+    if internal.len == sol.len { return internal[d], abs(internal[d]); }
+    var ku = 0.0;
+    var terms = 0.0;
+    for e in row_start[d]..row_start[d + 1] {
+        ku += val[e] * sol[col[e]];
+        terms += abs(val[e] * sol[col[e]]);
+    }
+    return ku, terms;
+}
+
 // The force of the supports on the body (or the heat that flows in through
 // them): K u - f on the fixed dofs of the region. With equilibrium, the
 // reactions and the applied loads sum to 0.
@@ -585,12 +617,31 @@ fn region_reaction() -> f64[3] {
         for p in ncomp {
             let d = ncomp * n + p;
             if fixed[d] != 1 { continue; }
-            var ku = 0.0;
-            for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+            let ku, terms = row_force(d);
             sum[p] += ku - load[d] - assembled_source[d];
         }
     }
     return sum;
+}
+
+// The mean of component comp of the solution on the boundary facets of the
+// region, weighted by area: the weight of each node is the load of a
+// unit traction (add_region_load). The load stays as it was.
+fn region_mean(comp: i64) -> f64 {
+    guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("region_mean: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
+    var kept: f64[>..] = [];
+    kept.append(load);
+    for &v in load { v = 0.0; }
+    add_region_load([1.0; 3]);
+    var sum = 0.0;
+    var area = 0.0;
+    for n in node_count() {
+        let w = load[ncomp * n + comp];
+        sum += w * sol[ncomp * n + comp];
+        area += w;
+    }
+    for d in load.len { load[d] = kept[d]; }
+    return if area > 0.0 { sum / area } else { 0.0 / 0.0 };
 }
 
 // The sum of the reactions on all fixed dofs.
@@ -600,8 +651,7 @@ fn all_reaction() -> f64[3] {
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
         if fixed[d] != 1 { continue; }
-        var ku = 0.0;
-        for e in row_start[d]..row_start[d + 1] { ku += val[e] * sol[col[e]]; }
+        let ku, terms = row_force(d);
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
     }
     return sum;
@@ -622,11 +672,8 @@ fn load_magnitude() -> f64 {
     var terms = 0.0;
     for d in sol.len {
         if fixed[d] != 1 { continue; }
-        var ku = 0.0;
-        for e in row_start[d]..row_start[d + 1] {
-            ku += val[e] * sol[col[e]];
-            terms += abs(val[e] * sol[col[e]]);
-        }
+        let ku, t = row_force(d);
+        terms += t;
         sum += abs(ku - load[d] - assembled_source[d]);
     }
     return max(sum, terms);

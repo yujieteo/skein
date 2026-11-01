@@ -1,5 +1,4 @@
 // femahoy: validation/cases/taylor-bar-impact/job.inp
-// blocked-by: G22
 // Taylor bar: a copper bar (radius 3.2 mm, length 32.4 mm) hits a rigid frictionless wall at
 // 227 m/s. Large strains, J2 plasticity with linear hardening, explicit time steps. A quarter
 // of the bar. References (DYNA3D) at 80 us: length 21.66 mm, mushroom radius 7.02 mm.
@@ -28,11 +27,12 @@ material copper {
     Hk: Pressure = 100 MPa
 }
 
-// The C3D8R of ccx: order-1 hexahedra with reduced integration, swept along the bar.
+// Quadratic tetrahedra (the C3D8R of ccx is an order-1 hexahedron with reduced integration).
+// At 1.6 mm the length change is -10.914 mm and the radius change 3.860 mm; at 1.2 mm they are
+// -10.896 mm and 3.827 mm (9075 dofs, 151 s on 1 thread).
 mesh m on rod {
-    size: 0.8 mm
-    cell: hex
-    refine wall: 0.33 mm
+    size: 1.2 mm
+    cell: tet
 }
 
 // First-order form: the velocity v is an unknown, so that it can take the initial value.
@@ -41,7 +41,7 @@ physics impact on rod solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0
     assume finite_strain, isotropic
     state eps_p: Tensor2<Real> = 0
     state alpha: Real = 0
-    // gap G22: finite-strain plasticity is only the additive split of the Green-Lagrange strain.
+    // With finite_strain, the plastic block is the multiplicative split F = Fe*Fp (spec §10.6).
     let S: Tensor2<Pressure> = hooke(E, nu, strain(u) - eps_p)
     plastic {
         yield: von_mises(S) - (sy + Hk*alpha)
@@ -52,16 +52,18 @@ physics impact on rod solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0
     eq rho*ddt(v) - div(defgrad(u)*S) = 0
 }
 
-method impact: cg { mesh: m, order: 1, quadrature: reduced }
+method impact: cg { mesh: m, order: 2 }
 
 // The wall holds v.z = 0 and lets the face slide in x and y.
 bc symx: v.x = 0
 bc symy: v.y = 0
 bc wall: v.z = 0
 
-step crash: transient(end: 80 us, dt: 4 ns, scheme: ssprk3) {
-    output u, von_mises(S), alpha every 2500
+step crash: transient(end: 80 us, dt: 4 ns, scheme: central_difference) {
+    output u, von_mises(S), alpha
 }
 
+// The tolerance of femahoy (derivation.md): the mesh error of its ccx mesh and the spread of
+// the published values.
 expect length: mean(u.z, top) == -10.74 mm within 0.8 mm
 expect radius: u.x at (R, 0 mm, 0 mm) == 3.82 mm within 0.8 mm
