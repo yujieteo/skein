@@ -102,6 +102,7 @@ var refines: Refine[>..] = [];
 fn clear_refines() {
     refines.clear();
     grade = 1.3;
+    grade_given = false;
 }
 
 fn refine_segment(x0: f64, y0: f64, x1: f64, y1: f64, h: f64) {

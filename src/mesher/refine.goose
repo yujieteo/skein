@@ -36,16 +36,19 @@ struct Target {
 
 var targets: Target[>..] = [];
 var grade = 1.3;       // the mesh setting grade (spec §9.1)
+var grade_given = false;
 var section_z = 0.0;   // the z at which the 2D mesher measures a target
 
 fn clear_refine() {
     targets.clear();
     grade = 1.3;
+    grade_given = false;
 }
 
 fn set_grade(g: f64) {
     guard g > 1.0 else { abort("set_grade: g > 1"); }
     grade = g;
+    grade_given = true;
 }
 
 // Wants the cells of edge `size` at the surface of g (surface) or in g.
@@ -56,11 +59,12 @@ fn add_refine(g: i64, size: f64, surface: bool) {
 
 // The wanted size at a point at most `reach` from (x, y, z).
 fn wanted_size(x: f64, y: f64, z: f64, reach: f64, size: f64) -> f64 {
+    let slope = if grade_given { grade - 1.0 } else { 0.4 };
     var h = size;
     for t in targets {
         let f = phi(t.g, x, y, z);
         let d = if t.surface { abs(f) } else { max(f, 0.0) };
-        h = min(h, t.size + (grade - 1.0) * max(d - reach, 0.0));
+        h = min(h, t.size + slope * max(d - reach, 0.0));
     }
     return h;
 }

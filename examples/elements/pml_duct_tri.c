@@ -1934,6 +1934,7 @@ typedef struct {
     gs_rhdr mesher_targets_g6;
     gs_stack gs_gstk_mesher_targets_g6;
     double mesher_grade_g6;
+    uint8_t mesher_grade_given_g6;
     double mesher_section_z_g6;
     double mesher_MIN_ANGLE_g6;
     int64_t mesher_LINE_g6;
@@ -2874,6 +2875,7 @@ static void main_g(int64_t gs_sp) {
         t120 = (uint8_t *)((GS_GL->mesher_targets_g6.base));
         t121 = 0;
         GS_GL->mesher_grade_g6 = 1.3;
+        GS_GL->mesher_grade_given_g6 = 0;
         (&GS_GL->gs_gstk_mesher_targets_g6)->top = t120;
         GS_GL->mesher_targets_g6.len = t121;
     }
@@ -39508,6 +39510,7 @@ static void gs_init_globals(void) {
     GS_GL->mesher_targets_g6.len = 0;
     GS_GL->mesher_targets_g6.len = 0;
     GS_GL->mesher_grade_g6 = 1.3;
+    GS_GL->mesher_grade_given_g6 = 0;
     GS_GL->mesher_section_z_g6 = 0.0;
     GS_GL->mesher_MIN_ANGLE_g6 = 25.0;
     GS_GL->mesher_LINE_g6 = 0;

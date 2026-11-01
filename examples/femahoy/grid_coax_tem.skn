@@ -46,12 +46,9 @@ material ptfe {
     mu: Mass*Length/(Time^2*Current^2) = mu0
 }
 
-// grade: 1.4 keeps the mesh of the expect values below. With the default 1.3, the mesh has 46,200
-// cells in place of 41,640, and the solve did not end in 10 minutes.
 mesh m on line_body {
     size: 0.5 mm
     cell: tet
-    grade: 1.4
     refine inner_wall: 0.25 mm
 }
 
