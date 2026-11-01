@@ -95,7 +95,8 @@ let CARD = """
     ## Shells
 
     `skein run` solves a shell on a part of the side of a cylinder on the x
-    axis (MITC4 quads, order 1). theta turns from +z to +y.
+    axis (MITC4 quads for order 1, MITC9 for order 2). theta turns from +z
+    to +y.
 
     ```
     let tube: Solid = cylinder((0, 0, 0) m, (1, 0, 0), R, L)
@@ -134,8 +135,41 @@ let CARD = """
       `boundary(wall, y == 0 m)`. A `Point` is `point((x, y, z))`.
     - `bc x0: w.x = 0`, `bc x0: theta.y = 0`, `bc end: N*n = (f, 0, 0)` (a
       force per length on a side).
-    - Report `w.z at p` or a physics `let` at p (p a node), or
-      `reaction(x0)`.
+    - Report `w.z at p` or a physics `let` at p, or `reaction(x0)`.
+    - Cut the shell with a `Solid`: `let skin: Surface = wall - door`, and
+      `boundary(skin, door)` is the cut edge. `material a on plain, b on pad`
+      gives each part its material. `refine door_edge: 5 mm` in the mesh.
+    - A submodel: `let global: Results = results("global.skn", step: "s")`,
+      then `bc cut: w = global.w` and `global.e_hoop at p`. `global.f` is
+      the `f` of this model on the results of the global model, with no
+      property of a material.
+    - `copy(windows)` in a `bc` value is the index of the copy of the
+      pattern `windows` at the point.
+
+    ## Beams
+
+    `skein run` solves `timoshenko` beams (2-node elements) on `line`s, alone
+    or as offset beams tied to a cylindrical shell. On a shell of order 2,
+    the beams have a node at each node of the shell on their line.
+
+    ```
+    physics beam on bar: timoshenko(A: A, I_y: I_y, I_z: I_z, J: J, y_axis: (0, 1, 0)) solves w: Vector<Length>,
+        theta: Vector<Angle> {
+        material ipe300
+    }
+    bc tip: F_b*n = (0, 0, -1)*P
+    ```
+
+    - The material gives `E`, `nu`, `A`, `I_y`, `I_z` and `J`, and `rho` for
+      a `modal(count: 4)` step. A `buckling(count: 2)` step comes just
+      after the `static` step of its load. `material s on stringers, f on
+      frames` gives each beam region its material.
+    - `F_b*n = P` is a force and `M_b*n = M` a moment on a `Point`.
+    - On a shell, `pattern`, `pattern_polar`, `move`, `|` and `& box` make
+      the beam lines. `offset: d*e_r` puts the axis off the skin. Tie the
+      beams with `bc beams: w_b = w` and `bc beams: theta_b = theta`. Cut
+      the beam lines with the same `Solid` as the shell (`- door_box(0 m)`).
+      A beam over a removed cell is an error.
 
     ## Boundary conditions
 

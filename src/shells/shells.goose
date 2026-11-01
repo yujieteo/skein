@@ -16,8 +16,11 @@ namespace shells;
 import .laminate;
 import .model;
 import .mitc4;
+import .mitc9;
 import .beam;
 import .solve;
+import .eigen;     // modes and buckling of the beams
+import .dissect;
 import .mesh;
 import .vtu;
 import .kernels;   // shell_stiffness and beam_stiffness
