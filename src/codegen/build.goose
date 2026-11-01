@@ -398,20 +398,19 @@ fn build_page(path: u8[:], text: u8[:], dir: u8[:], model: u8[:], params: Contro
         return 1;
     };
     var peaks: i64[>..] = [];
-    let none: u8[..256][>..] = [];
-    let ran, first_heap = profile_run(dir, none, "native.toon", peaks);
-    guard ran else { return 1; };
-    var heap = first_heap;
-    // The end runs: n = 0 at the corner, n > 0 at the word n - 1 of
-    // `others` alone.
-    for n in 0..if corner.len > 0 { others.len + 1 } else { 0 } {
+    var heap = 0;
+    // The runs: n = 0 at the corner, 0 < n < ends at the word n - 1 of
+    // `others` alone, and n = ends at the default values. The run at the
+    // default values is the last, so that its result files stay for the page.
+    let ends = if corner.len > 0 { others.len + 1 } else { 0 };
+    for n in 0..ends + 1 {
         var sets: u8[..256][>..] = [];
-        if n == 0 { sets.append(corner); } else { sets.push(others[n - 1]); }
+        if n < ends { if n == 0 { sets.append(corner); } else { sets.push(others[n - 1]); } }
         var more: i64[>..] = [];
-        let end_ran, h = profile_run(dir, sets, if n == 0 { "corner.toon" } else { "end.toon" }, more);
-        guard end_ran && more.len == peaks.len else { return 1; };
+        let ran, h = profile_run(dir, sets, if n == ends { "native.toon" } else if n == 0 { "corner.toon" } else { "end.toon" }, more);
+        guard ran && (n == 0 || more.len == peaks.len) else { return 1; };
         heap = max(heap, h);
-        for p, i in more { peaks[i] = max(peaks[i], p); }
+        if n == 0 { peaks.append(more); } else { for p, i in more { peaks[i] = max(peaks[i], p); } }
     }
     var table: u8[>..] = [];
     // The memory of the module: the regions, 1.5 times the largest heap
