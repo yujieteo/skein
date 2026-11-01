@@ -38,6 +38,11 @@ var linear_iterations = 0;
 var last_seconds = 0.0;
 var first_residual = 0.0;
 var last_residual = 0.0;
+// The next solve_steady starts from sol, and keeps first_residual of the
+// solve before. Reason: the flow solves of solve_fsi after the first
+// start near the root, so a stop relative to their own residual is too
+// tight.
+var warm = false;
 
 // Sets the material and the equations. The values are scaled.
 fn fluid(density: f64, viscosity: f64, navier_stokes: bool, stab: i64) {
@@ -98,6 +103,17 @@ fn fix_velocity(comp: i64, value: f64) {
         let d = vdof(n, comp);
         fixed[d] = 1;
         prescribed[d] = value;
+    }
+}
+
+// Fixes velocity component comp on the nodes of the region at F(x, y).
+fn fix_velocity_at<F>(comp: i64) {
+    guard (comp == 0 || comp == 1) && cell_count() > 0 && fixed.len == dof_count() && region.len == node_count() else { abort("fix_velocity_at: comp 0 or 1, and clear_bcs on a mesh"); }
+    for n in node_count() {
+        if region[n] == 0 { continue; }
+        let d = vdof(n, comp);
+        fixed[d] = 1;
+        prescribed[d] = F(coords[2 * n], coords[2 * n + 1]);
     }
 }
 
@@ -224,7 +240,7 @@ fn solve_steady(rtol: f64) -> bool {
     guard !turbulent else { return solve_rans(rtol); }
     let start = clock();
     let sizes = state_sizes();
-    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
+    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else if warm { sol[d] } else { 0.0 }; }
     var f: f64[>..] = [];
     var du: f64[>..] = [];
     var trial: f64[>..] = [];
@@ -232,8 +248,8 @@ fn solve_steady(rtol: f64) -> bool {
     solvers::zeros(du, sol.len);
     solvers::zeros(trial, sol.len);
     residual(sol, f);
-    first_residual = solvers::norm(f);
-    last_residual = first_residual;
+    if !warm { first_residual = solvers::norm(f); }
+    last_residual = solvers::norm(f);
     newton_steps = 0;
     linear_iterations = 0;
     var converged = true;

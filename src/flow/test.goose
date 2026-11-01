@@ -7,6 +7,11 @@
 // so Stokes and Navier-Stokes have the same solution. P2 velocity holds it
 // exactly. The force of each wall on the flow is -G H L / 2 along x.
 //
+// A cantilever of length 10 and height 1 in plane strain, held at x = 0,
+// with a shear load P at x = L on the solid of fsi.goose: the tip
+// deflection of Timoshenko's beam, P L³/(3 E' I) + P L/(κ G A), with
+// E' = E/(1 - ν²) and κ = 5/6.
+//
 // The gate of phase 3 is samples/02_cavity.skn, with an expect for each
 // row of Ghia et al. (1982), and samples/06_cylinder_sweep.skn.
 // scripts/generated_c.sh runs the two samples.
@@ -135,12 +140,61 @@ fn channel() {
     flow::set_turbulent(false);
 }
 
+fn cantilever() {
+    let len = 10.0;
+    let e = 1000.0;
+    let nu = 0.3;
+    let p = 0.1;
+    mesher::clear_shapes();
+    mesher::clear_refines();
+    if !mesher::mesh_2d(mesher::rect(0.0, 0.0, len, 1.0), 0.25) { fail("cantilever: the mesher did not finish"); }
+    var xy: f64[>..] = [];
+    var tri: i64[>..] = [];
+    for n in mesher::point_count() {
+        xy.push(mesher::vertex(n)[0]);
+        xy.push(mesher::vertex(n)[1]);
+    }
+    for c in mesher::cell_count() {
+        for k in 3 { tri.push(mesher::cell_node(c, k)); }
+    }
+    flow::solid_from_arrays(xy, tri);
+    flow::solid(e, nu);
+    assert(flow::select_solid_boundary() { x, y => abs(x) <= 1.0e-9 });
+    flow::fix_solid(0);
+    flow::fix_solid(1);
+    if !flow::factor_solid() { fail("cantilever: the stiffness is not positive definite"); }
+    // the consistent load of a uniform shear on the edges at x = L
+    var load: f64[>..] = [];
+    var u: f64[>..] = [];
+    solvers::zeros(load, 2 * flow::solid_nodes());
+    solvers::zeros(u, 2 * flow::solid_nodes());
+    for c in flow::solid_cells() {
+        for k in 3 {
+            let a = flow::s_conn[6 * c + k];
+            let b = flow::s_conn[6 * c + (k + 1) % 3];
+            if abs(flow::s_coords[2 * a] - len) > 1.0e-9 || abs(flow::s_coords[2 * b] - len) > 1.0e-9 { continue; }
+            let t = p * abs(flow::s_coords[2 * a + 1] - flow::s_coords[2 * b + 1]);
+            load[2 * a + 1] -= t / 6.0;
+            load[2 * b + 1] -= t / 6.0;
+            load[2 * flow::s_conn[6 * c + 3 + k] + 1] -= 4.0 * t / 6.0;
+        }
+    }
+    flow::solve_solid(load, u);
+    for d in u.len { flow::s_u[d] = u[d]; }
+    let tip, found = flow::solid_value_at(1, len, 0.5);
+    let ep = e / (1.0 - nu * nu);
+    let exact = -(p * len * len * len / (3.0 * ep / 12.0) + p * len / (5.0 / 6.0 * e / (2.0 * (1.0 + nu))));
+    print("cantilever, P2 plane strain: ", flow::solid_cells(), " cells, tip ", tip, " (Timoshenko ", exact, ")");
+    if !found || abs(tip - exact) > 0.02 * abs(exact) { fail(str("cantilever: the tip deflection is ", tip, ", not within 2% of ", exact)); }
+}
+
 fn main() {
     poiseuille("Stokes, P2/P1", 2, false, flow::NONE, 1.0e-6);
     poiseuille("Navier-Stokes, P2/P1, supg", 2, true, flow::SUPG, 1.0e-6);
     poiseuille("Navier-Stokes, P2/P1, supg_pspg_lsic", 2, true, flow::SUPG_PSPG_LSIC, 1.0e-6);
     poiseuille("Navier-Stokes, P1/P1, supg_pspg", 1, true, flow::SUPG_PSPG, 0.03);
     channel();
+    cantilever();
     if failures > 0 { exit(1); }
     print("flow: all tests pass");
 }

@@ -47,6 +47,7 @@ examples/femahoy/warpage_thick_copper.skn
 examples/flow/cavity_coarse.skn
 examples/flow/channel_sst_tri.skn
 examples/flow/poiseuille_stokes.skn
+examples/flow/turek_hron_fsi1_tri.skn
 examples/grid/mms_dg_static.skn
 examples/grid/mms_fv_static.skn
 examples/grid/mms_fv_transient.skn

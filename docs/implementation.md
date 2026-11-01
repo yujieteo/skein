@@ -191,6 +191,15 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
   share the dofs of the nodes of `low`. The mesh is half of the rect and
   its mirror. Reason: the mesher splits the boundary segments by the
   points inside, so the two ends of a rect do not get the same points.
+- An `interface` between the flow and a `linear_elastic` solid in plane
+  strain (`src/flow/fsi.goose`) is a partitioned steady solve: move the
+  fluid mesh by the harmonic extension of u, solve the flow, load the
+  solid with the reactions of the interface nodes, and relax u with the
+  Aitken factor. The mesher meshes the flow and the solid as one shape
+  with the solid as an interface, so the two meshes share the interface
+  nodes. The solid stiffness is a band with a Cholesky factor. Reason:
+  GMRES with ILU(0) did not reach 1e-10 on a cantilever in 5000
+  iterations.
 
 One task pool runs the cases of a study (spec §20.5). The runner starts
 each case in case order when the memory ledger admits it, and the next

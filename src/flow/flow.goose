@@ -14,6 +14,11 @@
 //     let ok = flow::solve_steady(1.0e-8);
 //     let u, found = flow::value_at(flow::VALUE_VX, 0.5, 0.5);
 //
+// A model with a solid (fsi.goose) also calls flow::read_solid(dir) after
+// read_mesh and flow::solid(E, nu), and in each step clear_solid_bcs,
+// select_solid_boundary and fix_solid, then flow::solve_fsi(rtol) in
+// place of solve_steady.
+//
 // skein run meshes the domain with src/mesher/ and writes the triangles in
 // the results directory (gen.goose). Reason: the mesher has recursive
 // functions, and a generated program and its runtime have none (Power of
@@ -27,3 +32,4 @@ import .mesh;
 import .cell;
 import .solve;
 import .post;
+import .fsi;

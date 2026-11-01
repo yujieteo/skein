@@ -6,12 +6,15 @@ namespace flow;
 import .mesh;
 import .cell;
 import .solve;
+import .fsi;
 
 let VALUE_VX = 0;
 let VALUE_VY = 1;
 let VALUE_P = 2;
 let VALUE_K = 3;    // k and w of a turbulent flow
 let VALUE_W = 4;
+let VALUE_UX = 5;   // the displacement of the solid (fsi.goose)
+let VALUE_UY = 6;
 
 // The barycentric coordinates of (x, y) in cell c.
 fn barycentric(c: i64, x: f64, y: f64) -> f64[3] {
@@ -28,6 +31,7 @@ fn barycentric(c: i64, x: f64, y: f64) -> f64[3] {
 // The value `what` (a VALUE_ constant, scaled) at (x, y), and whether a
 // cell holds the point.
 fn value_at(what: i64, x: f64, y: f64) -> f64, bool {
+    if coupled && (what == VALUE_UX || what == VALUE_UY) { return solid_value_at(what - VALUE_UX, x, y); }
     guard what >= VALUE_VX && what <= (if turbulent { VALUE_W } else { VALUE_P }) && cell_count() > 0 && sol.len == dof_count() else { abort("value_at: a value, and a solve"); }
     let tol = 1.0e-9;
     for c in cell_count() {

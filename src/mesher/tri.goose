@@ -445,33 +445,50 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64, inner: bool) {
     }
 }
 
+// The state of curve c at t: 0 off the boundary (on_boundary), else 1,
+// plus 2^(k + 1) for each interface k that holds a point at eps from the
+// boundary of g there. Reason: an interface that ends on the boundary of
+// g (the flag of examples/flow/turek_hron_fsi1_tri.skn on its cylinder)
+// must end at a point of the boundary, or the refinement does not finish.
+fn piece_state(g: i64, c: i64, t: f64, eps: f64, inner: bool) -> i64 {
+    guard on_boundary(g, c, t, eps, inner) else { return 0; }
+    guard !inner else { return 1; }
+    var state = 1;
+    for h, k in interfaces {
+        let p, q = sides(h, c, t, eps);
+        if p || q { state += 2 << k; }
+    }
+    return state;
+}
+
 // The pieces of each curve that are on the boundary of g, or with `inner`
-// on the boundary of an interface inside g.
+// on the boundary of an interface inside g. A piece ends where the state
+// of piece_state changes.
 fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
     let eps = 1.0e-7 * diameter;
     let tol = 100.0 * eps;
     let reach = 10.0 * sqrt(eps * diameter);
     for c in curves.len {
         let m = max(512, ceil(16.0 * curve_length(c) / size) as i64);
-        var on: bool[>..] = [];
-        for i in m { on.push(on_boundary(g, c, (i + 0.5) / m, eps, inner)); }
-        // The parameter between sample i and sample i + 1 where `on` changes.
+        var on: i64[>..] = [];
+        for i in m { on.push(piece_state(g, c, (i + 0.5) / m, eps, inner)); }
+        // The parameter between sample i and sample i + 1 where the state changes.
         fn change(i: i64) -> f64 {
             var lo = (i + 0.5) / m;
             var hi = (i + 1.5) / m;
             let state = on[i];
             for k in 60 {
                 let mid = 0.5 * (lo + hi);
-                if on_boundary(g, c, mid, eps, inner) == state { lo = mid; } else { hi = mid; }
+                if piece_state(g, c, mid, eps, inner) == state { lo = mid; } else { hi = mid; }
             }
             return snap_end(c, 0.5 * (lo + hi), eps, reach);
         }
         if curves[c].kind != ARC {
             var i = 0;
             while i < m {
-                if !on[i] { i++; continue; }
+                if on[i] == 0 { i++; continue; }
                 var j = i;
-                while j + 1 < m && on[j + 1] { j++; }
+                while j + 1 < m && on[j + 1] == on[i] { j++; }
                 let ta = if i == 0 { 0.0 } else { change(i - 1) };
                 let tb = if j == m - 1 { 1.0 } else { change(j) };
                 add_piece(c, ta, tb, size, tol, inner);
@@ -485,14 +502,14 @@ fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
             if on[i] != on[(i + 1) % m] { start = i; break; }
         }
         if start < 0 {
-            if on[0] { add_piece(c, 0.0, 1.0, size, tol, inner); }
+            if on[0] != 0 { add_piece(c, 0.0, 1.0, size, tol, inner); }
             continue;
         }
         var i = start + 1;
         while i < start + 1 + m {
-            if !on[i % m] { i++; continue; }
+            if on[i % m] == 0 { i++; continue; }
             var j = i;
-            while j + 1 < start + 1 + m && on[(j + 1) % m] { j++; }
+            while j + 1 < start + 1 + m && on[(j + 1) % m] == on[i % m] { j++; }
             let ta = change((i - 1) % m) + ((i - 1) / m);
             let tb = change(j % m) + (j / m);
             add_piece(c, ta, tb, size, tol, inner);
