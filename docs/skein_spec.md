@@ -868,9 +868,9 @@ points. A polygon through the points has a different boundary.
 `nurbs(d, knots(k1, …, km), p1, w1, …, pn, wn)` is the NURBS curve
 (Piegl and Tiller 1997) of degree `d` (1, 2 or 3) with n ≥ d + 1 control
 points `pi`, each with its weight `wi` > 0 (a `Real`). The m = n + d + 1
-knots do not fall, and the first and the last are each d + 1 times
-[`type_mismatch`]. Without `knots`, the knots are 0 (d + 1 times), 1, 2,
-…, n − d (d + 1 times). `fill(nurbs(…))` closes the curve with a line
+knots do not fall, the first and the last are each d + 1 times, and an
+inner knot is d times or fewer [`type_mismatch`]. Without `knots`, the
+knots are 0 (d + 1 times), 1, 2, …, n − d (d + 1 times). `fill(nurbs(…))` closes the curve with a line
 from its end to its start, as for `spline`. A rational curve of degree 2
 is a conic, so a circle is exact:
 
