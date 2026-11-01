@@ -88,8 +88,9 @@ fn set_word(k: Control, v: f64) -> u8[>..] { return str(k.name, "=", v, if k.uni
 // The literals of `base` that change at the ends of the ranges of
 // `params`, in `slots`, and the corner of the ranges with the most dofs,
 // as words of --set, in `corner`: the end of each range with more dofs
-// than the other end. The other end of each range goes to `others`. False, with an error on stderr, if a value changes
-// the program in another place.
+// than the other end. The other end of each range goes to `others`.
+// False, with an error on stderr, if a value changes the program in
+// another place.
 fn find_slots(path: u8[:], text: u8[:], base: u8[:], params: Control[:], slots: i64[>..]&, corner: u8[..256][>..]&,
               others: u8[..256][>..]&) -> bool {
     let lb = literals(base);
@@ -328,8 +329,9 @@ fn profile_run(dir: u8[:], sets: u8[..256][:], out: u8[:], peaks: i64[>..]&) -> 
 }
 
 // Builds main.goose of `dir` to C, runs the profile at the default values,
-// at `corner` and at each word of `others` alone, and writes the page. goose gets the absolute path of
-// main.goose, so that each link resolves to one path.
+// at `corner` and at each word of `others` alone, and writes the page.
+// goose gets the absolute path of main.goose, so that each link resolves
+// to one path.
 fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:], others: u8[..256][:]) -> i64 {
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }

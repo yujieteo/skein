@@ -329,10 +329,10 @@ It needs Goose, a C compiler for the native runs (`cc`, or set `CC`) and
 `emcc` on `PATH`. It runs the model natively at the default values, at
 the corner of the param ranges with the most dofs, and at the other end
 of each range with the other params at their defaults. Thus each end of
-each range has a native run. A native run
-that fails stops `build` with an error. The peak memory of these runs
-sets the memory limit of the page: the author sets nothing. The memory of
-a run starts at 64 MB and grows to that limit. If the browser cannot give
+each range has a native run. A native run that fails stops `build` with
+an error. The peak memory of these runs sets the memory limit of the
+page: the author sets nothing. The memory of a run starts at 64 MB and
+grows to that limit. If the browser cannot give
 the memory, the run stops and the page shows an error with the limit. A
 model that needs more than 15 GB gets a page with the native results only,
 and the page gives the size of the model.

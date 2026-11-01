@@ -264,18 +264,19 @@ Goose projects do (spec §18.1). `skein build --target wasm`
    it, and runs the program with them. A program that differs in another
    place than a slot stops the run with an error. Thus the run in the page
    gives the records and the VTU file of `skein run --set`, bit for bit.
-3. It runs that program natively at the default values and at the corner
-   of the ranges with the most dofs, and measures the peak of each Goose
-   data stack and the peak resident memory. A run that fails stops the
-   build with an error.
+3. It runs that program natively at the default values, at the corner
+   of the ranges with the most dofs, and at the other end of each range
+   with the other params at their defaults. Thus each end of each range
+   has a run. It measures the peak of each Goose data stack and the peak
+   resident memory. A run that fails stops the build with an error.
 4. It compiles the C with `emcc` to 64-bit WebAssembly (memory64). Each
-   data stack gets a fixed region: 1.5 times the larger peak of the two
+   data stack gets a fixed region: 1.5 times the largest peak of the
    runs, 1 MB at least. Reason: WebAssembly memory has no address-space reservation and
    no guard pages (Goose `docs/design/wasm.md`, fixed partitions). A
    canary gap behind each region replaces the guard gap: each end of the
    run checks it, and an overrun stops the run with exit status 4. The
    memory starts at 64 MB and grows to the regions plus 1.5 times the
-   larger heap peak (the peak resident memory less the data stacks). A
+   largest heap peak (the peak resident memory less the data stacks). A
    growth that the browser refuses stops the run, and the page shows an
    error with that limit. The page cannot catch the kernel OOM killer: a
    host with no free memory can still stop the tab.
