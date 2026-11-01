@@ -252,10 +252,15 @@ fn assemble(path: u8[:], vectors: i64) {
 // mesh of build_lattice, when it pays (solvers::nested_pays). It makes the
 // memory check of the direct solve.
 var direct = false;
+var direct_path: u8[>..] = [];   // the path and the vectors of plan_direct,
+var direct_vectors = 0;          // for the memory check of its fallback
 
 fn plan_direct(path: u8[:], vectors: i64) -> bool {
     var place: i64[>..] = [];
     for n in node_count() { place.push(n); }
+    direct_path.clear();
+    direct_path.append(path);
+    direct_vectors = vectors;
     direct = (path == "simplex elastic cg amg" || path == "simplex cg amg") && on_lattice &&
              solvers::nested_plan(lat, place, ncomp, row_start, col) && solvers::nested_pays(vectors);
     if direct { solvers::memory_check("lattice ldlt", solvers::nested_entries(), dof_total(), vectors, worker_mesh_bytes(), ""); }

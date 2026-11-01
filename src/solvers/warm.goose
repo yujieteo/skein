@@ -132,28 +132,18 @@ fn amg_keep(key: i64, row_start: i64[:], col: i32[:], fixed: u8[:]) {
 
 let LDLT_CHUNK = 1 << 22;   // 32 MB of the factor in each file
 
-// The signature of a matrix and of its fixed dofs: its pattern and two
-// sums of its values. The factor of one matrix solves another of the
-// same signature.
-fn matrix_signature(row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:]) -> f64[6] {
-    let p = pattern_signature(row_start, col, fixed);
-    var s: f64[6] = [p[0] * 1.0, p[1] * 1.0, p[2] * 1.0, p[3] * 1.0, 0.0, 0.0];
-    for v, e in val {
-        s[4] += v;
-        s[5] += v * (1 + e % 9973);
-    }
-    return s;
-}
 
 // Solves K x = b (nested_solve) with the factor of solve `key` of the last
 // run, if the run had the same matrix K: it needs no nested_factor, only
 // nested_plan of K. False if the page keeps nothing or K is another.
 fn nested_reuse(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:], b: f64[:], x: f64[:]) -> bool {
     guard warm_dir().len > 0 else { return false; }
-    let sig, ok = load_f64s(warm_path(key, "ldlt.sig"));
-    let now = matrix_signature(row_start, col, val, fixed);
-    guard ok && sig.len == 6 else { return false; }
-    for v, i in now { if sig[i] != v { return false; } }
+    let sig, ok = load_i64s(warm_path(key, "ldlt.sig"));
+    let now = pattern_signature(row_start, col, fixed);
+    guard ok && sig.len == 4 && sig[0] == now[0] && sig[1] == now[1] && sig[2] == now[2] && sig[3] == now[3] else { return false; }
+    let old, ok_old = load_f64s(warm_path(key, "ldlt.val"));
+    guard ok_old && old.len == val.len else { return false; }
+    for v, e in val { if old[e] != v { return false; } }
     var factor: f64[>..] = [];
     for c in (nd_values + LDLT_CHUNK - 1) / LDLT_CHUNK {
         let part, ok_part = load_f64s(warm_path(key, str("ldlt.", c)));
@@ -171,8 +161,9 @@ fn nested_reuse(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8
 // the peak from 1215 MB to 1903 MB.
 fn nested_keep(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:]) {
     guard warm_dir().len > 0 else { return; }
-    var sig: f64[>..] = [];
-    sig.append(matrix_signature(row_start, col, val, fixed));
+    var sig: i64[>..] = [];
+    sig.append(pattern_signature(row_start, col, fixed));
+    write_file(warm_path(key, "ldlt.val"), to_bytes(val));
     for c in (nd_values + LDLT_CHUNK - 1) / LDLT_CHUNK {
         write_file(warm_path(key, str("ldlt.", c)), to_bytes(nd_factor[c * LDLT_CHUNK..min(nd_values, (c + 1) * LDLT_CHUNK)]));
     }
