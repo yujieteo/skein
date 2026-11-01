@@ -904,7 +904,11 @@ fn make_runs() {
                 let k1 = if p.ring { lat(order * line, s + 1) } else { lat(s + 1, order * line) };
                 let cell = s / order;
                 let side = if p.ring { kept(line - 1, cell) || kept(line, cell) } else { kept(cell, line - 1) || kept(cell, line) };
-                on = side && segment_on(p, k0, k1);
+                on = segment_on(p, k0, k1);
+                if on && !side {
+                    unsupported(beam_tok, "a beam crosses a removed cell of the shell", "cut the beam curve with the same Solid, such as - door_box(0 m)");
+                    return;
+                }
             }
             if on && start < 0 { start = s; }
             if !on && start >= 0 {

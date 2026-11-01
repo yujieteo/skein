@@ -86,6 +86,10 @@ fn eigen_fail(why: u8[:]) -> bool {
     return false;
 }
 
+fn too_few_fail(count: i64) -> bool {
+    return eigen_fail(str("fewer than ", count, " positive eigenvalues: the load puts no beam in compression?"));
+}
+
 // Assembles and factors K, makes B, and runs the subspace iteration.
 fn eigen_solve(kind: i64, count: i64) -> bool {
     let t0 = clock();
@@ -105,6 +109,7 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     make_second(kind);
     let sizes = state_sizes();
     var ok = false;
+    let first_q = q;
     // An indefinite B (a beam in tension) can have negative μ of larger size
     // than the positive μ, and then the q vectors find too few positive μ.
     // Each try doubles q, up to the free dofs.
@@ -113,6 +118,7 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
         solvers::memory_check("shell skyline ldlt", 0, n, 3 * q + (144 * beams.len + n - 1) / n, 0, ", or fewer modes");
         eigen_iterations = 0;
         ok = subspace(count, q, n);
+        if !ok && !too_few && q > first_q { ok = too_few_fail(count); break; }
         if ok || eigen_kind != BUCKLING || !too_few || q == free { break; }
         q = min(2 * q, free);
     }
@@ -249,7 +255,7 @@ fn subspace(count: i64, q: i64, n: i64) -> bool {
     }
     too_few = mu.len == q && !(mu[count - 1] > 0.0);
     guard done else { return eigen_fail(str("no convergence in ", EIGEN_ITERATIONS, " iterations: residual ", worst)); };
-    guard !too_few else { return eigen_fail(str("fewer than ", count, " positive eigenvalues: the load puts no beam in compression?")); };
+    guard !too_few else { return too_few_fail(count); };
     for i in count { eigenvalues.push(1.0 / mu[i]); }
     mode_shapes.append(x[..count * n]);
     return true;
