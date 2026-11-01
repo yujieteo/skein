@@ -33,6 +33,7 @@ var eigenvalues: f64[>..] = [];  // λ of each mode of the last eigen solve: ω�
 var mode_shapes: f64[>..] = [];  // mode k at dof_count() k, with xᵀ K x = 1
 var eigen_iterations = 0;        // the iterations of the last eigen solve
 var eigen_error: u8[>..] = [];   // why the last eigen solve failed, or ""
+var too_few = false;             // the last subspace found fewer positive μ than the count
 var second: f64[>..] = [];       // B of each beam in global dofs: 144 values for each beam
 
 // The `count` lowest natural modes of the beams. Each beam section needs a
@@ -100,12 +101,21 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     for f in fixed { if f == 0 { free++; } }
     guard count <= free else { return eigen_fail(str(count, " modes, but only ", free, " free dofs")); };
     // q vectors as Bathe: min(2 p, p + 8), at most the free dofs.
-    let q = min(min(2 * count, count + 8), free);
-    // X, X̄ and B X: 3 q vectors, and B of each beam.
-    solvers::memory_check("shell skyline ldlt", 0, n, 3 * q + (144 * beams.len + n - 1) / n, 0, ", or fewer modes");
+    var q = min(min(2 * count, count + 8), free);
     make_second(kind);
     let sizes = state_sizes();
-    let ok = subspace(count, q, n);
+    var ok = false;
+    // An indefinite B (a beam in tension) can have negative μ of larger size
+    // than the positive μ, and then the q vectors find too few positive μ.
+    // Each try doubles q, up to the free dofs.
+    while true {
+        // X, X̄ and B X: 3 q vectors, and B of each beam.
+        solvers::memory_check("shell skyline ldlt", 0, n, 3 * q + (144 * beams.len + n - 1) / n, 0, ", or fewer modes");
+        eigen_iterations = 0;
+        ok = subspace(count, q, n);
+        if ok || eigen_kind != BUCKLING || !too_few || q == free { break; }
+        q = min(2 * q, free);
+    }
     guard state_sizes() == sizes else { abort("eigen_solve: a solve grows no array of the state (rule 3)"); }
     last_seconds = clock() - t0;
     return ok;
@@ -196,6 +206,7 @@ fn project(a: f64[:], b: f64[:], h: f64[:], q: i64, n: i64) {
 // the next X̄ᵀ K X̄ = X̄ᵀ B X.
 fn subspace(count: i64, q: i64, n: i64) -> bool {
     guard count >= 1 && q >= count && n == dof_count() else { abort("subspace: 1 <= count <= q, and n is the dof count"); }
+    too_few = false;
     var x = start_vectors(q, n);
     var xb: f64[>..] = [];
     var y: f64[>..] = [];
@@ -236,8 +247,9 @@ fn subspace(count: i64, q: i64, n: i64) -> bool {
         }
         eigen_iterations++;
     }
+    too_few = mu.len == q && !(mu[count - 1] > 0.0);
     guard done else { return eigen_fail(str("no convergence in ", EIGEN_ITERATIONS, " iterations: residual ", worst)); };
-    guard mu[count - 1] > 0.0 else { return eigen_fail(str("fewer than ", count, " positive eigenvalues: the load puts no beam in compression?")); };
+    guard !too_few else { return eigen_fail(str("fewer than ", count, " positive eigenvalues: the load puts no beam in compression?")); };
     for i in count { eigenvalues.push(1.0 / mu[i]); }
     mode_shapes.append(x[..count * n]);
     return true;

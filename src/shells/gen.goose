@@ -234,11 +234,10 @@ recursive fn value(n: i64) -> Val {
     if k == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME {
         let f = name(child(n, 0));
         let count = syntax::child_count(n) - 1;
-        if count == 1 && (f == "sin" || f == "cos" || f == "tan" || f == "sqrt" || f == "abs") {
+        if count == 1 && (f == "sin" || f == "cos" || f == "sqrt" || f == "abs") {
             let x = value(arg(n, 0)).v[0];
             if f == "sin" { return scalar(sin(x)); }
             if f == "cos" { return scalar(cos(x)); }
-            if f == "tan" { return scalar(tan(x)); }
             if f == "sqrt" { return scalar(sqrt(x)); }
             return scalar(abs(x));
         }
@@ -404,6 +403,8 @@ struct Expect {
 var solid_names: u8[..64][>..];
 var solid_nodes: i64[>..];
 var solid_shapes: i64[>..];     // the shape of each Solid, or -1 before its first use
+var shape_nodes: i64[>..];      // the nodes that node_shape made a shape for
+var shape_ids: i64[>..];        // the shape of each of shape_nodes
 var surface_names: u8[..64][>..];
 var surface_shapes: i64[>..];
 var table_names: u8[..64][>..];
@@ -455,11 +456,11 @@ var beam_name: u8[..64];
 var beam_region = -1;
 var wb_name: u8[..64];
 var thb_name: u8[..64];
-var beam_args: i64[7] = [-1; 7];
+var beam_args: i64[6] = [-1; 6];
 var tie_w = false;
 var tie_theta = false;
 
-let BEAM_ARGS = ["A", "I_y", "I_z", "J", "y_axis", "offset", "q"];
+let BEAM_ARGS = ["A", "I_y", "I_z", "J", "y_axis", "offset"];
 
 // The results value of a submodel (spec §15.1): its name, the model file,
 // the model name in the file, and the step.
@@ -486,6 +487,8 @@ fn reset() {
     solid_names.clear();
     solid_nodes.clear();
     solid_shapes.clear();
+    shape_nodes.clear();
+    shape_ids.clear();
     surface_names.clear();
     surface_shapes.clear();
     shapes.clear();
@@ -541,7 +544,7 @@ fn reset() {
     beam_region = -1;
     wb_name = [];
     thb_name = [];
-    beam_args = [-1; 7];
+    beam_args = [-1; 6];
     tie_w = false;
     tie_theta = false;
     source_name = [];
@@ -1112,6 +1115,10 @@ fn physics(n: i64) {
                 if i < 0 || (first(m) >= 0 && g < 0) {
                     unsupported(tok(m), "the material is not one that the model declares, on a Surface of the shell", PHYSICS_FIX);
                 }
+                // The first match wins, so the material of the rest comes last.
+                if first(m) < 0 && next(m) >= 0 {
+                    unsupported(tok(m), "a material with no on takes the rest, so it comes last", "write material a on pad, b");
+                }
                 shell_mats.push(i);
                 shell_mat_g.push(g);
                 m = next(m);
@@ -1153,7 +1160,11 @@ fn beam_physics(n: i64) {
             var i = 0;
             while a >= 0 {
                 let at = if syntax::nodes[a].aux >= 0 { position(BEAM_ARGS, syntax::text(syntax::nodes[a].aux)) } else { i };
-                if at >= 0 && at < 7 { beam_args[at] = first(a); }
+                if at >= 0 && at < 6 {
+                    beam_args[at] = first(a);
+                } else {
+                    unsupported(tok(a), "timoshenko takes A, I_y, I_z, J, y_axis and offset only", BEAM_FIX);
+                }
                 i++;
                 a = next(a);
             }
@@ -1166,6 +1177,9 @@ fn beam_physics(n: i64) {
                 let r = if first(m) >= 0 { find_region(first(m)) } else { -1 };
                 if i < 0 || (first(m) >= 0 && (r < 0 || regions[r].piece_count == 0)) {
                     unsupported(tok(m), "the material is not one that the model declares, on a beam Curve", BEAM_FIX);
+                }
+                if first(m) < 0 && next(m) >= 0 {
+                    unsupported(tok(m), "a material with no on takes the rest, so it comes last", "write material s on stringers, f");
                 }
                 beam_mats.push(i);
                 beam_mat_r.push(r);
@@ -1262,6 +1276,9 @@ fn bc(n: i64) {
         }
         if source_member(v) {
             if physics_tok < 0 || reg.point { unsupported(tok(v), "a value of the results value needs a Curve of the shell", BC_FIX_TEXT); }
+            if !(if d < 3 { is_w(name(v)) } else { is_theta(name(v)) }) {
+                unsupported(tok(v), "the results value has the type of the unknown: w = global.w, theta = global.theta", BC_FIX_TEXT);
+            }
             add_bc(Bc { region: r, kind: BC_FIX, dof: d, count: count, value: v });
             return;
         }
@@ -1451,16 +1468,23 @@ fn check_values() {
     var scratch: u8[>..] = [];
     fields.clear();
     field_ranks.clear();
-    for r in reports {
-        let rank, d = emit_global_expr(r.node, scratch);
-        if rank == 9 { unsupported(tok(r.node), "a report of a tensor is not in this slice", "report a component"); }
+    if beam_tok >= 0 { make_runs(); }
+    for s in steps {
+        eigen_step = s.kind != STEP_STATIC;
+        for r in reports[s.first_report..s.first_report + s.report_count] {
+            let rank, d = emit_global_expr(r.node, scratch);
+            if rank == 9 { unsupported(tok(r.node), "a report of a tensor is not in this slice", "report a component"); }
+        }
     }
     for x in expects {
+        // A top level expect reads the results of the last step.
+        eigen_step = steps[if x.step >= 0 { x.step } else { steps.len - 1 }].kind != STEP_STATIC;
         for v in [x.node, x.want, x.within] {
             let rank, d = emit_global_expr(v, scratch);
             if rank != 1 { unsupported(tok(v), "an expect compares scalars", "write a component, such as (reaction(end)).x"); }
         }
     }
+    eigen_step = false;
     for o in outputs {
         if is_output_word(o) { continue; }
         if physics_tok < 0 { unsupported(tok(o), "an output of a value needs the shell", "write output w"); }
@@ -1624,7 +1648,6 @@ struct BeamMat {
 }
 
 var bmats: BeamMat[>..];
-var b_q: f64[3] = [0.0, 0.0, 0.0];     // the load per length
 
 let BEAM_PROPS = ["E", "nu"];
 
@@ -1647,11 +1670,6 @@ fn read_beams() {
         if rho >= 0 { b.rho = scalar_value(rho); }
         b.y, b.y_radial = beam_vector(beam_args[4], samples, "y_axis");
         if beam_args[5] >= 0 { b.off, b.off_radial = beam_vector(beam_args[5], samples, "offset"); }
-        if k == 0 && beam_args[6] >= 0 {
-            let q, radial = beam_vector(beam_args[6], samples, "q");
-            if radial { unsupported(tok(beam_args[6]), "this slice has a uniform load per length on the beams", "write q: (0, 0, -1) kN/m"); }
-            b_q = q;
-        }
         in_physics = false;
         cur_mat = -1;
         bmats.push(b);

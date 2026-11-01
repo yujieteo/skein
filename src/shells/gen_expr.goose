@@ -86,6 +86,7 @@ fn type_of_name(word: u8[:]) -> i64 {
 }
 
 var eigen_modal = false;    // eigenvalue(k) is a frequency
+var eigen_step = false;     // the step is modal or buckling, with no field values
 
 // --- what depends on the node ------------------------------------------------------
 
@@ -107,12 +108,36 @@ recursive fn varies(v: i64) -> bool {
         }
         return axis_of(w) >= 0 || w == "n";
     }
-    if k == syntax::N_AT || is_call(v, "reaction") || is_call(v, "max") || is_call(v, "min") || is_call(v, "eigenvalue") {
+    if k == syntax::N_AT || is_call(v, "reaction") || is_call(v, "max") || is_call(v, "eigenvalue") {
         return true;
     }
     var c = first(v);
     while c >= 0 {
         if kind(c) != syntax::N_UNIT && varies(if kind(c) == syntax::N_ARG { first(c) } else { c }) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
+// Whether expression v uses a property of a material. The global model can
+// have other materials, so global.f uses none.
+recursive fn uses_prop(v: i64) -> bool {
+    if kind(v) == syntax::N_NAME || source_member(v) {
+        let w = name(v);
+        if bound(w) >= 0 || depth > 100 { return false; }
+        var node = -1;
+        if find(let_names, w) >= 0 { node = let_nodes[find(let_names, w)]; }
+        if node < 0 && prop_type(w) >= 0 { return true; }
+        if node < 0 && find(value_names, w) >= 0 { node = value_nodes[find(value_names, w)]; }
+        if node < 0 { return false; }
+        depth++;
+        let r = uses_prop(node);
+        depth--;
+        return r;
+    }
+    var c = first(v);
+    while c >= 0 {
+        if kind(c) != syntax::N_UNIT && uses_prop(if kind(c) == syntax::N_ARG { first(c) } else { c }) { return true; }
         c = next(c);
     }
     return false;
@@ -210,6 +235,10 @@ recursive fn emit_rt(v: i64, out: u8[>..]&) -> i64, Dim {
     if k == syntax::N_NAME { return emit_word(name(v), tok(v), out), d; }
     if source_member(v) {
         if !node_mode { unsupported(tok(v), str("'", source_of(v), "' is a value at a node: write it with at"), RT_FIX); }
+        if uses_prop(v) {
+            unsupported(tok(v), str("'", source_of(v), "' uses a property of a material, and the global model can have other materials"),
+                        "write global.f with an f of the results values and numbers only");
+        }
         return emit_word(name(v), tok(v), out), d;
     }
     if k == syntax::N_UNARY && op(v) == "-" {
@@ -350,10 +379,10 @@ recursive fn emit_binary(v: i64, out: u8[>..]&) -> i64 {
     return 1;
 }
 
-let SCALAR_FNS = ["sqrt", "abs", "sin", "cos", "tan"];
+let SCALAR_FNS = ["sqrt", "abs", "sin", "cos"];
 
 recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
-    if kind(v) == syntax::N_AT || is_call(v, "reaction") || is_call(v, "max") || is_call(v, "min") || is_call(v, "eigenvalue") {
+    if kind(v) == syntax::N_AT || is_call(v, "reaction") || is_call(v, "max") || is_call(v, "eigenvalue") {
         if node_mode {
             unsupported(tok(v), str("'", source_of(v), "' is a value of the whole model, not of a node"), RT_FIX);
             return 1;
@@ -390,16 +419,22 @@ recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
 
 // --- the global values ---------------------------------------------------------------
 
-let GLOBAL_FIX = "write f at p, max(f, r), min(f, r), reaction(r) or eigenvalue(k), and numbers and + - * / of these";
+let GLOBAL_FIX = "write f at p, max(f, r), reaction(r) or eigenvalue(k), and numbers and + - * / of these";
 
-// `f at p`, `max(f, r)`, `min(f, r)`, `reaction(r)` and `eigenvalue(k)`.
+// `f at p`, `max(f, r)`, `reaction(r)` and `eigenvalue(k)`.
 recursive fn emit_global(v: i64, out: u8[>..]&) -> i64 {
+    if eigen_step && !is_call(v, "eigenvalue") {
+        unsupported(tok(v), "a modal or a buckling step has eigenvalue(k) only", "report the values of the beams in a static step");
+        return 1;
+    }
     if kind(v) == syntax::N_AT {
         let f = child(v, 0);
         let at = vec3(value(child(v, 1)));
         if kind(f) == syntax::N_NAME && name(f) == "Nx" && beam_tok >= 0 {
             out.append("axial_at(");
             lits(out, at);
+            out.append(", ");
+            quoted(out, source_of(v));
             out.append(")");
             return 1;
         }
@@ -412,23 +447,22 @@ recursive fn emit_global(v: i64, out: u8[>..]&) -> i64 {
         out.append("))");
         return field_ranks[k];
     }
-    if (is_call(v, "max") || is_call(v, "min")) && syntax::child_count(v) == 3 {
+    if is_call(v, "max") && syntax::child_count(v) == 3 {
         let f = arg(v, 0);
         let rv = arg(v, 1);
         let r = find_region(rv);
         let whole = physics_tok >= 0 && surface_shape(rv) == mesh_g;
-        let big = is_call(v, "max");
         if kind(f) == syntax::N_NAME && name(f) == "Nx" && beam_tok >= 0 {
             if r < 0 || regions[r].piece_count == 0 {
-                unsupported(tok(rv), "max and min of Nx are on a beam Curve", GLOBAL_FIX);
+                unsupported(tok(rv), "max of Nx is on a beam Curve", GLOBAL_FIX);
                 return 1;
             }
             let rc = region_runs_code(r);
-            format(out, "beam_extreme(", rc, ", ", if big { "true" } else { "false" }, ")");
+            format(out, "beam_extreme(", rc, ")");
             return 1;
         }
         let k = field_index(f);
-        if field_ranks[k] != 1 { unsupported(tok(v), "max and min of a value that is not a scalar", GLOBAL_FIX); }
+        if field_ranks[k] != 1 { unsupported(tok(v), "max of a value that is not a scalar", GLOBAL_FIX); }
         format(out, "node_extreme(", k, ", ");
         if whole {
             out.append("surface_nodes()");
@@ -436,9 +470,9 @@ recursive fn emit_global(v: i64, out: u8[>..]&) -> i64 {
             let rc = region_code(r);
             out.append(rc);
         } else {
-            unsupported(tok(rv), "the region of max or min is the meshed surface, or a Curve of the shell", GLOBAL_FIX);
+            unsupported(tok(rv), "the region of max is the meshed surface, or a Curve of the shell", GLOBAL_FIX);
         }
-        format(out, ", ", if big { "true" } else { "false" }, ")");
+        out.append(")");
         return 1;
     }
     if is_call(v, "reaction") && syntax::child_count(v) == 2 {
@@ -519,7 +553,7 @@ recursive fn dim_of(v: i64) -> Dim {
         let f = if kind(child(v, 0)) == syntax::N_NAME { name(child(v, 0)) } else { "" };
         if f == "reaction" { return D_FORCE; }
         if f == "eigenvalue" { return if eigen_modal { D_FREQUENCY } else { no_dim() }; }
-        if f == "max" || f == "min" || f == "abs" || f == "norm" { return dim_of(arg(v, 0)); }
+        if f == "max" || f == "abs" || f == "norm" { return dim_of(arg(v, 0)); }
         if f == "sqrt" { return dim_scale(dim_of(arg(v, 0)), 0.5); }
         if f == "dot" || f == "cross" { return dim_add(dim_of(arg(v, 0)), dim_of(arg(v, 1)), 1); }
     }

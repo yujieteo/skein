@@ -296,18 +296,29 @@ recursive fn shell_curve(v: i64) -> bool {
     return false;
 }
 
+// shape_of(v), made once for each node v: on_curve and edge_on ask it for
+// each point and each edge, and shape_of adds a shape for each unnamed
+// solid.
+fn node_shape(v: i64) -> i64 {
+    for n, i in shape_nodes { if n == v { return shape_ids[i]; } }
+    let g = shape_of(v);
+    shape_nodes.push(v);
+    shape_ids.push(g);
+    return g;
+}
+
 // Whether the point p of the shell is on the curve v, to tol.
 recursive fn on_curve(v: i64, p: f64[3], tol: f64) -> bool {
     if kind(v) == syntax::N_NAME { return on_curve(regions[find_region(v)].node, p, tol); }
     if kind(v) == syntax::N_BINARY && op(v) == "|" { return on_curve(child(v, 0), p, tol) || on_curve(child(v, 1), p, tol); }
     if kind(v) == syntax::N_BINARY {
-        let f = phi(shape_of(child(v, 1)), p);
+        let f = phi(node_shape(child(v, 1)), p);
         return on_curve(child(v, 0), p, tol) && (if op(v) == "&" { f <= tol } else { f >= -tol });
     }
-    let s = shape_of(arg(v, 0));
+    let s = node_shape(arg(v, 0));
     let c = arg(v, 1);
     if is_condition(c) { return holds(c, p, tol) && abs(phi(s, p)) <= tol; }
-    return abs(phi(shape_of(c), p)) <= tol && phi(s, p) <= tol;
+    return abs(phi(node_shape(c), p)) <= tol && phi(s, p) <= tol;
 }
 
 // --- the grid --------------------------------------------------------------------
@@ -769,7 +780,7 @@ recursive fn edge_on(v: i64, e: Edge) -> bool {
     if kind(v) == syntax::N_NAME { return edge_on(regions[find_region(v)].node, e); }
     if kind(v) == syntax::N_BINARY && op(v) == "|" { return edge_on(child(v, 0), e) || edge_on(child(v, 1), e); }
     if kind(v) == syntax::N_BINARY {
-        let f = phi(shape_of(child(v, 1)), edge_mid(e));
+        let f = phi(node_shape(child(v, 1)), edge_mid(e));
         return edge_on(child(v, 0), e) && (if op(v) == "&" { f <= tol } else { f >= -tol });
     }
     let c = arg(v, 1);
@@ -779,7 +790,7 @@ recursive fn edge_on(v: i64, e: Edge) -> bool {
     // A node on a fixed line, or a node whose move went back, can stay up
     // to a cell from the cut. Each edge here is on the boundary of the
     // kept cells, so a cell of tolerance takes no other edge.
-    let g = shape_of(c);
+    let g = node_shape(c);
     let near = 1.0 * edge_length(e);
     return abs(phi(g, lat_point(e.a))) <= near && abs(phi(g, lat_point(e.b))) <= near && abs(phi(g, edge_mid(e))) <= near;
 }

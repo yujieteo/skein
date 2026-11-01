@@ -140,14 +140,17 @@ let CARD = """
       `boundary(skin, door)` is the cut edge. `material a on plain, b on pad`
       gives each part its material. `refine door_edge: 5 mm` in the mesh.
     - A submodel: `let global: Results = results("global.skn", step: "s")`,
-      then `bc cut: w = global.w` and `global.e_hoop at p`.
+      then `bc cut: w = global.w` and `global.e_hoop at p`. `global.f` is
+      the `f` of this model on the results of the global model, with no
+      property of a material.
     - `copy(windows)` in a `bc` value is the index of the copy of the
       pattern `windows` at the point.
 
     ## Beams
 
-    `skein run` solves `timoshenko` beams (2-node, order 1) on `line`s, alone
-    or as offset beams tied to a cylindrical shell.
+    `skein run` solves `timoshenko` beams (2-node elements) on `line`s, alone
+    or as offset beams tied to a cylindrical shell. On a shell of order 2,
+    the beams have a node at each node of the shell on their line.
 
     ```
     physics beam on bar: timoshenko(A: A, I_y: I_y, I_z: I_z, J: J, y_axis: (0, 1, 0)) solves w: Vector<Length>,

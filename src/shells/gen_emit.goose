@@ -511,11 +511,11 @@ let PRELUDE = """
 
     // The largest (big) or the smallest value of scalar field f at the view
     // nodes `nodes`.
-    fn node_extreme(f: i64, nodes: i64[:], big: bool) -> f64 {
+    fn node_extreme(f: i64, nodes: i64[:]) -> f64 {
         var best = 0.0;
         for k, i in nodes {
             let x = field(f, 0, k)[0];
-            if i == 0 || (big && x > best) || (!big && x < best) { best = x; }
+            if i == 0 || x > best { best = x; }
         }
         return best;
     }
@@ -547,13 +547,13 @@ let PRELUDE = """
     }
 
     // The largest (big) or the smallest axial force of the beams of the runs.
-    fn beam_extreme(runs: i64[:], big: bool) -> f64 {
+    fn beam_extreme(runs: i64[:]) -> f64 {
         var best = 0.0;
         var seen = false;
         for r in runs {
             for b in run_first[r]..run_first[r] + run_count[r] {
                 let x = shells::beam_axial_force(b);
-                if !seen || (big && x > best) || (!big && x < best) { best = x; }
+                if !seen || x > best { best = x; }
                 seen = true;
             }
         }
@@ -568,20 +568,22 @@ let PRELUDE = """
     }
 
     // The axial force of the beam with its middle nearest to (x, y, z).
-    fn axial_at(x: f64, y: f64, z: f64) -> f64 {
+    fn axial_at(x: f64, y: f64, z: f64, label: u8[:]) -> f64 {
         var best = -1;
         var dist = 0.0;
         for b, i in shells::beams {
             let p = shells::node_point(b.n[0]);
-            let q = shells::node_point(b.n[1]);
-            let d = norm3([0.5 * (p[0] + q[0]) - x, 0.5 * (p[1] + q[1]) - y, 0.5 * (p[2] + q[2]) - z]);
+            let e = sub3(shells::node_point(b.n[1]), p);
+            let u = sub3([x, y, z], p);
+            let t = max(0.0, min(1.0, dot3(u, e) / dot3(e, e)));
+            let d = norm3([u[0] - t * e[0], u[1] - t * e[1], u[2] - t * e[2]]);
             if best < 0 || d < dist {
                 best = i;
                 dist = d;
             }
         }
-        if best < 0 {
-            failed = true;
+        if best < 0 || dist > POINT_TOL {
+            fault(label, "is not on a beam");
             return 0.0;
         }
         return shells::beam_axial_force(best);
@@ -651,20 +653,6 @@ let PRELUDE = """
             a = b;
         }
         run_count.push(count);
-    }
-
-    // The load per length (qx, qy, qz) on each beam, half at each node.
-    fn beam_load(qx: f64, qy: f64, qz: f64) {
-        for b in shells::beams {
-            let p = shells::node_point(b.n[0]);
-            let q = shells::node_point(b.n[1]);
-            let half = 0.5 * norm3(sub3(q, p));
-            for n in b.n {
-                shells::force(n, shells::UX, half * qx);
-                shells::force(n, shells::UY, half * qy);
-                shells::force(n, shells::UZ, half * qz);
-            }
-        }
     }
 
     // A force per length on the edge of lattice points a, m (the middle, or
@@ -902,7 +890,11 @@ fn make_runs() {
         let lines = if p.ring { xs[..] } else { ts[..] };
         let c = if p.ring { p.p0[0] } else { theta_of(p.p0) };
         for v, i in lines { if abs(v - c) <= (if p.ring { tol } else { tol / radius }) { line = i; } }
-        if line < 0 { continue; }
+        if line < 0 {
+            unsupported(beam_tok, "a beam is not on a line of the mesh of the shell", "put each beam on a ring x = c or a line theta = c");
+            return;
+        }
+        let first_run = runs.len;
         let count = if p.ring { lat_nt() } else { lat_nx() };
         var start = -1;
         for s in count + 1 {
@@ -923,6 +915,10 @@ fn make_runs() {
                 }
                 start = -1;
             }
+        }
+        if runs.len == first_run {
+            unsupported(beam_tok, "a beam is not on a kept cell of the shell", "keep the beam off the cuts of the shell");
+            return;
         }
     }
 }
@@ -1138,8 +1134,10 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         // The load of each edge at its middle, with n the outward normal of
         // the edge on the surface.
         edge_mode = true;
+        var count = 0;
         for e in edges {
             if !edge_on(r.node, e) { continue; }
+            count++;
             edge_n = edge_normal(e);
             let f = value_at(b.value, edge_mid(e));
             if !ok() { break; }
@@ -1152,6 +1150,7 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
             out.append(");\n");
         }
         edge_mode = false;
+        if count == 0 { unsupported(tok(b.value), str("the curve ", r.name, " has no edge on the boundary of the mesh"), "put the load on a side or a cut of the shell"); }
     }
 }
 
@@ -1171,11 +1170,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
                 format(out, "    // physics ", physics_name, ": q\n    for c in shells::shells.len { shells::shell_load(c, ");
                 lits(out, q);
                 format(out, ", ", if q_normal { "true" } else { "false" }, "); }\n");
-            }
-            if b_q[0] != 0.0 || b_q[1] != 0.0 || b_q[2] != 0.0 {
-                format(out, "    // physics ", beam_name, ": q\n    beam_load(");
-                lits(out, b_q);
-                out.append(");\n");
             }
             for i in own { if bcs[i].kind != BC_FIX { emit_bc(out, bcs[i]); } }
         }
