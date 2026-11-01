@@ -1,7 +1,7 @@
 // femahoy: validation/cases/dynamics-bar-step/job.inp
 // A steel bar of 200 x 10 x 10 mm, fixed at one end. A step force of 1000 N
-// pulls the free end from t = 0. Explicit dynamics to t = 2L/c, 3D, linear
-// hexahedra. The reference is the 1D wave theory (Graff 1975): the end is
+// pulls the free end from t = 0. Explicit dynamics to t = 2L/c, 3D, quadratic
+// tetrahedra (the explicit step runs on simplices only). The reference is the 1D wave theory (Graff 1975): the end is
 // at 2*F*L/(E*A) = 0.0190476 mm, within 3 %.
 
 model dynamics_bar_step: 3d, mm_N_MPa_s
@@ -28,21 +28,11 @@ material steel {
 
 mesh m on bar {
     size: 2.5 mm
-    cell: hex
+    cell: tet
 }
 
-physics solid on bar solves u: Vector<Length> {
+physics solid on bar: linear_elastic solves u: Vector<Length> {
     material steel
-    assume small_strain, isotropic
-    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u))
-    eq rho*ddt2(u) - div(sigma) = 0
-}
-
-// The C3D8R of femahoy: linear cells with reduced integration.
-method solid: cg {
-    mesh: m
-    order: 1
-    quadrature: reduced
 }
 
 bc fixed: u = 0
@@ -50,7 +40,7 @@ bc fixed: u = 0
 // Like ccx, the solver takes its own stable increment.
 step pull: transient(end: t_wave, dt: stable, scheme: central_difference) {
     bc end_face: sigma*n = F/(W*W)*n
-    output u every 100
+    output u
 }
 
 expect u_end: mean(u.x, end_face) == 2*F*L/(E_s*W*W) within 3%
