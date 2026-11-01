@@ -2129,6 +2129,7 @@ run is a **case**. The procedure after the colon makes the cases:
 | `zip` | lists of one length | case `i` takes value `i` of each list |
 | `sample(n: Int, method: lhs \| sobol, seed: Int)` | a range `lo..hi` for each parameter | `n` points in the box of the ranges |
 | `minimize(objective, method: nelder_mead \| bobyqa, max_cases: Int, xtol: Real, step: Real)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
+| `topology(objective, region: Surface, volume: Real, penalty: Real, filter: Length, max_iterations: Int, threshold: Real)` | no parameter, only `expect` entries | 1 case: the loop of topology optimization on the cells of `region` |
 
 - Each entry names a `param` [`study_param`]. Each value has the type of the
   parameter [`type_mismatch`] and is in its range [`param_range`].
@@ -2146,6 +2147,24 @@ run is a **case**. The procedure after the colon makes the cases:
   `max_cases` cases. Reason: femahoy gap G25. The case shape-hole-biaxial
   stops at 0.001 from a simplex of 0.1, and its tolerance comes from that
   stop rule.
+- `topology` gives each cell of the mesh a density x in 0..1, and the
+  modulus E (1e-9 + (1 - 1e-9) x^penalty) (SIMP). From x = `volume` in
+  each cell, each iteration solves the step, gets the derivative of the
+  objective by each density from one adjoint solve, filters it over the
+  radius `filter`, and moves x by the optimality criteria update with the
+  mean of x equal to `volume`. The loop stops when no density changes by
+  more than 0.01, or after `max_iterations` (default 200). The default
+  penalty is 3. With `threshold`, a cell at the threshold or more becomes
+  solid (x = 1) and the others void (x = 0), and the step solves again: the
+  reports and expects then give the solid. The objective is a `report` of
+  the form a u_c(p) of the one static step, for example the compliance.
+  `objective`, `region`, `volume` and `filter` are necessary, `0 < volume
+  <= 1`, `penalty >= 1`, `filter > 0`, `0 < threshold < 1`, and the study
+  has no parameter entry [`procedure_args`]. `skein run` runs it for a 2d model with `cell: quad`
+  on a `rect` and `linear_elastic`. The case records hold the table
+  `topology` of each iteration, and the VTU holds `rho` in each cell.
+  Reason: femahoy gap G1, the cases topology-mbb-beam and
+  topology-mbb-beam-cad.
 - An entry can be an `expect` (§15.3). The cases of a `grid` are in the
   order of the Cartesian product, with the last entry the fastest.
 

@@ -109,6 +109,7 @@ golden files again and read the diff:
 | `src/transient/` | transient heat solver routines |
 | `src/flow/` | stabilized Stokes and Navier-Stokes solver routines, plus code generation for 2D flow |
 | `src/meshless/` | point clouds, `rkpm` and `gfd` for one scalar unknown and 2D elasticity, and their direct solve |
+| `src/optim/` | a Q4 grid of 2D elasticity with a band Cholesky solve, the adjoint of a point objective, and the `topology` loop: SIMP, the sensitivity filter and the optimality criteria update |
 
 ## Why Skein
 
