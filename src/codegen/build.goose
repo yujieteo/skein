@@ -131,6 +131,7 @@ let GPU_CALLS = [
     ["grid::solve_static(", "gpu::grid_static("],
     ["elements::modal(", "gpu::modal("],
     ["elements::buckling(", "gpu::buckling("],
+    ["meshless::solve_static(", "gpu::meshless_static("],
 ];
 
 // `line` with each call of GPU_CALLS replaced.
@@ -290,7 +291,7 @@ fn build(args: const u8[:][:]) -> i64 {
 // imports them as the compiler does (src/skein.goose).
 fn link_sources(dir: u8[:]) -> bool {
     let src = str(resource_dir(), "../src/");
-    for part in ["syntax", "check", "codegen", "elements", "shells", "flow", "grid", "gpu", "mesher", "runtime", "solvers", "fmt"] {
+    for part in ["syntax", "check", "codegen", "elements", "shells", "flow", "grid", "meshless", "gpu", "mesher", "runtime", "solvers", "fmt"] {
         guard shell(str("ln -sfn ", shell_quoted(str(src, part)), " ", shell_quoted(str(dir, "/", part)))) == 0 else { return false; };
     }
     return true;

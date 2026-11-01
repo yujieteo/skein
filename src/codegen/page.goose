@@ -35,6 +35,7 @@ let PAGE_IMPORTS = """
     import solvers from "./solvers";
     import elements from "./elements";
     import grid from "./grid";
+    import meshless from "./meshless";
     import gpu from "./gpu";
 
     """;

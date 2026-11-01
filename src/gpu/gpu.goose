@@ -14,8 +14,9 @@
 //     solve                elements::solve: an implicit step, on the GPU
 //                          only with the control of the page on
 //                          (SKEIN_GPU_IMPLICIT=1), else CG with AMG
-//     grid_static, modal,  grid::solve_static, elements::modal and
-//     buckling             elements::buckling: on the CPU
+//     grid_static, modal,  grid::solve_static, elements::modal,
+//     buckling,            elements::buckling and meshless::solve_static:
+//     meshless_static      on the CPU
 //
 // Each falls back to the CPU solve when the page has no WebGPU. This
 // package sets up the GPU: it converts the arrays of the CPU solve to f32
@@ -35,6 +36,7 @@ import os;
 namespace gpu;
 import elements from "../elements";
 import grid from "../grid";
+import meshless from "../meshless";
 import solvers from "../solvers";
 
 extern fn skein_gpu_ready() -> i32;
@@ -375,8 +377,8 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     return ok && done;
 }
 
-// The static step of fv or dg, and the modal and buckling steps of
-// elements: on the CPU, with a record of the device.
+// The static step of fv or dg, the modal and buckling steps of elements,
+// and the static step of rkpm: on the CPU, with a record of the device.
 fn grid_static<SRC, BC>(rtol: f64) -> bool {
     note("gmres ilu0", false);
     return grid::solve_static(rtol, SRC, BC);
@@ -390,6 +392,11 @@ fn modal(count: i64) -> bool {
 fn buckling(count: i64) -> bool {
     note("lobpcg", false);
     return elements::buckling(count);
+}
+
+fn meshless_static<SRC, BC>() -> bool {
+    note("skyline lu", false);
+    return meshless::solve_static(SRC, BC);
 }
 
 // ---- the implicit solve ----
