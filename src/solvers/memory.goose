@@ -68,6 +68,12 @@ struct MemoryPath {
 //                         129,762 dofs, on 2026-11-01: 8.1 and 7.5, and 12 more on 16
 //                         threads (the copy of the matrix of rows_start). On 16 threads the
 //                         estimate is 245 MB and the peak 170 MB.
+//     simplex newton cg amg  the constants of simplex cg amg, which it calls for each
+//                         Newton iteration. examples/femahoy/plasticity_sphere.skn, 12,663
+//                         dofs, on 2026-11-01: estimate 72 MB and peak 66 MB.
+//     simplex newton skyline ldlt  examples/femahoy/hyperelastic_tube.skn at 0.7 mm, 8,010
+//                         dofs, 751,855 entries of the profile, on 2026-11-01: 16.2 (U and
+//                         L, 8 bytes each). No threads.
 //     shell skyline ldlt  thin cylinder 38.1 mm, 23,760 dofs: 8.2 (one value for each
 //                         entry of the profile), and no threads
 //     simplex wave        PML duct at 6 mm and 4 mm, 35,070 and 76,602 dofs: 17.6 and 9.1
@@ -108,6 +114,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "simplex central_difference", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 12.0 },
     MemoryPath { name: "simplex newton cg amg", entry_bytes: 32.0, dof_bytes: 1600.0, thread_bytes: 16.0 },
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "simplex newton skyline ldlt", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },

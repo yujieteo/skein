@@ -22,6 +22,7 @@ let LOFT = 10;
 let PATTERN = 11;
 let PATTERN_POLAR = 12;
 let FILL = 13;
+let SPHERE = 14;
 
 // `a` and `b` are child nodes, the first point and the point count of a
 // polygon or a fill, or the child node and the copy count of a pattern. `p`
@@ -59,6 +60,10 @@ fn box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> i64 {
 fn cylinder(cx: f64, cy: f64, cz: f64, ax: f64, ay: f64, az: f64, r: f64, h: f64) -> i64 {
     let l = sqrt(ax * ax + ay * ay + az * az);
     return add_shape(CYLINDER, -1, -1, [cx, cy, cz, ax / l, ay / l, az / l, r, h]);
+}
+
+fn sphere(cx: f64, cy: f64, cz: f64, r: f64) -> i64 {
+    return add_shape(SPHERE, -1, -1, [cx, cy, cz, r, 0.0, 0.0, 0.0, 0.0]);
 }
 
 fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> i64 {
@@ -478,7 +483,8 @@ struct Frame {
 var frames: Frame[>..] = [];
 
 fn is_leaf(kind: i64) -> bool {
-    return kind == BOX || kind == RECT || kind == CYLINDER || kind == CIRCLE || kind == POLYGON || kind == FILL;
+    return kind == BOX || kind == RECT || kind == CYLINDER || kind == CIRCLE || kind == POLYGON || kind == FILL ||
+        kind == SPHERE;
 }
 
 // The signed distance from (x, y, z) to shape g with no children.
@@ -506,6 +512,9 @@ fn leaf_phi(g: i64, x: f64, y: f64, z: f64) -> f64 {
         let ry = vy - t * p[4];
         let rz = vz - t * p[5];
         return slab(sqrt(rx * rx + ry * ry + rz * rz) - p[6], t, p[7]);
+    }
+    if s.kind == SPHERE {
+        return sqrt((x - p[0]) * (x - p[0]) + (y - p[1]) * (y - p[1]) + (z - p[2]) * (z - p[2])) - p[3];
     }
     if s.kind == CIRCLE {
         return sqrt((x - p[0]) * (x - p[0]) + (y - p[1]) * (y - p[1])) - p[2];
@@ -589,6 +598,7 @@ fn leaf_bounds(g: i64) -> f64[6] {
     let p = s.p;
     if s.kind == BOX { return [p[0], p[1], p[2], p[3], p[4], p[5]]; }
     if s.kind == RECT { return [p[0], p[1], 0.0, p[2], p[3], 0.0]; }
+    if s.kind == SPHERE { return [p[0] - p[3], p[1] - p[3], p[2] - p[3], p[0] + p[3], p[1] + p[3], p[2] + p[3]]; }
     if s.kind == CIRCLE { return [p[0] - p[2], p[1] - p[2], 0.0, p[0] + p[2], p[1] + p[2], 0.0]; }
     if s.kind == POLYGON {
         var b: f64[6] = [1.0e300, 1.0e300, 0.0, -1.0e300, -1.0e300, 0.0];

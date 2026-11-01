@@ -34,10 +34,10 @@ material rubber {
     Kb: Pressure = 4000 MPa
 }
 
-// The CPE8R of ccx: a grid in r and θ of serendipity quads with reduced integration.
+// Quadratic triangles (the CPE8R of ccx is a serendipity quad with reduced integration).
 mesh m on quarter {
     size: 1.25 mm
-    cell: quad
+    cell: tri
 }
 
 physics tube on quarter solves u: Vector<Length> {
@@ -51,22 +51,24 @@ physics tube on quarter solves u: Vector<Length> {
     eq div(defgrad(u)*S) = 0
 }
 
-method tube: cg { mesh: m, order: 2, family: serendipity, quadrature: reduced }
+method tube: cg { mesh: m, order: 2 }
 
 bc sx: u.x = 0
 bc sy: u.y = 0
 
 // A pressure load cannot pass the maximum. Thus the inner face moves radially.
+// F is the x reaction of the inner face less its node on x = 0, as F of ccx
+// (derivation.md): the x reaction of that node holds the hoop force of sx.
 step inflate_25: static(ramp: 20) {
     bc inner: u = (15 mm)/A_in*(x, y)
-    expect f_25: reaction(inner).x == 5.74269 N within 0.2%
+    expect f_25: reaction(inner - sx).x == 5.74269 N within 0.2%
 }
 
 step inflate_40: static(ramp: 20) {
     bc inner: u = (30 mm)/A_in*(x, y)
     output u, S
-    report f_40 = reaction(inner).x
+    report f_40 = reaction(inner - sx).x
 }
 
-expect f_40: reaction(inner).x == 8.76165 N within 0.2%
+expect f_40: reaction(inner - sx).x == 8.76165 N within 0.2%
 expect u_outer: u.x at (B_out, 0 mm) == 23.5890 mm within 0.2%

@@ -238,8 +238,12 @@ fn hd_sqrt(x: Hd) -> Hd {
     return hd_chain(x, r, 0.5 / r, -0.25 / (r * x.f));
 }
 
-// x^y with an exponent that varies: exp(y ln x).
-fn hd_pow_hd(x: Hd, y: Hd) -> Hd { return hd_exp(hd_mul(y, hd_ln(x))); }
+// x^y: exp(y ln x), or pow for a constant y.
+fn hd_pow_hd(x: Hd, y: Hd) -> Hd {
+    // A constant exponent: x can be 0 or negative.
+    if y.a == 0.0 && y.b == 0.0 && y.ab == 0.0 { return hd_pow(x, y.f); }
+    return hd_exp(hd_mul(y, hd_ln(x)));
+}
 
 // The principal values c with the seed ε1 on c[i] and ε2 on c[j].
 fn hd_seed(c: f64[3], i: i64, j: i64) -> Hd[3] {

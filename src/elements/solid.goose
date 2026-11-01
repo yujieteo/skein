@@ -10,9 +10,12 @@
 // A static step takes `ramp` increments. Increment k moves the fixed
 // values from those of the end of the step before to those of the step,
 // and the loads likewise, by k / ramp. Each increment is Newton's method
-// with CG and AMG on the tangent (solve.goose): the first solve also
+// with the skyline of direct.goose on the tangent, or CG and AMG
+// (solve.goose) when the skyline is too large: the first solve also
 // moves the fixed dofs, so the tangent predicts the change of the free
-// dofs. The state of each point changes only at the end of an increment.
+// dofs. After the first increment, an increment starts from u plus the
+// change of u in the increment before, and its solves need less accuracy.
+// The state of each point changes only at the end of an increment.
 //
 // The explicit step is central_difference (explicit.goose) with the
 // internal force in place of K u, from the velocity of the unknown v of
@@ -27,6 +30,7 @@ import .solve;
 import .stages;
 import .material;
 import .explicit;
+import .direct;
 import solvers from "../solvers";
 
 let SOLID_NONE = 0;
@@ -49,7 +53,10 @@ var nl_start: f64[>..] = [];    // u at the start of the step
 var nl_target: f64[>..] = [];   // the fixed values of the step
 var nl_load: f64[>..] = [];     // the loads of the step
 var nl_last_load: f64[>..] = [];    // the loads of the end of the step before
+var nl_base: f64[>..] = [];     // u at the start of the increment
+var nl_step: f64[>..] = [];     // the change of u in the increment before
 var newton_steps = 0;           // the Newton iterations of the last static step
+var newton_direct = false;      // the step solves with the skyline
 var pt_s: f64[6] = [0.0; 6];    // the stress and the tangent of the last point
 var pt_d: f64[36] = [0.0; 36];
 
@@ -79,7 +86,11 @@ fn set_solid(law: i64, yield0: f64, hard: f64) {
     nl_target.clear();
     nl_load.clear();
     nl_last_load.clear();
+    nl_base.clear();
+    nl_step.clear();
     for d in dof_total() {
+        nl_base.push(0.0);
+        nl_step.push(0.0);
         nl_u.push(0.0);
         nl_start.push(0.0);
         nl_target.push(0.0);
@@ -241,7 +252,8 @@ fn solve_solid<ENERGY>(ramp: i64) -> bool {
     guard (solid_law == SOLID_J2 || solid_law == SOLID_ENERGY) && ramp >= 1 && dofs_sized() && nl_u.len == sol.len else { abort("solve_solid: set_solid of J2 at small strain or of an energy, ramp >= 1 and the arrays of the dofs"); }
     let start = clock();
     build_pattern();
-    solvers::memory_check("simplex newton cg amg", col.len, dof_total(), 6, worker_mesh_bytes(), "");
+    newton_direct = direct_setup();
+    if !newton_direct { solvers::memory_check("simplex newton cg amg", col.len, dof_total(), 6, worker_mesh_bytes(), ""); }
     assembled_source.clear();
     internal.clear();
     for d in dof_total() {
@@ -253,6 +265,7 @@ fn solve_solid<ENERGY>(ramp: i64) -> bool {
         nl_u[d] = nl_start[d];
         nl_target[d] = prescribed[d];
         nl_load[d] = load[d];
+        nl_step[d] = 0.0;
     }
     let sizes = state_sizes();
     var its = 0;
@@ -260,8 +273,14 @@ fn solve_solid<ENERGY>(ramp: i64) -> bool {
     var done = true;
     for k in 1..ramp + 1 {
         if !done { break; }
-        done = increment(k * 1.0 / ramp, start, its, ENERGY);
+        let lam = k * 1.0 / ramp;
+        for d in sol.len {
+            nl_base[d] = nl_u[d];
+            if k > 1 { nl_u[d] = if fixed[d] != 0 { nl_start[d] + lam * (nl_target[d] - nl_start[d]) } else { nl_u[d] + nl_step[d] }; }
+        }
+        done = increment(lam, k > 1, start, its, ENERGY);
         if done { commit_points(); }
+        for d in sol.len { nl_step[d] = nl_u[d] - nl_base[d]; }
     }
     guard state_sizes() == sizes else { abort("solve_solid: a solve grows no array of the state (rule 3)"); }
     for d in sol.len {
@@ -281,8 +300,11 @@ fn commit_points() {
 }
 
 // Newton's method for the increment to the fraction lam of the step. its
-// gets the CG iterations.
-fn increment<ENERGY>(lam: f64, start: f64, its: i64&) -> bool {
+// gets the CG iterations. A solve takes the residual to 1e-4 of its start,
+// but the first solve of an increment with no prediction takes it to
+// CG_TOLERANCE: it moves the fixed dofs alone, and a coarse solve of that
+// can turn cells inside out.
+fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
     let n = sol.len;
     for it in NEWTON_MAX {
         solid_assemble(ENERGY);
@@ -299,7 +321,10 @@ fn increment<ENERGY>(lam: f64, start: f64, its: i64&) -> bool {
             if fixed[d] == 0 { r2 += load[d] * load[d]; }
         }
         if it > 0 && moved == 0.0 && sqrt(r2) <= NEWTON_TOL * sqrt(scale) { return true; }
-        guard cg_solve(start) else { return false; };
+        cg_tolerance = if it == 0 && !predicted { CG_TOLERANCE } else { 1.0e-2 };
+        let solved = if newton_direct { direct_solve(start) } else { cg_solve(start) };
+        cg_tolerance = CG_TOLERANCE;
+        guard solved else { return false; };
         its += last_iterations;
         newton_steps++;
         for d in n { nl_u[d] += sol[d]; }

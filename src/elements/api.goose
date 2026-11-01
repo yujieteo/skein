@@ -18,7 +18,8 @@
 // The state is global: one mesh, one physics, one set of fixed dofs and one
 // set of loads. A boundary call (`fix`, `traction`, `flux`, `reaction`)
 // acts on the region of the last `plane`, `also_plane`, `hole`, `surface`
-// or `also_surface` call.
+// or `also_surface` call, less the nodes of each `except_plane` and
+// `except_surface` call after it. A load acts on each facet of the region.
 // These give false when the region holds no node.
 import std;
 namespace elements;
@@ -294,6 +295,7 @@ fn write_darcy(path: const u8[:], p_name: const u8[:], q_name: const u8[:]) -> b
 // Selects the boundary plane where coordinate `axis` is `value`.
 fn plane(axis: i64, value: f64) -> bool {
     region.clear();
+    region_out.clear();
     return also_plane(axis, value);
 }
 
@@ -312,6 +314,7 @@ fn also_plane(axis: i64, value: f64) -> bool {
 fn hole(cx: f64, cy: f64, r: f64) -> bool {
     guard r > 0.0 else { abort("hole: r > 0"); }
     region.clear();
+    region_out.clear();
     region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1 });
     return region_node_count() > 0;
 }
@@ -320,6 +323,7 @@ fn hole(cx: f64, cy: f64, r: f64) -> bool {
 // g is 0.
 fn surface(g: i64) -> bool {
     region.clear();
+    region_out.clear();
     return also_surface(g);
 }
 
@@ -331,6 +335,22 @@ fn also_surface(g: i64) -> bool {
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
+}
+
+// Removes the nodes of the plane from the region: for example the node
+// of a face on a symmetry plane, whose reaction also holds the force of
+// that plane. It gives false when the region holds no node.
+fn except_plane(axis: i64, value: f64) -> bool {
+    guard axis >= 0 && axis < 3 && region_out.len < 8 else { abort("except_plane: 0 <= axis < 3 and at most 8 parts"); }
+    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1 });
+    return region_node_count() > 0;
+}
+
+// Removes the nodes of the surface of shape g from the region.
+fn except_surface(g: i64) -> bool {
+    guard g >= 0 && region_out.len < 8 else { abort("except_surface: a shape and at most 8 parts"); }
+    region_out.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g });
+    return region_node_count() > 0;
 }
 
 // Holds component `comp` (X, Y, Z, or ALL) of u, or T (comp 0), at `v` on
@@ -348,6 +368,10 @@ fn fix_state() -> i64 { return fix_region_source(); }
 
 // Adds a uniform traction (force per area) on the region.
 fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
+
+// Adds the pressure p on the region: the traction -p n on its outward
+// normal n.
+fn pressure_load(p: f64) { add_region_pressure(p); }
 
 // Adds a uniform outward heat flux q·n = g (power per area) on the region.
 fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
@@ -386,7 +410,7 @@ fn plastic(sy: f64, hk: f64, finite: bool) { set_solid(if finite { SOLID_J2_FINI
 // An isotropic hyperelastic energy of the program (solve_energy), in 3d,
 // or in 2d in plane strain with the thickness t. It needs no E and nu.
 fn hyperelastic(t: f64) {
-    set_elastic(1.0, 0.0, PLANE_STRAIN, t);
+    set_elastic(1.0, 0.0, if dim == 2 { PLANE_STRAIN } else { SOLID_3D }, t);
     set_solid(SOLID_ENERGY, 0.0, 0.0);
 }
 
@@ -432,6 +456,10 @@ fn reaction() -> f64, f64, f64 {
     let r = region_reaction();
     return r[0], r[1], r[2];
 }
+
+// The mean of component comp of the solution on the region, weighted by
+// area. NaN if the region holds no facet.
+fn mean_value(comp: i64) -> f64 { return region_mean(comp); }
 
 // The check `submodel_cut`: on each part of the region, the resultant force
 // of the stress of this model and of the field of the last `read_state`.
