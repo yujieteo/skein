@@ -194,8 +194,10 @@ fn linear_solve(start: f64, key: i64, warm: bool) -> bool {
 // The direct solve of K du = f - K u (solvers/nested.goose) on the plan
 // of plan_direct, as cg_solve. If the factor finds a pivot with no
 // stiffness, CG with AMG takes the solve, as before the direct solve.
-// Reason: a free body with a self-equilibrated load has no SPD matrix. With a key > 0, a page run takes the factor
-// of the last run if K is the same (solvers/warm.goose), and keeps its own.
+// Reason: a nearly incompressible solid has a pivot that the factor rejects,
+// and CG with AMG solved it before the direct solve.
+// With a key > 0, a page run takes the factor of the last run if K is the
+// same (solvers/warm.goose), and keeps its own.
 fn direct_static(start: f64, key: i64) -> bool {
     let n = sol.len;
     var r = zeros(n);
@@ -211,6 +213,7 @@ fn direct_static(start: f64, key: i64) -> bool {
             solvers::nested_solve(r, du, fixed);
         } else {
             write_stderr(str("elements: the direct solve has a pivot with no stiffness at dof ", solvers::nested_singular(), ", CG with AMG takes the solve\n"));
+            solvers::nested_free();
             solvers::memory_check(direct_path[..], col.len, dof_total(), direct_vectors, worker_mesh_bytes(), "");
             direct = false;
             return cg_solve(start, key, false);

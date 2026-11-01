@@ -288,6 +288,18 @@ fn nd_sized(v: f64[>..]&, n: i64) {
     for k in n { v.push(0.0); }
 }
 
+// Frees the arrays of the factorization (nested_alloc), for a solve that
+// takes another path after a nested_factor that returned false.
+fn nested_free() {
+    nd_factor = [];
+    nd_buf = [];
+    nd_panel = [];
+    nd_stack = [];
+    nd_diag = [];
+    nd_map = [];
+    nd_pos = [];
+}
+
 // The arrays of the factorization of the plan, once for each plan.
 fn nested_alloc() {
     guard nd_fronts.len > 0 else { abort("nested_alloc: nested_plan"); }

@@ -132,7 +132,6 @@ fn amg_keep(key: i64, row_start: i64[:], col: i32[:], fixed: u8[:]) {
 
 let LDLT_CHUNK = 1 << 22;   // 32 MB of the factor in each file
 
-
 // Solves K x = b (nested_solve) with the factor of solve `key` of the last
 // run, if the run had the same matrix K: it needs no nested_factor, only
 // nested_plan of K. False if the page keeps nothing or K is another.
@@ -141,9 +140,12 @@ fn nested_reuse(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8
     let sig, ok = load_i64s(warm_path(key, "ldlt.sig"));
     let now = pattern_signature(row_start, col, fixed);
     guard ok && sig.len == 4 && sig[0] == now[0] && sig[1] == now[1] && sig[2] == now[2] && sig[3] == now[3] else { return false; }
-    let old, ok_old = load_f64s(warm_path(key, "ldlt.val"));
-    guard ok_old && old.len == val.len else { return false; }
-    for v, e in val { if old[e] != v { return false; } }
+    for c in (val.len + LDLT_CHUNK - 1) / LDLT_CHUNK {
+        let old, ok_old = load_f64s(warm_path(key, str("ldlt.val.", c)));
+        let at = c * LDLT_CHUNK;
+        guard ok_old && old.len == min(val.len, at + LDLT_CHUNK) - at else { return false; }
+        for v, e in old { if val[at + e] != v { return false; } }
+    }
     var factor: f64[>..] = [];
     for c in (nd_values + LDLT_CHUNK - 1) / LDLT_CHUNK {
         let part, ok_part = load_f64s(warm_path(key, str("ldlt.", c)));
@@ -156,14 +158,16 @@ fn nested_reuse(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8
 }
 
 // Keeps the factor of the last nested_factor as the factor of solve `key`,
-// in files of LDLT_CHUNK values: the copy of each file is the only memory
-// more. Reason: one file of the factor of interposer_warpage (1.1 GB) took
+// with the values of K that it factors, in files of LDLT_CHUNK values: the
+// copy of each file is the only memory more. Reason: one file of the factor of interposer_warpage (1.1 GB) took
 // the peak from 1215 MB to 1903 MB.
 fn nested_keep(key: i64, row_start: i64[:], col: i32[:], val: f64[:], fixed: u8[:]) {
     guard warm_dir().len > 0 else { return; }
     var sig: i64[>..] = [];
     sig.append(pattern_signature(row_start, col, fixed));
-    write_file(warm_path(key, "ldlt.val"), to_bytes(val));
+    for c in (val.len + LDLT_CHUNK - 1) / LDLT_CHUNK {
+        write_file(warm_path(key, str("ldlt.val.", c)), to_bytes(val[c * LDLT_CHUNK..min(val.len, (c + 1) * LDLT_CHUNK)]));
+    }
     for c in (nd_values + LDLT_CHUNK - 1) / LDLT_CHUNK {
         write_file(warm_path(key, str("ldlt.", c)), to_bytes(nd_factor[c * LDLT_CHUNK..min(nd_values, (c + 1) * LDLT_CHUNK)]));
     }

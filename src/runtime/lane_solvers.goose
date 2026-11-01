@@ -101,13 +101,14 @@ fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 
 // only the two triangular solves. If the factor finds a pivot with no
 // stiffness (a matrix that is not SPD, or a large contrast of stiffness),
 // the solve takes the path of AMG and CG after its memory check.
-// Reason: a free body with a self-equilibrated load has no SPD matrix,
+// Reason: a nearly incompressible solid has a pivot that the factor rejects,
 // and AMG with CG solved it before the direct solve.
 fn direct_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 {
     let key = solvers::warm_key();
     guard !solvers::nested_reuse(key, row_start, col, val, fixed, b, x) else { return true, true, 1; }
     guard solvers::nested_factor(row_start, col, val, fixed) else {
         write_stderr(str("runtime: the direct solve has a pivot with no stiffness at dof ", solvers::nested_singular(), ", AMG with CG takes the solve\n"));
+        solvers::nested_free();
         check_iterative_memory(col.len);
         return amg_solve(b, x, tol, max_it);
     }
