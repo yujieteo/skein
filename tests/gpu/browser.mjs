@@ -135,7 +135,7 @@ function expects(toon) {
   const out = {};
   for (const r of rows(toon, "verify")) {
     if (r[0] !== "post") continue;
-    const m = /^([A-Za-z0-9_]+): (?:error )?(\S+)(?: (.*))?$/.exec(r[3]);
+    const m = /^([A-Za-z0-9_]+): (?:L2 error )?(\S+)(?: (.*))?$/.exec(r[3]);
     if (m) out[m[1]] = { result: r[2], value: Number(m[2]), unit: m[3] ?? "", limit: r[4] };
   }
   return out;
