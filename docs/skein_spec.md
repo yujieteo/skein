@@ -500,6 +500,15 @@ section y axis is `y_axis` made normal to `tau`, and z is `cross(tau, e_y)`.
 `nu`. The template gives the axial force `Nx` (positive in tension), the
 force `F_b` and the moment `M_b`.
 
+A `modal` step (§14.2) of beams takes the mass from the density `rho` of
+each beam material: `rho*A` for the translation, `rho*(I_y + I_z)` for the
+twist and `rho*I_y`, `rho*I_z` for the rotary inertia, on the axis of the
+section. A `buckling` step of beams takes the geometric stiffness of the
+axial force `Nx` of the `static` step just before it.
+Reason: a stiffened panel needs the modes and the buckling load of its
+stiffeners (implementation.md §10). The template has no time derivative,
+so the density is the only input.
+
 The built-in functions of the two templates:
 
 | Function | Meaning |
@@ -513,8 +522,8 @@ Reason: a fuselage, a wing and a ship hull are shells with offset
 stiffeners. A solid mesh of a 4.6 mm skin on a 3 m radius needs millions
 of cells. The ABD matrix of classical laminate theory is the standard
 section of a composite shell (Jones 1999, §4.2). The solver uses the MITC4
-shell (Dvorkin and Bathe 1984) for these equations, so the shell does not
-lock in shear.
+shell (Dvorkin and Bathe 1984) for `order: 1` and the MITC9 shell (Bucalem
+and Bathe 1993) for `order: 2`, so the shell does not lock in shear.
 
 ---
 
@@ -846,7 +855,23 @@ function, so that the mesher can find sharp edges (§9.2).
 | `point(p)` | `Point` | |
 | `shell(a, t)` | same as `a` | a wall of constant thickness `t` inside the surface of `a`: `max(φa, −φa − t)` |
 | `loft(s1, s2, h)` | `Solid` | from 2D section `s1` at z = 0 to `s2` at z = `h` |
-| `pattern(a, v, n)`, `pattern_polar(a, axis, n)` | same as `a` | `n` copies of `a`, along `v` or about `axis` |
+| `pattern(a, v, n)`, `pattern_polar(a, axis, n)` | same as `a` | `n` copies of `a`, along `v` or about `axis` through the origin. Copy k (0 to n − 1) is `move(a, k*v)`, or `a` turned by k·360°/n. |
+
+`copy(r)` is a `Real` that varies in space: at a point, the index k of the
+copy of the pattern `r` that is nearest to the point. `r` must come from a
+`pattern` or a `pattern_polar` [`type_mismatch`]. Thus `x0 + copy(r)*dx` is
+the x of the copy at the point, for example the centre of each window for a
+load on the window edges:
+
+```skein
+let windows: Solid = pattern(window_0, (f_pitch, 0 m, 0 m), 8)
+let window_edge: Curve = boundary(skin, windows)
+let dx_w: Length = x - (x_w0 + copy(windows)*f_pitch)
+```
+
+Reason: gap G35. The load on the edge of a window depends on the distance
+from the centre of that window, and the copies of a pattern have no other
+name.
 
 `spline(p1, …, pn)` is the centripetal Catmull-Rom spline through the
 points (Yuksel et al. 2011). It has no cusp and no loop between two points.
@@ -928,7 +953,13 @@ for example a point load or a pressure reference.
 
 ### 8.4 Region algebra
 
-Regions combine with `|`, `&` and `-`. The checker computes containment by
+Regions combine with `|`, `&` and `-`. `a | b` has the higher dimension of
+`a` and `b`, `a & b` has the lower dimension, and `a - b` has the dimension
+of `a`. Thus `skin & door_box` is the part of the `Surface` `skin` in the
+`Solid` `door_box`, a `Surface`. Reason: gap G32. A shell or a beam line
+is cut by a solid, for example a pad-up band or a door cutout.
+
+The checker computes containment by
 the CSG tree: `a` is inside `b` if `a & b` equals `a` in the tree, or if a
 sampled test on the mesh shows it. A field, a physics, a `bc` or a
 `birth`/`death` statement must name a region inside the region of the unknown
@@ -1330,6 +1361,19 @@ On a `Point` region, `n` has no value. There the checker reads a natural
 condition `F*n = P` as the force `P` at the point. `P` has the dimension of
 `F` times area in a `3d` model, and of `F` times length in a `2d` or `axi`
 model.
+
+In a physics on a `Curve`, `along(F)` in an equation makes `F` a flux, as
+`div(F)` does. There `F*n = P` stands only on a `Point`, and is the force
+`P` at the point, with the dimension of `F`. A flux of `along` on a region
+that is not a `Point` is an error [`bc_form`].
+
+```skein
+bc tip: F_b*n = (0, 0, -1)*P
+bc tip: M_b*n = (0, M, 0)
+```
+
+Reason: a beam takes a force and a moment at a point, and the
+implementation.md §10 cantilever puts its load on the tip.
 
 The right side `rigid(p)` of an essential condition on a whole displacement
 `u: Vector<Length>` makes the region a **rigid face**: the face stays
@@ -2567,7 +2611,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `radiation(eps)` | the gray diffuse radiation of a face to the other faces of its enclosure, in a natural condition (§12.1) |
 | `wall_distance()` | the distance to the nearest wall, a boundary with `v = 0`, in a turbulence model (§4.2) |
 | `results(file, step:)` | §15.1 |
-| `boundary(g, s)`, geometry functions | §8 |
+| `boundary(g, s)`, geometry functions, `copy(r)` | §8 |
 
 ### Constants
 

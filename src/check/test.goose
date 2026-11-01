@@ -697,6 +697,18 @@ fn test_shells() {
     expect_id("type_mismatch", str(H, "let D3: Real = laminate(ply_stiffness(1 Pa, 1 Pa, 1 Pa, 0.3), 0 deg, false, 1 mm, 1 mm, (1, 0, 0), (0, 0, 1), 3)\n", SHELL));
     expect_id("rank_mismatch", str(H, "let g: Real = tangent(1, (0, 0, 1))\n", SHELL));
     expect_id("rank_mismatch", str(H, SHELL, "\nstep more: static {\n    report argmax(w, wall)\n}\n"));
+    // Gap G32: a Surface or a Curve & a Solid keeps the lower dimension.
+    let cut = "\nlet half: Solid = box((0, 0, -2) m, (1, 2, 2) m)\n";
+    expect_clean("a Surface & a Solid", str(H, SHELL, cut, "let pad: Surface = wall & half\nlet short: Curve = ribs & half - box((0, 0, 0) m, (1, 1, 1) m)\n"));
+    expect_id("geometry_dim", str(H, SHELL, cut, "let pad: Solid = wall & half\n"));
+    // Gap G35: copy(r) is the index of the copy of a pattern.
+    expect_clean("copy of a pattern", str(H, SHELL, "\nlet x_r: Angle = copy(ribs)*45 deg\n",
+        "step more: static {\n    bc tip: N*n = copy(ribs)*(1, 0, 0) kN/m\n}\n"));
+    expect_id("type_mismatch", str(H, SHELL, "\nlet k: Real = copy(wall)\n"));
+    // The flux of along(F_b) stands only on a Point (§12.1).
+    expect_clean("a beam force at a point", str(H, SHELL, "\nlet pt: Point = point((0, 0, 0) m)\n",
+        "step more: static {\n    bc pt: F_b*n = (0, 0, 1) kN\n}\n"));
+    expect_id("bc_form", str(H, SHELL, "\nstep more: static {\n    bc ribs: F_b*n = (0, 0, 1) kN/m\n}\n"));
 }
 
 fn main() {

@@ -51,7 +51,7 @@ var e3: f64[3];
 var area = 0.0;     // |a_1 × a_2|
 
 fn load_cell(c: i64) {
-    guard c >= 0 && c < shells.len && directors.len == coords.len else { abort("load_cell: 0 <= c < shells.len, and a director for each node"); }
+    guard c >= 0 && c < shells.len && shells[c].count == 4 && directors.len == coords.len else { abort("load_cell: 0 <= c < shells.len, a 4-node cell, and a director for each node"); }
     for l in 4 {
         let n = shells[c].n[l];
         for k in 3 {
@@ -134,29 +134,7 @@ fn local_rows(c: i64, xi: f64, eta: f64) {
         }
     }
     covariant(xi, eta);
-    let n = cross(a1, a2);
-    area = norm(n);
-    e3 = unit(n);
-    let axis = shells[c].axis;
-    var t = sub(axis, [dot3(axis, e3) * e3[0], dot3(axis, e3) * e3[1], dot3(axis, e3) * e3[2]]);
-    if norm(t) < 1.0e-8 * norm(axis) || norm(axis) == 0.0 { t = a1; }
-    e1 = unit(t);
-    e2 = cross(e3, e1);
-    // c[2 a + k] = g^a · e_k, from the inverse of the metric of a1 and a2.
-    let g11 = dot3(a1, a1);
-    let g12 = dot3(a1, a2);
-    let g22 = dot3(a2, a2);
-    let det = g11 * g22 - g12 * g12;
-    var up1: f64[3] = [0.0; 3];
-    var up2: f64[3] = [0.0; 3];
-    for k in 3 {
-        up1[k] = (g22 * a1[k] - g12 * a2[k]) / det;
-        up2[k] = (g11 * a2[k] - g12 * a1[k]) / det;
-    }
-    let c00 = dot3(up1, e1);
-    let c01 = dot3(up1, e2);
-    let c10 = dot3(up2, e1);
-    let c11 = dot3(up2, e2);
+    let c00, c01, c10, c11 = local_frame(c);
     for i in 24 {
         for s in 2 {
             let e11 = cov[72 * s + i];
@@ -170,6 +148,31 @@ fn local_rows(c: i64, xi: f64, eta: f64) {
         rows[168 + i] = c01 * g1[i] + c11 * g2[i];
     }
     drilling_rows(xi, eta, c00, c01, c10, c11);
+}
+
+// The local axes e1, e2, e3 and the area of cell c from a1 and a2, and
+// c[2 a + k] = g^a · e_k from the inverse of the metric of a1 and a2.
+fn local_frame(c: i64) -> f64, f64, f64, f64 {
+    guard c >= 0 && c < shells.len else { abort("local_frame: 0 <= c < shells.len"); }
+    let n = cross(a1, a2);
+    area = norm(n);
+    e3 = unit(n);
+    let axis = shells[c].axis;
+    var t = sub(axis, [dot3(axis, e3) * e3[0], dot3(axis, e3) * e3[1], dot3(axis, e3) * e3[2]]);
+    if norm(t) < 1.0e-8 * norm(axis) || norm(axis) == 0.0 { t = a1; }
+    e1 = unit(t);
+    e2 = cross(e3, e1);
+    let g11 = dot3(a1, a1);
+    let g12 = dot3(a1, a2);
+    let g22 = dot3(a2, a2);
+    let det = g11 * g22 - g12 * g12;
+    var up1: f64[3] = [0.0; 3];
+    var up2: f64[3] = [0.0; 3];
+    for k in 3 {
+        up1[k] = (g22 * a1[k] - g12 * a2[k]) / det;
+        up2[k] = (g11 * a2[k] - g12 * a1[k]) / det;
+    }
+    return dot3(up1, e1), dot3(up1, e2), dot3(up2, e1), dot3(up2, e2);
 }
 
 // The drilling row at (xi, eta): θ · e3 - ½ (∂u/∂x1 · e2 - ∂u/∂x2 · e1),
@@ -201,6 +204,10 @@ fn mat3_row(m: f64[9], r0: i64, j: i64) -> f64[3] {
 // a pressure qx along the top normal e3 instead.
 fn shell_load(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {
     guard c >= 0 && c < shells.len && load.len == dof_count() else { abort("shell_load: 0 <= c < shells.len, and a load for each dof"); }
+    if shells[c].count == 9 {
+        shell_load9(c, qx, qy, qz, normal);
+        return;
+    }
     load_cell(c);
     for gp in 4 {
         let xi = if gp % 2 == 0 { -GAUSS } else { GAUSS };
@@ -220,6 +227,7 @@ fn shell_load(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {
 // of the section: (11, 22, engineering 12).
 fn shell_strains(c: i64, xi: f64, eta: f64) -> f64[3], f64[3] {
     guard c >= 0 && c < shells.len && disp.len == dof_count() else { abort("shell_strains: 0 <= c < shells.len, and a solution for each dof"); }
+    if shells[c].count == 9 { return shell_strains9(c, xi, eta); }
     load_cell(c);
     local_rows(c, xi, eta);
     var eps: f64[3] = [0.0, 0.0, 0.0];
@@ -237,12 +245,18 @@ fn shell_strains(c: i64, xi: f64, eta: f64) -> f64[3], f64[3] {
     return eps, kap;
 }
 
-// The membrane force N and the membrane strain of cell c at its centre, as
+// The membrane force N and the membrane strain of cell c at its centre
+// (MITC4 or MITC9), as
 // 3 × 3 tensors in global axes (row-major).
 fn shell_resultants(c: i64) -> f64[9], f64[9] {
+    return shell_resultants_at(c, 0.0, 0.0);
+}
+
+// shell_resultants at (xi, eta) of cell c.
+fn shell_resultants_at(c: i64, xi: f64, eta: f64) -> f64[9], f64[9] {
     guard c >= 0 && c < shells.len && shells[c].section >= 0 && shells[c].section < sections.len else { abort("shell_resultants: 0 <= c < shells.len, and its section < sections.len"); }
     let s = sections[shells[c].section];
-    let eps, kap = shell_strains(c, 0.0, 0.0);
+    let eps, kap = shell_strains(c, xi, eta);
     var nl: f64[3] = [0.0; 3];
     for k in 3 {
         nl[k] = s.a[3 * k] * eps[0] + s.a[3 * k + 1] * eps[1] + s.a[3 * k + 2] * eps[2]
@@ -267,7 +281,7 @@ fn mean_resultants(n: i64) -> f64[9], f64[9] {
     var et: f64[9] = [0.0; 9];
     var count = 0;
     for c in shells.len {
-        if position(shells[c].n[..], n) < 0 { continue; }
+        if position(shells[c].n[..shells[c].count], n) < 0 { continue; }
         let a, b = shell_resultants(c);
         for k in 9 {
             nt[k] += a[k];
@@ -289,6 +303,10 @@ fn mean_directors() {
     var sum: f64[>..] = [];
     for i in coords.len { sum.push(0.0); }
     for c in shells.len {
+        if shells[c].count == 9 {
+            add_normals9(c, sum);
+            continue;
+        }
         load_cell(c);
         for l in 4 {
             covariant(NODE_XI[l], NODE_ETA[l]);
