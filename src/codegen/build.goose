@@ -8,7 +8,9 @@
 //     native.toon     the run of profile.c at the default values
 //     corner.toon     its run at the corner of the ranges with the most dofs
 //     wasm.c          main.c with the regions of WebAssembly
-//     <model>.html    the page, with the module in it
+//     solve.html      the module and the solve of the page (skein report
+//                     puts it in its page)
+//     <model>.html    the page, with solve.html in it
 //
 // A Goose data stack is a region of reserved address space with a guard
 // gap behind it. WebAssembly memory has no reservation and no guard
@@ -340,8 +342,9 @@ fn build_page(dir: u8[:], model: u8[:], params: Control[:], corner: u8[..256][:]
     }
     var native: u8[>..] = [];
     read_file(str(dir, "/native.toon"), native);
+    let solve = solve_html(model, params, glue);
     let page = str(dir, "/", model, ".html");
-    guard write_file(page, page_html(model, params, native, glue, total, seconds)) else {
+    guard write_file(str(dir, "/solve.html"), solve) && write_file(page, page_html(model, solve, native, total, seconds)) else {
         write_stderr(str("skein build: cannot write '", page, "'\n"));
         return 1;
     };

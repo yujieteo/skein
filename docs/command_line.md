@@ -477,13 +477,14 @@ A model with errors gives no document: `md` writes the diagnostics of
 skein report samples/01_cantilever.skn --study sizes -o cantilever.html
 ```
 
-`report` runs `check`, `verify` and `run` on the model, then writes one
-HTML file. The file opens offline in a browser with WebGL2: it holds the
-viewer, the source, the tables and the results. Without `-o`, the file is
+`report` runs `check`, `verify` and `run` on the model, and `build
+--target wasm` (§7), then writes one HTML file. The file opens offline in
+a browser with WebGL2: it holds the viewer, the source, the tables, the
+results and the solve of the page of `build`. Without `-o`, the file is
 `<model>.html`. Without `--study`, the report uses the first study of the
 model, or a single run if the model has no study. With `--no-run`,
-`report` uses the last run of the study in `.skein/studies/` and solves
-nothing. Reason: the interposer sweep of 72 cases runs for more than an
+`report` uses the last run of the study in `.skein/studies/` and does not
+run the study. Reason: the interposer sweep of 72 cases runs for more than an
 hour. `skein run --study` writes a hash of the source of the model and of
 its `use` files in `.skein/studies/<model>/<study>.hash`. If the hash is
 missing or is not the hash of the current source, `report --no-run` stops
@@ -506,9 +507,15 @@ solve of each step (cells, dofs, iterations, time, convergence), the
 verification checks with their values, limits and results, the reports,
 and the study table. Each row links to its line of the source.
 
-With a study, each param of the grid has a slider. A slider moves
-between the stored cases. The page does not solve: it shows only the
-cases of the native run.
+Each param of the study grid has a slider, and so does each param that
+has a control in the page of `build` (§7). A slider at the values of a
+stored case shows that case at once. A slider that stops at other values
+meshes and solves the model in the page, as the page of `build` does,
+and the viewer and the tables show that run. A value near a stored value
+(1 % of the range) takes the stored value. If `build` fails, or the
+model is too large for the browser, the sliders move only between the
+stored cases. Reason: the interposer study has 72 cases, and its sliders
+must reach each value of each range.
 
 The input "Open VTU" opens a VTU file of another solver in the same
 viewer, without source links.
@@ -525,6 +532,7 @@ the size in bytes and the number of cases:
 report: cantilever.html
 bytes: 9123456
 cases: 16
+solve_in_page: yes
 ```
 
 The exit status is that of `run` (§10).

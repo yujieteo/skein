@@ -6,6 +6,12 @@
 // TOON and its result files. Each result file is a small VTU, gzip in
 // base64, in the script element #vtu-<n>. The viewer also opens a VTU file
 // of another solver (the button "Open VTU"). That view has no source links.
+//
+// The page can also hold the solve of `skein build --target wasm`
+// (solve_html of src/codegen/page.goose): PARAMS, MODULE and skeinSolve.
+// Then each param of PARAMS has a slider over its range. A slider at the
+// values of a stored case shows that case at once. A slider that stops at
+// other values meshes and solves in the page, and the solve becomes a case.
 'use strict';
 
 // --- TOON --------------------------------------------------------------------------
@@ -971,7 +977,7 @@ function valueOf(model, text) {
 const D = JSON.parse(document.getElementById('skein-data').textContent);
 const M = readModel(D.source || '');
 const S = {
-  caseIndex: 0, step: 0, field: null, scale: 1, bands: 0, cut: 'off', cutAt: 0.5, mark: null, probe: null,
+  caseIndex: 0, values: {}, step: 0, field: null, scale: 1, bands: 0, cut: 'off', cutAt: 0.5, mark: null, probe: null,
   mesh: null, foreign: null, lines: false,
 };
 const meshes = new Map();
@@ -983,26 +989,62 @@ const tableToon = parseToon(D.table);
 const caseToons = (D.cases || []).map((c) => parseToon(c.run));
 const studyTable = tableToon.tables.cases || null;
 const studyParams = studyTable ? studyTable.cols.slice(1, studyTable.cols.indexOf('status')) : [];
+// The solve of the page, or false.
+const SOLVE = typeof skeinSolve === 'function' && MODULE.length > 0;
+const solveParams = SOLVE ? PARAMS.filter((p) => M.params.some((x) => x.name === p.name)) : [];
 
-// The param values of case i, name → text.
+// The param values of case i, name → text: the values of a solve in the
+// page, else the study values and the default of each other param of PARAMS.
 function caseValues(i) {
+  if (D.cases[i] && D.cases[i].values) return { ...D.cases[i].values };
   const out = {};
+  for (const p of solveParams) out[p.name] = M.params.find((x) => x.name === p.name).value;
   if (!studyTable || !studyTable.rows[i]) return out;
   studyParams.forEach((p, k) => { out[p] = studyTable.rows[i][k + 1]; });
   return out;
 }
 
-// The stored case of the param values `values` (name → value text), or
-// null. A browser solve can put a live solve behind this function: it takes
-// the same values, and gives a case of the same form ({ id, run, results }).
+function sameValue(a, b) {
+  const x = valueOf(M, a), y = valueOf(M, b);
+  return Math.abs(x - y) <= 1e-9 * Math.max(Math.abs(x), Math.abs(y), 1e-300);
+}
+
+// The case of the param values `values` (name → value text): a stored case
+// or a solve in the page, or null.
 async function caseFor(values) {
-  if (!studyTable) return D.cases[0] || null;
-  const want = studyParams.map((p) => valueOf(M, values[p]));
-  const i = studyTable.rows.findIndex((row) => studyParams.every((p, k) => {
-    const v = valueOf(M, row[k + 1]);
-    return Math.abs(v - want[k]) <= 1e-9 * Math.max(Math.abs(v), Math.abs(want[k]), 1e-300);
-  }));
+  const i = D.cases.findIndex((c, k) => {
+    const v = caseValues(k);
+    return Object.keys(values).every((p) => !(p in v) || sameValue(v[p], values[p]));
+  });
   return i < 0 ? null : D.cases[i];
+}
+
+// The value of the text `t` in the unit of the param p of PARAMS.
+function inUnit(p, t) { return valueOf(M, t) / (p.unit ? valueOf(M, '1 ' + p.unit) : 1); }
+
+let solves = 0;
+
+// Meshes and solves the param values `values` in the page. It gives the
+// new case, or null if the solve fails or a newer solve stops it.
+async function solveCase(values) {
+  const note = document.getElementById('note');
+  note.textContent = 'meshing and solving ' + solveParams.map((p) => p.name + ' = ' + values[p.name]).join(', ') + ' in the page';
+  document.body.dataset.solve = 'running';
+  const nums = {};
+  for (const p of solveParams) nums[p.name] = inUnit(p, values[p.name]);
+  const r = await skeinSolve(nums);
+  if (r.code === -2) return null;
+  document.body.dataset.solve = String(r.code);
+  const results = Object.entries(r.files).map(([path, text]) => ({ path, text }));
+  if (!results.length) {
+    note.textContent = 'The solve in the page failed with exit ' + r.code + ': ' + (r.err.trim().split('\n').pop() || 'no result file');
+    return null;
+  }
+  note.textContent = '';
+  const c = { id: 'page ' + ++solves, values, run: r.out, results, seconds: r.seconds, code: r.code };
+  D.cases.push(c);
+  caseToons.push(parseToon(r.out));
+  return c;
 }
 
 // The parsed VTU of blob k.
@@ -1012,9 +1054,14 @@ async function blobVtu(k) {
 
 // The mesh of result r: its mesh blob with its fields blob, decoded and
 // built once. The cache keeps the last 12 meshes. Reason: a study of 100
-// cases of 50000 nodes needs about 1 GB for all its meshes.
+// cases of 50000 nodes needs about 1 GB for all its meshes. A result of a
+// solve in the page has the VTU text, and keeps its mesh.
 const geometries = new Map();
 function meshOf(r) {
+  if ('text' in r) {
+    if (!r.built) r.built = parseVtu(new TextEncoder().encode(r.text)).then(buildMesh);
+    return r.built;
+  }
   if (!meshes.has(r.blob)) {
     if (!geometries.has(r.mesh)) geometries.set(r.mesh, blobVtu(r.mesh));
     meshes.set(r.blob, (async () => {
@@ -1213,34 +1260,61 @@ function selectStep(name) {
   if (k >= 0) { S.step = k; load(); }
 }
 
+// A slider for each param of the study and of PARAMS. S.values holds the
+// values of the sliders.
 function renderSliders() {
   const box = document.getElementById('sliders');
   box.textContent = '';
-  if (!studyTable) return;
-  box.append(el('h2', {}, 'Study ', D.study, ' ', M.studies.find((s) => s.name === D.study) ? lineLink(M.studies.find((s) => s.name === D.study).line) : null));
-  const now = caseValues(S.caseIndex);
-  for (const p of studyParams) {
+  const names = studyParams.concat(solveParams.map((p) => p.name).filter((n) => !studyParams.includes(n)));
+  if (!names.length) return;
+  const study = M.studies.find((x) => x.name === D.study);
+  box.append(studyTable ? el('h2', {}, 'Study ', D.study, ' ', study ? lineLink(study.line) : null) : el('h2', {}, 'Params'));
+  if (SOLVE) box.append(el('p', { class: 'note' }, 'A slider at the values of a stored case shows that case. A slider that stops at other values meshes and solves the model in the page.'));
+  for (const p of names) {
     const seen = [];
-    for (let i = 0; i < studyTable.rows.length; i++) {
+    for (let i = 0; i < D.cases.length; i++) {
       const t = caseValues(i)[p];
-      if (!seen.some((x) => valueOf(M, x) === valueOf(M, t))) seen.push(t);
+      if (t !== undefined && !seen.some((x) => sameValue(x, t))) seen.push(t);
     }
     seen.sort((a, b) => valueOf(M, a) - valueOf(M, b));
-    const at = Math.max(0, seen.findIndex((x) => valueOf(M, x) === valueOf(M, now[p])));
     const param = M.params.find((x) => x.name === p);
-    const input = el('input', { type: 'range', id: 'slider-' + p, 'data-param': p, min: 0, max: seen.length - 1, step: 1, value: at,
-      oninput: async (ev) => {
-        const values = caseValues(S.caseIndex);
-        values[p] = seen[+ev.target.value];
-        const c = await caseFor(values);
-        if (c) selectCase(D.cases.indexOf(c));
-        else document.getElementById('note').textContent = 'no stored case has these values';
-      } });
+    const control = solveParams.find((x) => x.name === p);
+    const out = el('output', { id: 'value-' + p }, S.values[p]);
+    const set = (t, solve) => { S.values[p] = t; out.textContent = t; showValues(solve); };
+    let input;
+    if (control) {
+      // A value near a stored value takes the stored value.
+      const at = (x) => seen.find((t) => Math.abs(inUnit(control, t) - x) <= 0.01 * (control.hi - control.lo)) ||
+        fmt(x) + (control.unit ? ' ' + control.unit : '');
+      input = el('input', { type: 'range', id: 'slider-' + p, 'data-param': p, min: control.lo, max: control.hi, step: 'any',
+        value: inUnit(control, S.values[p]), oninput: (ev) => set(at(+ev.target.value), false), onchange: (ev) => set(at(+ev.target.value), true) });
+    } else {
+      input = el('input', { type: 'range', id: 'slider-' + p, 'data-param': p, min: 0, max: seen.length - 1, step: 1,
+        value: Math.max(0, seen.findIndex((x) => sameValue(x, S.values[p]))),
+        oninput: (ev) => set(seen[+ev.target.value], false), onchange: (ev) => set(seen[+ev.target.value], true) });
+    }
     box.append(el('div', { class: 'slider' },
-      el('label', { for: 'slider-' + p }, el('b', {}, p), ' = ', el('output', { id: 'value-' + p }, now[p]), ' ',
-        param ? lineLink(param.line) : null),
+      el('label', { for: 'slider-' + p }, el('b', {}, p), ' = ', out, ' ', param ? lineLink(param.line) : null),
       input,
       param && param.doc ? el('div', { class: 'doc' }, param.doc) : null));
+  }
+}
+
+// Shows the case of the values of the sliders. Without a case, `solve`
+// meshes and solves them in the page.
+async function showValues(solve) {
+  const values = { ...S.values };
+  let c = await caseFor(values);
+  if (!c && solve && SOLVE) {
+    c = await solveCase(values);
+    if (JSON.stringify(values) !== JSON.stringify(S.values)) return;    // the sliders moved on
+  }
+  if (c) {
+    if (D.cases.indexOf(c) !== S.caseIndex) selectCase(D.cases.indexOf(c));
+  } else if (!SOLVE) {
+    document.getElementById('note').textContent = 'no stored case has these values';
+  } else if (!solve) {
+    document.getElementById('note').textContent = 'no stored case has these values: release the slider to solve them in the page';
   }
 }
 
@@ -1251,10 +1325,15 @@ function focusSlider(p) {
 
 function selectCase(i) {
   if (i < 0 || i >= D.cases.length) return;
+  // The sliders stay if they have the values of the case. Reason: a new
+  // slider element stops the drag of the old one.
+  const v = caseValues(i);
+  const same = Object.keys(v).every((p) => p in S.values && sameValue(S.values[p], v[p]));
   S.caseIndex = i;
+  S.values = v;
   S.step = Math.max(0, Math.min(S.step, D.cases[i].results.length - 1));
   S.foreign = null;
-  renderSliders();
+  if (!same) renderSliders();
   renderTables();
   load();
 }
@@ -1296,11 +1375,10 @@ function renderTables() {
   box.textContent = '';
   const toon = S.foreign ? null : caseToons[S.caseIndex];
   if (S.foreign) { box.append(el('p', { class: 'note' }, 'This view shows ', S.foreign, ', a VTU file of another solver: it has no source links and no solver tables.')); return; }
-  box.append(el('h2', {}, studyTable ? `Case ${D.cases[S.caseIndex].id}` : 'Run'));
-  if (studyTable) {
-    const v = caseValues(S.caseIndex);
-    box.append(el('p', {}, studyParams.map((p) => `${p} = ${v[p]}`).join(', ')));
-  }
+  const c = D.cases[S.caseIndex];
+  box.append(el('h2', {}, c.values ? `Solve in the page (${c.seconds.toFixed(1)} s, exit ${c.code})` : studyTable ? `Case ${c.id}` : 'Run'));
+  const v = caseValues(S.caseIndex);
+  if (Object.keys(v).length) box.append(el('p', {}, Object.entries(v).map(([p, t]) => `${p} = ${t}`).join(', ')));
   // the solver
   const method = checkToon.tables.method;
   box.append(table('Method', method, (c, v, r) => (v === null ? c : c === 'physics' ? withLine(v, itemLine('physics', v)) :
@@ -1654,6 +1732,7 @@ async function main() {
     const c = await caseFor(defaults);
     S.caseIndex = c ? D.cases.indexOf(c) : 0;
   }
+  S.values = caseValues(S.caseIndex);
   renderSliders();
   renderTables();
   try {
@@ -1668,5 +1747,5 @@ async function main() {
 }
 
 // The functions that a test or a browser solve uses.
-window.skein = { caseFor, selectCase, parseVtu, parseToon, probe, get view() { return view; }, state: S, data: D, model: M };
+window.skein = { caseFor, solveCase, selectCase, parseVtu, parseToon, probe, get view() { return view; }, state: S, data: D, model: M };
 main();
