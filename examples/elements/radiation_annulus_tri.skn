@@ -1,0 +1,59 @@
+// Two long concentric tubes in vacuum. The bore of the inner tube is at
+// 1000 K, the outside of the outer tube at 300 K, and the gap between them
+// passes the heat by gray diffuse radiation only. Steady conduction, 2D.
+// The reference is the closed form: the conduction of each tube,
+// ln(r_out/r_in)/(2 pi k), in series with the radiation between two
+// concentric cylinders, 2 pi r1 sb (T1^4 - T2^4)/(1/e1 + r1/r2*(1/e2 - 1)).
+// Its root is 1343.782788 W/m, with T1 = 925.8784195 K and
+// T2 = 330.7632354 K.
+
+model radiation_annulus: 2d, SI
+
+let r0: Length = 5 mm
+let r1: Length = 10 mm
+let r2: Length = 15 mm
+let r3: Length = 20 mm
+let T_hot: Temperature = 1000 K
+let T_out: Temperature = 300 K
+
+scales r3, 700 K, 2 W/(m*K)
+
+let bore: Surface = circle((0, 0) m, r0)
+let rod: Surface = circle((0, 0) m, r1)
+let gap: Surface = circle((0, 0) m, r2)
+let jacket: Surface = circle((0, 0) m, r3)
+let body: Surface = (rod - bore) | (jacket - gap)
+let hot: Curve = boundary(body, bore)
+let rod_face: Curve = boundary(body, rod)
+let tube_face: Curve = boundary(body, gap)
+let outside: Curve = boundary(body, jacket)
+
+material steel {
+    k: Conductivity = 2 W/(m*K)
+}
+
+mesh m on body {
+    size: 0.5 mm
+    cell: tri
+}
+
+physics thermal on body: heat solves T: Temperature = 300 K {
+    material steel
+}
+
+method thermal: cg { mesh: m, order: 2 }
+
+// The two faces of the gap make one enclosure.
+step steady: static {
+    bc hot: T = T_hot
+    bc outside: T = T_out
+    bc rod_face: dot(q, n) = radiation(0.8)
+    bc tube_face: dot(q, n) = radiation(0.5)
+    output T
+    // The closed form gives 1343.782788 W/m.
+    report heat_in = reaction(hot)
+}
+
+expect rod_side: T at (r1, 0 m) == 925.8784195 K within 0.01%
+
+expect tube_side: T at (r2, 0 m) == 330.7632354 K within 0.01%

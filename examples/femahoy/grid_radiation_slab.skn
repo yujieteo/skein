@@ -49,4 +49,4 @@ step steady: static {
 expect face: T at (0.005, 0.005, 0.1) m == 809.185667706 K within 1e-6%
 expect middle: T at (0.005, 0.005, 0.05) m == 904.592833853 K within 1e-6%
 // The heat into the slab at the radiating face.
-expect radiation: -integral(dot(q, n), radiating) == -1.908143323 W within 1e-6%
+expect radiated: -integral(dot(q, n), radiating) == -1.908143323 W within 1e-6%

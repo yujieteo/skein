@@ -1316,6 +1316,24 @@ Reason: a test puts its load on a face through a rigid plate, and the
 force and the moment of the plate are in the test (femahoy gap G17,
 CalculiX `*EQUATION`).
 
+The right side `radiation(eps)` of a natural condition on a heat flux is
+the net gray diffuse radiation out of the face, with the emissivity `eps`
+(a constant `Real`). The faces of all such conditions of a step make one
+enclosure, and they must close it. The view factors between the facets of
+the mesh are from the crossed strings of Hottel, with the facets that hide
+a pair in part. The temperature must be absolute (K). Other uses of
+`radiation` are errors [`radiation_form`].
+
+```skein
+bc rod_face: dot(q, n) = radiation(0.8)
+bc tube_face: dot(q, n) = radiation(0.5)
+```
+
+Reason: the radiation between surfaces is non-local, so the strong form
+cannot state it (decision G4.2). A condition and not a separate item:
+radiation is the flux of a face, like the other natural conditions.
+`skein run` solves it in a `2d` model.
+
 ### 12.2 Where `bc` may stand
 
 A `bc` at the top level applies in all steps. A `bc` in a step applies from
@@ -2431,6 +2449,7 @@ project of its own size, and Skein is a simulation language first. See the
 | `tangent(f, top)`, `ply_stiffness(E1, E2, G12, nu12)`, `laminate(Q, layup, mirror, t_ply, h, axis, top, k)`, `along(f)` | shells and beams (§4.3) |
 | `reaction(r)`, `integral(f, r)`, `mean(f, r)`, `argmax(f, r)`, `eigenvalue(k)`, `when(f, value)`, `rms(f, psd)` | reports (§14.5), and `integral` and `mean` in the `eq` of a global unknown (§10.5) |
 | `rigid(p)`, `moment(F*n)` | a rigid face and the moment on its point (§12.1) |
+| `radiation(eps)` | the gray diffuse radiation of a face to the other faces of its enclosure, in a natural condition (§12.1) |
 | `results(file, step:)` | §15.1 |
 | `boundary(g, s)`, geometry functions | §8 |
 

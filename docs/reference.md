@@ -346,6 +346,7 @@ bc corner: p = 0                      // a point
 bc load_pt: sigma*n = (0, 0, -1) kN   // a point force
 bc plate: u = rigid(c)                // a rigid face: straight, it turns about c
 bc c: moment(sigma*n) = (0, 5, 0) N*m // the moment on the rigid face
+bc gap_face: dot(q, n) = radiation(0.8) // gray radiation to the other faces of the enclosure
 ```
 
 A `bc` outside the steps applies in all steps. A `bc` inside a step applies

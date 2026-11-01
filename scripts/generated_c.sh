@@ -38,6 +38,7 @@ examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
+examples/elements/radiation_annulus_tri.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_kirsch_hole.skn

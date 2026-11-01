@@ -99,7 +99,7 @@ The core choices that each section tests:
 | Nonlinear structures (plasticity, hyperelasticity, large deformation) | `plastic`, `diff(W, C)`, `finite_strain` (§10.6) | a user law with many state variables needs a return map that the compiler must derive. A general return map for any yield function is hard. | phase 5. Start with von Mises and Drucker-Prager, and give a clear error for a law the compiler cannot map. |
 | Shells and beams | lower-dimension regions (§8.3) | the strong form of a shell (Reissner-Mindlin, Kirchhoff-Love) is long. Users do not write it from memory. | standard-library templates `reissner_mindlin` and `timoshenko`, in Skein source (spec §4.2, G4.1), phase 5 |
 | Contact | `contact` (§12.4) | not a PDE: an inequality. It does not fit the strong form, so it is a separate item. | accepted cost |
-| Heat transfer | C1 with `fourier`, `transient` | radiation between surfaces needs view factors, a non-local term | a `radiation` item with view factors, phase 5 (G4.2) |
+| Heat transfer | C1 with `fourier`, `transient` | radiation between surfaces needs view factors, a non-local term | the natural condition `dot(q, n) = radiation(eps)` with view factors (spec §12.1, G4.2). It runs in `2d` models. |
 | Incompressible CFD | `supg_pspg`, `vms`, `fv` with Rhie-Chow | none of note for laminar flow | — |
 | Turbulent CFD | `turbulent(model)` assumption | RANS models add equations with wall functions. LES needs `vms`. Each model is many lines. | the standard-library template `k_omega_sst` (spec §4.2, G4.1), phase 5 |
 | Compressible CFD with shocks | `dg`, `fv` with Roe flux | shocks need limiters or artificial viscosity, and the spec has no setting for them | `limiter` for `fv` (spec §13, G4.3). `dg` has no shock capturing until a model needs it. |
@@ -287,7 +287,7 @@ The captain decided each gap on 2026-10-30 ([grilling.md](grilling.md#answers)).
 | Gap | Workloads | Decision | Phase | Question |
 |---|---|---|---|---|
 | standard-library physics | shells, beams, turbulence | physics templates in Skein source (spec §4.2) | 2 to 5 | G4.1 |
-| radiation | heat transfer | a `radiation` item with view factors | 5 | G4.2 |
+| radiation | heat transfer | `radiation(eps)` in a natural condition, with view factors (spec §12.1). A condition, not an item: radiation is the flux of a face. | 5 | G4.2 |
 | shock capturing | compressible CFD | `limiter` for `fv` | 4 | G4.3 |
 | element families | electromagnetics, porous media | `family: nedelec \| raviart_thomas` | 5 | G4.4 |
 | number systems | electromagnetics, acoustics | `Real` and `Complex`, and the `harmonic` procedure (spec §5.1). `Quaternion` and `Dual` cut on 2026-10-31: no model used them. | 4 | G4.5, G4.5b |

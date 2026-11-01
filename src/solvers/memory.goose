@@ -82,6 +82,8 @@ struct MemoryPath {
 //                         2026-11-01: 14.5 (U and L, 8 bytes each). The check is before the
 //                         factors are sized; the check of the solve counts 0 entries. No
 //                         threads.
+//     radiation dense     counted, not measured: the n × n arrays F, M, X and Q of the
+//                         facets of an enclosure (src/elements/radiation.goose). No threads.
 let MEMORY_PATHS = [
     MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "box cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 1.0 },
@@ -95,6 +97,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "grid ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "meshless skyline lu", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "radiation dense", entry_bytes: 32.0, dof_bytes: 0.0, thread_bytes: 0.0 },
 ];
 
 // The bytes of each worker thread of a case: its stacks. Measured: 16

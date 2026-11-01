@@ -173,6 +173,7 @@ var setting_mode = false; // an undeclared name is a word (a setting value)
 var in_expect = false;
 var in_report = false;
 var in_bc = false;        // a bc whose left side names no unknown
+var in_natural = false;   // the right side of a natural bc
 var last_reports: u8[..64][>..];   // the named reports of the last step
 var scale_dims: i64[7][>..];
 var used_dims: i64[7][>..];
@@ -233,6 +234,7 @@ fn reset_state() {
     in_expect = false;
     in_report = false;
     in_bc = false;
+    in_natural = false;
     report_tok = -1;
     last_reports.clear();
     scale_dims.clear();

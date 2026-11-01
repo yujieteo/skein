@@ -14,6 +14,7 @@ namespace elements;
 import .mesh;
 import .assemble;
 import .stages;
+import .radiation;
 import solvers from "../solvers";
 
 var last_iterations = 0;
@@ -90,6 +91,14 @@ fn solve_system() -> bool {
     // r, z, p, q and the source vector
     assemble("simplex cg amg", 5);
     hold_dead_nodes();
+    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
+    if rad_count() > 0 { return radiation_solve(start); }
+    return cg_solve(start);
+}
+
+// CG on K du = f - K u from the u in sol, for the matrix and the loads of
+// the last assemble.
+fn cg_solve(start: f64) -> bool {
     let n = sol.len;
     var r = zeros(n);
     var z = zeros(n);
@@ -97,7 +106,6 @@ fn solve_system() -> bool {
     var q = zeros(n);
     let sizes = state_sizes();
     solvers::rows_start(row_start, col, val);
-    for d in n { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
     multiply(sol, q);
     var f2 = 0.0;
     for d in n {
@@ -140,6 +148,48 @@ fn solve_system() -> bool {
     guard state_sizes() == sizes else { abort("solve_system: a solve grows no array of the state (rule 3)"); }
     last_iterations = it;
     last_seconds = clock() - start;
+    return converged;
+}
+
+// The Picard iteration of radiation.goose: each step solves
+// (K + D) T' = f - R(T) + D T with CG, from T. At the end `load` holds
+// f - R(T), so the reactions and the check of the equilibrium hold the
+// radiated heat.
+fn radiation_solve(start: f64) -> bool {
+    exchange_matrix();
+    let n = sol.len;
+    var base: f64[>..] = [];
+    var k: f64[>..] = [];
+    var r = zeros(n);
+    var dg = zeros(n);
+    var last = zeros(n);
+    base.append(load);
+    k.append(val);
+    var converged = false;
+    var its = 0;
+    rad_steps = 0;
+    while !converged && rad_steps < RAD_STEPS {
+        radiated(r, dg);
+        for d in n {
+            val[entry(d, d)] = k[entry(d, d)] + dg[d];
+            load[d] = base[d] - r[d] + dg[d] * sol[d];
+            last[d] = sol[d];
+        }
+        guard cg_solve(start) else { return false; }
+        its += last_iterations;
+        rad_steps++;
+        var change = 0.0;
+        var top = 0.0;
+        for d in n {
+            change = max(change, abs(sol[d] - last[d]));
+            top = max(top, abs(sol[d]));
+        }
+        converged = change <= RAD_TOLERANCE * top;
+    }
+    radiated(r, dg);
+    for d in n { load[d] = base[d] - r[d]; }
+    for e in val.len { val[e] = k[e]; }
+    last_iterations = its;
     return converged;
 }
 
