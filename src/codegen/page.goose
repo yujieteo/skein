@@ -37,8 +37,8 @@ let PAGE_IMPORTS = """
     """;
 
 // The end of the program of the page. The arguments are the words of
-// `--set`. web_quality prints the mesh_quality record of the mesh after
-// the records.
+// `--set`. web_quality prints the mesh_quality record of a simplex mesh
+// after the records.
 let PAGE_MAIN = """
 
     fn web_quality() {
@@ -167,34 +167,49 @@ fn base64(out: u8[>..]&, s: u8[:]) {
     }
 }
 
-// The page of `model`, with its controls `params`, the native run
-// `native` of `seconds`, the module `glue` (empty if the model is too
-// large) and the memory of its regions.
-fn page_html(model: u8[:], params: Control[:], native: u8[:], glue: u8[:], memory_mb: i64, seconds: f64) -> u8[>..] {
+// The solve of a page, for the page of `skein build` and for the report
+// of `skein report` (src/report): the module `glue` of the model `model`
+// in base64 (empty if the model is too large), the controls PARAMS of
+// `params`, the memory MEMORY_MB of the run, `memory_mb`, and skeinSolve.
+// It is two script elements.
+fn solve_html(model: u8[:], params: Control[:], glue: u8[:], memory_mb: i64) -> u8[>..] {
+    var out: u8[>..] = "<script id=\"skein-module\" type=\"application/octet-stream\">";
+    base64(out, glue);
+    out.append("</script>\n<script>\n\"use strict\";\nconst PARAMS = [");
+    for k, i in params {
+        out.append(if i > 0 { ", " } else { "" });
+        out.append("{\"name\": ");
+        json_string(out, k.name);
+        out.append(", \"unit\": ");
+        json_string(out, k.unit);
+        format(out, ", \"lo\": ", k.lo, ", \"hi\": ", k.hi, ", \"value\": ", k.value, "}");
+    }
+    out.append("];\nconst RESULTS = ");
+    json_string(out, str(".skein/results/", model));
+    format(out, ";\nconst MEMORY_MB = ", memory_mb, ";\nconst MAX_MEMORY_MB = ", MAX_MEMORY_MB, ";\n");
+    out.append(SOLVE_JS);
+    out.append("</script>\n");
+    return out;
+}
+
+// The page of `model`, with its solve `solve` (solve_html) and the native
+// run `native` of `seconds`.
+fn page_html(model: u8[:], solve: u8[:], native: u8[:], seconds: f64) -> u8[>..] {
     var out: u8[>..] = [];
     var data: u8[>..] = [];
     data.append("const MODEL = ");
     json_string(data, model);
-    data.append(";\nconst PARAMS = [");
-    for k, i in params {
-        data.append(if i > 0 { ", " } else { "" });
-        data.append("{\"name\": ");
-        json_string(data, k.name);
-        data.append(", \"unit\": ");
-        json_string(data, k.unit);
-        format(data, ", \"lo\": ", k.lo, ", \"hi\": ", k.hi, ", \"value\": ", k.value, "}");
-    }
-    data.append("];\nconst NATIVE = ");
+    data.append(";\nconst NATIVE = ");
     json_string(data, native);
-    format(data, ";\nconst MEMORY_MB = ", memory_mb, ";\nconst MAX_MEMORY_MB = ", MAX_MEMORY_MB, ";\nconst NATIVE_SECONDS = ", seconds, ";\n");
+    format(data, ";\nconst NATIVE_SECONDS = ", seconds, ";\n");
     var at = 0;
     while at < PAGE_HTML.len {
         if PAGE_HTML.len - at >= 6 && PAGE_HTML[at..at + 6] == "@DATA@" {
             out.append(data);
             at += 6;
-        } else if PAGE_HTML.len - at >= 8 && PAGE_HTML[at..at + 8] == "@MODULE@" {
-            base64(out, glue);
-            at += 8;
+        } else if PAGE_HTML.len - at >= 7 && PAGE_HTML[at..at + 7] == "@SOLVE@" {
+            out.append(solve);
+            at += 7;
         } else if PAGE_HTML.len - at >= 7 && PAGE_HTML[at..at + 7] == "@MODEL@" {
             out.append(model);
             at += 7;
@@ -206,48 +221,18 @@ fn page_html(model: u8[:], params: Control[:], native: u8[:], glue: u8[:], memor
     return out;
 }
 
-// The page. skeinSolve(values) is the solve of the page: it takes the
-// value of each param (in its unit) and gives the run. Each run has a
-// worker and a module of its own, so that a new value stops the run
-// before it, and the memory of a run goes back when it ends.
-let PAGE_HTML = """
-    <!doctype html>
-    <html lang="en">
-    <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@MODEL@ in the browser</title>
-    <style>
-    :root { color-scheme: light dark; --bg: #ffffff; --fg: #1b1b1b; --muted: #606060; --line: #c8c8c8; --bad: #b00020; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #e8e8e8; --muted: #a0a0a0; --line: #444444; --bad: #ff6b6b; } }
-    body { background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
-    pre { overflow-x: auto; border: 1px solid var(--line); padding: 8px; font-size: 12px; }
-    .param { display: grid; grid-template-columns: 5em 1fr 10em; gap: 8px; align-items: center; margin: 6px 0; }
-    .param input[type=number] { width: 7em; }
-    canvas { display: block; width: 100%; aspect-ratio: 2 / 1; border: 1px solid var(--line); }
-    #state { color: var(--muted); }
-    #error { color: var(--bad); font-weight: 600; }
-    </style>
-    </head>
-    <body>
-    <h1>@MODEL@</h1>
-    <p id="note"></p>
-    <div id="params"></div>
-    <p><button id="solve">Solve in the page</button> <span id="state"></span></p>
-    <p id="error"></p>
-    <canvas id="view" width="1200" height="600"></canvas>
-    <p id="summary"></p>
-    <h2>Run in the page</h2>
-    <pre id="out">No run yet.</pre>
-    <h2>Native run (skein run, default values)</h2>
-    <pre id="native"></pre>
-    <script id="skein-module" type="application/octet-stream">@MODULE@</script>
-    <script>
-    "use strict";
-    @DATA@
-    const RESULTS = ".skein/results/" + MODEL;
+// The solve of the page (solve_html). skeinSolve(values) takes the value
+// of each param (in its unit) and gives the run. Each run has a worker and
+// a module of its own, so that a new value stops the run before it, and
+// the memory of a run goes back when it ends.
+let SOLVE_JS = """
     // The loader of the module, in UTF-8 bytes.
     const MODULE = Uint8Array.from(atob(document.getElementById("skein-module").textContent.trim()), (c) => c.charCodeAt(0));
+
+    // The message of a model that is too large for the memory of the browser.
+    function tooLarge() {
+      return "This model is too large for the memory of the browser: it needs " + MEMORY_MB + " MB, and the page has " + MAX_MEMORY_MB + " MB.";
+    }
 
     // The files of the records `results[n]:` of a run.
     function resultPaths(toon) {
@@ -307,6 +292,44 @@ let PAGE_HTML = """
         worker.postMessage({ args: sets, results: RESULTS });
       });
     }
+    """;
+
+// The page of `skein build`. skeinSolve (SOLVE_JS) is its solve.
+let PAGE_HTML = """
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@MODEL@ in the browser</title>
+    <style>
+    :root { color-scheme: light dark; --bg: #ffffff; --fg: #1b1b1b; --muted: #606060; --line: #c8c8c8; --bad: #b00020; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #e8e8e8; --muted: #a0a0a0; --line: #444444; --bad: #ff6b6b; } }
+    body { background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
+    pre { overflow-x: auto; border: 1px solid var(--line); padding: 8px; font-size: 12px; }
+    .param { display: grid; grid-template-columns: 5em 1fr 10em; gap: 8px; align-items: center; margin: 6px 0; }
+    .param input[type=number] { width: 7em; }
+    canvas { display: block; width: 100%; aspect-ratio: 2 / 1; border: 1px solid var(--line); }
+    #state { color: var(--muted); }
+    #error { color: var(--bad); font-weight: 600; }
+    </style>
+    </head>
+    <body>
+    <h1>@MODEL@</h1>
+    <p id="note"></p>
+    <div id="params"></div>
+    <p><button id="solve">Solve in the page</button> <span id="state"></span></p>
+    <p id="error"></p>
+    <canvas id="view" width="1200" height="600"></canvas>
+    <p id="summary"></p>
+    <h2>Run in the page</h2>
+    <pre id="out">No run yet.</pre>
+    <h2>Native run (skein run, default values)</h2>
+    <pre id="native"></pre>
+    @SOLVE@
+    <script>
+    "use strict";
+    @DATA@
 
     // The arrays of a VTU file of skein (ascii).
     function parseVtu(text) {
@@ -323,19 +346,25 @@ let PAGE_HTML = """
       return { xyz: nums(pts.body), conn: nums(conn.body), offs: nums(offs.body), types: nums(types.body), field: nums(field.body), comps };
     }
 
-    // The boundary triangles of the corner nodes of the cells.
+    // The boundary triangles of the corner nodes of the cells: the faces
+    // of a tetrahedron or a hexahedron (VTK type 12) that no other cell
+    // has, and each triangle and quad, a quad as 2 triangles.
+    const TET_FACES = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
+    const HEX_FACES = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
     function surface(v) {
       const tris = [], count = new Map();
+      const split = (f) => (f.length === 3 ? [f] : [[f[0], f[1], f[2]], [f[0], f[2], f[3]]]);
       for (let c = 0; c < v.types.length; c++) {
         const o = c > 0 ? v.offs[c - 1] : 0, t = v.types[c];
-        const n = Array.from(v.conn.slice(o, o + 4));
+        const n = Array.from(v.conn.slice(o, o + 8));
         if (t === 5 || t === 22) { tris.push([n[0], n[1], n[2]]); continue; }
-        for (const f of [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]) {
-          const tri = [n[f[0]], n[f[1]], n[f[2]]], key = tri.slice().sort((a, b) => a - b).join(",");
-          count.set(key, count.has(key) ? null : tri);
+        if (t === 9) { tris.push(...split(n.slice(0, 4))); continue; }
+        for (const f of t === 12 ? HEX_FACES : TET_FACES) {
+          const face = f.map((i) => n[i]), key = face.slice().sort((a, b) => a - b).join(",");
+          count.set(key, count.has(key) ? null : face);
         }
       }
-      for (const tri of count.values()) if (tri) tris.push(tri);
+      for (const face of count.values()) if (face) tris.push(...split(face));
       return tris;
     }
 
@@ -434,8 +463,7 @@ let PAGE_HTML = """
     const row = solveRow(NATIVE);
     if (!MODULE.length) {
       document.getElementById("solve").disabled = true;
-      document.getElementById("note").textContent = "This model is too large for the memory of the browser: it needs " +
-        MEMORY_MB + " MB, and the page has " + MAX_MEMORY_MB + " MB." + (row ? " The native run has " + row[1] + " cells and " + row[2] +
+      document.getElementById("note").textContent = tooLarge() + (row ? " The native run has " + row[1] + " cells and " + row[2] +
         " dofs, and took " + NATIVE_SECONDS.toFixed(1) + " s." : "") + " The page shows the native results.";
     } else {
       document.getElementById("note").textContent = "Each control meshes and solves the model again in the page (WebAssembly, one thread, up to " +

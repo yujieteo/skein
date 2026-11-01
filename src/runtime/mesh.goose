@@ -149,6 +149,42 @@ fn other_axes(axis: i64) -> i64, i64 {
 
 // --- the grid of a union of boxes ----------------------------------------------
 
+// The grid lines along axis a of the union of `boxes` (x0, y0, z0, x1, y1,
+// z1 for each): each face of each box, and each point of `points` (x, y, z
+// for each), is a grid plane. Between two planes, the grid has the fewest
+// equal cells of at most `size` (spec §9.2, as src/mesher/grid.goose).
+fn grid_lines(boxes: f64[:], points: f64[:], a: i64, size: f64) -> f64[>..] {
+    guard boxes.len > 0 && boxes.len % 6 == 0 && points.len % 3 == 0 && a >= 0 && a < 3 && size > 0.0 else {
+        abort("grid_lines: a box, points of 3 values, 0 <= a < 3 and size > 0");
+    }
+    var lo = boxes[a];
+    var hi = boxes[3 + a];
+    for b in boxes.len / 6 {
+        lo = min(lo, boxes[6 * b + a]);
+        hi = max(hi, boxes[6 * b + 3 + a]);
+    }
+    var cuts: f64[>..] = [lo, hi];
+    for b in boxes.len / 6 {
+        for c in [boxes[6 * b + a], boxes[6 * b + 3 + a]] {
+            if c > lo && c < hi { cuts.push(c); }
+        }
+    }
+    for q in points.len / 3 {
+        if points[3 * q + a] > lo && points[3 * q + a] < hi { cuts.push(points[3 * q + a]); }
+    }
+    sort(cuts);
+    let tol = 1.0e-9 * (hi - lo);
+    var out: f64[>..] = [lo];
+    var last = lo;
+    for c in cuts {
+        if c - last <= tol { continue; }
+        let n = max(1, ceil((c - last) / size - 1.0e-9) as! i64);
+        for k in 1..n + 1 { out.push(last + (c - last) * k / n); }
+        last = c;
+    }
+    return out;
+}
+
 // The grid mesher: 27-node hexahedra on the grid lines lx, ly and lz, which
 // need not be uniform. Cell (i, j, k) spans lx[i] to lx[i + 1], and so on.
 // It is in the mesh if its centre is in a box of `boxes`. The nodes are the

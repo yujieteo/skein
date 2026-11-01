@@ -86,7 +86,7 @@ fn main() {
     if command == "report" {
         var rest: const u8[:][>..] = [];
         for a in args[2..] { rest.push(a); }
-        exit(report::run(rest));
+        exit(report::run(rest) { prog => codegen::page_takes(prog) });
     }
     write_stderr(str("skein: unknown command '", command, "'\n", USAGE, "\n"));
     exit(2);

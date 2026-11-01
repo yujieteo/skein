@@ -1,8 +1,9 @@
 // `skein report` (docs/command_line.md §12). It runs a model with `skein
 // run`, and writes one HTML file that holds the source, the TOON tables of
 // the run and the VTU results. The page opens offline: its viewer
-// (viewer.js) is in the file. With a study, the page holds each case, and
-// the sliders of the page move between them.
+// (viewer.js) is in the file. With a study, the page holds each case. The
+// page also holds the solve of `skein build --target wasm`, so that a slider
+// that stops between the stored cases meshes and solves in the page.
 //
 //     .skein/report/<model>/                  the TOON of check, verify and run
 //     .skein/report/<model>/<n>.vtu           blob n: the mesh or the fields of a result
@@ -493,6 +494,21 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
     return status;
 }
 
+// The solve of the page of the model at `path` (solve_html of
+// src/codegen/page.goose), from `skein build --target wasm`, or "" if the
+// build fails. Its module is empty if the model is too large for the browser.
+fn page_solve(path: u8[:], model: u8[:], work: u8[:]) -> u8[>..], bool {
+    var me: u8[>..] = [];
+    arg(0, me);
+    let out = str(work, "/build.out");
+    let status = shell(str(quoted(me), " build ", quoted(path), " --target wasm > ", quoted(out), " 2> ", quoted(str(work, "/build.err"))));
+    guard status == 0 else {
+        write_stderr(text_of(str(work, "/build.err")));
+        return "", false;
+    };
+    return text_of(str(".skein/build/", model, "/web/solve.html")), find(text_of(out), "solve_in_page: yes") >= 0;
+}
+
 // Replaces the first `mark` in `doc` with `with`.
 fn put(doc: u8[>..]&, mark: u8[:], with: u8[:]) {
     let at = find(doc, mark);
@@ -539,9 +555,10 @@ fn token_classes(out: u8[>..]&) {
     out.append("]");
 }
 
-// `skein report`. `args` are the words after `report`. It gives the exit
-// status (command_line.md §10).
-fn run(args: const u8[:][:]) -> i64 {
+// `skein report`. `args` are the words after `report`. F(prog) tells if the
+// page of `skein build --target wasm` can take the program `prog`: if not,
+// the report does not run `build`. It gives the exit status (command_line.md §10).
+fn run<F>(args: const u8[:][:]) -> i64 {
     var path: u8[>..] = [];
     var out_path: u8[>..] = [];
     var study: u8[>..] = [];
@@ -577,7 +594,9 @@ fn run(args: const u8[:][:]) -> i64 {
     };
     check::check_text(path, text);
     if check::error_count() > 0 { return check::finish(false); }
-    let model, first_study = names(syntax::parse_model(path, text));
+    let prog = syntax::parse_model(path, text);
+    let model, first_study = names(prog);
+    let takes = F(prog);
     var classes: u8[>..] = [];
     token_classes(classes);
     if study.len == 0 { study.append(first_study); }
@@ -594,6 +613,13 @@ fn run(args: const u8[:][:]) -> i64 {
     format(json, "\"tokens\":", classes, ",");
     let status = run_model(path, model, study, work, no_run);
     if status > 1 { return status; }
+    var solve: u8[>..] = [];
+    var solve_in_page = false;
+    if takes {
+        let page, in_page = page_solve(path, model, work);
+        solve.append(page);
+        solve_in_page = in_page;
+    }
     let dir = str(resource_dir(), "../src/report/");
     var html = text_of(str(dir, "page.html"));
     guard html.len > 0 else {
@@ -612,7 +638,7 @@ fn run(args: const u8[:][:]) -> i64 {
     put(css, "/fonts/ibm-plex-mono.woff2", str("data:font/woff2;base64,", plex));
     put(html, "/*css*/", css);
     put(html, "/*js*/", text_of(str(dir, "viewer.js")));
-    put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs));
+    put(html, "<!--data-->", str("<script type=\"application/json\" id=\"skein-data\">", json, "</script>\n", blobs, solve));
     guard write_file(out_path, html) else {
         write_stderr(str("skein report: cannot write '", out_path, "'\n"));
         return 1;
@@ -620,5 +646,6 @@ fn run(args: const u8[:][:]) -> i64 {
     print("report: ", out_path);
     print("bytes: ", html.len);
     print("cases: ", cases);
+    print("solve_in_page: ", if solve_in_page { "yes" } else { "no" });
     return status;
 }

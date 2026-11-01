@@ -28,10 +28,18 @@ import .slots;
 // the programs that `skein build` compares must have the same strings.
 fn web_results_dir(model: u8[:]) -> u8[>..] { return str(".skein/results/", model); }
 
+// Whether the last web_program used the simplex generator of
+// src/elements/gen.goose, and not the hex generator of codegen.goose.
+var web_simplex = false;
+
+// The dofs of the mesh of the last web_program.
+fn web_dof_estimate() -> i64 { return if web_simplex { elements_gen::dof_estimate() } else { dof_estimate() }; }
+
 // The program of the model `text` of `path` with the values `sets`
 // (name=value, as `skein run --set` takes them), in `program`. Only the
-// simplex models of src/elements/gen.goose. False, with the errors on
-// stderr, if the model does not check or the generator does not take it.
+// simplex models of src/elements/gen.goose and the hex models of
+// codegen.goose. False, with the errors on stderr, if the model does not
+// check or the generator does not take it.
 fn web_program(path: u8[:], text: u8[:], sets: const u8[:][:], program: u8[>..]&) -> bool {
     var set_text: u8[>..] = [];
     guard set_source(path, text, sets, set_text) else { return false; };
@@ -41,16 +49,17 @@ fn web_program(path: u8[:], text: u8[:], sets: const u8[:][:], program: u8[>..]&
         return false;
     }
     let prog = syntax::parse_model(path, set_text);
-    if prog >= 0 && !elements_gen::claims(prog) {
-        write_stderr("skein build: --target wasm takes only the models of the simplex generator (tri or tet cells)\n");
-        return false;
-    }
-    guard prog >= 0 && elements_gen::read(prog) else {
+    web_simplex = prog >= 0 && elements_gen::claims(prog);
+    guard prog >= 0 && (if web_simplex { elements_gen::read(prog) } else { read(prog) }) else {
         fmt::write_errors();
         return false;
     };
     program.clear();
-    elements_gen::generate("./elements", web_results_dir(model_name), no_share(), program);
+    if web_simplex {
+        elements_gen::generate("./elements", web_results_dir(model_name), no_share(), program);
+    } else {
+        generate("./runtime", web_results_dir(model_name), no_share(), program);
+    }
     split_long_functions(program);
     return true;
 }
