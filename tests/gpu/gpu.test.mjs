@@ -30,14 +30,16 @@ try {
 }
 const skip = !adapter && !process.env.SKEIN_GPU && why;
 
-// The module and the data of the page of `model`.
+// The module and the data of the solve of the page of `model`
+// (solve.html).
 function page(model) {
   const dir = mkdtempSync(join(tmpdir(), "skein-gpu-"));
   execFileSync(join(root, "build", "skein"), ["build", join(root, model), "--target", "wasm"], { cwd: dir, stdio: "pipe" });
   const name = /^model ([A-Za-z0-9_]+):/m.exec(readFileSync(join(root, model), "utf8"))[1];
-  const html = readFileSync(join(dir, ".skein", "build", name, "web", name + ".html"), "utf8");
-  const data = html.slice(html.indexOf('"use strict";') + 13, html.indexOf("const RESULTS"));
-  const p = new Function(data + "return { MODEL, PARAMS, WGSL, GPU_JS };")();
+  const html = readFileSync(join(dir, ".skein", "build", name, "web", "solve.html"), "utf8");
+  const data = html.slice(html.indexOf('"use strict";') + 13, html.indexOf("// The loader of the module"));
+  const p = new Function(data + "return { PARAMS, WGSL, GPU_JS };")();
+  p.MODEL = name;
   const b64 = /<script id="skein-module"[^>]*>([^<]*)<\/script>/.exec(html)[1].trim();
   writeFileSync(join(dir, "skein.cjs"), Buffer.from(b64, "base64"));
   p.createSkein = createRequire(import.meta.url)(join(dir, "skein.cjs"));
