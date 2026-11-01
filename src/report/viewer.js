@@ -1023,6 +1023,8 @@ async function caseFor(values) {
 function inUnit(p, t) { return valueOf(M, t) / (p.unit ? valueOf(M, '1 ' + p.unit) : 1); }
 
 let solves = 0;
+// Whether a solve in the page puts the implicit solves on the GPU too.
+let implicitGpu = false;
 
 // Meshes and solves the param values `values` in the page. It gives the
 // new case, or null if the solve fails or a newer solve stops it.
@@ -1032,7 +1034,7 @@ async function solveCase(values) {
   document.body.dataset.solve = 'running';
   const nums = {};
   for (const p of solveParams) nums[p.name] = inUnit(p, values[p.name]);
-  const r = await skeinSolve(nums);
+  const r = await skeinSolve(nums, { implicitGpu });
   if (r.code === -2) return null;
   document.body.dataset.solve = String(r.code);
   const results = Object.entries(r.files).map(([path, text]) => ({ path, text }));
@@ -1269,7 +1271,14 @@ function renderSliders() {
   if (!names.length) return;
   const study = M.studies.find((x) => x.name === D.study);
   box.append(studyTable ? el('h2', {}, 'Study ', D.study, ' ', study ? lineLink(study.line) : null) : el('h2', {}, 'Params'));
-  if (SOLVE) box.append(el('p', { class: 'note' }, 'A slider at the values of a stored case shows that case. A slider that stops at other values meshes and solves the model in the page.'));
+  if (SOLVE) {
+    box.append(el('p', { class: 'note' }, 'A slider at the values of a stored case shows that case. A slider that stops at other values meshes and solves the model in the page.'));
+    box.append(el('p', { class: 'note' }, HAS_GPU ?
+      'WebGPU is present: the explicit steps run on the GPU, in f32. The implicit solves run on the CPU, unless you turn on the GPU for them.' :
+      'This browser has no WebGPU: all steps run on the CPU.'));
+    box.append(el('label', {}, el('input', { type: 'checkbox', id: 'implicit-gpu', checked: implicitGpu, disabled: !HAS_GPU,
+      onchange: (ev) => { implicitGpu = ev.target.checked; } }), ' Implicit solves on the GPU'));
+  }
   else if (typeof tooLarge === 'function') box.append(el('p', { class: 'note' }, tooLarge() + ' The sliders move only between the stored cases.'));
   for (const p of names) {
     const seen = [];
@@ -1406,6 +1415,7 @@ function renderTables() {
   add(el('div', { class: 'table' }, el('h3', {}, 'Linear solver'), solveText));
   add(table('Mesh (of the default param values)', verifyToon.tables.mesh, (c, v) => (v === null ? c : c === 'name' ? withLine(v, itemLine('mesh', v)) : v)));
   add(table('Solve', toon.tables.solve, (c, v) => (v === null ? c : c === 'step' ? withLine(v, itemLine('step', v)) : v)));
+  add(table('Devices', toon.tables.device, (c, v) => (v === null ? c : c === 'step' ? withLine(v, itemLine('step', v)) : v)));
   const verify = { cols: ['stage', 'id', 'result', 'value', 'limit'], rows: [] };
   if (verifyToon.tables.verify) verify.rows.push(...verifyToon.tables.verify.rows);
   if (toon.tables.verify) verify.rows.push(...toon.tables.verify.rows);
