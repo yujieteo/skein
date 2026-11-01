@@ -416,7 +416,12 @@ fn test_study_cases() {
     expect_text("a grid range", cases("study s: grid {\n    a: 1 m..2 m\n}\n"),
                 "error unsupported 13:11 a grid or a zip takes a list of values, not a range");
     expect_text("minimize", cases("study s: minimize(objective: r, method: nelder_mead, max_cases: 9) {\n    a: 1 m..2 m\n}\n"),
-                "error unsupported 12:10 the study procedure minimize is not in this build");
+                "error unsupported 12:10 minimize runs only with method: gradient in this build");
+    // A gradient minimize has no case before its loop, and starts at the default.
+    expect_text("minimize gradient", cases("study s: minimize(r, method: gradient) {\n    a: 0.5 m..4 m\n}\n"), "");
+    expect_text("minimize start", str(codegen::range_start[0] * 3.5), "0.5");
+    expect_text("minimize units", cases("study s: minimize(r, method: gradient) {\n    a: 50 cm..400 cm\n}\n"),
+                "error unsupported 13:5 minimize takes a range of two numbers in the unit of the default of the param");
     expect_text("a sample list", cases("study s: sample(n: 2, method: lhs, seed: 1) {\n    a: [1, 2] m\n}\n"),
                 "error unsupported 13:5 a sample takes a range for each param");
     expect_text("a sample method", cases("study s: sample(n: 2, method: grid, seed: 1) {\n    a: 1 m..2 m\n}\n"),
@@ -505,7 +510,7 @@ fn test_study_table() {
     }
     var out: u8[>..] = [];
     var toon: u8[>..] = [];
-    let status = codegen::study_table("s", codegen::tok(codegen::find_study(prog, "s")), 2, prog, ends, false, out, toon);
+    let status = codegen::study_table("s", codegen::tok(codegen::find_study(prog, "s")), 2, prog, ends, -1, "", false, out, toon);
     expect_text("the study table", out, str("""
         study: s
         jobs: 2
@@ -521,6 +526,15 @@ fn test_study_table() {
     if status != 1 {
         failures++;
         print("FAIL the study table: exit status ", status, ", not 1");
+    }
+    // A minimize study: only the best case sets the status.
+    out.clear();
+    toon.clear();
+    let best = codegen::study_table("s", codegen::tok(codegen::find_study(prog, "s")), 1, prog, ends[..2], 0, "xtol", false, out, toon);
+    expect_text("the best case", out[..out.find("cases[")], "study: s\njobs: 1\nbest: 1\nstop: xtol\n");
+    if best != 0 {
+        failures++;
+        print("FAIL the best case: exit status ", best, ", not 0");
     }
     // G10: the columns of the expects of the steps and of the study.
     let two = str(replace(STUDY_MODEL, "reaction(c)\n", "reaction(c)\n    expect es: a == 1 m within 1%\n"),

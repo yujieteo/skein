@@ -10,7 +10,9 @@
 // or at a point (a force). A report or an expect is a linear form of the
 // values of u at points: `k*(u.y at p) + c`, with k and c constant. A
 // `topology` study runs the loop of femahoy gap G1 (src/optim/topology.goose)
-// on the objective, a report of this form. Each other construct gives an
+// on the objective, a report of this form. A `minimize` study with
+// `method: gradient` gets dJ/dp from one adjoint solve and dv/dp, which
+// run.goose gives (emit_gradient). Each other construct gives an
 // error `unsupported` at its token, with a fix.
 //
 // The values are in the unit system of the header.
@@ -136,6 +138,14 @@ var penalty = 3.0;
 var filter = 0.0;
 var most = 200;
 var threshold = 0.0;           // 0: no solid
+
+// The minimize study of the run with `method: gradient` (spec §20.2):
+// the name of its objective, a report, or "" for no gradient. dv/dp is
+// `chain[i * gradient_params.len + k]`, the derivative of design value i
+// (design_values) by param k. run.goose sets them, and reset keeps them.
+var gradient_objective: u8[..64] = [];
+var gradient_params: u8[..64][>..];
+var chain: f64[>..];
 
 fn reset() {
     syntax::errors.clear();
@@ -345,7 +355,7 @@ let FORM_FIX = "write a value of u at a point times a constant, for example -(u.
 // The form of expression n, with its unit, or an error at n.
 fn form_of(n: i64) -> Form {
     var f = Form { a: 0.0, comp: -1, p: [0.0, 0.0], b: 0.0, unit: [] };
-    if !linear(n, f) || f.comp < 0 {
+    if !linear(n, f) {
         unsupported(tok(n), str("'", source_of(n), "' is not a linear form of u at a point"), FORM_FIX);
     }
     let d, known = dims(n);
@@ -560,7 +570,7 @@ fn topology_args() {
         let v = first(a);
         if word == "objective" {
             for r, i in reports { if syntax::nodes[r.item].aux >= 0 && syntax::text(syntax::nodes[r.item].aux) == name(v) { objective = i; } }
-            if objective < 0 { unsupported(tok(v), "the objective is not a named report of the step", "write report compliance = ... in the step"); }
+            if objective < 0 || reports[objective].form.comp < 0 { unsupported(tok(v), "the objective is not a named report of u at a point", "write report compliance = ... in the step"); }
         } else if word == "region" {
             if kind(v) != syntax::N_NAME || find_name(shape_names, name(v)) != domain {
                 unsupported(tok(v), "the design region of this generator is the rect of the mesh", "write region: beam, the region of the mesh");
@@ -627,7 +637,43 @@ fn read(prog: i64) -> bool {
     }
     if steps.len == 0 { unsupported(at, "the model has no step", STEP_FIX); }
     if topology_study >= 0 && ok() { topology_args(); }
+    if gradient_objective.len > 0 && ok() && gradient_report() < 0 {
+        unsupported(at, str("the objective '", gradient_objective, "' is not a named report of the step"), "write report r = ... in the step");
+    }
     return ok();
+}
+
+// The report of the gradient objective, in `reports`, or -1.
+fn gradient_report() -> i64 {
+    for r, i in reports { if syntax::nodes[r.item].aux >= 0 && syntax::text(syntax::nodes[r.item].aux) == gradient_objective { return i; } }
+    return -1;
+}
+
+// The values that the adjoint gives the derivative of, in the order of
+// optim::input_gradient: E, nu, t, the 2 components of each load in the
+// order of the calls, then a and b of the objective a u_c(p) + b.
+fn design_values() -> f64[>..] {
+    var v: f64[>..] = [young, poisson, thickness];
+    for b in global_bcs { if bcs[b].load { v.push(bcs[b].v[0]); v.push(bcs[b].v[1]); } }
+    for b in step_bcs { if bcs[b].load { v.push(bcs[b].v[0]); v.push(bcs[b].v[1]); } }
+    let f = reports[gradient_report()].form;
+    v.push(f.a);
+    v.push(f.b);
+    return v;
+}
+
+// The values that a param of a gradient study must not change: the mesh,
+// the regions, the fixed values and the point of the objective. Reason:
+// the adjoint gives no derivative by them.
+fn frozen() -> u8[>..] {
+    var s = str(lo[0], ",", lo[1], ",", hi[0], ",", hi[1], ",", cells[0], ",", cells[1], ",", plane, ";");
+    for r in regions { format(s, r.kind, ",", r.axis, ",", r.at[0], ",", r.at[1], ";"); }
+    for b in bcs {
+        if b.load { format(s, b.region, ";"); } else { format(s, b.region, ",", b.comp, ",", b.v[0], ",", b.v[1], ";"); }
+    }
+    let f = reports[gradient_report()].form;
+    format(s, f.comp, ",", f.p[0], ",", f.p[1]);
+    return s;
 }
 
 // The dofs of the mesh.
@@ -646,6 +692,8 @@ let PRELUDE = """
     var results: u8[>..] = [];
     var result_count = 0;
     var failed = false;
+    var gradients: u8[>..] = [];
+    var gradient_count = 0;
 
     // Appends `s` as a TOON value, in quotes when it needs them.
     fn toon(into: u8[>..]&, s: u8[:]) {
@@ -741,6 +789,20 @@ let PRELUDE = """
         return s;
     }
 
+    // dJ/dp of param `param`: g . dv, with g the derivative of the
+    // objective by each design value, and dv their derivatives by p.
+    fn gradient(param: u8[:], g: f64[:], dv: f64[:]) {
+        if g.len != dv.len {
+            write_stderr("skein run: the gradient has a derivative for each design value\n");
+            failed = true;
+            return;
+        }
+        var d = 0.0;
+        for x, i in g { d += x * dv[i]; }
+        format(gradients, "  ", param, ",", d, "\n");
+        gradient_count++;
+    }
+
     fn print_records() {
         var s: u8[>..] = [];
         format(s, "report[", report_count, "]{step,expr,value}:\n", reports);
@@ -748,13 +810,19 @@ let PRELUDE = """
         format(s, "solve[", solve_count, "]{step,cells,dofs,solves,seconds,converged}:\n", solves);
         format(s, "results[", result_count, "]:\n", results);
         if optim::history_objective.len > 0 { s.append(history()); }
+        if gradient_count > 0 { format(s, "gradient[", gradient_count, "]{param,value}:\n", gradients); }
         s.append(solvers::memory_records());
         write_stdout(s);
     }
 """;
 
-// The value of form f, as Goose: a at(comp, x, y, name) + b.
+// The value of form f, as Goose: a at(comp, x, y, name) + b, or b for a
+// form with no u.
 fn emit_form(out: u8[>..]&, f: Form) {
+    if f.comp < 0 {
+        lit(out, f.b);
+        return;
+    }
     lit(out, f.a);
     format(out, " * at(", f.comp, ", ");
     lit(out, f.p[0]);
@@ -861,6 +929,7 @@ fn emit_step(out: u8[>..]&, results_dir: u8[:]) {
         out.append("    solved(");
         quoted(out, s);
         out.append(", optim::solve());\n");
+        if gradient_objective.len > 0 { emit_gradient(out); }
     }
     for r in reports {
         out.append("    {\n        let name = ");
@@ -882,6 +951,37 @@ fn emit_step(out: u8[>..]&, results_dir: u8[:]) {
         out.append(");\n");
     }
     out.append("}\n\n");
+}
+
+// The derivative of the gradient objective by each param: one adjoint
+// solve gives the derivative by each design value, then the chain rule
+// with dv/dp. dJ/da is u_c(p), and dJ/db is 1.
+fn emit_gradient(out: u8[>..]&) {
+    let f = reports[gradient_report()].form;
+    let comp = max(f.comp, 0);
+    let p = if f.comp >= 0 { f.p } else { lo };
+    format(out, "    // the gradient of ", gradient_objective, " by each param\n    {\n        let name = \"", gradient_objective, "\";\n");
+    format(out, "        if !optim::objective(", comp, ", ");
+    lit(out, p[0]);
+    out.append(", ");
+    lit(out, p[1]);
+    out.append(", ");
+    lit(out, f.a);
+    format(out, ") { region(false, name); }\n        optim::solve_adjoint();\n        var g = optim::input_gradient();\n        g.push(at(", comp, ", ");
+    lit(out, p[0]);
+    out.append(", ");
+    lit(out, p[1]);
+    out.append(", name));\n        g.push(1.0);\n");
+    let np = gradient_params.len;
+    for w, k in gradient_params {
+        format(out, "        gradient(\"", w, "\", g, [");
+        for i in chain.len / np {
+            if i > 0 { out.append(", "); }
+            lit(out, chain[i * np + k]);
+        }
+        out.append("]);\n");
+    }
+    out.append("    }\n");
 }
 
 // The check of the volume of the last design: within 1 % of the limit.

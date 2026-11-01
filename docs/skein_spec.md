@@ -2128,7 +2128,7 @@ run is a **case**. The procedure after the colon makes the cases:
 | `grid` | a list for each parameter | the Cartesian product of the lists |
 | `zip` | lists of one length | case `i` takes value `i` of each list |
 | `sample(n: Int, method: lhs \| sobol, seed: Int)` | a range `lo..hi` for each parameter | `n` points in the box of the ranges |
-| `minimize(objective, method: nelder_mead \| bobyqa, max_cases: Int, xtol: Real, step: Real)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
+| `minimize(objective, method: nelder_mead \| bobyqa \| gradient, max_cases: Int, xtol: Real, step: Real)` | a range for each parameter, and the start value is the default | cases chosen one batch at a time to minimize a named `report` |
 | `topology(objective, region: Surface, volume: Real, penalty: Real, filter: Length, max_iterations: Int, threshold: Real)` | no parameter, only `expect` entries | 1 case: the loop of topology optimization on the cells of `region` |
 
 - Each entry names a `param` [`study_param`]. Each value has the type of the
@@ -2136,9 +2136,19 @@ run is a **case**. The procedure after the colon makes the cases:
 - A study does not change the steps. Each case runs all the steps.
 - A model may hold many studies. `skein run model.skn` runs the model once,
   with the defaults. `skein run model.skn --study re_sweep` runs the study.
-- `minimize` is gradient-free. Gradients by adjoint are in the roadmap
-  (phase 5). `objective` names a scalar `report` of the last step
-  [`study_objective`].
+- `objective` names a scalar `report` of the last step
+  [`study_objective`]. `nelder_mead` and `bobyqa` are gradient-free.
+- `method: gradient` gets the derivative of the objective by each
+  parameter from one adjoint solve in each case. It moves the values z in
+  0..1 of the ranges by a projected gradient: the first step moves the
+  parameter with the largest derivative by `step` of its range, each next
+  step is that of Barzilai and Borwein, and a step that does not lower the
+  objective (the Armijo rule) is halved. A parameter can change E, nu, the
+  thickness, a load and the objective, but not the mesh, a region or a
+  fixed value. `skein run` runs it for the models of `topology` below, with
+  a range and a default in one unit. The defaults: `max_cases: 50`, `xtol:
+  0.001`, `step: 0.1`. Reason: an objective of 4 parameters needs 8 more
+  solves for each central difference, and the adjoint needs 1.
 - `xtol` and `step` are fractions of the range of each parameter, above 0
   and at most 1 [`procedure_args`]. The first simplex of `nelder_mead` is
   the start and, for each parameter, the start moved by `step` of its

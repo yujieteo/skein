@@ -264,6 +264,28 @@ cases[3]{case,Re,status,verify,cd,time_s}:
 A case that fails gets the status `failed` and the diagnostic
 [`case_failed`](checks.md). The other cases continue.
 
+A `minimize` study also gives its best case and the reason that its loop
+stopped (`xtol`, `max_cases` or `case n failed`). Only the verification
+records of the best case set the exit status. With `method: gradient`,
+the records of each case also hold the derivative of the objective by
+each param, in the unit of the objective for each unit of the param:
+
+```toon
+study: best
+jobs: 1
+best: 10
+stop: xtol
+cases[10]{case,stiff,status,verify,cost,optimum,time_s}:
+  1,50.0 MPa,ok,pass,52.000000000000085 N,"",0.01
+  ...
+  10,10.001682370269508 MPa,ok,pass,20.000000282989255 N,pass,0.01
+```
+
+```toon
+gradient[1]{param,value}:
+  stiff,0.0003363891618904935
+```
+
 ### 6.6 Memory
 
 `run` ends its records with the memory of the run (spec §20.5): the

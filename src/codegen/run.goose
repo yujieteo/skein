@@ -405,6 +405,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         fmt::write_errors();
         return 1;
     }
+    if name(syntax::nodes[s].first) == "minimize" { return run_minimize(path, text, prog, s, study, json); }
     var stage = -1;
     for p in varied { stage = max(stage, check::param_stage(prog, p.name)); }
     // The program of each case.
@@ -513,8 +514,240 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     let hash = syntax::source_hash();
     var printed: u8[>..] = [];
     var table: u8[>..] = [];
-    let status = study_table(study, tok(find_study(p, study)), l.most, p, ends, json, printed, table);
+    let status = study_table(study, tok(find_study(p, study)), l.most, p, ends, -1, "", json, printed, table);
     let file = str(".skein/studies/", model, "/", study);
+    if !write_file(str(file, ".toon"), table) || !write_file(str(file, ".hash"), hash) {
+        write_stderr(str("skein run: cannot write '", file, ".toon'\n"));
+        return 1;
+    }
+    write_stdout(printed);
+    return status;
+}
+
+// --- minimize with gradients (spec §20.2) -----------------------------------------
+
+// The texts of the param values z, each in 0..1 of its range.
+fn range_texts(z: f64[:]) -> u8[..256][>..] {
+    var out: u8[..256][>..] = [];
+    for x, k in z {
+        var t: u8[..256] = [];
+        set256(t, str(range_lo[k] + x * (range_hi[k] - range_lo[k]), if range_unit[k].len > 0 { " " } else { "" }, range_unit[k]));
+        out.push(t);
+    }
+    return out;
+}
+
+// Reads the model `text` with the param values z and `tail` on the optim
+// lane: the design values and the values that a param must not change.
+// False on an error, with the message written.
+fn read_design(path: u8[:], text: u8[:], z: f64[:], tail: u8[:]) -> f64[>..], u8[>..], bool {
+    let cp = syntax::parse_model(path, values_source(text, range_texts(z), tail));
+    let lane = if cp >= 0 { read_model(cp) } else { -1 };
+    guard lane == LANE_OPTIM else {
+        if lane < 0 { fmt::write_errors(); } else {
+            write_stderr("skein run: minimize with method: gradient runs on a quad mesh of a rect with linear_elastic (src/optim/gen.goose)\n");
+        }
+        return [], [], false;
+    };
+    return optim_gen::design_values(), optim_gen::frozen(), true;
+}
+
+// dv/dp of each design value v by each param p at z, by central
+// differences of the values that the generator reads, in the order
+// chain[i * params + k]. A difference of values that the model text gives
+// is exact for a value linear in p. False if a param changes the mesh, a
+// region, a fixed value or the point of the objective.
+fn design_chain(path: u8[:], text: u8[:], z: f64[:]) -> f64[>..], bool {
+    let h = 1.0e-4;
+    let np = z.len;
+    var rows: f64[>..] = [];   // rows[k * nv + i] = dv_i/dp_k
+    var frozen: u8[>..] = [];
+    for k in np {
+        var zp: f64[>..] = [];
+        zp.append(z);
+        zp[k] += h;
+        let vp, fp, okp = read_design(path, text, zp, "");
+        zp[k] -= 2.0 * h;
+        let vm, fm, okm = read_design(path, text, zp, "");
+        guard okp && okm else { return [], false; };
+        if k == 0 { frozen.append(fp); }
+        guard fp == frozen && fm == frozen else {
+            write_stderr(str("skein run: the param '", varied[k].name, "' changes the mesh, a region, a fixed value or the point of the objective: method gradient varies E, nu, t, a load or the objective (src/optim/gen.goose)\n"));
+            return [], false;
+        };
+        for i in vp.len { rows.push((vp[i] - vm[i]) / (2.0 * h * (range_hi[k] - range_lo[k]))); }
+    }
+    let nv = rows.len / np;
+    var chain: f64[>..] = [];
+    for i in nv { for k in np { chain.push(rows[k * nv + i]); } }
+    return chain, true;
+}
+
+// The objective `objective` and the gradient dJ/dz in the records of a
+// case. ran is false if a record is missing.
+fn case_gradient(e: CaseEnd, objective: u8[:]) -> f64, f64[>..], bool {
+    var j = 0.0;
+    var found = false;
+    var g: f64[>..] = [];
+    for k in varied.len { g.push(0.0); }
+    var got = 0;
+    var section: u8[..16] = [];
+    for line in split(outs[e.out_lo..e.out_hi], "\n") {
+        if line.len > 0 && line[0] != ' ' {
+            section = [];
+            if starts_with(line, "report[") { section.append("report"); }
+            if starts_with(line, "gradient[") { section.append("gradient"); }
+            continue;
+        }
+        let f = toon_fields(line);
+        if section == "report" && f.len == 3 && starts_with(f[1], str(objective, " =")) {
+            let parts = split(f[2], " ");
+            let v, good = parse_flt(parts[0]);
+            if good { j = v; found = true; }
+        }
+        if section == "gradient" && f.len == 2 {
+            for w, k in varied {
+                let v, good = parse_flt(f[1]);
+                if w.name == f[0] && good { g[k] = v * (range_hi[k] - range_lo[k]); got++; }
+            }
+        }
+    }
+    return j, g, found && got == varied.len && e.ended && e.built && e.status == 0;
+}
+
+// Builds and runs case c of the minimize loop at z, with `tail` at the end
+// of the model text. It gives the end of the case, J and dJ/dz. ran is
+// false if the case gave no J or no gradient, and ok is false on an error
+// of the model, with the message written.
+fn gradient_case(path: u8[:], text: u8[:], study: u8[:], c: i64, z: f64[:], tail: u8[:], l: Ledger&) -> CaseEnd, f64, f64[>..], bool, bool {
+    var none = CaseEnd { ended: false, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 };
+    let chain, good = design_chain(path, text, z);
+    guard good else { return none, 0.0, [], false, false; };
+    let _, _, read = read_design(path, text, z, tail);
+    guard read else { return none, 0.0, [], false, false; };
+    optim_gen::chain.clear();
+    optim_gen::chain.append(chain);
+    let build_dir = str(".skein/build/", model_name, "/", study, "/", c + 1);
+    let case_dir = str(".skein/studies/", model_name, "/", study, "/", c + 1);
+    var program: u8[>..] = [];
+    guard make_dirs(build_dir) && make_dirs(case_dir) && write_program(LANE_OPTIM, case_dir, no_share(), program) else {
+        write_stderr("skein run: cannot make the directory .skein\n");
+        return none, 0.0, [], false, false;
+    };
+    let source = str(build_dir, "/main.goose");
+    guard write_file(source, program) else {
+        write_stderr(str("skein run: cannot write '", source, "'\n"));
+        return none, 0.0, [], false, false;
+    };
+    var job = CaseJob { case: c, threads: 1, budget: l.budget as! i64, build: [], exe: [], out: [], err: [] };
+    var goose: u8[>..] = [];
+    if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
+    format(job.build, shell_quoted(goose), " build -q ", shell_quoted(source), " -o ", shell_quoted(str(build_dir, "/", model_name)), " >",
+           shell_quoted(str(case_dir, "/run.err")), " 2>&1");
+    job.exe.append(shell_quoted(str("./", build_dir, "/", model_name)));
+    set1024(job.out, str(case_dir, "/run.toon"));
+    set1024(job.err, str(case_dir, "/run.err"));
+    var dofs: i64[>..] = [];
+    for i in c + 1 { dofs.push(optim_gen::dof_estimate()); }
+    let ends = run_cases([job], dofs, 1, l);
+    let j, g, ran = case_gradient(ends[0], optim_gen::gradient_objective);
+    return ends[0], j, g, ran, true;
+}
+
+fn largest(v: f64[:]) -> f64 {
+    var m = 0.0;
+    for x in v { m = max(m, abs(x)); }
+    return m;
+}
+
+fn dot_of(a: f64[:], b: f64[:]) -> f64 {
+    var s = 0.0;
+    for x, i in a { s += x * b[i]; }
+    return s;
+}
+
+// The name of the objective of minimize `pr`: the first argument, or the
+// argument `objective`.
+fn objective_name(pr: i64) -> const u8[:] {
+    var a = syntax::nodes[pr].first;
+    while a >= 0 {
+        let aux = syntax::nodes[a].aux;
+        if aux < 0 || syntax::text(aux) == "objective" { return name(syntax::nodes[a].first); }
+        a = syntax::nodes[a].next;
+    }
+    return "";
+}
+
+// `skein run --study` of a minimize study with method: gradient: a
+// projected gradient on z, the param values in 0..1 of their ranges. The
+// first step moves the param of the largest derivative by `step` of its
+// range, and each next step is that of Barzilai and Borwein, s.s / s.y. A
+// step that does not lower J by 1e-4 of its first-order estimate (Armijo)
+// is halved, after the cut of the bounds. The loop stops when a step moves no param by xtol of its
+// range, or after max_cases cases. Each case solves the step and its
+// adjoint once. The expects of the study then run in the best case.
+fn run_minimize(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json: bool) -> i64 {
+    set64(optim_gen::gradient_objective, objective_name(syntax::nodes[s].first));
+    optim_gen::gradient_params.clear();
+    for w in varied { optim_gen::gradient_params.push(w.name); }
+    let tail = str(case_expects[expect_at[0]..expect_at[1]]);
+    var l = new_ledger(solvers::BUDGET_SHARE * solvers::free_bytes());
+    outs.clear();
+    case_values.clear();
+    var ends: CaseEnd[>..] = [];
+    var z: f64[>..] = [];
+    z.append(range_start);
+    let e0, j0, g0, ran0, ok0 = gradient_case(path, text, study, 0, z, "", l);
+    guard ok0 else { return 1; };
+    case_values.append(range_texts(z));
+    ends.push(e0);
+    var stop: u8[>..] = str(if ran0 { "max_cases" } else { "case 1 failed" });
+    var best = 0;
+    var j = j0;
+    var g = g0;
+    var alpha = first_step / max(largest(g), 1.0e-300);
+    while ran0 && ends.len < max_cases {
+        var trial: f64[>..] = [];
+        var d: f64[>..] = [];
+        for x, k in z {
+            trial.push(min(1.0, max(0.0, x - alpha * g[k])));
+            d.push(trial[k] - x);
+        }
+        if largest(d) < xtol { stop = str("xtol"); break; }
+        let e, jt, gt, ran, ok = gradient_case(path, text, study, ends.len, trial, "", l);
+        guard ok else { return 1; };
+        case_values.append(range_texts(trial));
+        ends.push(e);
+        if !ran { stop = str("case ", ends.len, " failed"); break; }
+        if jt <= j + 1.0e-4 * dot_of(g, d) {
+            var y: f64[>..] = [];
+            for x, k in gt { y.push(x - g[k]); }
+            let sy = dot_of(d, y);
+            alpha = if sy > 0.0 { dot_of(d, d) / sy } else { 2.0 * alpha };
+            z = copy(trial);
+            j = jt;
+            g = copy(gt);
+            best = ends.len - 1;
+            if largest(d) < xtol { stop = str("xtol"); break; }
+        } else {
+            // Half the step that the bounds left. Reason: a long step
+            // that ends on a bound gives the same trial for each halving.
+            alpha = 0.5 * min(alpha, largest(d) / max(largest(g), 1.0e-300));
+        }
+    }
+    if tail.len > 0 {
+        let e, _, _, _, ok = gradient_case(path, text, study, best, z, tail, l);
+        guard ok else { return 1; };
+        ends[best] = e;
+    }
+    optim_gen::gradient_objective = [];
+    case_count = ends.len;
+    let p = syntax::parse_model(path, text);
+    let hash = syntax::source_hash();
+    var printed: u8[>..] = [];
+    var table: u8[>..] = [];
+    let status = study_table(study, tok(find_study(p, study)), 1, p, ends, best, stop, json, printed, table);
+    let file = str(".skein/studies/", model_name, "/", study);
     if !write_file(str(file, ".toon"), table) || !write_file(str(file, ".hash"), hash) {
         write_stderr(str("skein run: cannot write '", file, ".toon'\n"));
         return 1;

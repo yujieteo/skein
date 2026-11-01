@@ -1,0 +1,43 @@
+// The modulus of a bar in tension with the least cost: the work of the
+// load falls as E grows, and the cost of the material grows with E. The
+// tension s on the end x = L gives the exact u_x = s L / E at the end, so
+// J(E) = k s L / E + w E has the minimum at E* = sqrt(k s L / w).
+// With k = 1 N/mm, s = 1 MPa, L = 100 mm and w = 1 mm^2: E* = 10 MPa.
+
+model stiffness_bar: 2d, mm_N_MPa_s
+
+scales 100 mm, 1 MPa
+
+param stiff: Pressure = 50 MPa in 1 MPa..100 MPa
+
+let bar: Surface = rect((0, 0) mm, (100, 10) mm)
+let root: Curve = boundary(bar, x == 0 mm)
+let tip: Curve = boundary(bar, x == 100 mm)
+let corner: Point = point((0, 0) mm)
+
+material solid {
+    E: Pressure = stiff
+    nu: Real = 0.3
+}
+
+mesh m on bar {
+    size: 5 mm
+    cell: quad
+}
+
+physics plate on bar: linear_elastic solves u: Vector<Length> {
+    material solid
+    assume plane_stress(1 mm)
+}
+
+step pull: static {
+    bc root: u.x = 0
+    bc corner: u.y = 0
+    bc tip: sigma*n = (1, 0) MPa
+    report cost = 1 N/mm*(u.x at (100 mm, 5 mm)) + 1 mm^2*stiff
+}
+
+study best: minimize(cost, method: gradient, max_cases: 30, xtol: 0.0001) {
+    stiff: 1 MPa..100 MPa
+    expect optimum: stiff == 10 MPa within 0.1%
+}
