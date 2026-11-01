@@ -26,8 +26,8 @@ let BUILTIN_FNS = [
     // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
     "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
     // rms of a harmonic step (§14.5, gap G2), radiation of a natural bc (§12.1),
-    // the wall distance of a turbulence model (§4.2).
-    "rms", "radiation", "wall_distance",
+    // the wall distance of a turbulence model (§4.2), copy of a pattern (§8.1, gap G35).
+    "rms", "radiation", "wall_distance", "copy",
 ];
 let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "omega"];
 
@@ -492,7 +492,9 @@ fn geom_op_ty(tok: i64, a: Ty, b: Ty) -> Ty {
               "both sides must be geometry values");
         return joined(any_ty(), a, b);
     }
+    // `a & b` is the part of the lower dimension (gap G32), `a - b` keeps `a`.
     var r = geom_ty(max(a.geo, b.geo));
+    if syntax::tokens[tok].kind == syntax::TK_AMP { r.geo = min(a.geo, b.geo); }
     if syntax::tokens[tok].kind == syntax::TK_MINUS { r.geo = a.geo; }
     return joined(r, a, b);
 }

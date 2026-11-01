@@ -3246,7 +3246,7 @@ static void step_load_g(int64_t gs_sp) {
         gs_memcpy(t252, (const uint8_t *)(((uint8_t *)gs_str35)), (size_t)t104);
         t252 += t104;
         GS_GL->solves_g.len += t104;
-        int64_t t105 = gs_fmt_i64(t252, (int64_t)(((GS_GL->shells_shells_g6.len))));
+        int64_t t105 = gs_fmt_i64(t252, (int64_t)(gs_add_i64((int64_t)(((GS_GL->shells_shells_g6.len))), ((GS_GL->shells_beams_g6.len)), gs_file1, 222)));
         t252 += t105;
         GS_GL->solves_g.len += t105;
         int64_t t106 = 1;
@@ -3283,7 +3283,7 @@ static void step_load_g(int64_t gs_sp) {
         gs_memcpy(t252, (const uint8_t *)(((uint8_t *)gs_str23)), (size_t)t116);
         t252 += t116;
         GS_GL->solves_g.len += t116;
-        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file1, 129);
+        GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file1, 224);
         if ((uint8_t)(!converged_g)) {
             GS_GL->failed_g = 1;
         }
@@ -3636,7 +3636,7 @@ static void step_load_g(int64_t gs_sp) {
         gs_memcpy(t259, (const uint8_t *)(((uint8_t *)gs_str23)), (size_t)t238);
         t259 += t238;
         GS_GL->results_g.len += t238;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 159);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 254);
         (&GS_GL->gs_gstk_results_g)->top = t259;
     }
     L224:;

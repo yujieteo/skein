@@ -137,6 +137,25 @@ let CARD = """
     - Report `w.z at p` or a physics `let` at p (p a node), or
       `reaction(x0)`.
 
+    ## Beams
+
+    `skein run` solves `timoshenko` beams (2-node, order 1) on `line`s, alone
+    or as offset beams tied to a cylindrical shell.
+
+    ```
+    physics beam on bar: timoshenko(A: A, I_y: I_y, I_z: I_z, J: J, y_axis: (0, 1, 0)) solves w: Vector<Length>,
+        theta: Vector<Angle> {
+        material ipe300
+    }
+    bc tip: F_b*n = (0, 0, -1)*P
+    ```
+
+    - The material gives `E`, `nu`, `A`, `I_y`, `I_z` and `J`.
+    - `F_b*n = P` is a force and `M_b*n = M` a moment on a `Point`.
+    - On a shell, `pattern`, `pattern_polar`, `move`, `|` and `& box` make
+      the beam lines. `offset: d*e_r` puts the axis off the skin. Tie the
+      beams with `bc beams: w_b = w` and `bc beams: theta_b = theta`.
+
     ## Boundary conditions
 
     - `bc region: u = 0` fixes the displacement. `bc region: u.x = 0` fixes one

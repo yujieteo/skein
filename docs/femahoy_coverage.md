@@ -149,6 +149,13 @@ gives the roadmap phase that closes the gap:
   the package of
   [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) use
   the cells of femahoy.
+- Phase 5 closes G32 and G35. The captain put them in phase 5 on
+  2026-10-31. Spec [§8.4](skein_spec.md#84-region-algebra) gives `a & b`
+  the lower dimension of `a` and `b`, so the 787 models
+  [fuselage.skn](studies/b787/skein/fuselage.skn) and
+  [door_corner.skn](studies/b787/skein/door_corner.skn) pass `skein check`
+  with no mark. Spec [§8.1](skein_spec.md#81-distance-functions) states
+  `copy(r)`, the index of the copy of a pattern at a point.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
@@ -227,10 +234,10 @@ uses the shell template of G3 (`docs/studies/b787/skein/fuselage.skn:150`, `docs
 | Gap | Study feature | Evidence | Why the spec cannot state it | Smallest spec change | Phase |
 |---|---|---|---|---|---|
 | G31 | Offset beams on a shell: the stringers and the frames, with a torsion constant, a section axis, an offset and the axial force. | `docs/studies/b787/skein/fuselage.skn:166`, `:184`, `:204`, `docs/studies/b787/skein/door_corner.skn:175` | §4.2 gives `timoshenko(A, I_y, I_z)` with no source, no torsion constant, no section axis, no offset and no axial force. No rule ties a beam to the shell points on its line. | `timoshenko` arguments `J`, `y_axis` and `offset`, and a template `let Nx` (axial force). In §12.1, let the right side of an essential `bc` be an unknown of another physics on the same points (a tie). | 5, closed by [§4.3](skein_spec.md#43-shells-beams-and-laminates) and [§12.1](skein_spec.md#121-form) |
-| G32 | A shell or a beam line cut by a solid: `skin & door_box(pad_w)`, `stringers & left`. | `docs/studies/b787/skein/fuselage.skn:61`, `:70`, `:86`, `docs/studies/b787/skein/door_corner.skn:65`, `:75`, `:78`, `:91` | §5.3 and §8.4 do not give the dimension of `a & b` when `a` is a `Surface` or a `Curve` and `b` is a `Solid`. The checker gives the higher dimension, a `Solid`. | In §8.4: `a & b` has the lower dimension of `a` and `b`, and `a - b` has the dimension of `a`. | not set |
+| G32 | A shell or a beam line cut by a solid: `skin & door_box(pad_w)`, `stringers & left`. | `docs/studies/b787/skein/fuselage.skn:61`, `:70`, `:86`, `docs/studies/b787/skein/door_corner.skn:65`, `:75`, `:78`, `:91` | §5.3 and §8.4 do not give the dimension of `a & b` when `a` is a `Surface` or a `Curve` and `b` is a `Solid`. The checker gives the higher dimension, a `Solid`. | In §8.4: `a & b` has the lower dimension of `a` and `b`, and `a - b` has the dimension of `a`. | 5, closed by [§8.4](skein_spec.md#84-region-algebra) |
 | G33 | Shell resultants: the force resultant `N`, the membrane strain `eps_m`, an edge load `N*n`, and a strain of the global model in a submodel. | `docs/studies/b787/skein/fuselage.skn:160`, `:201`, `docs/studies/b787/skein/door_corner.skn:168`, `:203`, `:208`, `:214`, `:217` | The shell template of G3 declares no resultant. A natural `bc` needs a flux of an `eq` (§12.1). §15.1 gives a `Results` value the unknowns of the other model, not its physics `let` fields. | The G3 template gives `let N` and `let eps_m`, and its `eq` has `div(N)`, so `N*n` is a natural condition. In §15.1, a `Results` value also gives the physics `let` fields. | 5, closed by [§4.3](skein_spec.md#43-shells-beams-and-laminates) and [§15.1](skein_spec.md#151-results) |
 | G34 | A submodel for each case of a parameter sweep: the door corner takes the global case with the same `p_U`. | `docs/studies/b787/compare/edits/e4_sweep.skein.patch:23` | §15.1 gives `results(file, step:)` no study case, so a `Results` value refers to one state only. | A `case:` argument of `results`, which names a `param` value of the other model. | 3, closed by [§15.1](skein_spec.md#151-results) |
-| G35 | A value for each copy of a `pattern`: the centre of each window, for the window load. | `docs/studies/b787/compare/edits/e3_windows.skein.patch:53` | §8.1 gives `pattern(a, v, n)` the type of `a`, with no index and no value for each copy. The model computes x - x_w with `atan2`. | `pattern` gives an index `k` of the copy, and the position of each copy, for use in a `bc`. | not set |
+| G35 | A value for each copy of a `pattern`: the centre of each window, for the window load. | `docs/studies/b787/compare/edits/e3_windows.skein.patch:53` | §8.1 gives `pattern(a, v, n)` the type of `a`, with no index and no value for each copy. The model computes x - x_w with `atan2`. | `pattern` gives an index `k` of the copy, and the position of each copy, for use in a `bc`. | 5, closed by [§8.1](skein_spec.md#81-distance-functions): `copy(r)` |
 
 ### Points that the spec does not make clear
 

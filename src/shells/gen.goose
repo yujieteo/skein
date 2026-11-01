@@ -8,8 +8,16 @@
 // mesh.goose, with `cell: quad` and order 1. A Curve is a side of the grid,
 // for example `boundary(shell, x == 0 m)` or `boundary(shell, y == 0 m)`. A
 // Point is the node at it. The section is the laminate of the template
-// arguments `layup` and `mirror` and of the material. Each other construct
-// gives an error `unsupported` at its token, with a fix.
+// arguments `layup` and `mirror` and of the material.
+//
+// A physics with the template timoshenko is on a Curve of straight lines
+// and of rings `boundary(shell, x == c)`, with pattern, pattern_polar,
+// move, |, and & or - of a box. With a shell, each line is along x on the
+// cylinder, the grid has a node line on each beam, and the tie
+// `bc beams: w_b = w` and `theta_b = theta` makes the beams share the
+// shell nodes. With no shell, each line is meshed alone. The 2-node beam
+// is of order 1. Each other construct gives an error `unsupported` at its
+// token, with a fix.
 //
 // src/codegen/dispatch.goose has hooks of the shells lane for a model of
 // the box generator. A shell model has 6 dofs at each node, a section in
@@ -94,6 +102,7 @@ var let_nodes: i64[>..];
 var let_types: i64[>..];
 var prop_names: u8[..64][>..];
 var prop_nodes: i64[>..];
+var prop_from = 0;      // the first property of the material in use
 var depth = 0;
 
 // x, y and z are the point `px` while `at_point`. N and eps_m are the
@@ -137,7 +146,7 @@ recursive fn named(n: i64, word: u8[:]) -> Val {
     }
     var node = -1;
     if in_physics && find(let_names, word) >= 0 { node = let_nodes[find(let_names, word)]; }
-    if node < 0 && in_physics && find(prop_names, word) >= 0 { node = prop_nodes[find(prop_names, word)]; }
+    if node < 0 && in_physics && find(prop_names[prop_from..], word) >= 0 { node = prop_nodes[prop_from + find(prop_names[prop_from..], word)]; }
     if node < 0 && find(value_names, word) >= 0 { node = value_nodes[find(value_names, word)]; }
     if node >= 0 {
         if depth > 100 {
@@ -151,7 +160,7 @@ recursive fn named(n: i64, word: u8[:]) -> Val {
     }
     if at_point && axis_of(word) >= 0 { return scalar(px[axis_of(word)]); }
     // n is the outward unit normal of the side of the cylinder.
-    if at_point && word == "n" { return vector([0.0, px[1] / radius, px[2] / radius]); }
+    if at_point && word == "n" && radius > 0.0 { return vector([0.0, px[1] / radius, px[2] / radius]); }
     if word == "pi" { return scalar(PI); }
     if axis_of(word) >= 0 {
         unsupported(tok(n), str("'", word, "' has no value here"), "use x, y and z only in a value at a point of the shell");
@@ -260,17 +269,30 @@ fn value_at(n: i64, p: f64[3]) -> Val {
 
 // --- the model -------------------------------------------------------------------
 
-// A region of the shell: sides of the grid (bit 0 is x = x0, 1 is x = x1,
-// 2 is θ = t0, 3 is θ = t1) or the node at a point.
+// A region: sides of the grid (bit 0 is x = x0, 1 is x = x1, 2 is θ = t0,
+// 3 is θ = t1), the node at a point, or pieces of a beam Curve. A side
+// x == c is also a ring piece.
 struct Region {
     name: u8[..64],
     sides: i64,     // 0 for a point
     at: f64[3],
+    first_piece: i64,
+    piece_count: i64,
 }
 
-// The bc kinds: a fixed dof, or a force per length `N*n` on a side.
+// A piece of a beam Curve: the straight line from p0 to p1, or the ring of
+// the shell at x = p0[0].
+struct Piece {
+    ring: bool,
+    p0: f64[3],
+    p1: f64[3],
+}
+
+// The bc kinds: a fixed dof, a force per length `N*n` on a side, or a
+// force or a moment `F_b*n`, `M_b*n` on a point (dofs `dof` to `dof` + 2).
 let BC_FIX = 0;
 let BC_EDGE = 1;
+let BC_FORCE = 2;
 
 struct Bc {
     region: i64,
@@ -286,11 +308,12 @@ let F_W = 0;
 let F_THETA = 1;
 let F_LET = 2;
 let F_REACTION = 3;
+let F_NX = 4;
 
 struct Field {
     what: i64,
     comp: i64,      // 0 to 2, or -1 for the vector
-    let_index: i64, // for F_LET
+    let_index: i64, // for F_LET; F_NX is the axial force of the beam nearest to `at`
     region: i64,    // for F_REACTION
     at: f64[3],
 }
@@ -326,6 +349,7 @@ var table_nodes: i64[>..];
 var material_names: u8[..64][>..];
 var material_nodes: i64[>..];
 var regions: Region[>..];
+var pieces: Piece[>..];
 var bcs: Bc[>..];
 var global_bcs: i64[>..];
 var reports: Report[>..];
@@ -352,6 +376,20 @@ var args: i64[5] = [-1; 5];     // the nodes of layup, mirror, axis, top and q, 
 
 let TEMPLATE_ARGS = ["layup", "mirror", "axis", "top", "q"];
 
+// The beam physics: its region, unknowns, material and the nodes of its
+// template arguments, and whether the tie of each unknown is there.
+var beam_tok = -1;
+var beam_name: u8[..64];
+var beam_region = -1;
+var wb_name: u8[..64];
+var thb_name: u8[..64];
+var beam_material: u8[..64];
+var beam_args: i64[7] = [-1; 7];
+var tie_w = false;
+var tie_theta = false;
+
+let BEAM_ARGS = ["A", "I_y", "I_z", "J", "y_axis", "offset", "q"];
+
 fn reset() {
     codegen::reset();
     value_names.clear();
@@ -361,6 +399,7 @@ fn reset() {
     let_types.clear();
     prop_names.clear();
     prop_nodes.clear();
+    prop_from = 0;
     depth = 0;
     at_point = false;
     in_physics = false;
@@ -371,6 +410,7 @@ fn reset() {
     material_names.clear();
     material_nodes.clear();
     regions.clear();
+    pieces.clear();
     bcs.clear();
     global_bcs.clear();
     reports.clear();
@@ -386,6 +426,16 @@ fn reset() {
     theta_name = [];
     material_name = [];
     args = [-1; 5];
+    radius = 0.0;
+    beam_tok = -1;
+    beam_name = [];
+    beam_region = -1;
+    wb_name = [];
+    thb_name = [];
+    beam_material = [];
+    beam_args = [-1; 7];
+    tie_w = false;
+    tie_theta = false;
 }
 
 // The point of the shell at x and θ.
@@ -548,7 +598,7 @@ let REGION_FIX = "write boundary(shell, x == 0 m) for a side of the shell, or po
 // `let end0: Curve = boundary(roof, x == 0 mm)`: the sides of the grid
 // where the == holds, or `let tip: Point = point((x, y, z) mm)`.
 fn region(n: i64, v: i64, curve: bool) {
-    var r = Region { name: [], sides: 0, at: [0.0, 0.0, 0.0] };
+    var r = Region { name: [], sides: 0, at: [0.0, 0.0, 0.0], first_piece: pieces.len, piece_count: 0 };
     set64(r.name, name(n));
     if !curve {
         guard is_call(v, "point") && syntax::child_count(v) == 2 else {
@@ -561,7 +611,9 @@ fn region(n: i64, v: i64, curve: bool) {
     }
     guard is_call(v, "boundary") && syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_NAME &&
           shell_tok >= 0 && name(arg(v, 0)) == shell_name else {
-        unsupported(tok(v), str("the curve '", name(n), "' is not a side of the shell"), REGION_FIX);
+        if !curve_pieces(v, pieces) { return; }
+        r.piece_count = pieces.len - r.first_piece;
+        regions.push(r);
         return;
     }
     let cond = arg(v, 1);
@@ -583,11 +635,179 @@ fn region(n: i64, v: i64, curve: bool) {
         }
         if on { r.sides |= 1 << side; }
     }
-    if r.sides != 0 {
+    // x == c is also the ring at c, for a frame.
+    if kind(child(cond, 0)) == syntax::N_NAME && name(child(cond, 0)) == "x" {
+        let c = scalar_value(child(cond, 1));
+        let tol = 1.0e-9 * (x1 - x0);
+        if c >= x0 - tol && c <= x1 + tol {
+            pieces.push(Piece { ring: true, p0: [c, 0.0, 0.0], p1: [c, 0.0, 0.0] });
+            r.piece_count = 1;
+        }
+    }
+    if r.sides != 0 || r.piece_count > 0 {
         regions.push(r);
         return;
     }
     if ok() { unsupported(tok(cond), str("the curve '", name(n), "' is not a side of the shell"), REGION_FIX); }
+}
+
+let CURVE_FIX = "write the beam line as line(p0, p1), a pattern or pattern_polar of it, & or - a box, or boundary(shell, x == c) for a ring";
+
+// The pieces of the beam Curve `v`, appended to `out`. False after an
+// error. Each form changes the pieces that its operand appended, in place.
+recursive fn curve_pieces(v: i64, out: Piece[>..]&) -> bool {
+    let from = out.len;
+    if is_call(v, "line") && syntax::child_count(v) == 3 {
+        out.push(Piece { ring: false, p0: vec3(value(arg(v, 0))), p1: vec3(value(arg(v, 1))) });
+        return ok();
+    }
+    if kind(v) == syntax::N_NAME && find_region(v) >= 0 && regions[find_region(v)].piece_count > 0 {
+        let r = regions[find_region(v)];
+        // `out` may be `pieces`: copy by index.
+        for i in r.piece_count {
+            let p = pieces[r.first_piece + i];
+            out.push(p);
+        }
+        return true;
+    }
+    if (is_call(v, "pattern") || is_call(v, "pattern_polar")) && syntax::child_count(v) == 4 {
+        if !curve_pieces(arg(v, 0), out) { return false; }
+        let count = out.len - from;
+        let d = vec3(value(arg(v, 1)));
+        let n = scalar_value(arg(v, 2));
+        if !ok() { return false; }
+        for k in 1..max(round(n) as! i64, 1) {
+            for i in count {
+                let p = out[from + i];
+                let q = if is_call(v, "pattern") { moved(p, [k * d[0], k * d[1], k * d[2]], tok(v)) } else { turned(p, d, 2.0 * PI * k / n, tok(v)) };
+                if !(q.ring && has_ring(out[from..], q.p0[0])) { out.push(q); }
+            }
+        }
+        return ok();
+    }
+    if is_call(v, "move") && syntax::child_count(v) == 3 {
+        if !curve_pieces(arg(v, 0), out) { return false; }
+        let d = vec3(value(arg(v, 1)));
+        for i in from..out.len { out[i] = moved(out[i], d, tok(v)); }
+        return ok();
+    }
+    if kind(v) == syntax::N_BINARY && op(v) == "|" {
+        return curve_pieces(child(v, 0), out) && curve_pieces(child(v, 1), out);
+    }
+    if kind(v) == syntax::N_BINARY && (op(v) == "&" || op(v) == "-") {
+        if !curve_pieces(child(v, 0), out) { return false; }
+        let lo, hi, good = box_of(child(v, 1));
+        if !good { return false; }
+        let count = out.len - from;
+        for i in count {
+            if out[from + i].ring {
+                unsupported(tok(v), "this slice cuts beam lines only, not a ring", "cut the shell, or move the ring");
+                return false;
+            }
+            clip(out[from + i], lo, hi, op(v) == "&", out);
+        }
+        // The cut pieces replace the pieces of the operand.
+        let kept = out.len - from - count;
+        for i in kept { out[from + i] = out[from + count + i]; }
+        for i in count { out.pop(); }
+        return true;
+    }
+    unsupported(tok(v), str("the curve '", source_of(v), "' is not in this slice"), CURVE_FIX);
+    return false;
+}
+
+fn has_ring(out: Piece[:], x: f64) -> bool {
+    for p in out { if p.ring && abs(p.p0[0] - x) <= 1.0e-12 * (abs(x) + 1.0) { return true; } }
+    return false;
+}
+
+fn moved(p: Piece, d: f64[3], at: i64) -> Piece {
+    if p.ring && (d[1] != 0.0 || d[2] != 0.0) {
+        unsupported(at, "a ring moves along x only", "move the ring by (dx, 0 m, 0 m)");
+    }
+    var q = p;
+    for k in 3 {
+        q.p0[k] += d[k];
+        q.p1[k] += d[k];
+    }
+    return q;
+}
+
+// p turned by angle a about the axis d through the origin (Rodrigues).
+fn turned(p: Piece, d: f64[3], a: f64, at: i64) -> Piece {
+    let l = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if p.ring {
+        if abs(d[1]) > 1.0e-12 * l || abs(d[2]) > 1.0e-12 * l { unsupported(at, "a ring turns about the x axis only", "turn the ring about (1, 0, 0)"); }
+        return p;
+    }
+    let k: f64[3] = [d[0] / l, d[1] / l, d[2] / l];
+    return Piece { ring: false, p0: rodrigues(p.p0, k, a), p1: rodrigues(p.p1, k, a) };
+}
+
+fn rodrigues(v: f64[3], k: f64[3], a: f64) -> f64[3] {
+    let kv = k[0] * v[0] + k[1] * v[1] + k[2] * v[2];
+    let c: f64[3] = [k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]];
+    var r: f64[3] = [0.0, 0.0, 0.0];
+    for j in 3 { r[j] = v[j] * cos(a) + c[j] * sin(a) + k[j] * kv * (1.0 - cos(a)); }
+    return r;
+}
+
+// The corners of `box(p0, p1)`, or of a Solid let that is one.
+recursive fn box_of(v: i64) -> f64[3], f64[3], bool {
+    if kind(v) == syntax::N_NAME && find(solid_names, name(v)) >= 0 && depth < 100 {
+        depth++;
+        let lo, hi, good = box_of(solid_nodes[find(solid_names, name(v))]);
+        depth--;
+        return lo, hi, good;
+    }
+    guard is_call(v, "box") && syntax::child_count(v) == 3 else {
+        unsupported(tok(v), str("this slice cuts a beam line with a box only, not '", source_of(v), "'"), CURVE_FIX);
+        return [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], false;
+    }
+    let a = vec3(value(arg(v, 0)));
+    let b = vec3(value(arg(v, 1)));
+    return [min(a[0], b[0]), min(a[1], b[1]), min(a[2], b[2])], [max(a[0], b[0]), max(a[1], b[1]), max(a[2], b[2])], ok();
+}
+
+// The part of line p in the closed box lo..hi (keep), or out of it, into out.
+fn clip(p: Piece, lo: f64[3], hi: f64[3], keep: bool, out: Piece[>..]&) {
+    var ta = 0.0;
+    var tb = 1.0;
+    var size = 0.0;
+    for k in 3 { size = max(size, hi[k] - lo[k]); }
+    let tol = 1.0e-9 * size;
+    for k in 3 {
+        let d = p.p1[k] - p.p0[k];
+        if abs(d) <= 1.0e-300 {
+            if p.p0[k] < lo[k] - tol || p.p0[k] > hi[k] + tol { tb = -1.0; }
+            continue;
+        }
+        let a = (lo[k] - tol - p.p0[k]) / d;
+        let b = (hi[k] + tol - p.p0[k]) / d;
+        ta = max(ta, min(a, b));
+        tb = min(tb, max(a, b));
+    }
+    let length = sqrt(sq(p.p1[0] - p.p0[0]) + sq(p.p1[1] - p.p0[1]) + sq(p.p1[2] - p.p0[2]));
+    let small = 1.0e-9 * max(length, size) / max(length, 1.0e-300);
+    var parts: f64[4] = [0.0, 0.0, 0.0, 0.0];
+    var count = 0;
+    if keep && tb - ta > small {
+        parts = [ta, tb, 0.0, 0.0];
+        count = 1;
+    } else if !keep && tb - ta <= small {
+        parts = [0.0, 1.0, 0.0, 0.0];
+        count = 1;
+    } else if !keep {
+        if ta > small { parts[2 * count] = 0.0; parts[2 * count + 1] = ta; count++; }
+        if tb < 1.0 - small { parts[2 * count] = tb; parts[2 * count + 1] = 1.0; count++; }
+    }
+    for c in count { out.push(Piece { ring: false, p0: on_line(p, parts[2 * c]), p1: on_line(p, parts[2 * c + 1]) }); }
+}
+
+fn sq(x: f64) -> f64 { return x * x; }
+
+fn on_line(p: Piece, t: f64) -> f64[3] {
+    return [p.p0[0] + t * (p.p1[0] - p.p0[0]), p.p0[1] + t * (p.p1[1] - p.p0[1]), p.p0[2] + t * (p.p1[2] - p.p0[2])];
 }
 
 fn find_region(n: i64) -> i64 {
@@ -619,6 +839,14 @@ fn value_item(n: i64) {
     }
 }
 
+// Whether r is the shell, a beam Curve, or a | of these.
+recursive fn mesh_region(r: i64) -> bool {
+    if kind(r) == syntax::N_BINARY && op(r) == "|" { return mesh_region(child(r, 0)) && mesh_region(child(r, 1)); }
+    if kind(r) != syntax::N_NAME { return false; }
+    if shell_tok >= 0 && name(r) == shell_name { return true; }
+    return find_region(r) >= 0 && regions[find_region(r)].piece_count > 0;
+}
+
 fn mesh(n: i64) {
     if mesh_tok >= 0 {
         unsupported(tok(n), "a second mesh: this slice has one", "remove the second mesh");
@@ -626,8 +854,8 @@ fn mesh(n: i64) {
     }
     mesh_tok = tok(n);
     let r = child(n, 0);
-    if kind(r) != syntax::N_NAME || name(r) != shell_name {
-        unsupported(tok(r), str("the mesh is not on the shell ", shell_name), str("write mesh m on ", shell_name));
+    if !mesh_region(r) {
+        unsupported(tok(r), "the mesh is not on the shell and the beams", "write mesh m on skin | beams, with the names of the physics regions");
     }
     var s = first(child(n, 1));
     while s >= 0 {
@@ -649,6 +877,11 @@ fn mesh(n: i64) {
 let PHYSICS_FIX = "write physics shell on roof: reissner_mindlin(top: n) solves w: Vector<Length>, theta: Vector<Angle> { material ply }";
 
 fn physics(n: i64) {
+    let u = syntax::child_of_kind(n, syntax::N_USES);
+    if u >= 0 && name(u) == "timoshenko" {
+        beam_physics(n);
+        return;
+    }
     if physics_tok >= 0 {
         unsupported(tok(n), "a second physics: this slice has one shell physics", "remove the second physics");
         return;
@@ -673,8 +906,8 @@ fn physics(n: i64) {
                 a = next(a);
             }
         } else if k == syntax::N_USES {
-            unsupported(tok(c), str("skein run has no generator for ", name(c), " yet"),
-                        "run the beams with the shell lane tests (src/shells/test.goose)");
+            unsupported(tok(c), str("skein run has no generator for ", name(c), " on a shell"),
+                        "use reissner_mindlin for the shell and timoshenko for the beams");
         } else if k == syntax::N_UNKNOWN {
             if w_name.len == 0 { set64(w_name, name(c)); } else if theta_name.len == 0 { set64(theta_name, name(c)); }
         } else if k == syntax::N_MATASSIGN {
@@ -697,8 +930,52 @@ fn physics(n: i64) {
     if args[3] < 0 { unsupported(tok(n), "reissner_mindlin needs top", "write top: n"); }
 }
 
+let BEAM_FIX = "write physics beam on bars: timoshenko(A: A, I_y: I_y, I_z: I_z, J: J, y_axis: (0, 1, 0)) solves w: Vector<Length>, theta: Vector<Angle> { material sec }";
+
+fn beam_physics(n: i64) {
+    if beam_tok >= 0 {
+        unsupported(tok(n), "a second beam physics: this slice has one", "put all the beams in one physics");
+        return;
+    }
+    beam_tok = tok(n);
+    set64(beam_name, name(n));
+    var c = first(n);
+    while c >= 0 {
+        let k = kind(c);
+        if k == syntax::N_ON {
+            beam_region = find_region(first(c));
+            if beam_region < 0 || regions[beam_region].piece_count == 0 {
+                unsupported(tok(first(c)), "the beam is not on a Curve of lines or rings that a let names", CURVE_FIX);
+            }
+        } else if k == syntax::N_USES {
+            var a = first(c);
+            var i = 0;
+            while a >= 0 {
+                let at = if syntax::nodes[a].aux >= 0 { position(BEAM_ARGS, syntax::text(syntax::nodes[a].aux)) } else { i };
+                if at >= 0 && at < 7 { beam_args[at] = first(a); }
+                i++;
+                a = next(a);
+            }
+        } else if k == syntax::N_UNKNOWN {
+            if wb_name.len == 0 { set64(wb_name, name(c)); } else if thb_name.len == 0 { set64(thb_name, name(c)); }
+        } else if k == syntax::N_MATASSIGN {
+            let m = first(c);
+            if syntax::child_count(c) != 1 || first(m) >= 0 || beam_material.len > 0 {
+                unsupported(tok(c), "this slice gives one material to all the beams", BEAM_FIX);
+            }
+            set64(beam_material, name(m));
+        } else {
+            unsupported(tok(c), "the beam physics statement is not in this slice", "use only material");
+        }
+        c = next(c);
+    }
+    for i in 5 {
+        if beam_args[i] < 0 { unsupported(tok(n), str("timoshenko needs ", BEAM_ARGS[i]), BEAM_FIX); }
+    }
+}
+
 fn method(n: i64) {
-    if name(n) != physics_name || syntax::text(syntax::nodes[n].aux) != "cg" {
+    if (name(n) != physics_name && name(n) != beam_name) || syntax::text(syntax::nodes[n].aux) != "cg" {
         unsupported(tok(n), "this slice has only the cg method of the physics", "write method shell: cg { order: 1 }");
         return;
     }
@@ -706,7 +983,7 @@ fn method(n: i64) {
     while s >= 0 {
         if kind(s) == syntax::N_SETTING && name(s) == "order" {
             if scalar_value(first(s)) != 1.0 {
-                unsupported(tok(s), "the MITC4 shell is of order 1", "write order: 1");
+                unsupported(tok(s), "the MITC4 shell and the 2-node beam are of order 1", "write order: 1");
             }
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order");
@@ -715,19 +992,24 @@ fn method(n: i64) {
     }
 }
 
-let BC_FIX_TEXT = "write bc end: w = 0, bc end: theta.x = 0, or bc end: N*n = (1, 0, 0) N/mm";
+let BC_FIX_TEXT = "write bc end: w = 0, bc end: theta.x = 0, bc end: N*n = (1, 0, 0) N/mm, or bc tip: F_b*n = (0, 0, -1) kN";
 
 // The dof of `w`, `w.x`, `theta` or `theta.z`: the first dof and the
 // count, or -1.
+// The beam unknowns share the dofs of the shell unknowns (the tie).
 fn target_dofs(t: i64) -> i64, i64 {
-    if kind(t) == syntax::N_NAME && name(t) == w_name { return 0, 3; }
-    if kind(t) == syntax::N_NAME && name(t) == theta_name { return 3, 3; }
+    if kind(t) == syntax::N_NAME && is_w(name(t)) { return 0, 3; }
+    if kind(t) == syntax::N_NAME && is_theta(name(t)) { return 3, 3; }
     if kind(t) == syntax::N_MEMBER && kind(first(t)) == syntax::N_NAME && axis_of(name(t)) >= 0 {
-        if name(first(t)) == w_name { return axis_of(name(t)), 1; }
-        if name(first(t)) == theta_name { return 3 + axis_of(name(t)), 1; }
+        if is_w(name(first(t))) { return axis_of(name(t)), 1; }
+        if is_theta(name(first(t))) { return 3 + axis_of(name(t)), 1; }
     }
     return -1, 0;
 }
+
+fn is_w(word: u8[:]) -> bool { return word.len > 0 && (word == w_name || word == wb_name); }
+
+fn is_theta(word: u8[:]) -> bool { return word.len > 0 && (word == theta_name || word == thb_name); }
 
 // A `bc` item or statement: one Bc for each fixed dof, or one load.
 fn bc(n: i64) {
@@ -738,7 +1020,24 @@ fn bc(n: i64) {
         unsupported(tok(child(n, 0)), "the region of the bc is not a Curve or a Point that a let names", REGION_FIX);
         return;
     }
+    // The tie: bc beams: w_b = w and bc beams: theta_b = theta.
+    if kind(target) == syntax::N_NAME && kind(v) == syntax::N_NAME && (name(target) == wb_name || name(target) == thb_name) &&
+       (name(v) == w_name || name(v) == theta_name) {
+        let pair_w = name(target) == wb_name && name(v) == w_name;
+        let pair_theta = name(target) == thb_name && name(v) == theta_name;
+        if !(pair_w || pair_theta) || r != beam_region || in_step {
+            unsupported(tok(n), "the tie is bc beams: w_b = w and bc beams: theta_b = theta, at the top level, on the region of the beams",
+                        "tie each beam unknown to the shell unknown of the same type");
+            return;
+        }
+        if pair_w { tie_w = true; } else { tie_theta = true; }
+        return;
+    }
     let d, count = target_dofs(target);
+    if d >= 0 && regions[r].sides == 0 && regions[r].piece_count > 0 {
+        unsupported(tok(n), "this slice fixes a beam at a Point only", "write bc root: w = 0 with let root: Point = point(...)");
+        return;
+    }
     if d >= 0 {
         let x = value(v);
         for j in 9 {
@@ -749,6 +1048,15 @@ fn bc(n: i64) {
             bcs.push(Bc { region: r, kind: BC_FIX, dof: d + j, load: [0.0, 0.0, 0.0] });
             if !in_step { global_bcs.push(bcs.len - 1); }
         }
+        return;
+    }
+    let lf = if kind(target) == syntax::N_BINARY && op(target) == "*" && kind(child(target, 1)) == syntax::N_NAME &&
+                name(child(target, 1)) == "n" && kind(child(target, 0)) == syntax::N_NAME { name(child(target, 0)) } else { "" };
+    if beam_tok >= 0 && (lf == "F_b" || lf == "M_b") && regions[r].sides == 0 && regions[r].piece_count == 0 {
+        let x = value(v);
+        if x.n != 3 { unsupported(tok(v), "the force or the moment at a point is a vector", BC_FIX_TEXT); }
+        bcs.push(Bc { region: r, kind: BC_FORCE, dof: if lf == "F_b" { 0 } else { 3 }, load: vec3(x) });
+        if !in_step { global_bcs.push(bcs.len - 1); }
         return;
     }
     if source_of(target) == "N*n" && regions[r].sides != 0 {
@@ -763,7 +1071,7 @@ fn bc(n: i64) {
 
 var in_step = false;
 
-let REPORT_FIX = "write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, or report reaction(end)";
+let REPORT_FIX = "write report w.z at (x, y, z) mm, report s at (x, y, z) mm with s a let of the physics, report Nx at (x, y, z) mm, or report reaction(end)";
 
 // The field of a report or an expect.
 fn field(e: i64, one: bool) -> Field, bool {
@@ -788,6 +1096,10 @@ fn field(e: i64, one: bool) -> Field, bool {
     }
     let v = child(e, 0);
     f.at = vec3(value(child(e, 1)));
+    if kind(v) == syntax::N_NAME && name(v) == "Nx" && beam_tok >= 0 {
+        f.what = F_NX;
+        return f, true;
+    }
     let d, count = target_dofs(v);
     if d >= 0 {
         f.what = if d < 3 { F_W } else { F_THETA };
@@ -897,14 +1209,15 @@ fn read(prog: i64) -> bool {
         c = next(c);
     }
     let at = if first(prog) >= 0 { tok(first(prog)) } else { tok(prog) };
-    if shell_tok < 0 { unsupported(at, "the model has no shell surface", SHELL_FIX); }
+    if shell_tok < 0 && beam_tok < 0 { unsupported(at, "the model has no shell surface", SHELL_FIX); }
     if mesh_tok < 0 { unsupported(at, "the model has no mesh", "add mesh m on roof { size: 1000 mm, cell: quad }"); }
-    if physics_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
+    if physics_tok < 0 && beam_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { ... }"); }
     let m = find(material_names, material_name);
     if physics_tok >= 0 && m < 0 { unsupported(physics_tok, "the physics has no material that the model declares", PHYSICS_FIX); }
-    if ok() { read_section(material_nodes[m]); }
-    if ok() { read_loads(); }
+    if ok() && physics_tok >= 0 { read_section(material_nodes[m]); }
+    if ok() && physics_tok >= 0 { read_loads(); }
+    if ok() && beam_tok >= 0 { read_beam(); }
     for r in reports { if ok() { check_let(r.field); } }
     for x in expects { if ok() { check_let(x.field); } }
     return ok();
@@ -1089,6 +1402,187 @@ fn let_coefficients(i: i64, p: f64[3]) -> f64[19], bool {
     return c, v0.n == 1 && abs(got - want) <= 1.0e-9 * size;
 }
 
+// --- the beams -------------------------------------------------------------------
+
+// E, nu, A, I_y, I_z and J of the beam section.
+var b_section: f64[6] = [0.0; 6];
+// y_axis, the offset and the load per length: a vector, or, with the
+// *_radial flag, [0] times the outward normal of the shell.
+var b_y: f64[3] = [0.0, 1.0, 0.0];
+var b_y_radial = false;
+var b_off: f64[3] = [0.0, 0.0, 0.0];
+var b_off_radial = false;
+var b_q: f64[3] = [0.0, 0.0, 0.0];
+
+// The section and the vectors of the beams, from the beam material and the
+// template arguments. The argument names are the properties of the beam
+// material.
+fn read_beam() {
+    let m = find(material_names, beam_material);
+    if m < 0 || beam_region < 0 {
+        unsupported(beam_tok, "the beam physics has no region or no material that the model declares", BEAM_FIX);
+        return;
+    }
+    let keep = prop_names.len;
+    prop_from = keep;
+    var p = first(material_nodes[m]);
+    while p >= 0 {
+        var w: u8[..64] = [];
+        set64(w, name(p));
+        prop_names.push(w);
+        prop_nodes.push(child(p, 1));
+        p = next(p);
+    }
+    in_physics = true;
+    for word, i in ["E", "nu"] {
+        let k = find(prop_names[keep..], word);
+        if k < 0 { unsupported(tok(material_nodes[m]), str("the beam material has no ", word), "give the beam material E and nu"); }
+        if k >= 0 { b_section[i] = scalar_value(prop_nodes[keep + k]); }
+    }
+    for i in 4 { b_section[2 + i] = scalar_value(beam_args[i]); }
+    let samples = beam_samples();
+    b_y, b_y_radial = beam_vector(beam_args[4], samples, "y_axis");
+    b_off = [0.0, 0.0, 0.0];
+    b_off_radial = false;
+    if beam_args[5] >= 0 { b_off, b_off_radial = beam_vector(beam_args[5], samples, "offset"); }
+    b_q = [0.0, 0.0, 0.0];
+    if beam_args[6] >= 0 {
+        let q, radial = beam_vector(beam_args[6], samples, "q");
+        if radial { unsupported(tok(beam_args[6]), "this slice has a uniform load per length on the beams", "write q: (0, 0, -1) kN/m"); }
+        b_q = q;
+    }
+    in_physics = false;
+    while prop_names.len > keep {
+        prop_names.pop();
+        prop_nodes.pop();
+    }
+    prop_from = 0;
+    if ok() { check_pieces(); }
+}
+
+fn beam_pieces() -> const Piece[:] {
+    let r = regions[beam_region];
+    return pieces[r.first_piece..r.first_piece + r.piece_count];
+}
+
+// Points on up to 8 pieces of the beams: the start and the middle of each.
+fn beam_samples() -> f64[3][>..] {
+    let ps = beam_pieces();
+    var out: f64[3][>..] = [];
+    for k in min(ps.len, 8) {
+        let p = ps[k * ps.len / min(ps.len, 8)];
+        if p.ring {
+            out.push(shell_point(p.p0[0], t0 + 0.2 * (t1 - t0)));
+            out.push(shell_point(p.p0[0], t0 + 0.7 * (t1 - t0)));
+        } else {
+            out.push(p.p0);
+            out.push(on_line(p, 0.5));
+        }
+    }
+    return out;
+}
+
+// The vector of template argument n on the beams: the same at each sample,
+// or s times the outward normal of the shell ([s, 0, 0], true).
+fn beam_vector(n: i64, samples: f64[3][:], what: u8[:]) -> f64[3], bool {
+    let a = vec3(value_at(n, samples[0]));
+    var same = true;
+    var radial = radius > 0.0;
+    let r0 = sqrt(sq(samples[0][1]) + sq(samples[0][2]));
+    let s = if r0 > 0.0 { (a[1] * samples[0][1] + a[2] * samples[0][2]) / r0 } else { 0.0 };
+    let size = abs(a[0]) + abs(a[1]) + abs(a[2]);
+    for p in samples {
+        let b = vec3(value_at(n, p));
+        let rp = sqrt(sq(p[1]) + sq(p[2]));
+        for j in 3 {
+            if abs(b[j] - a[j]) > 1.0e-12 * size { same = false; }
+            let er = if j == 0 || rp == 0.0 { 0.0 } else { p[j] / rp };
+            if abs(b[j] - s * er) > 1.0e-12 * abs(s) { radial = false; }
+        }
+    }
+    if same || !ok() { return a, false; }
+    if radial && s != 0.0 { return [s, 0.0, 0.0], true; }
+    unsupported(tok(n), str("this slice has a beam ", what, " that is uniform or along the normal of the shell"),
+                "write a constant vector, or s*e_r with e_r the outward normal");
+    return a, false;
+}
+
+// With a shell, each line is along x on the cylinder; with no shell, each
+// piece is a line.
+fn check_pieces() {
+    for p in beam_pieces() {
+        if physics_tok < 0 && p.ring {
+            unsupported(beam_tok, "a ring of beams needs the shell", "use lines for the beams");
+            return;
+        }
+        if physics_tok >= 0 && !on_shell(p) {
+            unsupported(beam_tok, str("a beam line from (", p.p0[0], ", ", p.p0[1], ", ", p.p0[2], ") is not along x on the shell"),
+                        "put each line on the cylinder at one θ, or cut the lines with & box(...)");
+            return;
+        }
+        if !p.ring && on_line(p, 0.0) == on_line(p, 1.0) {
+            unsupported(beam_tok, "a beam line has no length", "give each line two different points");
+            return;
+        }
+    }
+    if physics_tok >= 0 && (!tie_w || !tie_theta) {
+        unsupported(beam_tok, "the beams on the shell need the tie", str("add bc ", regions[beam_region].name, ": ", wb_name, " = ", w_name,
+                    " and bc ", regions[beam_region].name, ": ", thb_name, " = ", theta_name));
+    }
+    if physics_tok >= 0 && ok() { grid_counts(); }
+}
+
+fn on_shell(p: Piece) -> bool {
+    let tol = 1.0e-6 * radius;
+    let xt = 1.0e-9 * (x1 - x0);
+    let in_x = min(p.p0[0], p.p1[0]) >= x0 - xt && max(p.p0[0], p.p1[0]) <= x1 + xt;
+    if p.ring { return in_x; }
+    if abs(p.p0[1] - p.p1[1]) > tol || abs(p.p0[2] - p.p1[2]) > tol { return false; }
+    let t = theta_of(p.p0);
+    return in_x && abs(sqrt(sq(p.p0[1]) + sq(p.p0[2])) - radius) <= tol && t >= t0 - 1.0e-9 && t <= t1 + 1.0e-9;
+}
+
+// θ of a point of the shell, from t0 up.
+fn theta_of(q: f64[3]) -> f64 {
+    var d = atan2(q[1], q[2]) - t0;
+    d -= 2.0 * PI * floor(d / (2.0 * PI));
+    if d > t1 - t0 && 2.0 * PI - d < 1.0e-9 { d -= 2.0 * PI; }
+    return t0 + d;
+}
+
+// The cells of the grid along x and along θ: at least those of the mesh
+// size, and a node line on each beam.
+fn grid_counts() -> i64, i64 {
+    var nx = cells_for(x1 - x0, mesh_size);
+    var nt = cells_for(radius * (t1 - t0), mesh_size);
+    if beam_region < 0 { return nx, nt; }
+    let limit_x = 1000 * nx;
+    let limit_t = 1000 * nt;
+    while nx < limit_x && !fits(nx, true) { nx++; }
+    while nt < limit_t && !fits(nt, false) { nt++; }
+    if !fits(nx, true) || !fits(nt, false) {
+        unsupported(beam_tok, "no grid near the mesh size has a node line on each beam", "put the beams at a common step of x and of θ");
+    }
+    return nx, nt;
+}
+
+fn fits(count: i64, along_x: bool) -> bool {
+    for p in beam_pieces() {
+        if along_x {
+            for e in [p.p0[0], p.p1[0]] { if !on_step(count, (e - x0) / (x1 - x0)) { return false; } }
+        } else if !p.ring && !on_step(count, (theta_of(p.p0) - t0) / (t1 - t0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn on_step(count: i64, f: f64) -> bool { return abs(f * count - round(f * count)) <= 1.0e-6; }
+
+fn grid_index(count: i64, f: f64) -> i64 { return round(f * count) as! i64; }
+
+fn line_cells(p: Piece) -> i64 { return cells_for(sqrt(sq(p.p1[0] - p.p0[0]) + sq(p.p1[1] - p.p0[1]) + sq(p.p1[2] - p.p0[2])), mesh_size); }
+
 // --- the program -----------------------------------------------------------------
 
 fn lit(out: u8[>..]&, x: f64) { codegen::lit(out, x); }
@@ -1123,7 +1617,7 @@ recursive fn type_unit(t: i64, out: u8[>..]&) {
 fn field_unit(f: Field) -> u8[>..] {
     if f.what == F_W { return str(codegen::system.length); }
     if f.what == F_THETA { return str("rad"); }
-    if f.what == F_REACTION { return str(codegen::system.force); }
+    if f.what == F_REACTION || f.what == F_NX { return str(codegen::system.force); }
     var u: u8[>..] = [];
     type_unit(let_types[f.let_index], u);
     return u;
@@ -1238,6 +1732,101 @@ let PRELUDE = """
             + (1.0 - fx) * ft * shells::displacement(shells::grid_node(grid, i, j + 1), d);
     }
 
+    // Dof d of the node at (x, y, z), on a beam with no shell.
+    fn node_dof(x: f64, y: f64, z: f64, tol: f64, expr: u8[:], d: i64) -> f64 {
+        return shells::displacement(node_at(x, y, z, tol, expr), d);
+    }
+
+    // The axial force of the beam with its middle nearest to (x, y, z).
+    fn axial_at(x: f64, y: f64, z: f64) -> f64 {
+        var best = -1;
+        var dist = 0.0;
+        for b, i in shells::beams {
+            let p = shells::node_point(b.n[0]);
+            let q = shells::node_point(b.n[1]);
+            let d = shells::norm([0.5 * (p[0] + q[0]) - x, 0.5 * (p[1] + q[1]) - y, 0.5 * (p[2] + q[2]) - z]);
+            if best < 0 || d < dist {
+                best = i;
+                dist = d;
+            }
+        }
+        if best < 0 {
+            failed = true;
+            return 0.0;
+        }
+        return shells::beam_axial_force(best);
+    }
+
+    // The outward unit normal of the cylinder at p.
+    fn radial(p: f64[3]) -> f64[3] {
+        let r = sqrt(p[1] * p[1] + p[2] * p[2]);
+        return [0.0, p[1] / r, p[2] / r];
+    }
+
+    // A beam from node a to node b. With `y_radial`, y is the normal at the
+    // middle; with `o_radial`, the offset at each node is o[0] times the
+    // normal there.
+    fn beam(a: i64, b: i64, section: i64, y: f64[3], y_radial: bool, o: f64[3], o_radial: bool) {
+        let pa = shells::node_point(a);
+        let pb = shells::node_point(b);
+        var ya = y;
+        if y_radial { ya = radial([0.5 * (pa[0] + pb[0]), 0.5 * (pa[1] + pb[1]), 0.5 * (pa[2] + pb[2])]); }
+        var oa = o;
+        var ob = o;
+        if o_radial {
+            let na = radial(pa);
+            let nb = radial(pb);
+            oa = [o[0] * na[0], o[0] * na[1], o[0] * na[2]];
+            ob = [o[0] * nb[0], o[0] * nb[1], o[0] * nb[2]];
+        }
+        shells::add_beam(a, b, section, ya, oa, ob);
+    }
+
+    // Beams on the grid nodes from (i0, j0) to (i1, j1), a line of x or of θ.
+    fn grid_beams(i0: i64, j0: i64, i1: i64, j1: i64, section: i64, y: f64[3], y_radial: bool, o: f64[3], o_radial: bool) {
+        let along_x = j0 == j1;
+        for k in (if along_x { i1 - i0 } else { j1 - j0 }) {
+            let a = if along_x { shells::grid_node(grid, i0 + k, j0) } else { shells::grid_node(grid, i0, j0 + k) };
+            let b = if along_x { shells::grid_node(grid, i0 + k + 1, j0) } else { shells::grid_node(grid, i0, j0 + k + 1) };
+            beam(a, b, section, y, y_radial, o, o_radial);
+        }
+    }
+
+    // The node at (x, y, z) if one is within tol, else a new node.
+    fn node_or_new(p: f64[3], tol: f64) -> i64 {
+        if shells::node_count() > 0 {
+            let n, d = shells::nearest_node(p[0], p[1], p[2]);
+            if d <= tol { return n; }
+        }
+        return shells::add_node(p[0], p[1], p[2]);
+    }
+
+    // `count` beams on the line from p to q. An end at a node shares it.
+    fn line_beams(p: f64[3], q: f64[3], count: i64, tol: f64, section: i64, y: f64[3], o: f64[3]) {
+        var a = node_or_new(p, tol);
+        for k in count {
+            let f = 1.0 * (k + 1) / count;
+            let at: f64[3] = [p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1]), p[2] + f * (q[2] - p[2])];
+            let b = if k == count - 1 { node_or_new(q, tol) } else { shells::add_node(at[0], at[1], at[2]) };
+            shells::add_beam(a, b, section, y, o, o);
+            a = b;
+        }
+    }
+
+    // The load per length (qx, qy, qz) on each beam, half at each node.
+    fn beam_load(qx: f64, qy: f64, qz: f64) {
+        for b in shells::beams {
+            let p = shells::node_point(b.n[0]);
+            let q = shells::node_point(b.n[1]);
+            let half = 0.5 * shells::norm([q[0] - p[0], q[1] - p[1], q[2] - p[2]]);
+            for n in b.n {
+                shells::force(n, shells::UX, half * qx);
+                shells::force(n, shells::UY, half * qy);
+                shells::force(n, shells::UZ, half * qz);
+            }
+        }
+    }
+
     // N and eps_m at (x, y, z): the mean of the cells at a node, or the
     // value at the centre of the cell that holds the point.
     fn resultants_at(x: f64, y: f64, z: f64, tol: f64, expr: u8[:]) -> f64[9], f64[9] {
@@ -1250,7 +1839,7 @@ let PRELUDE = """
     // The direct solve has no iterations: cg_iterations is 0.
     fn solve(step: u8[:]) {
         let converged = shells::solve();
-        format(solves, "  ", step, ",", shells::shells.len, ",", shells::dof_count(), ",0,",
+        format(solves, "  ", step, ",", shells::shells.len + shells::beams.len, ",", shells::dof_count(), ",0,",
                shells::last_seconds, ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
         if !converged { failed = true; }
@@ -1316,6 +1905,16 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         format(out, "    edge_load(", r.sides, ", ");
         lits(out, b.load);
         out.append(");\n");
+    } else if b.kind == BC_FORCE {
+        out.append("    {\n");
+        emit_node_at(out, "n", r.at, r.name);
+        for j in 3 {
+            if b.load[j] == 0.0 { continue; }
+            format(out, "        shells::force(n, ", DOF_NAMES[b.dof + j], ", ");
+            lit(out, b.load[j]);
+            out.append(");\n");
+        }
+        out.append("    }\n");
     } else if r.sides != 0 {
         format(out, "    fix_sides(", r.sides, ", ", DOF_NAMES[b.dof], ");\n");
     } else {
@@ -1344,6 +1943,12 @@ fn emit_value(out: u8[>..]&, f: Field, label: u8[:], comp: i64) {
     lit(at, 1.0e-3 * mesh_size);
     at.append(", ");
     quoted(at, label);
+    if f.what == F_NX {
+        out.append("        let v = axial_at(");
+        lits(out, f.at);
+        out.append(");\n");
+        return;
+    }
     if f.what == F_LET {
         let c, linear = let_coefficients(f.let_index, f.at);
         format(out, "        let tn, te = resultants_at(", at, ");\n        let v = ");
@@ -1360,7 +1965,8 @@ fn emit_value(out: u8[>..]&, f: Field, label: u8[:], comp: i64) {
     let d0 = if f.what == F_W { 0 } else { 3 };
     for j in 3 {
         if comp >= 0 && j != comp { continue; }
-        format(out, "        let v", AXIS_NAMES[j], " = dof_at(", at, ", ", DOF_NAMES[d0 + j], ");\n");
+        format(out, "        let v", AXIS_NAMES[j], " = ", if physics_tok >= 0 { "dof_at(" } else { "node_dof(" }, at, ", ",
+               DOF_NAMES[d0 + j], ");\n");
     }
 }
 
@@ -1369,7 +1975,7 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
     emit_value(out, r.field, r.label, r.field.comp);
     var v: u8[>..] = [];
     let unit = field_unit(r.field);
-    if r.field.what == F_LET {
+    if r.field.what == F_LET || r.field.what == F_NX {
         format(v, "quantity(v, \"", unit, "\")");
     } else if r.field.comp >= 0 {
         format(v, "quantity(v", AXIS_NAMES[r.field.comp], ", \"", unit, "\")");
@@ -1397,7 +2003,12 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
         lits(out, q);
         format(out, ", ", if q_normal { "true" } else { "false" }, "); }\n");
     }
-    for i in own { if bcs[i].kind == BC_EDGE { emit_bc(out, bcs[i]); } }
+    if b_q[0] != 0.0 || b_q[1] != 0.0 || b_q[2] != 0.0 {
+        format(out, "    // physics ", beam_name, ": q\n    beam_load(");
+        lits(out, b_q);
+        out.append(");\n");
+    }
+    for i in own { if bcs[i].kind != BC_FIX { emit_bc(out, bcs[i]); } }
     out.append("    solve(");
     quoted(out, s.name);
     format(out, ");\n    equilibrium(\"", codegen::system.force, "\");\n");
@@ -1409,9 +2020,9 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
         out.append("    output(");
         quoted(out, path);
         out.append(", ");
-        quoted(out, w_name);
+        quoted(out, if physics_tok >= 0 { w_name[..] } else { wb_name[..] });
         out.append(", ");
-        quoted(out, theta_name);
+        quoted(out, if physics_tok >= 0 { theta_name[..] } else { thb_name[..] });
         out.append(");\n");
     }
     out.append("}\n\n");
@@ -1420,7 +2031,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
 fn emit_expect(out: u8[>..]&, x: Expect) {
     format(out, "    // expect ", x.name, "\n    {\n");
     emit_value(out, x.field, x.name, x.field.comp);
-    let v = if x.field.what == F_LET { str("v") } else { str("v", AXIS_NAMES[x.field.comp]) };
+    let v = if x.field.what == F_LET || x.field.what == F_NX { str("v") } else { str("v", AXIS_NAMES[x.field.comp]) };
     out.append("        expect(");
     quoted(out, x.name);
     format(out, ", ", v, ", ");
@@ -1436,7 +2047,15 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 fn cells_for(length: f64, size: f64) -> i64 { return max(ceil(length / size - 1.0e-9) as! i64, 1); }
 
 // The dofs of the mesh of the model that `read` read: 6 at each node.
-fn dof_estimate() -> i64 { return 6 * (cells_for(x1 - x0, mesh_size) + 1) * (cells_for(radius * (t1 - t0), mesh_size) + 1); }
+fn dof_estimate() -> i64 {
+    if physics_tok >= 0 {
+        let nx, nt = grid_counts();
+        return 6 * (nx + 1) * (nt + 1);
+    }
+    var nodes = 0;
+    for p in beam_pieces() { nodes += line_cells(p) + 1; }
+    return 6 * nodes;
+}
 
 // Writes the Goose program of the model that `read` read. The program
 // imports the shells from `shells_path` and writes its VTU files under
@@ -1453,9 +2072,20 @@ fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append(";   // the shells import it\n");
     out.append(PRELUDE);
     for si in 0..steps.len { emit_step(out, si, results_dir); }
-    let nx = cells_for(x1 - x0, mesh_size);
-    let nt = cells_for(radius * (t1 - t0), mesh_size);
     out.append("fn main() {\n    shells::clear();\n");
+    if physics_tok >= 0 { emit_shell(out); }
+    if beam_tok >= 0 { emit_beams(out); }
+    for s in steps { format(out, "    step_", s.name, "();\n"); }
+    for x in expects { if x.step < 0 { emit_expect(out, x); } }
+    out.append("    print_records();\n");
+    out.append("    if failed { exit(1); }\n");
+    out.append("}\n");
+}
+
+// The laminate and the grid of the shell.
+fn emit_shell(out: u8[>..]&) {
+    let sys = codegen::system;
+    let nx, nt = grid_counts();
     format(out, "    // material ", material_name, ": ", angles.len, " plies from the top face\n");
     out.append("    shells::laminate_clear();\n");
     for a in angles {
@@ -1492,9 +2122,50 @@ fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, ", ", nx, ", ", nt, ", section, ");
     lits(out, axis);
     out.append(");\n");
-    for s in steps { format(out, "    step_", s.name, "();\n"); }
-    for x in expects { if x.step < 0 { emit_expect(out, x); } }
-    out.append("    print_records();\n");
-    out.append("    if failed { exit(1); }\n");
-    out.append("}\n");
+}
+
+// The beam section and the beams of each piece: on the grid lines of the
+// shell, or on lines of their own.
+fn emit_beams(out: u8[>..]&) {
+    format(out, "    // material ", beam_material, ": the beam section\n    let beam_section = shells::beam_section(");
+    for v, i in b_section {
+        if i > 0 { out.append(", "); }
+        lit(out, v);
+    }
+    out.append(");\n");
+    var tail: u8[>..] = [];
+    tail.append("beam_section, [");
+    lits(tail, b_y);
+    format(tail, "], ", if b_y_radial { "true" } else { "false" }, ", [");
+    lits(tail, b_off);
+    format(tail, "], ", if b_off_radial { "true" } else { "false" }, ");\n");
+    let ps = beam_pieces();
+    format(out, "    // physics ", beam_name, " on ", regions[beam_region].name, ": ", ps.len, " lines and rings\n");
+    if physics_tok < 0 {
+        for p in ps {
+            out.append("    line_beams([");
+            lits(out, p.p0);
+            out.append("], [");
+            lits(out, p.p1);
+            format(out, "], ", line_cells(p), ", ");
+            lit(out, 1.0e-3 * mesh_size);
+            out.append(", beam_section, [");
+            lits(out, b_y);
+            out.append("], [");
+            lits(out, b_off);
+            out.append("]);\n");
+        }
+        return;
+    }
+    let nx, nt = grid_counts();
+    for p in ps {
+        let ia = grid_index(nx, (min(p.p0[0], p.p1[0]) - x0) / (x1 - x0));
+        if p.ring {
+            format(out, "    grid_beams(", ia, ", 0, ", ia, ", ", nt, ", ", tail);
+        } else {
+            let ib = grid_index(nx, (max(p.p0[0], p.p1[0]) - x0) / (x1 - x0));
+            let j = grid_index(nt, (theta_of(p.p0) - t0) / (t1 - t0));
+            format(out, "    grid_beams(", ia, ", ", j, ", ", ib, ", ", j, ", ", tail);
+        }
+    }
 }

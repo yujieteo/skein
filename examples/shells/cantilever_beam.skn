@@ -1,0 +1,72 @@
+// A steel cantilever of an IPE 300 section with a force at the tip: the
+// cantilever benchmark of implementation.md §10 with the beam template
+// (spec §4.3). The beam is the line of the section centroids. Timoshenko
+// beam theory gives the tip deflection P L^3/(3 E I_y) + P L/(k G A),
+// with the shear factor k = 5/6 of the template. The study varies the
+// length: `skein run cantilever_beam.skn --study lengths`.
+
+model cantilever_beam: 3d, SI
+
+param L: Length = 2 m in 0.5 m..4 m
+let P: Force = 10 kN
+
+scales L, P
+
+// IPE 300 (EN 10365): the web is along z, so I_y is the strong axis.
+let E_s: Pressure = 210 GPa
+let nu_s: Real = 0.3
+let A_s: Area = 53.8e-4 m^2
+let I_ys: Length^4 = 8356e-8 m^4
+
+let bar: Curve = line((0, 0, 0) m, (L, 0 m, 0 m))
+let root: Point = point((0, 0, 0) m)
+let tip: Point = point((L, 0 m, 0 m))
+
+material ipe300 {
+    E: Pressure = E_s
+    nu: Real = nu_s
+    A: Area = A_s
+    I_y: Length^4 = I_ys
+    I_z: Length^4 = 604e-8 m^4
+    J: Length^4 = 20.1e-8 m^4
+}
+
+mesh m on bar {
+    size: 100 mm
+}
+
+// The section y axis is the global y, so the section z axis is the
+// global z.
+physics beam on bar: timoshenko(
+    A: A,
+    I_y: I_y,
+    I_z: I_z,
+    J: J,
+    y_axis: (0, 1, 0),
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material ipe300
+}
+
+method beam: cg { mesh: m, order: 1 }
+
+bc root: w = 0
+bc root: theta = 0
+
+step load: static {
+    bc tip: F_b*n = (0, 0, -1)*P
+    output w
+    report w.z at (L, 0 m, 0 m)
+    report reaction(root)
+}
+
+let G_s: Pressure = E_s/(2*(1 + nu_s))
+let w_tip: Length = P*L^3/(3*E_s*I_ys) + P*L/(5/6*G_s*A_s)
+
+expect deflection: w.z at (L, 0 m, 0 m) == -w_tip within 0.1%
+
+expect root_force: (reaction(root)).z == P within 1e-6 N
+
+study lengths: grid {
+    L: [1, 2, 3, 4] m
+}

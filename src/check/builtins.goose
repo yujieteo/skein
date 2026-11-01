@@ -432,6 +432,18 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(LENGTH, 1);
     }
+    if name == "copy" {
+        // copy(r): the index of the copy of the pattern r nearest to the point (spec §8.1, gap G35).
+        guard arity(tok, name, a, 1, 1) && want_geom(tok, name, a, 0) && !is_any(t0) else { return any_ty(); }
+        guard t0.list else {
+            error(first_tok(a.node[0]), "type_mismatch", "copy takes a geometry value made by pattern or pattern_polar",
+                  "give a pattern, for example copy(windows) with let windows: Solid = pattern(w0, v, 8)");
+            return any_ty();
+        }
+        var r = num_ty(NO_DIM, 0);
+        r.varying = true;
+        return r;
+    }
     if name == "rigid" || name == "moment" {
         // check_bc reads both forms. Other places cannot use them (spec §12.1, gap G17).
         error(tok, "rigid_form", str(name, " stands only in a bc"),
