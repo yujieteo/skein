@@ -242,7 +242,7 @@ fn test_modes() {
     if ms[2] != 0.0 || ms[3] != 1.0 { fail("modes: the constant of a scalar field"); }
 }
 
-// The 5-point Laplacian on 40 x 40 nodes, for test_warm.
+// The 5-point Laplacian on 80 x 80 nodes (3 AMG levels), for test_warm.
 var lap_rs: i64[>..] = [0];
 var lap_col: i32[>..] = [];
 var lap_val: f64[>..] = [];
@@ -257,7 +257,7 @@ fn lap_amg(r: f64[:], z: f64[:]) { solvers::amg_apply(r, z); }
 // SKEIN_WARM, which ./build.sh test sets to an empty directory.
 fn test_warm() {
     if solvers::warm_dir().len == 0 { fail("warm: SKEIN_WARM is not set"); return; }
-    let n = 40;
+    let n = 80;
     for j in n {
         for i in n {
             let r = i + n * j;
@@ -282,7 +282,7 @@ fn test_warm() {
     }
     let key = solvers::warm_key();
     if !solvers::amg_setup(lap_rs, lap_col, lap_val, 1) { fail("warm: amg_setup"); return; }
-    if solvers::amg_levels < 2 { fail(str("warm: ", solvers::amg_levels, " AMG levels, want 2 or more")); }
+    if solvers::amg_levels < 3 { fail(str("warm: ", solvers::amg_levels, " AMG levels, want 3 or more")); }
     let ok1, its1 = runtime::cg(b, x1, 1.0e-10, 500, lap_multiply, lap_amg);
     solvers::amg_keep(key, lap_rs, lap_col, free);
     var other: f64[>..] = [];
