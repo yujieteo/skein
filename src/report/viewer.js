@@ -1300,17 +1300,28 @@ function renderSliders() {
   }
 }
 
+// The params of the values `values` that the page solve cannot change, and
+// that are not at their default.
+function fixedParams(values) {
+  return Object.keys(values).filter((p) => !solveParams.some((q) => q.name === p) &&
+    !M.params.some((x) => x.name === p && sameValue(x.value, values[p])));
+}
+
 // Shows the case of the values of the sliders. Without a case, `solve`
 // meshes and solves them in the page.
 async function showValues(solve) {
   const values = { ...S.values };
   let c = await caseFor(values);
-  if (!c && solve && SOLVE) {
+  const fixed = fixedParams(values);
+  const inPage = SOLVE && fixed.length === 0;
+  if (!c && solve && inPage) {
     c = await solveCase(values);
     if (JSON.stringify(values) !== JSON.stringify(S.values)) return;    // the sliders moved on
   }
   if (c) {
     if (D.cases.indexOf(c) !== S.caseIndex) selectCase(D.cases.indexOf(c));
+  } else if (SOLVE && !inPage) {
+    document.getElementById('note').textContent = 'no stored case has these values, and the page solves only with the default of ' + fixed.join(', ');
   } else if (!SOLVE) {
     document.getElementById('note').textContent = 'no stored case has these values';
   } else if (!solve) {

@@ -516,10 +516,12 @@ has a control in the page of `build` (§7). A slider at the values of a
 stored case shows that case at once. A slider that stops at other values
 meshes and solves the model in the page, as the page of `build` does,
 and the viewer and the tables show that run. A value near a stored value
-(1 % of the range) takes the stored value. If `report` does not run
-`build`, if `build` fails, or if the model is too large for the browser,
-the sliders move only between the stored cases. Reason: the interposer study has 72 cases, and its sliders
-must reach each value of each range.
+(1 % of the range) takes the stored value. The page solve changes only
+the params with a control. If a study param without a control is not at
+its default, the page does not solve. If `report` does not run `build`,
+if `build` fails, or if the model is too large for the browser, the
+sliders move only between the stored cases. Reason: the interposer study
+has 72 cases, and its sliders must reach each value of each range.
 
 The input "Open VTU" opens a VTU file of another solver in the same
 viewer, without source links.
