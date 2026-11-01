@@ -365,6 +365,8 @@ var geometry_names: u8[..64][>..];
 var geometry_nodes: i64[>..];
 var surface_lets: i64[>..];
 var point_lets: i64[>..];
+var finite_strain = false;  // assume finite_strain: the linear form gives the preload of a buckling step
+var pk_name: u8[..64] = []; // the let P1 = defgrad(u)*S2 of the finite strain form, or ""
 var conductivity_name: u8[..64] = [];  // the property of the flux of the heat physics: k, or eps of -eps*grad(phi)
 var geo = GEO_BOX;
 var lo: f64[3];
@@ -435,6 +437,8 @@ fn reset() {
     geometry_nodes.clear();
     surface_lets.clear();
     point_lets.clear();
+    finite_strain = false;
+    pk_name.clear();
     set64(conductivity_name, "k");
     geo = GEO_BOX;
     hole_r = 0.0;
@@ -1105,6 +1109,9 @@ fn physics_item(n: i64) {
             materials_of(c);
         } else if k == syntax::N_ASSUME {
             assumptions(c);
+        } else if k == syntax::N_LET && finite_strain && physics == ELASTIC && source_of(child(c, 1)) == str("defgrad(", unknown_name, ")*", flux_name) {
+            // P1 = F S2: the first Piola-Kirchhoff stress of the finite strain form.
+            set64(pk_name, name(c));
         } else if k == syntax::N_LET {
             let p = flux_let(c);
             if p < 0 || physics >= 0 && p != physics {
@@ -1121,7 +1128,7 @@ fn physics_item(n: i64) {
             eq_count++;
             let left = child(c, 0);
             let right = child(c, 1);
-            let div = is_call(left, "div") && flux_name.len > 0 && source_of(arg(left, 0)) == flux_name;
+            let div = is_call(left, "div") && flux_name.len > 0 && (source_of(arg(left, 0)) == flux_name || pk_name.len > 0 && source_of(arg(left, 0)) == pk_name);
             if !div || physics == ELASTIC && source_of(right) != "0" {
                 unsupported(tok(c), "this generator solves eq div(sigma) = 0 or eq div(q) = q_v", PHYSICS_FIX);
             } else if physics == HEAT {
@@ -1192,9 +1199,11 @@ fn assumptions(n: i64) {
             if first(a) < 0 && w == "plane_stress" {
                 unsupported(tok(a), "plane_stress needs the thickness", "write plane_stress(1 mm)");
             }
+        } else if w == "finite_strain" {
+            finite_strain = true;
         } else if w != "small_strain" && w != "isotropic" {
             unsupported(tok(a), str("the assumption '", w, "' is not in this generator"),
-                        "use small_strain, isotropic, plane_stress(t) or plane_strain");
+                        "use small_strain, finite_strain, isotropic, plane_stress(t) or plane_strain");
         }
         a = next(a);
     }
@@ -1393,7 +1402,7 @@ fn bc(n: i64) -> i64 {
     } else if member && physics == ELASTIC && axis_of(name(target)) >= 0 {
         b.comp = axis_of(name(target));
         b.v[0] = scalar_value(v);
-    } else if physics == ELASTIC && t == str(flux_name, "*n") && kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" &&
+    } else if physics == ELASTIC && (t == str(flux_name, "*n") || pk_name.len > 0 && t == str(pk_name, "*n")) && kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" &&
               source_of(child(v, 1)) == "n" && surfs[s].points.len == 0 {
         b.kind = BC_PRESSURE;
         b.v[0] = scalar_value(child(v, 0));
@@ -1846,6 +1855,12 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
     return -1, -1, -1, 1.0;
 }
 
+// Whether a static step has an output.
+fn outputs_static() -> bool {
+    for st in steps { if st.procedure == STATIC && st.output { return true; } }
+    return false;
+}
+
 // Reads the program `prog`. False on an error, and `syntax::errors` holds
 // the errors.
 fn read(prog: i64) -> bool {
@@ -1915,6 +1930,17 @@ fn read(prog: i64) -> bool {
         c = next(c);
     }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
+    // The linear buckling of the finite strain form is K + λ K_G of the
+    // stress of the linear static step before it. A static result of the
+    // finite strain form is not in this generator.
+    if finite_strain {
+        var buckle = false;
+        for st in steps { if st.procedure == BUCKLING { buckle = true; } }
+        if !buckle || reports.len > 0 || outputs_static() {
+            unsupported(at, "finite_strain runs only as the preload of a buckling step, with no report and no output of a static step",
+                        "add a buckling step, and remove the reports and the outputs of the static steps");
+        }
+    }
     if rkpm_support > 0.0 { rkpm_limits(prog); }
     if ok() { step_bcs(); }
     if ok() { harmonic_values(); }
