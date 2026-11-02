@@ -210,11 +210,18 @@ gives the roadmap phase that closes the gap:
   affine in T, natural boundary fluxes, and the mean, the integral and the
   maximum of any field expression on a region. A banded LU solve
   (`src/solvers/band.goose`) replaces GMRES for the thin channel.
+- [wedge_oblique_shock.skn](../examples/femahoy/wedge_oblique_shock.skn) runs
+  with `skein run` on the conservation-law family `src/cons/`: any
+  `ddt(U) + div(F) = S` system of an `fv` method with more than one unknown
+  component, on triangles, with a MUSCL limiter, a Rusanov flux whose speed
+  comes from the Jacobian of the model flux, and SSPRK3. All five expects pass
+  within 0.25 % (the shock angle is 36.998 deg).
 - Not run yet in the flow batch, each needs a new solver family:
-  naca0012_ladson and naca23012_flap (the generator has no `nu`, no turbulence
-  model in a written-out physics), wedge_oblique_shock (compressible Euler
-  with a vector unknown in `fv`), dam_break_vof and dam_break_martin_moyce
-  (two-phase VOF), turek_hron_fsi1 (a second physics in the flow generator),
+  naca0012_ladson and naca23012_flap (Spalart-Allmaras with a nuTilde unknown,
+  a wall-distance physics, a spline airfoil with a far field, boundary layer
+  cells and a second physics), dam_break_vof and dam_break_martin_moyce
+  (two-phase VOF with tables, surface tension and a Tait water; the flow
+  generator rejects the Newtonian stress `let`), turek_hron_fsi1 (a second physics in the flow generator),
   slider_crank (a multibody first-order form) and acoustics_pulsating_sphere
   (3D acoustic reports at a point and on a region).
 
