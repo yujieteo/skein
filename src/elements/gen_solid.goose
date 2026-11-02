@@ -85,8 +85,15 @@ fn solid_unknown(c: i64) {
 // The eqs of the first-order form: ddt(u) - v = 0, and
 // rho*ddt(v) - div(x) = 0 with x as in solid_eq. False for another eq.
 fn solid_dynamic_eq(c: i64) -> bool {
-    guard velocity_name.len > 0 && source_of(child(c, 1)) == "0" else { return false; }
+    guard source_of(child(c, 1)) == "0" else { return false; }
     let left = child(c, 0);
+    // The second-order form eq rho*ddt2(u) - div(sigma) = 0, for a modal step.
+    if kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "-" && source_of(child(left, 0)) == str("rho*ddt2(", unknown_name, ")") &&
+       is_call(child(left, 1), "div") && source_of(arg(child(left, 1), 0)) == flux_name {
+        dynamic_eq = true;
+        return true;
+    }
+    guard velocity_name.len > 0 else { return false; }
     guard kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "-" else { return false; }
     let a = child(left, 0);
     let b = child(left, 1);

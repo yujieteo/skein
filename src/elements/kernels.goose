@@ -12,6 +12,10 @@ import .assemble;
 // f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.
 fn cell_matrix(c: i64) {
     guard c >= 0 && c < cell_count() && (physics == ELASTIC || physics == HEAT) && (dim == 2 || dim == 3) && (order == 1 || order == 2) else { abort("cell_matrix: c < cell_count(), a physics, dim 2 or 3 and order 1 or 2"); }
+    if hex_cells {
+        if physics == ELASTIC { elastic_hex8(c); } else { heat_hex8(c); }
+        return;
+    }
     if physics == ELASTIC && dim == 2 && order == 1 { elastic_tri3(c); }
     if physics == ELASTIC && dim == 2 && order == 2 { elastic_tri6(c); }
     if physics == ELASTIC && dim == 3 && order == 1 { elastic_tet4(c); }
@@ -20,6 +24,74 @@ fn cell_matrix(c: i64) {
     if physics == HEAT && dim == 2 && order == 2 { heat_tri6(c); }
     if physics == HEAT && dim == 3 && order == 1 { heat_tet4(c); }
     if physics == HEAT && dim == 3 && order == 2 { heat_tet10(c); }
+}
+
+fn elastic_hex8(c: i64) {
+    guard c >= 0 && c < cell_count() && physics == ELASTIC && dim == 3 && per_cell == 8 && ncomp == 3 else { abort("elastic_hex8: a cell, the physics, dim 3, 8 nodes and 3 components"); }
+    for &v in ke { v = 0.0; }
+    for &v in fe { v = 0.0; }
+    for qp in quad_count(3) {
+        let xi, w = quad_point(3, qp);
+        let dv = w * cell_geometry(c, xi) * thickness;
+        for i in 8 {
+            fe[3 * i] += volume_force[0] * shp[i] * dv;
+            fe[3 * i + 1] += volume_force[1] * shp[i] * dv;
+            fe[3 * i + 2] += volume_force[2] * shp[i] * dv;
+        }
+        for i in 0..8 {
+            for j in 0..8 {
+                var dot = 0.0;
+                dot += grad[3 * i] * grad[3 * j];
+                dot += grad[3 * i + 1] * grad[3 * j + 1];
+                dot += grad[3 * i + 2] * grad[3 * j + 2];
+                let row = 72 * i + 3 * j;
+                var v = lame * grad[3 * i] * grad[3 * j] + shear * grad[3 * i] * grad[3 * j];
+                v += shear * dot;
+                ke[row] += v * dv;
+                v = lame * grad[3 * i] * grad[3 * j + 1] + shear * grad[3 * i + 1] * grad[3 * j];
+                ke[row + 1] += v * dv;
+                v = lame * grad[3 * i] * grad[3 * j + 2] + shear * grad[3 * i + 2] * grad[3 * j];
+                ke[row + 2] += v * dv;
+                v = lame * grad[3 * i + 1] * grad[3 * j] + shear * grad[3 * i] * grad[3 * j + 1];
+                ke[row + 24] += v * dv;
+                v = lame * grad[3 * i + 1] * grad[3 * j + 1] + shear * grad[3 * i + 1] * grad[3 * j + 1];
+                v += shear * dot;
+                ke[row + 25] += v * dv;
+                v = lame * grad[3 * i + 1] * grad[3 * j + 2] + shear * grad[3 * i + 2] * grad[3 * j + 1];
+                ke[row + 26] += v * dv;
+                v = lame * grad[3 * i + 2] * grad[3 * j] + shear * grad[3 * i] * grad[3 * j + 2];
+                ke[row + 48] += v * dv;
+                v = lame * grad[3 * i + 2] * grad[3 * j + 1] + shear * grad[3 * i + 1] * grad[3 * j + 2];
+                ke[row + 49] += v * dv;
+                v = lame * grad[3 * i + 2] * grad[3 * j + 2] + shear * grad[3 * i + 2] * grad[3 * j + 2];
+                v += shear * dot;
+                ke[row + 50] += v * dv;
+            }
+        }
+    }
+}
+
+fn heat_hex8(c: i64) {
+    guard c >= 0 && c < cell_count() && physics == HEAT && dim == 3 && per_cell == 8 && ncomp == 1 else { abort("heat_hex8: a cell, the physics, dim 3, 8 nodes and 1 components"); }
+    for &v in ke { v = 0.0; }
+    for &v in fe { v = 0.0; }
+    for qp in quad_count(3) {
+        let xi, w = quad_point(3, qp);
+        let dv = w * cell_geometry(c, xi) * thickness;
+        let kq = conductivity_at(c);
+        for i in 8 {
+            fe[i] += source * shp[i] * dv;
+        }
+        for i in 0..8 {
+            for j in 0..8 {
+                var dot = 0.0;
+                dot += grad[3 * i] * grad[3 * j];
+                dot += grad[3 * i + 1] * grad[3 * j + 1];
+                dot += grad[3 * i + 2] * grad[3 * j + 2];
+                ke[8 * i + j] += kq * dot * dv;
+            }
+        }
+    }
 }
 
 fn elastic_tri3(c: i64) {
@@ -375,6 +447,7 @@ fn heat_tri3(c: i64) {
     for qp in quad_count(2) {
         let xi, w = quad_point(2, qp);
         let dv = w * cell_geometry(c, xi) * thickness;
+        let kq = conductivity_at(c);
         for i in 3 {
             fe[i] += source * shp[i] * dv;
         }
@@ -383,7 +456,7 @@ fn heat_tri3(c: i64) {
                 var dot = 0.0;
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
-                ke[3 * i + j] += conductivity * dot * dv;
+                ke[3 * i + j] += kq * dot * dv;
             }
         }
     }
@@ -396,6 +469,7 @@ fn heat_tri6(c: i64) {
     for qp in quad_count(2) {
         let xi, w = quad_point(2, qp);
         let dv = w * cell_geometry(c, xi) * thickness;
+        let kq = conductivity_at(c);
         for i in 6 {
             fe[i] += source * shp[i] * dv;
         }
@@ -404,7 +478,7 @@ fn heat_tri6(c: i64) {
                 var dot = 0.0;
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
-                ke[6 * i + j] += conductivity * dot * dv;
+                ke[6 * i + j] += kq * dot * dv;
             }
         }
         for i in 0..3 {
@@ -412,7 +486,7 @@ fn heat_tri6(c: i64) {
                 var dot = 0.0;
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
-                ke[6 * i + j] += conductivity * dot * dv;
+                ke[6 * i + j] += kq * dot * dv;
             }
         }
         for i in 3..6 {
@@ -420,7 +494,7 @@ fn heat_tri6(c: i64) {
                 var dot = 0.0;
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
-                ke[6 * i + j] += conductivity * dot * dv;
+                ke[6 * i + j] += kq * dot * dv;
             }
         }
         for i in 3..6 {
@@ -428,7 +502,7 @@ fn heat_tri6(c: i64) {
                 var dot = 0.0;
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
-                ke[6 * i + j] += conductivity * dot * dv;
+                ke[6 * i + j] += kq * dot * dv;
             }
         }
     }
@@ -441,6 +515,7 @@ fn heat_tet4(c: i64) {
     for qp in quad_count(3) {
         let xi, w = quad_point(3, qp);
         let dv = w * cell_geometry(c, xi) * thickness;
+        let kq = conductivity_at(c);
         for i in 4 {
             fe[i] += source * shp[i] * dv;
         }
@@ -450,7 +525,7 @@ fn heat_tet4(c: i64) {
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
                 dot += grad[3 * i + 2] * grad[3 * j + 2];
-                ke[4 * i + j] += conductivity * dot * dv;
+                ke[4 * i + j] += kq * dot * dv;
             }
         }
     }
@@ -463,6 +538,7 @@ fn heat_tet10(c: i64) {
     for qp in quad_count(3) {
         let xi, w = quad_point(3, qp);
         let dv = w * cell_geometry(c, xi) * thickness;
+        let kq = conductivity_at(c);
         for i in 10 {
             fe[i] += source * shp[i] * dv;
         }
@@ -472,7 +548,7 @@ fn heat_tet10(c: i64) {
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
                 dot += grad[3 * i + 2] * grad[3 * j + 2];
-                ke[10 * i + j] += conductivity * dot * dv;
+                ke[10 * i + j] += kq * dot * dv;
             }
         }
         for i in 0..4 {
@@ -481,7 +557,7 @@ fn heat_tet10(c: i64) {
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
                 dot += grad[3 * i + 2] * grad[3 * j + 2];
-                ke[10 * i + j] += conductivity * dot * dv;
+                ke[10 * i + j] += kq * dot * dv;
             }
         }
         for i in 4..10 {
@@ -490,7 +566,7 @@ fn heat_tet10(c: i64) {
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
                 dot += grad[3 * i + 2] * grad[3 * j + 2];
-                ke[10 * i + j] += conductivity * dot * dv;
+                ke[10 * i + j] += kq * dot * dv;
             }
         }
         for i in 4..10 {
@@ -499,7 +575,7 @@ fn heat_tet10(c: i64) {
                 dot += grad[3 * i] * grad[3 * j];
                 dot += grad[3 * i + 1] * grad[3 * j + 1];
                 dot += grad[3 * i + 2] * grad[3 * j + 2];
-                ke[10 * i + j] += conductivity * dot * dv;
+                ke[10 * i + j] += kq * dot * dv;
             }
         }
     }

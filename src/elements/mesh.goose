@@ -68,6 +68,7 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     guard (d == 2 || d == 3) && (ord == 1 || ord == 2) else { abort("start_mesh: d is 2 or 3 and ord 1 or 2"); }
     dim = d;
     order = ord;
+    hex_cells = false;
     per_cell = node_count_of(d, ord);
     coords.clear();
     conn.clear();
@@ -215,6 +216,26 @@ fn build_box(d: i64, ord: i64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64
     build_lattice(nx, ny, nz);
 }
 
+// A box with nx × ny × nz hexahedra of order 1 (8 nodes, shape.goose): the
+// lattice of the nodes is that of the simplex mesh, and each lattice cell is one cell.
+fn build_hex_box(lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
+    guard nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && hi[2] > lo[2] else { abort("build_hex_box: nx, ny and nz > 0 and hi > lo"); }
+    start_mesh(3, 1, lo, hi);
+    hex_cells = true;
+    per_cell = node_count_of(3, 1);
+    map_kind = MAP_BOX;
+    lat = [nx + 1, ny + 1, nz + 1];
+    place_nodes();
+    for ck in nz {
+        for cj in ny {
+            for ci in nx {
+                for l in 8 { conn.push(lattice_node(ci + HEX_CORNERS[3 * l], cj + HEX_CORNERS[3 * l + 1], ck + HEX_CORNERS[3 * l + 2])); }
+            }
+        }
+    }
+    on_lattice = true;
+}
+
 // The radial parameter of each vertex row: cells that grow from `fine` at
 // the hole by a factor `GRADE` up to `size`, then stay at `size`, scaled
 // to fill the length `span`.
@@ -332,6 +353,7 @@ fn load_mesh(dir: const u8[:]) -> bool {
     order = sizes[1];
     per_cell = sizes[2];
     body_shape = sizes[3];
+    hex_cells = dim == 3 && per_cell == 8;
     for t in 3 {
         bbox_lo[t] = bbox[t];
         bbox_hi[t] = bbox[3 + t];

@@ -124,7 +124,7 @@ fn heat_block(lo_a: i64, hi_a: i64, lo_b: i64, hi_b: i64, dim: i64, size: i64) {
     format(block_text, "    for i in ", lo_a, "..", hi_a, " {\n");
     format(block_text, "        for j in ", lo_b, "..", hi_b, " {\n");
     gradient_dot(dim, true);
-    format(block_text, "            ke[", size, " * i + j] += conductivity * dot * dv;\n");
+    format(block_text, "            ke[", size, " * i + j] += kq * dot * dv;\n");
     block_text.append("        }\n    }\n");
 }
 
@@ -265,6 +265,7 @@ fn elements_kernels() -> u8[>..] {
     out.append("// f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.\n");
     out.append("fn cell_matrix(c: i64) {\n");
     out.append("    guard c >= 0 && c < cell_count() && (physics == ELASTIC || physics == HEAT) && (dim == 2 || dim == 3) && (order == 1 || order == 2) else { abort(\"cell_matrix: c < cell_count(), a physics, dim 2 or 3 and order 1 or 2\"); }\n");
+    out.append("    if hex_cells {\n        if physics == ELASTIC { elastic_hex8(c); } else { heat_hex8(c); }\n        return;\n    }\n");
     for physics in 2 {
         let word = if physics == 0 { "ELASTIC" } else { "HEAT" };
         for dim in 2..4 {
@@ -274,6 +275,10 @@ fn elements_kernels() -> u8[>..] {
         }
     }
     out.append("}\n");
+    for physics in 2 {
+        out.push('\n');
+        cube_kernel(out, physics);
+    }
     for physics in 2 {
         for dim in 2..4 {
             for order in 1..3 {
@@ -285,6 +290,11 @@ fn elements_kernels() -> u8[>..] {
     return out;
 }
 
+// The 8-node hexahedron of order 1: one group of nodes, and the integrand of a simplex.
+fn cube_kernel(out: u8[>..]&, physics: i64) {
+    simplex_cell_kernel(out, physics, 3, 1, true);
+}
+
 // physics 0 is elastic, 1 heat.
 fn simplex_kernel_name(physics: i64, dim: i64, order: i64) -> u8[>..] {
     guard (physics == 0 || physics == 1) && (dim == 2 || dim == 3) && (order == 1 || order == 2) else { abort("simplex_kernel_name: a physics, dim 2 or 3 and order 1 or 2"); }
@@ -294,8 +304,12 @@ fn simplex_kernel_name(physics: i64, dim: i64, order: i64) -> u8[>..] {
 // The groups of the nodes of a simplex: its vertices, then the nodes at
 // the midpoints of its edges (order 2).
 fn simplex_kernel(out: u8[>..]&, physics: i64, dim: i64, order: i64) {
-    let name = simplex_kernel_name(physics, dim, order);
-    let nodes = if order == 1 { dim + 1 } else { (dim + 1) * (dim + 2) / 2 };
+    simplex_cell_kernel(out, physics, dim, order, false);
+}
+
+fn simplex_cell_kernel(out: u8[>..]&, physics: i64, dim: i64, order: i64, cube: bool) {
+    let name = if cube { str(if physics == 0 { "elastic_" } else { "heat_" }, "hex8") } else { simplex_kernel_name(physics, dim, order) };
+    let nodes = if cube { 8 } else if order == 1 { dim + 1 } else { (dim + 1) * (dim + 2) / 2 };
     let comps = if physics == 0 { dim } else { 1 };
     let size = nodes * comps;
     let groups = if order == 1 { 1 } else { 2 };
@@ -321,6 +335,7 @@ fn simplex_kernel(out: u8[>..]&, physics: i64, dim: i64, order: i64) {
     format(head, "    for qp in quad_count(", dim, ") {\n");
     format(head, "        let xi, w = quad_point(", dim, ", qp);\n");
     head.append("        let dv = w * cell_geometry(c, xi) * thickness;\n");
+    if physics == 1 { head.append("        let kq = conductivity_at(c);\n"); }
     format(head, "        for i in ", nodes, " {\n");
     if physics == 1 {
         head.append("            fe[i] += source * shp[i] * dv;\n");

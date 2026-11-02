@@ -357,8 +357,8 @@ fn test_unsupported() {
                  "error unsupported 5:37 the surface is not on a face of beam");
     expect_error("no support", replace(model(MM, str(MESH, STEP)), "bc root: u = 0\n", ""),
                  "error unsupported 16:9 no face is fixed");
-    expect_error("a unit outside the slice", replace(model(MM, str(MESH, STEP)), "-1) MPa", "-1) J"),
-                 "error unsupported 21:34 the unit 'J' is not in this slice");
+    expect_error("a unit outside the slice", replace(model(MM, str(MESH, STEP)), "-1) MPa", "-1) ft"),
+                 "error unsupported 21:34 the unit 'ft' is not in this slice");
     expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
 }
 

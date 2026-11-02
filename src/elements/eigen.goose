@@ -37,10 +37,11 @@ var modes: f64[>..] = [];        // mode k at dof_total() k
 let GAUSS_X: f64[4] = [0.0694318442029737, 0.33000947820757187, 0.6699905217924281, 0.9305681557970263];
 let GAUSS_W: f64[4] = [0.17392742256872692, 0.3260725774312731, 0.3260725774312731, 0.17392742256872692];
 
-fn rich_count() -> i64 { return if dim == 2 { 16 } else { 64 }; }
+fn rich_count() -> i64 { return if hex_cells { quad_count(dim) } else if dim == 2 { 16 } else { 64 }; }
 
 // Point q of the conical product rule on the unit simplex of dimension dim.
 fn rich_point(q: i64) -> f64[3], f64 {
+    if hex_cells { return quad_point(dim, q); }
     let u = GAUSS_X[q % 4];
     let v = GAUSS_X[q / 4 % 4];
     let w = GAUSS_X[q / 16];
@@ -393,6 +394,22 @@ fn residuals(theta: f64[:], ax: f64[:], bx: f64[:], count: i64, m: i64, n: i64) 
     return all, w;
 }
 
+// For a modal step of a body with no fixed dof: adds s M to K, with s = 1e-6
+// times the ratio of the sums of the diagonals of K and M. Gives s, or 0.
+fn free_body_shift(kind: i64) -> f64 {
+    guard kind == MASS else { return 0.0; }
+    for d in dof_total() { if fixed[d] != 0 { return 0.0; } }
+    var dk = 0.0;
+    var dm = 0.0;
+    for r in dof_total() {
+        dk += val[entry(r, r)];
+        dm += val_b[entry(r, r)];
+    }
+    let s = 1.0e-6 * dk / dm;
+    for e in val.len { val[e] += s * val_b[e]; }
+    return s;
+}
+
 // Assembles K, its AMG and the matrix B or A of `kind`, then runs LOBPCG.
 fn eigen_solve(kind: i64, count: i64) -> bool {
     guard physics == ELASTIC && dofs_sized() && count >= 1 else { abort("eigen_solve: an elastic physics, the arrays of the dofs and count >= 1"); }
@@ -405,9 +422,13 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     assemble(if kind == MASS { "simplex modal lobpcg amg" } else { "simplex buckling lobpcg amg" }, 14 * m + 2 * mode_count());
     hold_dead_nodes();
     eigen_kind = kind;
-    let factored = setup_preconditioner(0);
+    // A body with no fixed dof has 6 rigid modes (K is singular): the shift
+    // K + s M, an SPD matrix, moves each θ by s, which is removed after.
     assemble_second(kind);
+    let shift = free_body_shift(kind);
+    let factored = setup_preconditioner(0);
     let done = factored && lobpcg(count);
+    for t in eigenvalues.len { eigenvalues[t] -= shift; }
     last_iterations = eigen_its;
     last_seconds = clock() - start;
     return done;
