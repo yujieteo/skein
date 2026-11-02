@@ -644,8 +644,8 @@ fn shell_quoted(s: u8[:]) -> u8[>..] {
 }
 
 // `path` relative to the directory that skein run started in, which is the
-// project root, if it is below it and the real working directory resolves it. So the generated program names the same
-// file in each checkout.
+// project root, if it is below it and the real working directory resolves
+// it. So the generated program names the same file in each checkout.
 fn project_path(path: u8[:]) -> u8[>..] {
     var cwd: u8[>..] = [];
     if env("PWD", cwd) && cwd.len > 0 && path.len > cwd.len && path[..cwd.len] == cwd[..] && path[cwd.len] == '/' {

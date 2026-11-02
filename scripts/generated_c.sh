@@ -18,9 +18,10 @@
 # Goose writes the absolute path of each imported file into the C. This
 # script removes the repository directory from these paths, and the
 # directory of the Goose stdlib, so the C is the same in each checkout and
-# with each Goose install. That is the only change to the C. The C is then the same on each machine with the Goose
-# version in goose_version. After you change Goose, set goose_version to the
-# output of `goose --version` and write the C again.
+# with each Goose install. That is the only change to the C. The C is then
+# the same on each machine with the Goose version in goose_version. After you
+# change Goose, set goose_version to the output of `goose --version` and
+# write the C again.
 #
 # Needs build/skein (./build.sh), and goose on PATH or in $GOOSE.
 set -eu
