@@ -2262,11 +2262,6 @@ fn expect(n: i64, step: i64) {
         }
         if !mine(left) { return; }
     }
-    // A value of samples: an expression of `f at p` and constants.
-    if kind(left) != syntax::N_AT && kind(left) != syntax::N_NAME && !is_call(left, "eigenvalue") && !is_call(left, "mean") && has_sample(left) {
-        composite_expect(n);
-        return;
-    }
     if kind(left) == syntax::N_AT {
         what, comp = point_field(left, false);
     } else if is_call(left, "eigenvalue") {
@@ -2282,6 +2277,11 @@ fn expect(n: i64, step: i64) {
     if what < 0 { what, comp, surf, scale, inverse = scaled_field(left); }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
+    // A value of samples: an expression of `f at p` and constants.
+    if (what < 0 || comp < 0) && has_sample(left) {
+        composite_expect(n);
+        return;
+    }
     if what < 0 || comp < 0 {
         var s: u8[..256] = [];
         codegen::set256(s, str(name(n), ": ", source_of(left), " is not in this generator"));
