@@ -327,7 +327,10 @@ work (`src/gpu/kernels.wgsl`), and Goose sets up and controls the GPU
    again, until the residual of the CPU solve holds.
 
 `tests/gpu/gpu.test.mjs` runs each page in Node with the `webgpu` package
-(Dawn) and compares the GPU run with the CPU run.
+(Dawn) and compares the GPU run with the CPU run. `./build.sh browser`
+(`tests/gpu/browser.mjs`) solves 7 explicit models in the page in headless
+Chromium with WebGPU, on the GPU and on the CPU, and checks their expect
+values. It fails when the adapter is not Nvidia or a GPU run uses the CPU.
 
 The page runs the simplex models (`tri` or `tet` cells), the hex models
 (a box, a sector or a union of boxes) and the `fv` and `dg` grids.
