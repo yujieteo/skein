@@ -353,6 +353,24 @@ fn test_nested() {
     if !(worst <= 1.0e-10 * solvers::norm(b)) { fail(str("nested: the residual is ", worst)); }
 }
 
+// --- band_solve: a tridiagonal system that needs a pivot ---------------------
+//
+// Row 0 has a 0 on the diagonal, so the solve must swap rows. The exact x is (1, 2, 3, 4).
+fn test_band() {
+    var rs: i64[5] = [0, 2, 5, 8, 10];
+    var cols: i32[10] = [0, 1, 0, 1, 2, 1, 2, 3, 2, 3];
+    var vals: f64[10] = [0.0, 2.0, 1.0, 3.0, 1.0, 1.0, 4.0, 1.0, 1.0, 5.0];
+    var b: f64[4] = [4.0, 10.0, 18.0, 23.0];
+    var x: f64[4] = [0.0; 4];
+    var work: f64[16] = [0.0; 16];
+    let kl, ku = solvers::band_widths(rs[..], cols[..]);
+    if kl != 1 || ku != 1 { fail("band_widths"); }
+    if !solvers::band_solve(rs[..], cols[..], vals[..], b[..], x[..], kl, ku, work[..]) { fail("band_solve: singular"); return; }
+    for i in 4 {
+        if abs(x[i] - (i + 1) as f64) > 1.0e-12 { fail("band_solve: wrong x"); }
+    }
+}
+
 fn main() {
     test_newton();
     test_cantilever();
@@ -360,6 +378,7 @@ fn main() {
     test_modes();
     test_warm();
     test_nested();
+    test_band();
     if failures > 0 { exit(1); }
     print("solvers: all tests pass");
 }

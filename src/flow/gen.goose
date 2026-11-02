@@ -9,6 +9,15 @@
 // method with GMRES and ILU(0). Each other construct gives an error
 // `unsupported` at its token, with a fix.
 //
+// A temperature Tf: Temperature in the flow physics, with the energy equation
+// `rho*cp*dot(v, grad(Tf)) + div(qf) = 0` and a body force that is affine in
+// Tf (the Boussinesq buoyancy), is a thermal flow (src/flow/heat.goose). A
+// second physics that solves a Temperature alone on a shape that touches the
+// flow is a solid with heat conduction: conjugate heat transfer. The mesher
+// meshes the two shapes as one, with the cells of the solid marked, so that T
+// is continuous across their interface and the heat flux that leaves the
+// solid enters the fluid.
+//
 // A second physics `linear_elastic` in plane strain on its own shape, with
 // an `interface` item, is a solid in the flow (src/flow/fsi.goose). The
 // mesher meshes the two shapes as one, with the boundary of the solid as
@@ -146,6 +155,7 @@ recursive fn quantity(n: i64) -> Q {
 }
 
 recursive fn name_quantity(n: i64) -> Q {
+    if probe_on && thermal && name(n) == temp { return real(probe_value); }
     var v = codegen::find_value(name(n));
     if v < 0 { v = property(name(n)); }
     if v < 0 && name(n) == "pi" { return real(PI); }
@@ -272,6 +282,9 @@ fn scales(n: i64) {
     var c = first(n);
     while c >= 0 {
         let q = quantity(c);
+        // a fourth scale is the temperature: T has no scale, since K is not a
+        // dimension of this generator
+        if count >= 3 && thermal_scale_ok(c) { count++; c = next(c); continue; }
         if count < 3 && q.n == 1 && q.v[0] > 0.0 {
             for j in 3 { m[3 * count + j] = q.d[j] / 2.0; }
             b[count] = log(q.v[0]);
@@ -281,12 +294,18 @@ fn scales(n: i64) {
         c = next(c);
     }
     let x, solved = solve3(m, b);
-    if count != 3 || !solved {
+    if count < 3 || count > 4 || !solved {
         unsupported(tok(n), "the scales of a flow model are three values that give a length, a mass and a time",
                     "write scales L, U, rho with a length, a velocity and a density");
         return;
     }
     for j in 3 { base[j] = exp(x[j]); }
+}
+
+// Whether the scale c after the third is a positive scalar.
+fn thermal_scale_ok(c: i64) -> bool {
+    let q = quantity(c);
+    return q.n == 1 && q.v[0] > 0.0 && same_dim(q.d, [0, 0, 0]);
 }
 
 // The solution of m x = b, by Gauss elimination with partial pivots.
@@ -328,6 +347,7 @@ fn solve3(m: f64[9], b: f64[3]) -> f64[3], bool {
 let SHAPE = 0;
 let BOUNDARY = 1;
 let POINT = 2;
+let LINE = 3;       // line(p0, p1): a segment in the flow, for max(f, line)
 
 struct Named {
     name: u8[..64],
@@ -346,6 +366,8 @@ struct Refine {
 let BC_V = 0;       // component comp of the velocity, or both for comp -1
 let BC_P = 1;
 let BC_U = 2;       // the displacement of the solid at 0
+let BC_T = 3;       // the temperature
+let BC_FLUX = 4;    // the outward heat flux dot(q, n)
 
 // A `bc`: the region (an index in `named`), the target and the scaled value.
 struct Bc {
@@ -420,6 +442,28 @@ var solid_material = -1;
 var solid_size = 0.0;
 var interface_node = -1;
 
+var thermal = false;        // the flow solves a temperature
+var temp: u8[..64];         // its name
+var temp_start = 0.0;
+var flux: u8[..64];         // the let of the heat flux of the fluid: fourier(k, T)
+var energy_seen = false;
+var heat_source = 0.0;      // Q of the fluid, scaled
+var buoyancy: f64[2] = [0.0, 0.0];   // the body force is force + buoyancy*T, scaled
+var probe_on = false;       // a name of the temperature is the number probe_value
+var probe_value = 0.0;
+var th_tok = -1;            // the physics of the solid with heat conduction, or -1
+var th_name: u8[..64];
+var th_domain = -1;         // an index in `named`
+var th_temp: u8[..64];
+var th_flux: u8[..64];
+var th_mat = -1;
+var th_source = 0.0;
+var th_size = 0.0;
+var th_energy_seen = false;
+var p_offset = 0.0;         // the pressure level of the traction bcs, scaled
+var p_offset_set = false;
+var thermal_materials: i64[>..];
+
 let STABILIZE_NAMES = ["none", "supg", "supg_pspg", "supg_pspg_lsic"];
 
 fn reset() {
@@ -462,6 +506,26 @@ fn reset() {
     solid_material = -1;
     solid_size = 0.0;
     interface_node = -1;
+    thermal = false;
+    temp = [];
+    temp_start = 0.0;
+    flux = [];
+    energy_seen = false;
+    heat_source = 0.0;
+    buoyancy = [0.0, 0.0];
+    probe_on = false;
+    th_tok = -1;
+    th_name = [];
+    th_domain = -1;
+    th_temp = [];
+    th_flux = [];
+    th_mat = -1;
+    th_source = 0.0;
+    th_size = 0.0;
+    th_energy_seen = false;
+    p_offset = 0.0;
+    p_offset_set = false;
+    thermal_materials.clear();
     base = [1.0, 1.0, 1.0];
     table_node = -1;
     table_row = -1;
@@ -528,8 +592,8 @@ fn value_item(n: i64) {
     set64(g.name, name(n));
     if is_shape(v) {
         named.push(g);
-    } else if is_call(v, "boundary") || is_call(v, "point") || is_union(v) {
-        g.kind = if is_call(v, "point") { POINT } else { BOUNDARY };
+    } else if is_call(v, "boundary") || is_call(v, "point") || is_call(v, "line") || is_union(v) {
+        g.kind = if is_call(v, "point") { POINT } else if is_call(v, "line") { LINE } else { BOUNDARY };
         named.push(g);
     } else {
         codegen::value_names.push(g.name);
@@ -542,6 +606,16 @@ fn material(n: i64) {
         solid_materials(n);
         return;
     }
+    if property_of(n, "mu") < 0 && property_of(n, "k") >= 0 && property_of(n, "rho") < 0 {
+        // the material of a solid with heat conduction: k
+        thermal_materials.push(n);
+        var p = first(n);
+        while p >= 0 {
+            if name(p) != "k" && name(p) != "cp" && name(p) != "rho" { unsupported(tok(p), str("the property '", name(p), "' is not in the flow generator"), "give the solid k"); }
+            p = next(p);
+        }
+        return;
+    }
     if material_node >= 0 {
         unsupported(tok(n), "a second material: the flow generator has one", "remove the second material");
         return;
@@ -550,8 +624,8 @@ fn material(n: i64) {
     set64(material_name, name(n));
     var p = first(n);
     while p >= 0 {
-        if name(p) != "rho" && name(p) != "mu" {
-            unsupported(tok(p), str("the property '", name(p), "' is not in the flow generator"), "give the fluid rho and mu");
+        if name(p) != "rho" && name(p) != "mu" && name(p) != "cp" && name(p) != "k" {
+            unsupported(tok(p), str("the property '", name(p), "' is not in the flow generator"), "give the fluid rho and mu, and cp and k for a temperature");
         }
         p = next(p);
     }
@@ -580,6 +654,10 @@ fn written_out(c: i64, eqs: i64&) {
     let k = kind(c);
     let v = velocity;
     let p = pressure;
+    if k == syntax::N_LET && thermal && compact(child(c, 1)) == str("fourier(k,", temp, ")") {
+        set64(flux, name(c));
+        return;
+    }
     if k == syntax::N_LET {
         if compact(child(c, 1)) != str("-", p, "*I+2*mu*sym(grad(", v, "))") {
             unsupported(tok(c), str("the let '", name(c), "' is not the Newtonian stress"),
@@ -599,8 +677,54 @@ fn written_out(c: i64, eqs: i64&) {
     eqs++;
     if left == str("div(", v, ")") && right == "0" { return; }
     if left == str("rho*grad(", v, ")*", v, "-div(", s, ")") && right == "0" { return; }
+    if left == str("rho*grad(", v, ")*", v, "-div(", s, ")") && thermal {
+        body_force_of(child(c, 1));
+        return;
+    }
+    if thermal && flux.len > 0 && left == str("rho*cp*dot(", v, ",grad(", temp, "))+div(", flux, ")") {
+        energy_seen = true;
+        heat_source = if right == "0" { 0.0 } else { scaled_value(child(c, 1)) };
+        return;
+    }
     unsupported(tok(c), "the eq is not an equation of the flow generator",
                 str("write eq rho*grad(", v, ")*", v, " - div(", s, ") = 0 and eq div(", v, ") = 0"));
+}
+
+// The body force of the momentum equation, the right side of
+// `rho*grad(v)*v - div(sigma) = f`, when the flow is thermal: force + buoyancy*T,
+// which must be affine in T (checked at three values of T). Reason: the
+// Boussinesq force rho*(1 - beta*(T - T0))*g is of this form, and the cell
+// rows need only the two vectors.
+fn body_force_of(f: i64) {
+    probe_on = true;
+    var q: Q[3] = [real(0.0); 3];
+    for i in 3 {
+        probe_value = i;
+        q[i] = scaled(quantity(f));
+    }
+    probe_on = false;
+    if !ok() { return; }
+    for i in 3 {
+        if q[i].n != 2 && !(q[i].n == 1 && q[i].v[0] == 0.0) {
+            unsupported(tok(f), "the body force is not a vector", "write a vector, for example rho*(1 - beta*(T - T0))*(0, -g)");
+            return;
+        }
+    }
+    var f0: f64[2] = [0.0; 2];
+    var f1: f64[2] = [0.0; 2];
+    var f2: f64[2] = [0.0; 2];
+    if q[0].n == 2 { f0 = q[0].v; }
+    if q[1].n == 2 { f1 = q[1].v; }
+    if q[2].n == 2 { f2 = q[2].v; }
+    for j in 2 {
+        let scale = max(abs(f0[j]), max(abs(f1[j]), abs(f2[j])));
+        if abs(f2[j] - 2.0 * f1[j] + f0[j]) > 1.0e-9 * scale {
+            unsupported(tok(f), str("the body force is not affine in ", temp), "write a force of the form f0 + f1*T, for example rho*(1 - beta*(T - T0))*(0, -g)");
+            return;
+        }
+        force[j] = f0[j];
+        buoyancy[j] = f1[j] - f0[j];
+    }
 }
 
 fn physics_item(n: i64) {
@@ -631,6 +755,10 @@ fn physics_item(n: i64) {
             let t = child(c, 0);
             if kind(t) == syntax::N_TYPE_NAME && name(t) == "Pressure" && pressure.len == 0 {
                 set64(pressure, name(c));
+            } else if kind(t) == syntax::N_TYPE_NAME && name(t) == "Temperature" && !thermal {
+                thermal = true;
+                set64(temp, name(c));
+                if syntax::child_count(c) > 1 { temp_start = scaled_value(child(c, 1)); }
             } else if kind(t) == syntax::N_TYPE_APPLY && velocity.len == 0 {
                 set64(velocity, name(c));
             } else if turbulent && turb_k.len == 0 {
@@ -652,12 +780,66 @@ fn physics_item(n: i64) {
         c = next(c);
     }
     for s in statements { written_out(s, eqs); }
-    if !template && eqs != 2 { unsupported(tok(n), "a written-out flow physics needs two eqs", PHYSICS_FIX); }
+    if !template && eqs != (if thermal { 3 } else { 2 }) { unsupported(tok(n), str("a written-out flow physics needs ", if thermal { "three" } else { "two" }, " eqs"), PHYSICS_FIX); }
+    if thermal && ok() && !energy_seen {
+        unsupported(tok(n), "the temperature has no energy equation", str("write let q: Vector<HeatFlux> = fourier(k, ", temp, ") and eq rho*cp*dot(", velocity, ", grad(", temp, ")) + div(q) = 0"));
+    }
     if template && statements.len > 0 { unsupported(tok(statements[0]), "a physics with a template has no let or eq", "remove it"); }
     if domain < 0 && ok() { unsupported(tok(n), "the physics has no region", "write physics flow on dom"); }
 }
 
 let SOLID_FIX = "write physics flag on bar: linear_elastic solves u: Vector<Length> { material steel  assume plane_strain }";
+
+// Whether physics n solves a Temperature alone: a solid with heat conduction.
+fn is_thermal_solid(n: i64) -> bool {
+    var temperature = false;
+    var c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_USES { return false; }
+        if kind(c) == syntax::N_UNKNOWN {
+            let t = child(c, 0);
+            if !(kind(t) == syntax::N_TYPE_NAME && name(t) == "Temperature") { return false; }
+            temperature = true;
+        }
+        c = next(c);
+    }
+    return temperature;
+}
+
+let THERMAL_SOLID_FIX = "write physics solid on wall solves Ts: Temperature = T0 { material pvc  let q: Vector<HeatFlux> = fourier(k, Ts)  eq div(q) = 0 }";
+
+// The solid with heat conduction: `let qs = fourier(k, Ts)` and `eq div(qs) = Q`.
+fn thermal_solid_item(n: i64) {
+    if th_tok >= 0 {
+        unsupported(tok(n), "a second solid with heat conduction: the flow generator has one", "remove the second physics");
+        return;
+    }
+    th_tok = tok(n);
+    set64(th_name, name(n));
+    var c = first(n);
+    while c >= 0 {
+        let k = kind(c);
+        if k == syntax::N_ON {
+            th_domain = named_of(first(c), SHAPE);
+            if th_domain < 0 { unsupported(tok(first(c)), "the region of the physics is not a shape that a let names", THERMAL_SOLID_FIX); }
+        } else if k == syntax::N_UNKNOWN {
+            if th_temp.len > 0 { unsupported(tok(c), "the solid solves one temperature", THERMAL_SOLID_FIX); }
+            set64(th_temp, name(c));
+        } else if k == syntax::N_MATASSIGN {
+            for m in thermal_materials { if first(c) >= 0 && name(m) == name(first(c)) { th_mat = m; } }
+        } else if k == syntax::N_LET && compact(child(c, 1)) == str("fourier(k,", th_temp, ")") {
+            set64(th_flux, name(c));
+        } else if k == syntax::N_EQN && th_flux.len > 0 && compact(child(c, 0)) == str("div(", th_flux, ")") {
+            th_energy_seen = true;
+            th_source = if compact(child(c, 1)) == "0" { 0.0 } else { scaled_value(child(c, 1)) };
+        } else if k != syntax::N_ASSUME {
+            unsupported(tok(c), "the statement is not in the solid with heat conduction", THERMAL_SOLID_FIX);
+        }
+        c = next(c);
+    }
+    if th_mat < 0 && ok() { unsupported(tok(n), "the solid needs a material with k", "add material pvc { k: Conductivity = 0.25 W/(m*K) }"); }
+    if !th_energy_seen && ok() { unsupported(tok(n), "the solid has no energy equation", THERMAL_SOLID_FIX); }
+}
 
 // Whether physics n uses the template linear_elastic: the solid.
 fn is_solid(n: i64) -> bool {
@@ -754,6 +936,45 @@ fn solid_mesh(n: i64) {
         s = next(s);
     }
     if solid_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 1 cm"); }
+}
+
+// The mesh of the solid with heat conduction: a size, and tri cells.
+fn thermal_solid_mesh(n: i64) {
+    var s = first(child(n, 1));
+    while s >= 0 {
+        let v = first(s);
+        if kind(s) == syntax::N_SETTING && name(s) == "size" {
+            th_size = scaled_value(v);
+        } else if !(kind(s) == syntax::N_SETTING && name(s) == "cell" && kind(v) == syntax::N_NAME && name(v) == "tri") {
+            unsupported(tok(s), "the mesh of the solid has a size and tri cells", "write mesh ms on wall { size: 1 mm, cell: tri }");
+        }
+        s = next(s);
+    }
+    if th_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 1 cm"); }
+}
+
+// The method of the solid with heat conduction: cg, on the mesh of the flow.
+fn thermal_solid_method(n: i64) {
+    if syntax::text(syntax::nodes[n].aux) != "cg" { unsupported(tok(n), "the solid with heat conduction has the cg method", "write method solid: cg { mesh: ms }"); }
+    var s = first(child(n, 0));
+    while s >= 0 {
+        if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
+            unsupported(tok(s), "the method setting of the solid is not in the flow generator", "use only mesh");
+        }
+        s = next(s);
+    }
+}
+
+// The checks of a model with a temperature, after the fluid.
+fn read_thermal(at: i64) {
+    if th_tok >= 0 && !thermal { unsupported(th_tok, "a solid with heat conduction needs a flow with a temperature", "add Tf: Temperature to the flow"); }
+    if !thermal { return; }
+    if property("cp") < 0 || property("k") < 0 {
+        unsupported(at, "a flow with a temperature needs a material with cp and k", "add cp: SpecificHeat = 1000 J/(kg*K) and k: Conductivity = 0.025 W/(m*K)");
+        return;
+    }
+    if th_tok >= 0 && th_size <= 0.0 && ok() { unsupported(th_tok, "the solid has no mesh", "add mesh ms on wall { size: 1 mm, cell: tri }"); }
+    if turbulent || solid_tok >= 0 || period_high >= 0 { unsupported(at, "a flow with a temperature is laminar, with no solid linear_elastic and not periodic", "remove them"); }
 }
 
 // The checks of a model with a solid, after the fluid.
@@ -937,12 +1158,14 @@ fn bc(n: i64) -> i64 {
     let target = child(n, 1);
     let v = child(n, 2);
     let r = if kind(region) == syntax::N_NAME { find_named(name(region)) } else { -1 };
-    if r < 0 || named[r].kind == SHAPE {
+    if r < 0 || named[r].kind == SHAPE || named[r].kind == LINE {
         unsupported(tok(region), "the region of the bc is not a boundary or a point that a let names", BC_FIX_TEXT);
         return -1;
     }
     var b = Bc { region: r, kind: BC_V, comp: -1, v: [0.0, 0.0], expr: -1 };
     let t = compact(target);
+    if thermal && is_temperature_target(t) { return temperature_bc(n, b, t); }
+    if t == str(stress, "*n") && is_pressure_level(v) { return -1; }
     if solid_tok >= 0 && t == displacement { return solid_bc(n, b); }
     if mentions_xy(v) && (t == velocity || t == str(velocity, ".x") || t == str(velocity, ".y")) {
         // a value of x and y: emit_bc writes it as Goose (emit_coordinate)
@@ -976,10 +1199,64 @@ fn bc(n: i64) -> i64 {
     return bcs.len - 1;
 }
 
+// Whether t is the temperature of the fluid or of the solid, or the flux
+// dot(q, n) of one of them.
+fn is_temperature_target(t: u8[:]) -> bool { return thermal_kind(t) != 0; }
+
+// 1 for the temperature of the fluid or of the solid, 2 for the flux
+// dot(q, n) of one of them, else 0.
+fn thermal_kind(t: u8[:]) -> i64 {
+    if t == temp || (th_tok >= 0 && t == th_temp) { return 1; }
+    if t == str("dot(", flux, ",n)") || (th_tok >= 0 && t == str("dot(", th_flux, ",n)")) { return 2; }
+    return 0;
+}
+
+// `bc inlet: Tf = T_in`, `bc heater: dot(qs, n) = -q_h`, and the two
+// conditions of an interface, `Tf = Ts` and `dot(qs, n) = dot(qf, n)`. The
+// interface needs no condition in the weak form: the cells of the fluid and
+// of the solid share the nodes of their interface, so T is continuous and the
+// flux is the same on both sides. The bcs of an interface only have to say
+// what the weak form holds.
+fn temperature_bc(n: i64, b: Bc, t: u8[:]) -> i64 {
+    let v = child(n, 2);
+    let w = compact(v);
+    if thermal_kind(w) != 0 && thermal_kind(w) == thermal_kind(t) && w != t {
+        if th_tok < 0 { unsupported(tok(v), "an interface needs a solid with heat conduction", THERMAL_SOLID_FIX); }
+        return -1;
+    }
+    var c = b;
+    c.kind = if thermal_kind(t) == 1 { BC_T } else { BC_FLUX };
+    c.v[0] = scaled(quantity(v)).v[0];
+    use_region(b.region);
+    bcs.push(c);
+    return bcs.len - 1;
+}
+
+// `bc outlet: sigma*n = -p_out*n`. The pressure enters the flow through its
+// gradient, so the level of the traction only shifts p: the flow solves for p
+// - p_out with the traction 0, and a report of p adds p_out again. Two bcs
+// with different levels have no such shift.
+fn is_pressure_level(v: i64) -> bool {
+    guard kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" && compact(child(v, 1)) == "n" else { return false; }
+    let level = -scaled(quantity(child(v, 0))).v[0];
+    if p_offset_set && abs(level - p_offset) > 1.0e-12 * max(abs(level), 1.0) {
+        unsupported(tok(v), "the tractions -p*n of the bcs have different levels p", "give each traction bc the same pressure, or sigma*n = 0");
+    }
+    p_offset = level;
+    p_offset_set = true;
+    return true;
+}
+
 // Whether the boundary g (an index in `named`) is on the solid.
 fn on_solid(g: i64) -> bool {
     let v = named[g].value;
     return solid_domain >= 0 && named[g].kind == BOUNDARY && is_call(v, "boundary") && named_of(arg(v, 0), SHAPE) == solid_domain;
+}
+
+// Whether the boundary g is on the solid with heat conduction.
+fn on_thermal_solid(g: i64) -> bool {
+    let v = named[g].value;
+    return th_domain >= 0 && named[g].kind == BOUNDARY && is_call(v, "boundary") && named_of(arg(v, 0), SHAPE) == th_domain;
 }
 
 // `bc root: u = 0`, on a boundary of the solid.
@@ -1056,6 +1333,8 @@ fn output_fields(n: i64) -> bool {
             solid = true;
         } else if kind(o) == syntax::N_EVERY {
             unsupported(tok(o), "a static step has no every", "remove it");
+        } else if kind(o) == syntax::N_NAME && thermal && (name(o) == temp || (th_tok >= 0 && name(o) == th_temp)) {
+            // T is always in the VTU file of a thermal flow
         } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure && !(turbulent && (name(o) == turb_k || name(o) == turb_w))) {
             unsupported(tok(o), "the flow generator writes the velocity and the pressure, and k and w of k_omega_sst", str("write output ", velocity, ", ", pressure));
         }
@@ -1084,6 +1363,7 @@ fn point_field(e: i64) -> i64, i64 {
     if f == str(velocity, ".x") { return 0, -1; }
     if f == str(velocity, ".y") { return 1, -1; }
     if f == pressure { return 2, -1; }
+    if thermal && (f == temp || (th_tok >= 0 && f == th_temp)) { return 5, -1; }
     if solid_tok >= 0 && f == displacement { return 3, 4; }
     if solid_tok >= 0 && f == str(displacement, ".x") { return 3, -1; }
     if solid_tok >= 0 && f == str(displacement, ".y") { return 4, -1; }
@@ -1123,6 +1403,103 @@ fn traction_integral(e: i64) -> i64 {
     return -1;
 }
 
+let REGION_FIX = "write mean(-grad(T).x, wall), integral(T*dot(v, n), outlet) or max(v.x, line_name), with let line_name: Curve = line((0.5, 0) m, (0.5, 1) m)";
+
+// The dimension and the Goose text of the field of an integrand, or false:
+// a component of the velocity, the pressure, T, a component of grad(T),
+// dot(v, n) and dot(q, n) with q the heat flux of the fluid or of the solid.
+// The text reads the local values `s` of flow::Local.
+fn field_text(e: i64, out: u8[>..]&) -> i64[3], bool {
+    let f = compact(e);
+    let zero: i64[3] = [0, 0, 0];
+    if f == str(velocity, ".x") { out.append("s.vx"); return VELOCITY_D, true; }
+    if f == str(velocity, ".y") { out.append("s.vy"); return VELOCITY_D, true; }
+    if f == pressure {
+        out.append("(s.p + ");
+        lit(out, p_offset);
+        out.push(')');
+        return PRESSURE_D, true;
+    }
+    if thermal && (f == temp || (th_tok >= 0 && f == th_temp)) { out.append("s.t"); return zero, true; }
+    if thermal && (f == str("grad(", temp, ").x") || (th_tok >= 0 && f == str("grad(", th_temp, ").x"))) { out.append("s.tx"); return [-2, 0, 0], true; }
+    if thermal && (f == str("grad(", temp, ").y") || (th_tok >= 0 && f == str("grad(", th_temp, ").y"))) { out.append("s.ty"); return [-2, 0, 0], true; }
+    if f == str("dot(", velocity, ",n)") { out.append("(s.vx * s.nx + s.vy * s.ny)"); return VELOCITY_D, true; }
+    if thermal && f == str("dot(", flux, ",n)") {
+        out.append("(-");
+        lit(out, scaled_value(property("k")));
+        out.append(" * (s.tx * s.nx + s.ty * s.ny))");
+        return [0, 2, -6], true;
+    }
+    if th_tok >= 0 && f == str("dot(", th_flux, ",n)") {
+        out.append("(-");
+        lit(out, scaled_value(property_of(th_mat, "k")));
+        out.append(" * (s.tx * s.nx + s.ty * s.ny))");
+        return [0, 2, -6], true;
+    }
+    return zero, false;
+}
+
+// Appends the field e to out, if e is one.
+fn try_field(out: u8[>..]&, e: i64) -> i64[3], bool {
+    var text: u8[>..] = [];
+    let d, field = field_text(e, text);
+    if field { out.append(text); }
+    return d, field;
+}
+
+// The Goose text of the integrand e of mean, integral and max, and its
+// dimension: a field, + - * / of integrands, a minus, or a value.
+recursive fn emit_integrand(out: u8[>..]&, e: i64) -> i64[3] {
+    let d, field = try_field(out, e);
+    if field { return d; }
+    let k = kind(e);
+    if k == syntax::N_BINARY && position(["+", "-", "*", "/"], syntax::text(tok(e))) >= 0 {
+        let op = syntax::text(tok(e));
+        out.push('(');
+        let a = emit_integrand(out, child(e, 0));
+        format(out, " ", op, " ");
+        let b = emit_integrand(out, child(e, 1));
+        out.push(')');
+        if op == "*" { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+        if op == "/" { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+        return a;
+    }
+    if k == syntax::N_UNARY && syntax::text(tok(e)) == "-" {
+        out.append("(-");
+        let a = emit_integrand(out, first(e));
+        out.push(')');
+        return a;
+    }
+    let q = scaled(quantity(e));
+    out.push('(');
+    lit(out, q.v[0]);
+    out.push(')');
+    return quantity(e).d;
+}
+
+// `mean(f, r)` and `integral(f, r)` on a boundary r, and `max(f, r)` on a
+// line r.
+fn region_ok(e: i64) -> bool {
+    guard syntax::child_count(e) == 3 else {
+        unsupported(tok(e), "mean, integral and max have a field and a region", REGION_FIX);
+        return false;
+    };
+    let r = if kind(arg(e, 1)) == syntax::N_NAME { find_named(name(arg(e, 1))) } else { -1 };
+    let wanted = if is_call(e, "max") { LINE } else { BOUNDARY };
+    if r < 0 || named[r].kind != wanted {
+        unsupported(tok(arg(e, 1)), str("the region of ", if is_call(e, "max") { "max" } else { "mean and integral" }, " is not a ", if is_call(e, "max") { "line" } else { "boundary" }, " that a let names"), REGION_FIX);
+        return false;
+    }
+    if !thermal && !is_call(e, "max") {
+        unsupported(tok(e), "mean and integral of a field are in a flow with a temperature", "use integral((sigma*n).x, wall)");
+        return false;
+    }
+    var scratch: u8[>..] = [];
+    emit_integrand(scratch, arg(e, 0));
+    if wanted == BOUNDARY { use_region(r); }
+    return ok();
+}
+
 // Whether `e` is a result of this generator, with an error if not.
 recursive fn result_ok(e: i64) -> bool {
     let k = kind(e);
@@ -1132,6 +1509,8 @@ recursive fn result_ok(e: i64) -> bool {
         if other >= 0 { unsupported(tok(e), str("the vector '", source_of(child(e, 0)), "' at a point is only in a report, not in an expect or a + - * /"), REPORT_FIX); }
         return what >= 0 && other < 0 && point_ok(e);
     }
+    if is_call(e, "integral") && traction_integral(e) < 0 && thermal { return region_ok(e); }
+    if is_call(e, "mean") || (is_call(e, "max") && syntax::child_count(e) == 3) { return region_ok(e); }
     if is_call(e, "integral") {
         if traction_integral(e) >= 0 { use_region(named_of(arg(e, 1), BOUNDARY)); }
         if traction_integral(e) < 0 { unsupported(tok(e), "the flow generator integrates (sigma*n).x or (sigma*n).y on a boundary", REPORT_FIX); }
@@ -1199,6 +1578,8 @@ fn read(prog: i64) -> bool {
             value_item(c);
         } else if k == syntax::N_MATERIAL {
             material(c);
+        } else if k == syntax::N_PHYSICS && is_thermal_solid(c) {
+            thermal_solid_item(c);
         } else if k == syntax::N_PHYSICS && is_solid(c) {
             solid_item(c);
         } else if k == syntax::N_PHYSICS {
@@ -1234,10 +1615,17 @@ fn read(prog: i64) -> bool {
     read_fluid(at);
     for m in mesh_nodes {
         let r = child(m, 0);
-        if solid_domain >= 0 && kind(r) == syntax::N_NAME && name(r) == named[solid_domain].name { solid_mesh(m); } else { mesh(m); }
+        if solid_domain >= 0 && kind(r) == syntax::N_NAME && name(r) == named[solid_domain].name { solid_mesh(m); }
+        else if th_domain >= 0 && kind(r) == syntax::N_NAME && name(r) == named[th_domain].name { thermal_solid_mesh(m); }
+        else { mesh(m); }
     }
     if mesh_size <= 0.0 && ok() { unsupported(at, "the model has no mesh", "add mesh m on dom { size: 1 cm }"); }
-    for m in methods { if solid_tok >= 0 && name(m) == solid_name { solid_method(m); } else { method(m); } }
+    for m in methods {
+        if solid_tok >= 0 && name(m) == solid_name { solid_method(m); }
+        else if th_tok >= 0 && name(m) == th_name { thermal_solid_method(m); }
+        else { method(m); }
+    }
+    read_thermal(at);
     if !stabilize_set { stabilize = if convective { 1 } else { 0 }; }
     if order == 1 && stabilize < 2 { unsupported(at, "order 1 for the velocity needs pressure stabilization", "write stabilize: supg_pspg"); }
     if turbulent && (order != 1 || stabilize != 2) { unsupported(at, "k_omega_sst runs on P1 cells with supg_pspg", "write method flow: cg { order: 1, stabilize: supg_pspg }"); }
@@ -1377,14 +1765,16 @@ fn write_mesh(dir: u8[:]) -> bool {
     // With a period, half of the rect and its mirror at the middle.
     var shape = mesher_shape(named[domain].value);
     mesher::clear_interfaces();
-    if solid_tok >= 0 {
+    if solid_tok >= 0 || th_tok >= 0 {
         // the flow and the solid as one shape, with the edges of the solid
-        let solid = mesher_shape(named[solid_domain].value);
+        let sd = if solid_tok >= 0 { solid_domain } else { th_domain };
+        let ssize = if solid_tok >= 0 { solid_size } else { th_size };
+        let solid = mesher_shape(named[sd].value);
         // The sides of its rects at the solid size, so that the solid has
         // its size inside. Its circles are on the boundary with the flow,
         // which the refines of the flow mesh.
         var list: Refine[>..] = [];
-        edge_refines(named[solid_domain].value, solid_size, list);
+        edge_refines(named[sd].value, ssize, list);
         for r in list { if !r.circle { mesher::refine_segment(r.p[0], r.p[1], r.p[2], r.p[3], r.h); } }
         shape = mesher::union(shape, solid);
         mesher::add_interface(solid);
@@ -1418,6 +1808,27 @@ fn write_mesh(dir: u8[:]) -> bool {
     cells = tri.len / 3;
     vertices = xy.len / 2;
     if !write_file(str(dir, "/flow.xy"), to_bytes(xy[..])) || !write_file(str(dir, "/flow.tri"), to_bytes(tri[..])) {
+        write_stderr(str("skein run: cannot write the mesh in '", dir, "'\n"));
+        return false;
+    }
+    return th_tok < 0 || write_parts(dir);
+}
+
+// Writes flow.part: 1 for each cell of the mesh with the centre in the solid
+// with heat conduction, else 0.
+fn write_parts(dir: u8[:]) -> bool {
+    let solid = mesher_shape(named[th_domain].value);
+    var part: u8[>..] = [];
+    for c in mesher::cell_count() {
+        var x = 0.0;
+        var y = 0.0;
+        for k in 3 {
+            x += mesher::vertex(mesher::cell_node(c, k))[0] / 3.0;
+            y += mesher::vertex(mesher::cell_node(c, k))[1] / 3.0;
+        }
+        part.push(if mesher::phi(solid, x, y, 0.0) < 0.0 { 1 } else { 0 });
+    }
+    if !write_file(str(dir, "/flow.part"), to_bytes(part[..])) {
         write_stderr(str("skein run: cannot write the mesh in '", dir, "'\n"));
         return false;
     }
@@ -1504,7 +1915,9 @@ fn dof_estimate() -> i64 {
         let band = (mesh_size - r.h) / (grade - 1.0);
         cell_count += length * band / (0.4330127 * r.h * mesh_size);
     }
+    if th_tok >= 0 { cell_count += shape_area(named[th_domain].value) / (0.4330127 * th_size * th_size); }
     let vertex_count = 0.5 * cell_count;
+    if thermal { return (4.0 * vertex_count + (if order == 2 { 3.0 * 1.5 * cell_count } else { 0.0 })) as! i64; }
     return (if turbulent { 5.0 * vertex_count } else if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
 }
 
@@ -1548,7 +1961,7 @@ fn unit_of(d: i64[3]) -> u8[>..] {
 // The component of a velocity vector in a report, or -1.
 var vector_comp = -1;
 
-let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P", "flow::VALUE_UX", "flow::VALUE_UY"];
+let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P", "flow::VALUE_UX", "flow::VALUE_UY", "flow::VALUE_T"];
 let VELOCITY_D: i64[3] = [2, 0, -2];
 let PRESSURE_D: i64[3] = [-2, 2, -4];
 let LENGTH_D: i64[3] = [2, 0, 0];
@@ -1562,14 +1975,22 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
         var what, other = point_field(e);
         if other >= 0 && vector_comp >= 0 { what += vector_comp; }
         let at = scaled(at_point(child(e, 1)));
-        let d = if what == 2 { PRESSURE_D } else if what >= 3 { LENGTH_D } else { VELOCITY_D };
-        format(out, "at(", VALUE_NAMES[what], ", ");
+        let d = if what == 2 { PRESSURE_D } else if what == 5 { [0, 0, 0] } else if what >= 3 { LENGTH_D } else { VELOCITY_D };
+        format(out, "(at(", VALUE_NAMES[what], ", ");
         lit(out, at.v[0]);
         out.append(", ");
         lit(out, at.v[1]);
-        out.append(", name) * ");
+        out.append(", name)");
+        if what == 2 && p_offset != 0.0 {
+            out.append(" + ");
+            lit(out, p_offset);
+        }
+        out.append(") * ");
         lit(out, reference(d));
         return d;
+    }
+    if is_call(e, "mean") || (is_call(e, "max") && syntax::child_count(e) == 3) || (is_call(e, "integral") && traction_integral(e) < 0) {
+        return emit_region(out, e);
     }
     if is_call(e, "integral") {
         // The force of the wall on the fluid: p_ref L for each unit of depth.
@@ -1604,6 +2025,32 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
     return q.d;
 }
 
+// `mean`, `integral` and `max` of a field on a region.
+fn emit_region(out: u8[>..]&, e: i64) -> i64[3] {
+    let r = find_named(name(arg(e, 1)));
+    var f: u8[>..] = [];
+    var d = emit_integrand(f, arg(e, 0));
+    if is_call(e, "max") {
+        let a = scaled(quantity(arg(named[r].value, 0)));
+        let b = scaled(quantity(arg(named[r].value, 1)));
+        out.append("(flow::line_max(");
+        lit(out, a.v[0]);
+        out.append(", ");
+        lit(out, a.v[1]);
+        out.append(", ");
+        lit(out, b.v[0]);
+        out.append(", ");
+        lit(out, b.v[1]);
+        format(out, ") { s => ", f, " } * ");
+    } else {
+        format(out, "(flow::boundary_value(select_", named[r].name, "(), ", if is_call(e, "mean") { "true" } else { "false" }, ") { s => ", f, " } * ");
+        if is_call(e, "integral") { d = [d[0] + 2, d[1], d[2]]; }
+    }
+    lit(out, reference(d));
+    out.push(')');
+    return d;
+}
+
 // The Goose condition of the region of a `boundary(shape, cond)`, in the
 // coordinates x and y and the tolerance tol of the program.
 recursive fn emit_boundary(out: u8[>..]&, b: i64) {
@@ -1619,11 +2066,16 @@ recursive fn emit_boundary(out: u8[>..]&, b: i64) {
     }
     let shape = arg(b, 0);
     let s = named_of(shape, SHAPE);
-    if s != domain && (s < 0 || s != solid_domain) {
+    if s != domain && (s < 0 || s != solid_domain) && (s < 0 || s != th_domain) {
         if s < 0 || !emit_shape_edge(out, named[s].value) {
             unsupported(tok(shape), "the shape of the boundary is not the domain, a rect or a circle", "write boundary(dom, ...)");
         }
         out.append(" && ");
+    }
+    // boundary(shape) has no condition: all of the boundary
+    if syntax::child_count(b) < 3 {
+        out.append("true");
+        return;
     }
     out.push('(');
     emit_cond(out, arg(b, 1));
@@ -1903,7 +2355,7 @@ fn emit_selects(out: u8[>..]&) {
             lit(out, p.v[1]);
             out.append(");\n}\n\n");
         } else {
-            out.append(if on_solid(r) { "flow::select_solid_boundary() { x, y => " } else { "flow::select_boundary() { x, y => " });
+            out.append(if on_solid(r) { "flow::select_solid_boundary() { x, y => " } else if on_thermal_solid(r) { "flow::select_solid_part() { x, y => " } else { "flow::select_boundary() { x, y => " });
             emit_boundary(out, g.value);
             out.append(" };\n}\n\n");
         }
@@ -1926,6 +2378,12 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
             emit_coordinate(out, if b.comp >= 0 { b.expr } else { child(b.expr, j) });
             out.append(" };\n");
         }
+        return;
+    }
+    if b.kind == BC_T || b.kind == BC_FLUX {
+        out.append(if b.kind == BC_T { "    flow::fix_temperature(" } else { "    flow::add_heat_flux(" });
+        lit(out, b.v[0]);
+        out.append(");\n");
         return;
     }
     if b.kind == BC_P {
@@ -2063,6 +2521,7 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     for si in 0..steps.len { emit_step(out, si, results_dir); }
     out.append("fn main() {\n");
     if turbulent { out.append("    flow::set_turbulent(true);\n"); }
+    if thermal { out.append("    flow::set_thermal(true);\n"); }
     format(out, "    // mesh on ", named[domain].name, ": P", order, "/P1 triangles, written by skein run\n    if !flow::read_mesh(");
     quoted(out, results_dir);
     format(out, ", ", order, ") {\n        write_stderr(\"skein run: cannot read the mesh in ");
@@ -2089,6 +2548,28 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         lit(out, force[0]);
         out.append(", ");
         lit(out, force[1]);
+        out.append(");\n");
+    }
+    if thermal {
+        format(out, "    // temperature ", temp, ": the energy equation of ", physics_name, "\n    flow::thermal_fluid(");
+        lit(out, scaled_value(property("k")));
+        out.append(", ");
+        lit(out, scaled_value(property("rho")) * scaled_value(property("cp")));
+        out.append(", ");
+        lit(out, heat_source);
+        out.append(");\n    flow::buoyant_force(");
+        lit(out, buoyancy[0]);
+        out.append(", ");
+        lit(out, buoyancy[1]);
+        out.append(");\n    flow::temperature_start(");
+        lit(out, temp_start);
+        out.append(");\n");
+    }
+    if th_tok >= 0 {
+        format(out, "    // physics ", th_name, ", material ", name(th_mat), ": heat conduction in the solid cells\n    flow::thermal_solid(");
+        lit(out, scaled_value(property_of(th_mat, "k")));
+        out.append(", ");
+        lit(out, th_source);
         out.append(");\n");
     }
     if period_high >= 0 {

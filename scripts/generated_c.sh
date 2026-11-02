@@ -51,6 +51,8 @@ examples/femahoy/bar_pressure.skn
 examples/femahoy/birth_death_column.skn
 examples/femahoy/buckling_column.skn
 examples/femahoy/cantilever_2step.skn
+examples/femahoy/cavity_devahldavis.skn
+examples/femahoy/cht_heated_channel.skn
 examples/femahoy/contact_cattaneo.skn
 examples/femahoy/contact_hertz.skn
 examples/femahoy/dynamics_bar_step.skn

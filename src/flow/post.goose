@@ -13,6 +13,7 @@ let VALUE_VY = 1;
 let VALUE_P = 2;
 let VALUE_UX = 3;   // the displacement of the solid (fsi.goose)
 let VALUE_UY = 4;
+let VALUE_T = 5;    // the temperature of a thermal flow (heat.goose)
 
 // The barycentric coordinates of (x, y) in cell c.
 fn barycentric(c: i64, x: f64, y: f64) -> f64[3] {
@@ -30,11 +31,17 @@ fn barycentric(c: i64, x: f64, y: f64) -> f64[3] {
 // cell holds the point.
 fn value_at(what: i64, x: f64, y: f64) -> f64, bool {
     if coupled && (what == VALUE_UX || what == VALUE_UY) { return solid_value_at(what - VALUE_UX, x, y); }
-    guard what >= VALUE_VX && what <= VALUE_P && cell_count() > 0 && sol.len == dof_count() else { abort("value_at: a value, and a solve"); }
+    guard ((what >= VALUE_VX && what <= VALUE_P) || (what == VALUE_T && thermal)) && cell_count() > 0 && sol.len == dof_count() else { abort("value_at: a value, and a solve"); }
     let tol = 1.0e-9;
     for c in cell_count() {
         let l = barycentric(c, x, y);
         if l[0] < -tol || l[1] < -tol || l[2] < -tol { continue; }
+        if what == VALUE_T {
+            let s = shape(geometry(c), l);
+            var t = 0.0;
+            for a in per_cell { t += s.n[a] * sol[tdof(cell_node(c, a))]; }
+            return t, true;
+        }
         if what == VALUE_P {
             var p = 0.0;
             for k in 3 { p += l[k] * sol[pdof(cell_node(c, k))]; }
@@ -85,6 +92,10 @@ fn write_vtu(path: const u8[:], x_ref: f64, v_ref: f64, p_ref: f64) -> bool {
     for n in nodes { format(out, v_ref * sol[vdof(n, 0)], " ", v_ref * sol[vdof(n, 1)], " 0\n"); }
     out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"p\" format=\"ascii\">\n");
     for n in nodes { format(out, p_ref * pressure[n], "\n"); }
+    if thermal {
+        out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"T\" format=\"ascii\">\n");
+        for n in nodes { format(out, sol[tdof(n)], "\n"); }
+    }
     if turbulent {
         out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"k\" format=\"ascii\">\n");
         for n in nodes { format(out, v_ref * v_ref * sol[turbulence_dof(n, 0)], "\n"); }

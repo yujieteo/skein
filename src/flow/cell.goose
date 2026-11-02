@@ -35,6 +35,10 @@ let SUPG_PSPG_LSIC = 3;
 var rho = 1.0;
 var mu = 1.0;
 var force: f64[2] = [0.0, 0.0];
+// The part of the body force that is linear in the temperature T of a
+// thermal flow (heat.goose): the force at T is force + buoyancy T. Reason:
+// the Boussinesq buoyancy rho (1 - beta (T - T0)) g is of this form.
+var buoyancy: f64[2] = [0.0, 0.0];
 var convective = true;      // Navier-Stokes; false for Stokes
 var stabilize = NONE;
 
@@ -138,10 +142,11 @@ struct Point {
     p: f64,
     gp: f64[2],
     r: f64[2],
+    bf: f64[2],     // the body force at the point
 }
 
-fn flow_point(g: Geometry, s: Shape, l: f64[3], u: f64[15]) -> Point {
-    var f = Point { v: [0.0; 2], gv: [0.0; 4], p: 0.0, gp: [0.0; 2], r: [0.0; 2] };
+fn flow_point(g: Geometry, s: Shape, l: f64[3], u: f64[15], tq: f64) -> Point {
+    var f = Point { v: [0.0; 2], gv: [0.0; 4], p: 0.0, gp: [0.0; 2], r: [0.0; 2], bf: [0.0; 2] };
     var visc: f64[2] = [0.0; 2];
     for a in per_cell {
         for i in 2 {
@@ -164,7 +169,8 @@ fn flow_point(g: Geometry, s: Shape, l: f64[3], u: f64[15]) -> Point {
     }
     for i in 2 {
         let conv = if convective { rho * (f.gv[2 * i] * f.v[0] + f.gv[2 * i + 1] * f.v[1]) } else { 0.0 };
-        f.r[i] = conv + f.gp[i] - mu * visc[i] - force[i];
+        f.bf[i] = force[i] + buoyancy[i] * tq;
+        f.r[i] = conv + f.gp[i] - mu * visc[i] - f.bf[i];
     }
     return f;
 }
@@ -181,6 +187,12 @@ fn taus(g: Geometry, v: f64[2]) -> f64, f64 {
 
 // The residual r of cell c at the local dofs u (cell_dofs).
 fn cell_residual(c: i64, u: f64[15], r: f64[15]&) {
+    cell_residual_t(c, u, [0.0; 6], r);
+}
+
+// The same with the temperature tl at the nodes of the cell, for the body
+// force that depends on it.
+fn cell_residual_t(c: i64, u: f64[15], tl: f64[6], r: f64[15]&) {
     guard c >= 0 && c < cell_count() && rho > 0.0 && mu > 0.0 else { abort("cell_residual: c < cell_count(), rho > 0 and mu > 0"); }
     let g = geometry(c);
     for d in 15 { r[d] = 0.0; }
@@ -188,7 +200,9 @@ fn cell_residual(c: i64, u: f64[15], r: f64[15]&) {
         let l, wq = quad_point(q);
         let w = wq * g.area;
         let s = shape(g, l);
-        let f = flow_point(g, s, l, u);
+        var tq = 0.0;
+        for a in per_cell { tq += s.n[a] * tl[a]; }
+        let f = flow_point(g, s, l, u, tq);
         let tm, tc = taus(g, f.v);
         let div = f.gv[0] + f.gv[3];
         var sigma: f64[4] = [0.0; 4];
@@ -209,7 +223,7 @@ fn momentum_rows(s: Shape, f: Point, sigma: f64[4], tm: f64, tc: f64, div: f64, 
         let streamline = f.v[0] * s.dn[2 * a] + f.v[1] * s.dn[2 * a + 1];
         for i in 2 {
             let conv = if convective { rho * (f.gv[2 * i] * f.v[0] + f.gv[2 * i + 1] * f.v[1]) } else { 0.0 };
-            var row = s.n[a] * (conv - force[i]) + s.dn[2 * a] * sigma[2 * i] + s.dn[2 * a + 1] * sigma[2 * i + 1];
+            var row = s.n[a] * (conv - f.bf[i]) + s.dn[2 * a] * sigma[2 * i] + s.dn[2 * a + 1] * sigma[2 * i + 1];
             if stabilize >= SUPG { row += tm * streamline * f.r[i]; }
             if stabilize == SUPG_PSPG_LSIC { row += tc * rho * s.dn[2 * a + i] * div; }
             r[2 * a + i] += w * row;
@@ -240,7 +254,7 @@ fn pressure_term(c: i64, u: f64[15], k: f64[9]&) {
     guard c >= 0 && c < cell_count() else { abort("pressure_term: c < cell_count()"); }
     let g = geometry(c);
     let l: f64[3] = [1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0];
-    let f = flow_point(g, shape(g, l), l, u);
+    let f = flow_point(g, shape(g, l), l, u, 0.0);
     let tm, tc = taus(g, f.v);
     for a in 3 {
         for b in 3 { k[3 * a + b] = tm / rho * g.area * (g.gl[2 * a] * g.gl[2 * b] + g.gl[2 * a + 1] * g.gl[2 * b + 1]); }
