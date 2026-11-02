@@ -15,8 +15,8 @@
 // A tied node of a `bloch` group takes the value of its master times the
 // phase exp(iθ). The assembly adds each term of a tied node to its master,
 // times the phase (the test function too, with the conjugate phase), so
-// the row of the tied node is the identity. GMRES with ILU(0) solves the
-// real system, then the tied nodes take their values.
+// the row of the tied node is the identity. A direct sparse LU
+// (src/solvers/slu.goose) solves the real system, then the tied nodes take their values.
 import std;
 import math;
 namespace elements;
@@ -29,14 +29,12 @@ import .solve;
 import solvers from "../solvers";
 
 let WAVE_TOLERANCE = 1.0e-10;  // the GMRES residual relative to the right side
-let WAVE_RESTART = 1000;        // the largest restart: GMRES(200) stalls on a PML duct of 8 rows of cells
-let WAVE_KRYLOV = 50000000;     // the largest restart times the dofs: 400 MB of Krylov vectors
-let WAVE_ITERATIONS = 20000;
 let PML_REFLECTION = 1.0e-6;    // the reflection of the layer at normal incidence
 
 var wave_c: f64[2] = [0.0, 0.0];   // c, the coefficient of u
 var wave_s: f64[2] = [0.0, 0.0];   // s, the source
 var wave_damping = 0.0;            // ζ
+var wave_cell_terms: f64[>..] = [];  // for each cell: c (re, im), s (re, im) and the diffusion ν
 var pml_shape = -1;                // the shape of the layer, or -1
 var pml_lo: f64[3] = [0.0; 3];     // the rest of the body: the box from pml_lo to pml_hi
 var pml_hi: f64[3] = [0.0; 3];
@@ -77,6 +75,57 @@ fn set_wave_terms(c: f64[2], s: f64[2], damping: f64) {
     wave_c = c;
     wave_s = s;
     wave_damping = damping;
+    wave_cell_terms.clear();
+    for e in cell_count() {
+        wave_cell_terms.append([c[0], c[1], s[0], s[1], 1.0]);
+    }
+}
+
+// Gives all cells the diffusion nu.
+fn wave_material_all(nu: f64) {
+    guard physics == WAVE && nu > 0.0 && wave_cell_terms.len == 5 * cell_count() else { abort("wave_material_all: a wave physics with its terms set, and nu > 0"); }
+    for e in cell_count() { wave_cell_terms[5 * e + 4] = nu; }
+}
+
+// The integral of u over the cells in the shape g: its real and imaginary part, then the area of the cells.
+fn wave_cells_integral(g: i64) -> f64[3] {
+    guard physics == WAVE && g >= 0 else { abort("wave_cells_integral: a wave physics and a shape"); }
+    var total: f64[3] = [0.0; 3];
+    for c in cell_count() {
+        if !cell_in(c, g) { continue; }
+        for q in rich_count() {
+            let xi, w = rich_point(q);
+            let dv = w * cell_geometry(c, xi) * thickness;
+            var u: f64[2] = [0.0, 0.0];
+            for l in per_cell {
+                u[0] += shp[l] * sol[2 * cell_node(c, l)];
+                u[1] += shp[l] * sol[2 * cell_node(c, l) + 1];
+            }
+            total[0] += u[0] * dv;
+            total[1] += u[1] * dv;
+            total[2] += dv;
+        }
+    }
+    return total;
+}
+
+// Gives the cells in the shape g the diffusion ν, the coefficient c and the
+// source s, for div(ν grad(u)) + c u = s. It gives the number of these cells.
+fn wave_material(g: i64, nu: f64, c: f64[2], s: f64[2]) -> i64 {
+    guard physics == WAVE && g >= 0 && nu > 0.0 && wave_cell_terms.len == 5 * cell_count() else {
+        abort("wave_material: a wave physics with its terms set, a shape and nu > 0");
+    }
+    var count = 0;
+    for e in cell_count() {
+        if !cell_in(e, g) { continue; }
+        wave_cell_terms[5 * e] = c[0];
+        wave_cell_terms[5 * e + 1] = c[1];
+        wave_cell_terms[5 * e + 2] = s[0];
+        wave_cell_terms[5 * e + 3] = s[1];
+        wave_cell_terms[5 * e + 4] = nu;
+        count++;
+    }
+    return count;
 }
 
 // The layer of shape g, past the box from lo to hi, of thickness h.
@@ -207,6 +256,7 @@ fn wave_cell(c: i64, me: f64[:], fe: f64[:]) {
     for &v in me { v = 0.0; }
     for &v in fe { v = 0.0; }
     let damp: f64[2] = [1.0, 2.0 * wave_damping];
+    let nu = wave_cell_terms[5 * c + 4];
     for q in rich_count() {
         let xi, w = rich_point(q);
         let dv = w * cell_geometry(c, xi) * thickness;
@@ -221,11 +271,13 @@ fn wave_cell(c: i64, me: f64[:], fe: f64[:]) {
         for j in dim {
             let sj: f64[2] = [s[2 * j], s[2 * j + 1]];
             let l = cmul(damp, cdiv(det, cmul(sj, sj)));
-            lam[2 * j] = l[0];
-            lam[2 * j + 1] = l[1];
+            lam[2 * j] = nu * l[0];
+            lam[2 * j + 1] = nu * l[1];
         }
-        let m = cmul(wave_c, det);
-        let f = cmul(wave_s, det);
+        let cc: f64[2] = [wave_cell_terms[5 * c], wave_cell_terms[5 * c + 1]];
+        let ss: f64[2] = [wave_cell_terms[5 * c + 2], wave_cell_terms[5 * c + 3]];
+        let m = cmul(cc, det);
+        let f = cmul(ss, det);
         for i in per_cell {
             fe[2 * i] -= f[0] * shp[i] * dv;
             fe[2 * i + 1] -= f[1] * shp[i] * dv;
@@ -249,8 +301,7 @@ fn wave_assemble() {
     wave_pattern();
     // The restart vectors of GMRES, and its (m + 1) × m Hessenberg matrix
     // (8 MB for m = 1000) as vectors of the dofs.
-    let m = wave_restart(dof_total());
-    solvers::memory_check("simplex wave gmres ilu0", col.len, dof_total(), m + 9 + (m + 1) * m / max(dof_total(), 1), 0, "");
+    wave_choose_path();
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     var me: f64[200] = [0.0; 200];
@@ -310,8 +361,50 @@ fn wave_rhs() -> f64[>..] {
     return b;
 }
 
-// The GMRES restart of a system of n dofs.
-fn wave_restart(n: i64) -> i64 { return min(WAVE_RESTART, max(50, WAVE_KRYLOV / max(n, 1))); }
+
+let WAVE_SECONDS = 900.0;       // the longest estimated time of a direct solve (15 minutes). Reason: a run that cannot finish stops with a message and never looks like a hang
+var wave_direct = false;        // the system of this solve takes the direct solve
+
+// The solution path of a system with its pattern in row_start and col: the
+// direct solve of src/solvers/slu.goose, whose factor is also the
+// preconditioner of GMRES. Prints the time estimate if it is over 20 s.
+// Stops before the solve, with the estimate and the fix, if the estimate is
+// over WAVE_SECONDS. Checks the memory of the path. Reason: GMRES with
+// ILU(0) does not converge on the indefinite systems of a fine mesh
+// (waveguide_step at 1.4 mm ran for more than 5 minutes).
+fn wave_choose_path() {
+    wave_direct = false;
+    guard solvers::slu_plan(row_start, col, 2) else {
+        write_stderr(str("skein run: the direct solve cannot plan the system of ", dof_total(), " dofs. Use a coarser mesh\n"));
+        exit(1);
+    };
+    let seconds = solvers::slu_work() / solvers::SLU_RATE;
+    if seconds > WAVE_SECONDS {
+        write_stderr(str("skein run: the direct solve of ", dof_total(), " dofs takes about ", round(seconds) as! i64,
+                         " seconds, and the limit is ", round(WAVE_SECONDS) as! i64, " seconds. Use a coarser mesh\n"));
+        exit(1);
+    }
+    wave_direct = true;
+    solvers::memory_check("simplex wave lu", solvers::slu_entry_count(), dof_total(), 40, 0, "");
+    if seconds > 20.0 {
+        write_stderr(str("skein run: the direct solve of ", dof_total(), " dofs takes about ", round(seconds) as! i64, " seconds\n"));
+    }
+    solvers::slu_build();
+}
+
+// The solve of b with the factor of the direct solve: x in sol. False if
+// GMRES does not converge.
+fn wave_krylov<G>(b: f64[:], corrected: bool) -> i64, bool {
+    var its = 0;
+    var converged = solvers::slu_factor(row_start, col, val);
+    if converged {
+        solvers::rows_start(row_start, col, val);
+        its, converged = solvers::gmres(row_start, col, val, b, sol, WAVE_TOLERANCE, 30, 200) { r, z => solvers::slu_apply(r, z); };
+        solvers::rows_stop();
+    }
+    solvers::slu_free();
+    return its, converged;
+}
 
 // Assembles and solves the system of one frequency. False if GMRES does
 // not converge.
@@ -321,18 +414,7 @@ fn wave_solve() -> bool {
     wave_assemble();
     let sizes = wave_sizes();
     let b = wave_rhs();
-    var lu: f64[>..] = [];
-    var diag: i64[>..] = [];
-    var converged = solvers::ilu0(row_start, col, val, lu, diag);
-    var its = 0;
-    if converged {
-        let restart = wave_restart(b.len);
-        solvers::rows_start(row_start, col, val);
-        its, converged = solvers::gmres(row_start, col, val, b, sol, WAVE_TOLERANCE, restart, WAVE_ITERATIONS) { r, z =>
-            solvers::ilu0_apply(row_start, col, lu, diag, r, z);
-        };
-        solvers::rows_stop();
-    }
+    let its, converged = wave_krylov(b, false) { r, z => z[0] = r[0]; };
     for n in node_count() {
         if tie[n] < 0 { continue; }
         let m, p = master(n);

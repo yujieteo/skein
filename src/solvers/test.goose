@@ -10,6 +10,8 @@
 //    that a page keeps from one run to the next (warm.goose).
 // 4. The nested dissection solve (nested.goose) on a lattice with holes
 //    and fixed dofs: the residual of its solution.
+// 5. The direct solve of an indefinite system with a symmetric pattern
+//    (slu.goose): the residual of its solution.
 import std;
 import math;
 import runtime from "../runtime";
@@ -353,6 +355,55 @@ fn test_nested() {
     if !(worst <= 1.0e-10 * solvers::norm(b)) { fail(str("nested: the residual is ", worst)); }
 }
 
+// --- slu: the direct solve of an indefinite system with a symmetric pattern ---
+//
+// A 7-point operator on a 9 x 7 x 6 grid with a complex diagonal 5.5 + 0.3i (as 2 x 2 real
+// blocks), so the matrix is indefinite and not symmetric. slu_apply gives x with
+// |K x - b| <= 1e-9 |b|, and the plan counts the entries of L.
+fn test_slu() {
+    let nx = 9;
+    let ny = 7;
+    let nz = 6;
+    var rs: i64[>..] = [0];
+    var cl: i32[>..] = [];
+    var vl: f64[>..] = [];
+    var b: f64[>..] = [];
+    let steps = [-nx * ny, -nx, -1, 0, 1, nx, nx * ny];
+    for p in nx * ny * nz {
+        for c in 2 {
+            for s in steps {
+                let q = p + s;
+                let i = p % nx;
+                let j = p / nx % ny;
+                if q < 0 || q >= nx * ny * nz || (s == 1 && i == nx - 1) || (s == -1 && i == 0) || (s == nx && j == ny - 1) || (s == -nx && j == 0) { continue; }
+                for c2 in 2 {
+                    cl.push((2 * q + c2) as i32);
+                    var v = 0.0;
+                    if s == 0 { v = if c2 == c { 5.5 } else if c == 0 { -0.3 } else { 0.3 }; } else if c2 == c { v = -1.0; }
+                    vl.push(v);
+                }
+            }
+            rs.push(cl.len);
+            b.push(sin(0.7 * p + c));
+        }
+    }
+    if !solvers::slu_plan(rs, cl, 2) { fail("slu: slu_plan"); return; }
+    solvers::slu_build();
+    if !solvers::slu_factor(rs, cl, vl) { fail("slu: slu_factor"); return; }
+    var x: f64[>..] = [];
+    solvers::zeros(x, b.len);
+    solvers::slu_apply(b, x);
+    var kx: f64[>..] = [];
+    solvers::zeros(kx, b.len);
+    solvers::multiply(rs, cl, vl, x, kx);
+    var worst = 0.0;
+    for r in b.len { worst = max(worst, abs(kx[r] - b[r])); }
+    print("slu: ", b.len, " dofs, ", solvers::slu_entry_count(), " entries of L, ", solvers::slu_replaced(), " pivots replaced, residual ", worst / solvers::norm(b));
+    if !(worst <= 1.0e-9 * solvers::norm(b)) { fail(str("slu: the residual is ", worst)); }
+    if solvers::slu_entry_count() < (rs.len - 1) || solvers::slu_work() <= 0.0 { fail("slu: the plan counts no entries"); }
+    solvers::slu_free();
+}
+
 // --- band_solve: a tridiagonal system that needs a pivot ---------------------
 //
 // Row 0 has a 0 on the diagonal, so the solve must swap rows. The exact x is (1, 2, 3, 4).
@@ -378,6 +429,7 @@ fn main() {
     test_modes();
     test_warm();
     test_nested();
+    test_slu();
     test_band();
     if failures > 0 { exit(1); }
     print("solvers: all tests pass");

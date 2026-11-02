@@ -82,6 +82,8 @@ fn edge_reset() {
     darcy_f = -1;
     physics_lets.clear();
     probes.clear();
+    region_names.clear();
+    region_shapes.clear();
     quiet = false;
     probe_bad = false;
 }
@@ -386,6 +388,19 @@ recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         format(out, "cpart(", position(CPARTS, name(child(n, 0))), ", ");
         emit_cx(out, pre, arg(n, 0));
         out.push(')');
+    } else if k == syntax::N_AT && wave_eddy {
+        let p = value(child(n, 1));
+        if p.n != dim || source_of(child(n, 0)) != unknown_name {
+            probe_fail(tok(n), "the point is not a vector, or the field is not the unknown", "write u at (x, y) mm");
+            return;
+        }
+        out.append("wave_point(");
+        lit(out, p.v[0]);
+        out.append(", ");
+        lit(out, p.v[1]);
+        out.append(", ");
+        lit(out, p.v[2]);
+        out.push(')');
     } else if k == syntax::N_AT {
         let p = value(child(n, 1));
         if p.n != dim { probe_fail(tok(n), "the point is not a vector", "write at (x, y, z) mm"); }
@@ -442,6 +457,10 @@ recursive fn find_rms(n: i64) -> i64 {
 fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let f = arg(n, 0);
     let r = arg(n, 1);
+    if wave_eddy {
+        emit_cell_integral(out, pre, n);
+        return;
+    }
     let s = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
     if physics == DARCY && s >= 0 && source_of(f) == str("dot(", flux_name, ", n)") {
         emit_region(pre, s);
@@ -486,6 +505,60 @@ fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         return;
     };
     emit_field(out, f, value(arg(c, 0)).v, value(arg(c, 1)).v);
+}
+
+var region_names: u8[..64][>..];   // the regions of the integrals, and their shapes: a shape is made once
+var region_shapes: i64[>..];
+
+fn cached_region_shape(r: i64) -> i64 {
+    for w, i in region_names { if w == name(r) { return region_shapes[i]; } }
+    let g = region_shape(r);
+    var w: u8[..64] = [];
+    set64(w, name(r));
+    region_names.push(w);
+    region_shapes.push(g);
+    return g;
+}
+
+// The material item of the region r: the one of the law `on r`, or the
+// base material.
+fn region_item(r: i64) -> i64 {
+    for w in region_laws { if ends_with(w.label, str(" on ", source_of(r))) { return w.item; } }
+    return material_node;
+}
+
+// integral(f, r) over the cells of a region r, with f linear in u and ddt(u) and
+// in the properties of the material of r: f = a u + b gives a I + b A, with I
+// the integral of u and A the area of r.
+fn emit_cell_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
+    let f = arg(n, 0);
+    let r = arg(n, 1);
+    guard kind(r) == syntax::N_NAME && find_geometry(name(r)) >= 0 else {
+        probe_fail(tok(r), "the integral is on a region that a let names", PROBE_FIX);
+        return;
+    };
+    let base = material_node;
+    material_node = region_item(r);
+    eddy_on = true;
+    eddy_u = [0.0, 0.0];
+    let b = cval(f);
+    eddy_u = [1.0, 0.0];
+    let a1 = cval(f);
+    eddy_u = [2.0, 0.0];
+    let a2 = cval(f);
+    eddy_on = false;
+    material_node = base;
+    if abs(a2[0] - 2.0 * a1[0] + b[0]) > 1.0e-9 * (abs(a2[0]) + abs(b[0]) + 1.0e-300) || abs(a2[1] - 2.0 * a1[1] + b[1]) > 1.0e-9 * (abs(a2[1]) + abs(b[1]) + 1.0e-300) {
+        probe_fail(tok(f), "the integrand is not affine in the unknown", PROBE_FIX);
+    }
+    format(pre, "    let cells_", n, " = wave_cells(", cached_region_shape(r), ");\n");
+    out.append("cadd(cmul(");
+    format(out, "[", a1[0] - b[0], ", ", a1[1] - b[1], "]");
+    format(out, ", [cells_", n, "[0], cells_", n, "[1]]), [");
+    lit(out, b[0]);
+    format(out, " * cells_", n, "[2], ");
+    lit(out, b[1]);
+    format(out, " * cells_", n, "[2]])");
 }
 
 // far_field(u, H, s, d) of the edge physics on a boundary s, with
