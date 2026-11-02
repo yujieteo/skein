@@ -981,4 +981,3 @@ fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], js
     write_stdout(printed);
     return status;
 }
-
