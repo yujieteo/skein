@@ -1735,6 +1735,8 @@ step burn: transient(end: 10 s, dt: 0.1 s) {
   each born cell stores `F_birth = defgrad(u)` at its birth. The compiler
   then replaces `defgrad(u)` with `defgrad(u) * inv(F_birth)` in the cells
   of `r`. Thus the stress of a born cell is zero at its birth.
+- A report or an output of a node that a `birth` step adds shows the change
+  of the value since the birth of the node.
 - `where cond` selects the cells of `r` where `cond` is true at the start of
   the step. `cond` may use the fields.
 - The mesh of the whole model, alive or dead, is made once, before the first
