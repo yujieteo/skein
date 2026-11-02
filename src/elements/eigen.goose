@@ -37,10 +37,11 @@ var modes: f64[>..] = [];        // mode k at dof_total() k
 let GAUSS_X: f64[4] = [0.0694318442029737, 0.33000947820757187, 0.6699905217924281, 0.9305681557970263];
 let GAUSS_W: f64[4] = [0.17392742256872692, 0.3260725774312731, 0.3260725774312731, 0.17392742256872692];
 
-fn rich_count() -> i64 { return if dim == 2 { 16 } else { 64 }; }
+fn rich_count() -> i64 { return if hex_cells { quad_count(dim) } else if dim == 2 { 16 } else { 64 }; }
 
 // Point q of the conical product rule on the unit simplex of dimension dim.
 fn rich_point(q: i64) -> f64[3], f64 {
+    if hex_cells { return quad_point(dim, q); }
     let u = GAUSS_X[q % 4];
     let v = GAUSS_X[q / 4 % 4];
     let w = GAUSS_X[q / 16];

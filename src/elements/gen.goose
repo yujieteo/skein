@@ -68,6 +68,7 @@ fn claims(prog: i64) -> bool {
                 s = next(s);
             }
         }
+        if k == syntax::N_STEP && hex_modal(c) { return true; }
         if k == syntax::N_PHYSICS {
             var u = first(c);
             while u >= 0 {
@@ -80,6 +81,13 @@ fn claims(prog: i64) -> bool {
         c = next(c);
     }
     return false;
+}
+
+// Whether step n is a modal step. A modal step of a model with hexahedra
+// runs here: the incompatible modes and the mass are in this lane.
+fn hex_modal(n: i64) -> bool {
+    let proc = child(n, 0);
+    return name(proc) == "modal";
 }
 
 // Whether type n is Complex<D> of a scalar D.
@@ -411,6 +419,7 @@ var capacity_node = -1;         // rho*cp of `eq rho*cp*ddt(T) + div(q) = 0`, or
 var curve_node = -1;            // the k of the material when it depends on the unknown T, else -1
 var initial_node = -1;          // the initial value of the unknown, or -1
 var nl_rtol = 0.0;              // rtol of a solve item, or 0
+var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
 var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
@@ -481,6 +490,7 @@ fn reset() {
     mesh_size = 0.0;
     mesh_fine = 0.0;
     mesh_tok = -1;
+    incompatible_family = false;
     hex_mesh = false;
     curve_node = -1;
     capacity_node = -1;
@@ -1387,6 +1397,8 @@ fn method(n: i64) {
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
         } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
             pml_setting(first(s));
+        } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
+            incompatible_family = true;
         } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
             // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
@@ -1397,6 +1409,9 @@ fn method(n: i64) {
     }
     if (physics == EDGE || physics == DARCY) && order != 1 {
         unsupported(tok(n), str("the family ", family_word, " has order 1 in this generator"), "write order: 1");
+    }
+    if incompatible_family && !hex_mesh {
+        unsupported(tok(n), "the family incompatible is for hexahedra", "write cell: hex in the mesh");
     }
     if hex_mesh && order != 1 {
         unsupported(tok(n), "the hexahedra of this generator have order 1", "write order: 1");
@@ -2111,7 +2126,7 @@ fn read(prog: i64) -> bool {
             symmetries.push(c);
         } else if k == syntax::N_CONTACT {
             contact_items.push(c);
-        } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY && k != syntax::N_FN {
+        } else if k != syntax::N_SCALES && k != syntax::N_ALLOW && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY && k != syntax::N_FN {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this generator"),
                         "remove it: this generator runs one linear static or steady heat model");
         }
@@ -3393,6 +3408,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             out.append(");\n");
         }
         emit_solid_law(out);
+        if incompatible_family { out.append("    elements::incompatible(true);\n"); }
         if body_node >= 0 {
             out.append("    elements::body_force(");
             lits(out, body_force);

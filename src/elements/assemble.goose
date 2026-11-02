@@ -166,6 +166,9 @@ fn cell_jacobian(c: i64, jac: f64[9]&) -> f64 {
          + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
 }
 
+// The inverse of the Jacobian of the last cell_geometry: jinv[3 t + r] = d xi_r / d x_t.
+var jinv: f64[9] = [0.0; 9];
+
 // Fills shp and grad at reference point xi of cell c, and gives the
 // determinant of the Jacobian.
 fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
@@ -192,6 +195,7 @@ fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
     }
     assert(det > 0.0);
     // inv = jac⁻¹, so dN/dx_t = Σr inv[3 t + r] dN/dxi_r
+    jinv = inv;
     for l in per_cell {
         for t in 3 {
             var g = 0.0;
@@ -332,12 +336,99 @@ fn worker_mesh_bytes() -> i64 {
     return 8 * (coords.len + conn.len + cell_law.len + birth_u.len) + dead.len + born.len;
 }
 
+// --- the incompatible modes of the hexahedron ----------------------------------
+//
+// The 8-node hexahedron with incompatible modes (Wilson et al. 1973, Taylor
+// et al. 1976) in the elements lane: the cell of `family: incompatible`.
+//
+// Each cell adds the modes P_m = 1 - s_m^2, with s = 2 xi - 1 on the lattice
+// cell [0, 1]^3, to each component of the displacement. The modes are
+// internal to the cell: this file condenses them out of ke, so that
+// ke = Kuu - Kua Kaa^-1 Kau. The gradient of a mode uses the Jacobian at the
+// centre of the cell times det0 / det, so the cell passes the patch test.
+// The volume force of the modes is not condensed.
+// Whether the elastic hexahedra have the incompatible modes.
+var incompatible_modes = false;
+
+let MODES = 9;
+let NODE_DOFS = 24;
+
+// The block (p, q) of the stiffness between two points with the gradients
+// a and b of their scalar functions.
+fn pair_block(a: f64[3], b: f64[3], p: i64, q: i64) -> f64 {
+    var v = lame * a[p] * b[q] + shear * a[q] * b[p];
+    if p == q { v += shear * (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]); }
+    return v;
+}
+
+// Condenses the 9 mode dofs out of ke of the hexahedron c.
+fn condense_incompatible(c: i64) {
+    guard physics == ELASTIC && dim == 3 && per_cell == 8 && ncomp == 3 else { abort("condense_incompatible: an elastic hexahedron"); }
+    let det0 = cell_geometry(c, [0.5, 0.5, 0.5]);
+    let inv0 = jinv;
+    var kaa: f64[81] = [0.0; 81];
+    var kau: f64[216] = [0.0; 216];   // row 3 m + q of the mode, column 3 i + p of the node
+    for qp in quad_count(3) {
+        let xi, w = quad_point(3, qp);
+        let det = cell_geometry(c, xi);
+        let dv = w * det * thickness;
+        var gm: f64[9] = [0.0; 9];
+        for m in 3 {
+            let dp = -4.0 * (2.0 * xi[m] - 1.0) * det0 / det;
+            for t in 3 { gm[3 * m + t] = inv0[3 * t + m] * dp; }
+        }
+        for m in 3 {
+            let am: f64[3] = [gm[3 * m], gm[3 * m + 1], gm[3 * m + 2]];
+            for n in 3 {
+                let an: f64[3] = [gm[3 * n], gm[3 * n + 1], gm[3 * n + 2]];
+                for q in 3 {
+                    for r in 3 { kaa[9 * (3 * m + q) + 3 * n + r] += pair_block(am, an, q, r) * dv; }
+                }
+            }
+            for i in 8 {
+                let gi: f64[3] = [grad[3 * i], grad[3 * i + 1], grad[3 * i + 2]];
+                for q in 3 {
+                    for p in 3 { kau[NODE_DOFS * (3 * m + q) + 3 * i + p] += pair_block(am, gi, q, p) * dv; }
+                }
+            }
+        }
+    }
+    // x = Kaa^-1 Kau, by Gauss elimination (Kaa is symmetric positive definite).
+    var x: f64[216] = kau;
+    for k in MODES {
+        let piv = kaa[10 * k];
+        assert(piv > 0.0);
+        for r in k + 1..MODES {
+            let f = kaa[9 * r + k] / piv;
+            guard f != 0.0 else { continue; }
+            for j in k..MODES { kaa[9 * r + j] -= f * kaa[9 * k + j]; }
+            for j in NODE_DOFS { x[NODE_DOFS * r + j] -= f * x[NODE_DOFS * k + j]; }
+        }
+    }
+    for kk in MODES {
+        let k = MODES - 1 - kk;
+        for j in NODE_DOFS {
+            var s = x[NODE_DOFS * k + j];
+            for t in k + 1..MODES { s -= kaa[9 * k + t] * x[NODE_DOFS * t + j]; }
+            x[NODE_DOFS * k + j] = s / kaa[10 * k];
+        }
+    }
+    for a in NODE_DOFS {
+        for b in NODE_DOFS {
+            var s = 0.0;
+            for r in MODES { s += kau[NODE_DOFS * r + a] * x[NODE_DOFS * r + b]; }
+            ke[NODE_DOFS * a + b] -= s;
+        }
+    }
+}
+
 // The matrix ke and the source fe of cell c, with the law of its region.
 // A born cell adds K_e u_b on its nodes (stages.goose).
 fn cell_terms(c: i64) {
     let m = per_cell * ncomp;
     use_law(c);
     cell_matrix(c);
+    if incompatible_modes && physics == ELASTIC && hex_cells && dim == 3 { condense_incompatible(c); }
     if born.len > 0 && born[c] != 0 {
         for r in m {
             var s = 0.0;
