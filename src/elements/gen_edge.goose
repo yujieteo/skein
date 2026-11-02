@@ -469,7 +469,7 @@ fn edge_report(item: i64) {
     var probe: u8[>..] = [];
     var pre: u8[>..] = [];
     emit_cx(probe, pre, first(item));
-    var r = Report { expr: first(item), label: [] };
+    var r = Report { expr: first(item), label: [], row: -1 };
     codegen::set256(r.label, one_line(item));
     reports.push(r);
 }

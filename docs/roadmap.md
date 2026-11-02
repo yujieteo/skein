@@ -56,6 +56,7 @@ Phase 3 is in three tasks: flow, solid, and the mesher with the task pool.
 | submodels | done: `results(file, step:, case:)`, the cut values and `submodel_cut`, `src/elements/source.goose`. The femahoy gap G34 is closed. |
 | AMG | done: the default preconditioner of the elements solver and of the box runtime, with the near null space of each physics (`src/solvers/modes.goose`), `src/solvers/amg.goose` |
 | LOBPCG for modal and buckling | done: `modal` and `buckling` steps and `eigenvalue(k)`, `src/elements/eigen.goose` |
+| femahoy structural models | done: `skein run` passes `expect` for [buckling_column.skn](../examples/femahoy/buckling_column.skn) (preload form `P = defgrad(u)*S`), [birth_death_column.skn](../examples/femahoy/birth_death_column.skn) (birth and death on hexahedra, table rows in point reports), [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn) with its global model (quad cells, meshed as P2 triangles) and [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn) (`crack_tip`, quarter-point cells, `f at p` in an `expect`). Left out: random vibration (needs a `Complex` vector unknown), the laminate and the 2.5D frame (shell family), and the shape loop (needs `Nelder-Mead` with a mesher in the loop). |
 
 Gate: `scripts/generated_c.sh` runs samples 02 and 06. Sample 02 passes
 each `expect` against Ghia et al. within the limit of 0.02 m/s. The gap
