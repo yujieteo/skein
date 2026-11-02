@@ -205,3 +205,31 @@ fn facet_key(d: i64, c: i64, f: i64) -> i64 {
     sort(v);
     return (v[0] * nv + v[1]) * nv + v[2];
 }
+
+// Quarter-point cells at the crack tip (x, y) (spec §9.1): on each edge of a
+// triangle that touches the tip, the mid-side node moves to a quarter of
+// the edge from the tip. It gives the number of edges that it moved.
+fn quarter_point(x: f64, y: f64) -> i64 {
+    guard dim == 2 && order == 2 else { abort("quarter_point: P2 triangles"); }
+    var count = 0;
+    var shortest = 1.0e300;
+    for n in node_count() { shortest = min(shortest, abs(node_x(n, 0) - x) + abs(node_x(n, 1) - y)); }
+    let tol = 1.0e-9 * (abs(x) + abs(y) + 1.0) + shortest;
+    var moved = dictionary<i64, i64> {};
+    for c in cell_count() {
+        for e in edge_count(2) {
+            let a = cell_node(c, edge_node(2, e, 0));
+            let b = cell_node(c, edge_node(2, e, 1));
+            let m = cell_node(c, 3 + e);
+            let a_tip = abs(node_x(a, 0) - x) + abs(node_x(a, 1) - y) <= tol;
+            let b_tip = abs(node_x(b, 0) - x) + abs(node_x(b, 1) - y) <= tol;
+            guard a_tip != b_tip && moved.get(m) == null else { continue; }
+            moved.insert(m, 1);
+            let at = if a_tip { a } else { b };
+            let other = if a_tip { b } else { a };
+            for t in 2 { coords[3 * m + t] = node_x(at, t) + 0.25 * (node_x(other, t) - node_x(at, t)); }
+            count++;
+        }
+    }
+    return count;
+}

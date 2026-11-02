@@ -476,6 +476,8 @@ var capacity_node = -1;         // rho*cp of `eq rho*cp*ddt(T) + div(q) = 0`, or
 var curve_node = -1;            // the k of the material when it depends on the unknown T, else -1
 var initial_node = -1;          // the initial value of the unknown, or -1
 var nl_rtol = 0.0;              // rtol of a solve item, or 0
+var mesh_has_tip = false;        // the mesh has a crack_tip: the body is a shape of the mesher
+var crack_tips: f64[3][>..];     // x, y and the size of each crack_tip
 var hex_regions = false;         // a region of cells on the hexahedra of a box
 var quad_mesh = false;           // cell: quad of a 2D mesh, meshed as triangles
 var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
@@ -565,6 +567,7 @@ fn reset() {
     mesh_tok = -1;
     incompatible_family = false;
     quad_mesh = false;
+    crack_tips.clear();
     hex_regions = false;
     hex_mesh = false;
     curve_node = -1;
@@ -807,6 +810,7 @@ fn structured(n: i64) -> bool {
     let round = if dim == 3 { "cylinder" } else { "circle" };
     let cut = kind(n) == syntax::N_BINARY;
     let outer = if cut { geometry_call(child(n, 0)) } else { n };
+    guard !mesh_has_tip else { return false; }
     guard outer >= 0 && is_call(outer, shape) && syntax::child_count(outer) == 3 else { return false; }
     guard cut else { return true; }
     let c = geometry_call(child(n, 1));
@@ -1293,8 +1297,10 @@ fn mesh(n: i64) {
             } else {
                 mesh_fine = scalar_value(child(s, 1));
             }
+        } else if kind(s) == syntax::N_CRACK_TIP {
+            crack_tip(s);
         } else if kind(s) != syntax::N_SETTING {
-            unsupported(tok(s), "layers and crack_tip are not in this generator", "remove the line");
+            unsupported(tok(s), "layers are not in this generator", "remove the line");
         } else if name(s) == size_name {
             mesh_size = scalar_value(v);
         } else if name(s) == "grade" && kind(n) == syntax::N_MESH && geo == GEO_SHAPE {
@@ -1318,6 +1324,30 @@ fn mesh(n: i64) {
     }
     if mesh_size <= 0.0 { unsupported(tok(n), str("the ", size_name, " must be > 0"), str("add ", size_name, ": 5 mm")); }
     if mesh_fine <= 0.0 { mesh_fine = mesh_size; }
+}
+
+// `crack_tip p: L`: cells of size L at the point p, with the mid-side nodes on the
+// edges at p moved to a quarter (elements::quarter_point).
+fn crack_tip(s: i64) {
+    let region = first(s);
+    var p = if kind(region) == syntax::N_NAME { mesher::let_node(name(region)) } else { -1 };
+    if p >= 0 && is_call(p, "point") { p = arg(p, 0); }
+    guard p >= 0 && dim == 2 && geo == GEO_SHAPE && order == 2 else {
+        unsupported(tok(region), "a crack_tip is a point of a 2d shape, with order 2", "write crack_tip tip: 0.5 mm, with let tip: Point = point((a, 0 mm)) and order: 2");
+        return;
+    };
+    let at = value(p);
+    let size = scalar_value(child(s, 1));
+    guard at.n == 2 && size > 0.0 else {
+        unsupported(tok(region), "the crack tip is a point (x, y) and a size > 0", "write crack_tip tip: 0.5 mm");
+        return;
+    };
+    crack_tips.push([at.v[0], at.v[1], size]);
+    // The circle of radius L is an interface of the mesh: its arc is cut in edges of length L and no
+    // cell crosses it, so the cells in it are a fan of triangles with the edges of length L at the tip.
+    let g = mesher::circle(at.v[0], at.v[1], size);
+    interfaces.push(g);
+    refines.push(Refine { g: g, size: size, surface: true, axis: -1, planes: [0.0; 2], plane_count: 0, round: false, ring: [0.0; 3] });
 }
 
 let PHYSICS_FIX = "write physics solid on plate: linear_elastic solves u: Vector<Length> { material steel }, or physics thermal on bar: heat(q_v) solves T: Temperature { material steel }";
@@ -1618,6 +1648,7 @@ fn method(n: i64) {
     if incompatible_family && !hex_mesh {
         unsupported(tok(n), "the family incompatible is for hexahedra", "write cell: hex in the mesh");
     }
+    if crack_tips.len > 0 && order != 2 { unsupported(tok(n), "a crack_tip moves the mid-side nodes: it needs order 2", "write order: 2"); }
     if hex_mesh && order != 1 {
         unsupported(tok(n), "the hexahedra of this generator have order 1", "write order: 1");
     }
@@ -2176,6 +2207,18 @@ fn region_surf(r: i64) -> i64 {
     return surfs.len - 1;
 }
 
+// Whether the tree n has an `f at p` below it.
+recursive fn has_sample(n: i64) -> bool {
+    if n < 0 { return false; }
+    if kind(n) == syntax::N_AT { return true; }
+    var c = first(n);
+    while c >= 0 {
+        if has_sample(c) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
 // An `expect` of a value of two physics: each pass registers the terms
 // of its physics, and the last pass keeps the expect, after the terms of all.
 fn composite_expect(n: i64) {
@@ -2218,6 +2261,11 @@ fn expect(n: i64, step: i64) {
             return;
         }
         if !mine(left) { return; }
+    }
+    // A value of samples: an expression of `f at p` and constants.
+    if kind(left) != syntax::N_AT && kind(left) != syntax::N_NAME && !is_call(left, "eigenvalue") && !is_call(left, "mean") && has_sample(left) {
+        composite_expect(n);
+        return;
     }
     if kind(left) == syntax::N_AT {
         what, comp = point_field(left, false);
@@ -2578,15 +2626,18 @@ fn emit_field_terms(out: u8[>..]&) {
 // the expression of the terms.
 struct Term {
     id: i64,
-    surf: i64,
+    surf: i64,      // the boundary of an integral, or -1 for a sample `f at p`
     sign: f64,
+    what: i64,      // the field of a sample
+    comp: i64,
+    at: f64[3],
 }
 
 var terms: Term[>..];       // the terms of the pass now
 var term_nodes: i64[>..];   // the integral call of each term, in the order of the model
 
 recursive fn has_integral(n: i64) -> bool {
-    if is_call(n, "integral") { return true; }
+    if is_call(n, "integral") || kind(n) == syntax::N_AT { return true; }
     var c = first(n);
     while c >= 0 {
         if has_integral(c) { return true; }
@@ -2597,6 +2648,16 @@ recursive fn has_integral(n: i64) -> bool {
 
 // Registers the integrals of expression n, and the terms of the pass now.
 recursive fn collect_terms(n: i64) {
+    // A sample `u.y at (x, y)` in an expression of other values: the term is its value at the end of the pass.
+    if kind(n) == syntax::N_AT {
+        let id = term_nodes.len;
+        term_nodes.push(n);
+        if owner_of(n) != pass_now { return; }
+        let what, comp = point_field(n, true);
+        if what < 0 || comp < 0 { return; }
+        terms.push(Term { id: id, surf: -1, sign: 1.0, what: what, comp: comp, at: value(child(n, 1)).v });
+        return;
+    }
     if is_call(n, "integral") && syntax::child_count(n) == 3 {
         let id = term_nodes.len;
         term_nodes.push(n);
@@ -2613,7 +2674,7 @@ recursive fn collect_terms(n: i64) {
             unsupported(tok(n), "a value of two physics runs in the SI system", "write the header SI");
             return;
         }
-        terms.push(Term { id: id, surf: s, sign: if flux_plus { 1.0 } else { -1.0 } });
+        terms.push(Term { id: id, surf: s, sign: if flux_plus { 1.0 } else { -1.0 }, what: -1, comp: -1, at: [0.0; 3] });
         return;
     }
     var c = first(n);
@@ -2624,7 +2685,14 @@ recursive fn collect_terms(n: i64) {
 }
 
 fn emit_term(out: u8[>..]&, tm: Term) {
-    format(out, "    // term ", tm.id, ": ", source_of(term_nodes[tm.id]), "\n    ");
+    format(out, "    // term ", tm.id, ": ", source_of(term_nodes[tm.id]), "\n");
+    if tm.surf < 0 {
+        out.append("    {\n");
+        emit_sample(out, "v", tm.what, tm.comp, tm.at);
+        format(out, "        term(", tm.id, ", v);\n    }\n");
+        return;
+    }
+    out.append("    ");
     emit_region(out, tm.surf);
     format(out, "    {\n        let rx, ry, rz = elements::reaction();\n        term(", tm.id, ", ");
     lit(out, tm.sign);
@@ -2647,7 +2715,7 @@ recursive fn composite_text(out: u8[>..]&, n: i64) {
         return;
     }
     let k = kind(n);
-    if is_call(n, "integral") {
+    if is_call(n, "integral") || kind(n) == syntax::N_AT {
         for c, i in term_nodes { if c == n { format(out, "terms[", i, "]"); } }
         return;
     }
@@ -2819,8 +2887,20 @@ fn shares_mesh(p: i64) -> bool {
     return true;
 }
 
+// Whether mesh item n has a crack_tip.
+fn has_crack_tip(n: i64) -> bool {
+    guard kind(n) == syntax::N_MESH else { return false; }
+    var s = first(child(n, 1));
+    while s >= 0 {
+        if kind(s) == syntax::N_CRACK_TIP { return true; }
+        s = next(s);
+    }
+    return false;
+}
+
 fn read_pass(prog: i64, pass: i64) -> bool {
     reset();
+    mesh_has_tip = false;
     pass_now = max(pass, 0);
     program_node = prog;
     var physics_node = if pass >= 0 { physics_nodes[pass] } else { -1 };
@@ -2846,6 +2926,7 @@ fn read_pass(prog: i64, pass: i64) -> bool {
         } else if k == syntax::N_MESH || k == syntax::N_POINTS {
             if mesh_node >= 0 { unsupported(tok(c), "a second mesh: this generator has one", "remove the second mesh"); }
             mesh_node = c;
+            mesh_has_tip = has_crack_tip(c);
         } else if k == syntax::N_METHOD {
             methods.push(c);
         } else if k == syntax::N_SYMMETRY {
@@ -4102,6 +4183,13 @@ fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
             lit(out, mesh_size);
             out.append(") {\n        write_stderr(\"skein run: the mesher did not finish in its budget of points: give a larger size\\n\");\n");
             out.append("        exit(1);\n    }\n");
+            for t in crack_tips {
+                out.append("    elements::quarter_point(");
+                lit(out, t[0]);
+                out.append(", ");
+                lit(out, t[1]);
+                out.append(");\n");
+            }
         } else if geo == GEO_HOLE {
             format(out, ", ", mesh_fine, " ", sys.length, " at the hole\n    elements::mesh_hole(", dim, ", ", order, ", ");
             lits(out, lo);
@@ -4226,7 +4314,7 @@ fn emit_setup(out: u8[>..]&) {
 // The steps of the pass now, and its expects of no step, in main.
 fn emit_calls(out: u8[>..]&) {
     for s in steps { format(out, "    step_", s.name, tag(), "();\n"); }
-    if multi() { emit_pass_end(out); }
+    if multi() || terms.len > 0 { emit_pass_end(out); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for x in probes { if x.step < 0 { emit_edge_expect(out, x); } }
     for s in skipped {

@@ -78,6 +78,61 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
                 + m[2] * (m[3] * m[7] - m[4] * m[6])) / det;
         }
     }
+    // A curved cell of order 2 (snapped edges, quarter-point nodes): Newton's method on x(xi) = p
+    // from the affine guess, which is exact for a straight cell.
+    if order == 2 {
+        let affine = xi;
+        var n: f64[10] = [0.0; 10];
+        var dn: f64[30] = [0.0; 30];
+        for it in 6 {
+            shape(dim, 2, xi, n, dn);
+            var r: f64[3] = [0.0; 3];
+            var j: f64[9] = [0.0; 9];
+            for l in per_cell {
+                let v = cell_node(c, l);
+                for t in dim {
+                    r[t] += n[l] * node_x(v, t);
+                    for a in dim { j[3 * t + a] += dn[3 * l + a] * node_x(v, t); }
+                }
+            }
+            for t in dim { r[t] -= p[t]; }
+            var step: f64[3] = [0.0; 3];
+            if dim == 2 {
+                let det = j[0] * j[4] - j[1] * j[3];
+                guard abs(det) > 0.0 else { break; };
+                step[0] = (r[0] * j[4] - j[1] * r[1]) / det;
+                step[1] = (j[0] * r[1] - r[0] * j[3]) / det;
+            } else {
+                let det = j[0] * (j[4] * j[8] - j[5] * j[7]) - j[1] * (j[3] * j[8] - j[5] * j[6]) + j[2] * (j[3] * j[7] - j[4] * j[6]);
+                guard abs(det) > 0.0 else { break; };
+                for a in 3 {
+                    var m = j;
+                    for t in 3 { m[3 * t + a] = r[t]; }
+                    step[a] = (m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])) / det;
+                }
+            }
+            for a in dim { xi[a] -= step[a]; }
+        }
+        // A point far from the cell keeps its affine coordinates: the map is not one-to-one there.
+        for a in dim { if !(xi[a] > -0.5 && xi[a] < 1.5) { xi = affine; } }
+        // A root where the map folds (det <= 0) is not in the cell.
+        shape(dim, 2, xi, n, dn);
+        var back: f64[9] = [0.0; 9];
+        for l in per_cell {
+            for t in dim { for a in dim { back[3 * t + a] += dn[3 * l + a] * node_x(cell_node(c, l), t); } }
+        }
+        let folded = if dim == 2 { back[0] * back[4] - back[1] * back[3] <= 0.0 } else { false };
+        // A root that does not reproduce p (Newton did not converge) is not one either.
+        var miss = 0.0;
+        var span = 0.0;
+        for t in dim {
+            var x = 0.0;
+            for l in per_cell { x += n[l] * node_x(cell_node(c, l), t); }
+            miss = max(miss, abs(x - p[t]));
+            span = max(span, abs(node_x(cell_node(c, 1), t) - node_x(cell_node(c, 0), t)));
+        }
+        if folded || miss > 1.0e-6 * span { xi = affine; }
+    }
     var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
     for r in dim {
         l[r + 1] = xi[r];
@@ -89,7 +144,8 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
 // The field in cell c at reference point xi.
 fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 && ncomp <= 3 && sol.len == dof_total() else { abort("cell_field: a field, 0 <= comp < 9 and a solution of each dof"); }
-    cell_geometry(c, xi);
+    // A value needs the shape functions only: the Jacobian of a quarter-point cell is singular at its tip.
+    if what == FIELD_VALUE { shape(dim, order, xi, shp, dref); } else { cell_geometry(c, xi); }
     use_law(c);
     if what == FIELD_VALUE {
         var v = 0.0;
