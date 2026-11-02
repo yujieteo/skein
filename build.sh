@@ -15,6 +15,13 @@
 #                       and `npm install` in tests/gpu. With no GPU adapter
 #                       the checks skip, and SKEIN_GPU=1 makes that a
 #                       failure.
+#   ./build.sh browser  build, then solve 7 explicit models in the page in
+#                       headless Chromium with WebGPU, on the GPU and on the
+#                       CPU, and check their expect values
+#                       (tests/gpu/browser.mjs). It fails if the adapter is
+#                       not Nvidia or a GPU run uses the CPU. Needs emcc,
+#                       Node 22+ and Chromium; see the script for the
+#                       environment.
 #
 # Needs the Goose compiler on PATH (or in $GOOSE), and the Goose standard
 # library in $GOOSE_STDLIB when goose cannot find it beside itself.
@@ -57,5 +64,6 @@ case "${1:-build}" in
     build) build ;;
     test) build && run_tests ;;
     gpu) build && node --test --test-reporter=spec "$root/tests/gpu/gpu.test.mjs" ;;
-    *) echo "usage: ./build.sh [build|test|gpu]" >&2; exit 2 ;;
+    browser) build && node "$root/tests/gpu/browser.mjs" ;;
+    *) echo "usage: ./build.sh [build|test|gpu|browser]" >&2; exit 2 ;;
 esac
