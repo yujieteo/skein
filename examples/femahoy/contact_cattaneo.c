@@ -1181,13 +1181,13 @@ typedef struct { gs_rhdr *hdr; gs_stack *stk; gs_rhdr *fl; gs_stack *flstk; } gs
 
 typedef struct { double e[23]; } a23_f64;
 
+typedef struct { int64_t e[24]; } a24_i64;
+
 typedef struct { int64_t e[2]; } a2_i64;
 
 typedef struct { int64_t e[6]; } a6_i64;
 
 typedef struct { int64_t e[12]; } a12_i64;
-
-typedef struct { int64_t e[24]; } a24_i64;
 
 typedef struct { int64_t e[3]; } a3_i64;
 
@@ -1237,6 +1237,8 @@ typedef struct { double e[10]; } a10_f64;
 
 typedef struct { double e[30]; } a30_f64;
 
+typedef struct { double e[9]; } a9_f64;
+
 typedef struct { double e[900]; } a900_f64;
 
 typedef struct elements_Part_g8 elements_Part_g8;
@@ -1257,8 +1259,6 @@ typedef struct { uint8_t len; elements_Part_g8 e[16]; } l16_elements_Part_g8;
 typedef struct { uint8_t len; elements_Part_g8 e[8]; } l8_elements_Part_g8;
 
 typedef struct { double e[4]; } a4_f64;
-
-typedef struct { double e[9]; } a9_f64;
 
 typedef struct elements_J2_g8 elements_J2_g8;
 struct elements_J2_g8 {
@@ -1466,218 +1466,221 @@ static const uint8_t gs_str63[46] = "also_plane: 0 <= axis < 3 and at most 16 pa
 static const uint8_t gs_str64[44] = "on_part: n < node_count() and k < region.len";
 static const uint8_t gs_str65[30] = "in_body: a body of mesh_bodies";
 static const uint8_t gs_str66[27] = "on_region: n < node_count()";
-static const uint8_t gs_str67[42] = "also_surface: a shape and at most 16 parts";
-static const uint8_t gs_str68[62] = "contact_slave: an elastic physics, kn > 0, kt >= 0 and mu >= 0";
-static const uint8_t gs_str69[68] = "fix_region: a physics, -1 <= comp < ncomp and the arrays of the dofs";
-static const uint8_t gs_str70[98] = "solve_solid: J2 at small strain, an energy or the linear law, ramp >= 1 and the arrays of the dofs";
-static const uint8_t gs_str71[21] = "simplex newton cg amg";
-static const uint8_t gs_str72[1] = "";
-static const uint8_t gs_str73[57] = "solve_solid: a solve grows no array of the state (rule 3)";
-static const uint8_t gs_str74[13] = "zeros: n >= 0";
-static const uint8_t gs_str75[35] = "build_pattern: a mesh and a physics";
-static const uint8_t gs_str76[27] = "simplex newton skyline ldlt";
-static const uint8_t gs_str77[32] = "memory_path: the solution path '";
-static const uint8_t gs_str78[37] = "' has no memory model in MEMORY_PATHS";
-static const uint8_t gs_str79[18] = "SKEIN_MEMORY_PROBE";
-static const uint8_t gs_str80[16] = "estimate_bytes: ";
-static const uint8_t gs_str81[24] = "/proc/self/oom_score_adj";
-static const uint8_t gs_str82[4] = "1000";
-static const uint8_t gs_str83[19] = "SKEIN_MEMORY_BUDGET";
-static const uint8_t gs_str84[45] = "skein run: the solve runs on 1 thread, since ";
-static const uint8_t gs_str85[20] = " threads need about ";
-static const uint8_t gs_str86[8] = " MB and ";
-static const uint8_t gs_str87[12] = " MB is free\012";
-static const uint8_t gs_str88[24] = "from SKEIN_MEMORY_BUDGET";
-static const uint8_t gs_str89[40] = " of MemAvailable and of the cgroup limit";
-static const uint8_t gs_str90[33] = "skein run: the solve needs about ";
-static const uint8_t gs_str91[19] = " MB of memory, and ";
-static const uint8_t gs_str92[20] = " MB is free for it (";
-static const uint8_t gs_str93[3] = "). ";
-static const uint8_t gs_str94[42] = "Close other programs or use a coarser mesh";
-static const uint8_t gs_str95[2] = ".\012";
-static const uint8_t gs_str96[6] = "VmRSS:";
-static const uint8_t gs_str97[3] = " kB";
-static const uint8_t gs_str98[13] = "SKEIN_THREADS";
-static const uint8_t gs_str99[66] = "path_bytes: entries, dofs, vectors and mesh >= 0, and threads >= 1";
-static const uint8_t gs_str100[13] = "/proc/meminfo";
-static const uint8_t gs_str101[13] = "MemAvailable:";
-static const uint8_t gs_str102[17] = "/proc/self/cgroup";
-static const uint8_t gs_str103[4] = "0::/";
-static const uint8_t gs_str104[14] = "/sys/fs/cgroup";
-static const uint8_t gs_str105[11] = "/memory.max";
-static const uint8_t gs_str106[15] = "/memory.current";
-static const uint8_t gs_str107[1] = "/";
-static const uint8_t gs_str108[41] = "direct_solve: direct_setup of the pattern";
-static const uint8_t gs_str109[58] = "direct_solve: a solve grows no array of the state (rule 3)";
-static const uint8_t gs_str110[58] = "add_cell: the matrix and the source of the nodes of a cell";
-static const uint8_t gs_str111[37] = "entry: r and c are rows of the matrix";
-static const uint8_t gs_str112[69] = "cell_matrix: c < cell_count(), a physics, dim 2 or 3 and order 1 or 2";
-static const uint8_t gs_str113[68] = "elastic_tet10: a cell, the physics, dim 3, 10 nodes and 3 components";
-static const uint8_t gs_str114[63] = "heat_tri3: a cell, the physics, dim 2, 3 nodes and 1 components";
-static const uint8_t gs_str115[63] = "heat_tet4: a cell, the physics, dim 3, 4 nodes and 1 components";
-static const uint8_t gs_str116[66] = "elastic_tri3: a cell, the physics, dim 2, 3 nodes and 2 components";
-static const uint8_t gs_str117[73] = "cell_geometry: c < cell_count() and shp and grad hold the nodes of a cell";
-static const uint8_t gs_str118[66] = "elastic_tri6: a cell, the physics, dim 2, 6 nodes and 2 components";
-static const uint8_t gs_str119[45] = "elastic_tri6_0_0: per_cell == 6 && ncomp == 2";
-static const uint8_t gs_str120[45] = "elastic_tri6_0_1: per_cell == 6 && ncomp == 2";
-static const uint8_t gs_str121[45] = "elastic_tri6_1_0: per_cell == 6 && ncomp == 2";
-static const uint8_t gs_str122[45] = "elastic_tri6_1_1: per_cell == 6 && ncomp == 2";
-static const uint8_t gs_str123[66] = "elastic_tet4: a cell, the physics, dim 3, 4 nodes and 3 components";
-static const uint8_t gs_str124[47] = "elastic_tet10_0_0: per_cell == 10 && ncomp == 3";
-static const uint8_t gs_str125[47] = "elastic_tet10_0_1: per_cell == 10 && ncomp == 3";
-static const uint8_t gs_str126[47] = "elastic_tet10_1_0: per_cell == 10 && ncomp == 3";
-static const uint8_t gs_str127[47] = "elastic_tet10_1_1: per_cell == 10 && ncomp == 3";
-static const uint8_t gs_str128[63] = "heat_tri6: a cell, the physics, dim 2, 6 nodes and 1 components";
-static const uint8_t gs_str129[65] = "heat_tet10: a cell, the physics, dim 3, 10 nodes and 1 components";
-static const uint8_t gs_str130[59] = "rigid_terms: the first call of a step assembles the tangent";
-static const uint8_t gs_str131[40] = "rows_start: no workers yet, and a matrix";
-static const uint8_t gs_str132[59] = "multiply: x and y have one entry for each row of the matrix";
-static const uint8_t gs_str133[50] = "rows_multiply: x and y have one entry for each row";
-static const uint8_t gs_str134[19] = "dot: a.len == b.len";
-static const uint8_t gs_str135[58] = "solve_system: a solve grows no array of the state (rule 3)";
-static const uint8_t gs_str136[79] = "multiply_rows: row_start has y.len + 1 entries, and col and val hold these rows";
-static const uint8_t gs_str137[81] = "multiply: row_start has y.len + 1 entries, col and val one size, x and y one size";
-static const uint8_t gs_str138[10] = "SKEIN_WARM";
-static const uint8_t gs_str139[7] = "amg.sig";
-static const uint8_t gs_str140[5] = "amg.n";
-static const uint8_t gs_str141[6] = "amg.rs";
-static const uint8_t gs_str142[7] = "amg.col";
-static const uint8_t gs_str143[7] = "amg.val";
-static const uint8_t gs_str144[7] = "amg.prs";
-static const uint8_t gs_str145[8] = "amg.pcol";
-static const uint8_t gs_str146[8] = "amg.pval";
-static const uint8_t gs_str147[8] = "amg.chol";
-static const uint8_t gs_str148[19] = "amg_keep: amg_setup";
-static const uint8_t gs_str149[1] = ".";
-static const uint8_t gs_str150[48] = "push_level: n + 1 row starts that end at col.len";
-static const uint8_t gs_str151[72] = "near_null_space: ncomp dofs and 3 coordinates for each node, in 2D or 3D";
-static const uint8_t gs_str152[38] = "thin_axis: 3 coordinates for each node";
-static const uint8_t gs_str153[79] = "amg_setup_modes: a CSR matrix with the dofs in blocks, and nb modes of each dof";
-static const uint8_t gs_str154[26] = "dot: a and b have one size";
-static const uint8_t gs_str155[22] = "spmm: two CSR matrices";
-static const uint8_t gs_str156[23] = "transpose: a CSR matrix";
-static const uint8_t gs_str157[59] = "amg_apply: amg_setup, and r and z of the size of its matrix";
-static const uint8_t gs_str158[2] = "  ";
-static const uint8_t gs_str159[1] = ",";
-static const uint8_t gs_str160[3] = "yes";
-static const uint8_t gs_str161[2] = "no";
-static const uint8_t gs_str162[34] = "save_state: a solution of each dof";
-static const uint8_t gs_str163[12] = ".state_sizes";
-static const uint8_t gs_str164[10] = ".state_law";
-static const uint8_t gs_str165[13] = ".state_coords";
-static const uint8_t gs_str166[11] = ".state_conn";
-static const uint8_t gs_str167[10] = ".state_sol";
-static const uint8_t gs_str168[38] = "load_magnitude: the arrays of the dofs";
-static const uint8_t gs_str169[11] = "equilibrium";
-static const uint8_t gs_str170[1] = " ";
-static const uint8_t gs_str171[7] = "  post,";
-static const uint8_t gs_str172[6] = ",pass,";
-static const uint8_t gs_str173[6] = ",fail,";
-static const uint8_t gs_str174[50] = "all_reaction: a physics and the arrays of the dofs";
-static const uint8_t gs_str175[48] = "total_load: a physics and the arrays of the dofs";
-static const uint8_t gs_str176[1] = "c";
-static const uint8_t gs_str177[52] = "add_node_force: a physics and the arrays of the dofs";
-static const uint8_t gs_str178[6] = "normal";
-static const uint8_t gs_str179[30] = "rigid_face: an elastic physics";
-static const uint8_t gs_str180[39] = "also_point: a mesh and at most 16 parts";
-static const uint8_t gs_str181[5] = "slide";
-static const uint8_t gs_str182[41] = ".skein/results/contact_cattaneo/slide.vtu";
-static const uint8_t gs_str183[38] = "write_vtu_file: a solution of each dof";
-static const uint8_t gs_str184[32] = "<DataArray type=\"Float64\" Name=\"";
-static const uint8_t gs_str185[22] = "\" NumberOfComponents=\"";
-static const uint8_t gs_str186[18] = "\" format=\"ascii\">\012";
-static const uint8_t gs_str187[13] = "</DataArray>\012";
-static const uint8_t gs_str188[25] = "skein run: cannot write '";
-static const uint8_t gs_str189[38] = "rigid_moment: a rigid face of the step";
-static const uint8_t gs_str190[44] = "rigid_moment: a face that is not on one line";
-static const uint8_t gs_str191[46] = "write_edge_vtu: an edge physics and a solution";
-static const uint8_t gs_str192[5] = "curl_";
-static const uint8_t gs_str193[5] = "_imag";
-static const uint8_t gs_str194[41] = "\" NumberOfComponents=\"3\" format=\"ascii\">\012";
-static const uint8_t gs_str195[114] = "<?xml version=\"1.0\"?>\012<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">\012<UnstructuredGrid>";
-static const uint8_t gs_str196[23] = "<Piece NumberOfPoints=\"";
-static const uint8_t gs_str197[17] = "\" NumberOfCells=\"";
-static const uint8_t gs_str198[3] = "\">\012";
-static const uint8_t gs_str199[74] = "<Points>\012<DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">\012";
-static const uint8_t gs_str200[31] = "</DataArray>\012</Points>\012<Cells>\012";
-static const uint8_t gs_str201[60] = "<DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\012";
-static const uint8_t gs_str202[68] = "</DataArray>\012<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\012";
-static const uint8_t gs_str203[66] = "</DataArray>\012<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\012";
-static const uint8_t gs_str204[34] = "</DataArray>\012</Cells>\012<PointData>\012";
-static const uint8_t gs_str205[29] = "barycentric: c < cell_count()";
-static const uint8_t gs_str206[61] = "cell_field: a field, 0 <= comp < 9 and a solution of each dof";
-static const uint8_t gs_str207[6] = "expect";
-static const uint8_t gs_str208[2] = ": ";
-static const uint8_t gs_str209[35] = "field_at: a field and 0 <= comp < 9";
-static const uint8_t gs_str210[46] = "cell_matrix: a cell with the nodes of its type";
-static const uint8_t gs_str211[26] = "hex8i_matrix: a hex8i cell";
-static const uint8_t gs_str212[43] = "hex27_stiffness: a hex27 cell with 27 nodes";
-static const uint8_t gs_str213[26] = "gauss_hex3: empty xi and w";
-static const uint8_t gs_str214[27] = "hex27_shape: empty n and dn";
-static const uint8_t gs_str215[23] = "shape_1d_ds: 0 <= a < 3";
-static const uint8_t gs_str216[53] = "cell_jacobian: a cell and 3 derivatives for each node";
-static const uint8_t gs_str217[33] = "cell_lame: a cell with a material";
-static const uint8_t gs_str218[20] = "shape_1d: 0 <= a < 3";
-static const uint8_t gs_str219[56] = "hex27_stiffness_0_0: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str220[56] = "hex27_stiffness_0_1: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str221[56] = "hex27_stiffness_0_2: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str222[56] = "hex27_stiffness_1_0: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str223[56] = "hex27_stiffness_1_1: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str224[56] = "hex27_stiffness_1_2: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str225[56] = "hex27_stiffness_2_0: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str226[56] = "hex27_stiffness_2_1: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str227[56] = "hex27_stiffness_2_2: grad.len == 81 && ke.len == 81 * 81";
-static const uint8_t gs_str228[41] = "hex8i_condense: a hex8i cell with 8 nodes";
-static const uint8_t gs_str229[37] = "hex8i_full: a hex8i cell with 8 nodes";
-static const uint8_t gs_str230[26] = "gauss_hex2: empty xi and w";
-static const uint8_t gs_str231[26] = "hex8_shape: empty n and dn";
-static const uint8_t gs_str232[50] = "mode_gradient: det != 0 and 9 entries of g from at";
-static const uint8_t gs_str233[51] = "hex8i_full_0_0: grad.len == 33 && ke.len == 33 * 33";
-static const uint8_t gs_str234[51] = "hex8i_full_0_1: grad.len == 33 && ke.len == 33 * 33";
-static const uint8_t gs_str235[51] = "hex8i_full_1_0: grad.len == 33 && ke.len == 33 * 33";
-static const uint8_t gs_str236[51] = "hex8i_full_1_1: grad.len == 33 && ke.len == 33 * 33";
-static const uint8_t gs_str237[2] = "x0";
-static const uint8_t gs_str238[2] = "x1";
-static const uint8_t gs_str239[2] = "y0";
-static const uint8_t gs_str240[2] = "y1";
-static const uint8_t gs_str241[2] = "z0";
-static const uint8_t gs_str242[2] = "z1";
-static const uint8_t gs_str243[2] = "r0";
-static const uint8_t gs_str244[2] = "r1";
-static const uint8_t gs_str245[2] = "t0";
-static const uint8_t gs_str246[2] = "t1";
-static const uint8_t gs_str247[13] = "box cg jacobi";
-static const uint8_t gs_str248[10] = "box cg amg";
-static const uint8_t gs_str249[18] = "box cg amg bending";
-static const uint8_t gs_str250[14] = "box gmres ilu0";
-static const uint8_t gs_str251[14] = "simplex cg amg";
-static const uint8_t gs_str252[22] = "simplex elastic cg amg";
-static const uint8_t gs_str253[24] = "simplex modal lobpcg amg";
-static const uint8_t gs_str254[27] = "simplex buckling lobpcg amg";
-static const uint8_t gs_str255[26] = "simplex central_difference";
-static const uint8_t gs_str256[12] = "lattice ldlt";
-static const uint8_t gs_str257[18] = "shell skyline ldlt";
-static const uint8_t gs_str258[23] = "simplex wave gmres ilu0";
-static const uint8_t gs_str259[22] = "flow newton gmres ilu0";
-static const uint8_t gs_str260[15] = "grid gmres ilu0";
-static const uint8_t gs_str261[11] = "grid ssprk3";
-static const uint8_t gs_str262[19] = "meshless skyline lu";
-static const uint8_t gs_str263[16] = "simplex mixed cg";
-static const uint8_t gs_str264[15] = "radiation dense";
-static const uint8_t gs_str265[16] = "q4 band cholesky";
-static const uint8_t gs_str266[2] = "cg";
-static const uint8_t gs_str267[6] = "jacobi";
-static const uint8_t gs_str268[4] = "tri3";
-static const uint8_t gs_str269[4] = "tri6";
-static const uint8_t gs_str270[4] = "tet4";
-static const uint8_t gs_str271[5] = "tet10";
-static const uint8_t gs_str272[4] = "hex8";
-static const uint8_t gs_str273[5] = "hex27";
-static const uint8_t gs_str274[11] = "quad4_shell";
-static const uint8_t gs_str275[5] = "beam2";
-static const uint8_t gs_str276[5] = "hex8i";
-static const uint8_t gs_str277[5] = "quad4";
-static const uint8_t gs_str278[53] = "</PointData>\012</Piece>\012</UnstructuredGrid>\012</VTKFile>\012";
+static const uint8_t gs_str67[27] = "facet_vertices: d is 2 or 3";
+static const uint8_t gs_str68[42] = "also_surface: a shape and at most 16 parts";
+static const uint8_t gs_str69[62] = "contact_slave: an elastic physics, kn > 0, kt >= 0 and mu >= 0";
+static const uint8_t gs_str70[68] = "fix_region: a physics, -1 <= comp < ncomp and the arrays of the dofs";
+static const uint8_t gs_str71[98] = "solve_solid: J2 at small strain, an energy or the linear law, ramp >= 1 and the arrays of the dofs";
+static const uint8_t gs_str72[21] = "simplex newton cg amg";
+static const uint8_t gs_str73[1] = "";
+static const uint8_t gs_str74[57] = "solve_solid: a solve grows no array of the state (rule 3)";
+static const uint8_t gs_str75[13] = "zeros: n >= 0";
+static const uint8_t gs_str76[35] = "build_pattern: a mesh and a physics";
+static const uint8_t gs_str77[27] = "simplex newton skyline ldlt";
+static const uint8_t gs_str78[32] = "memory_path: the solution path '";
+static const uint8_t gs_str79[37] = "' has no memory model in MEMORY_PATHS";
+static const uint8_t gs_str80[18] = "SKEIN_MEMORY_PROBE";
+static const uint8_t gs_str81[16] = "estimate_bytes: ";
+static const uint8_t gs_str82[24] = "/proc/self/oom_score_adj";
+static const uint8_t gs_str83[4] = "1000";
+static const uint8_t gs_str84[19] = "SKEIN_MEMORY_BUDGET";
+static const uint8_t gs_str85[45] = "skein run: the solve runs on 1 thread, since ";
+static const uint8_t gs_str86[20] = " threads need about ";
+static const uint8_t gs_str87[8] = " MB and ";
+static const uint8_t gs_str88[12] = " MB is free\012";
+static const uint8_t gs_str89[24] = "from SKEIN_MEMORY_BUDGET";
+static const uint8_t gs_str90[40] = " of MemAvailable and of the cgroup limit";
+static const uint8_t gs_str91[33] = "skein run: the solve needs about ";
+static const uint8_t gs_str92[19] = " MB of memory, and ";
+static const uint8_t gs_str93[20] = " MB is free for it (";
+static const uint8_t gs_str94[3] = "). ";
+static const uint8_t gs_str95[42] = "Close other programs or use a coarser mesh";
+static const uint8_t gs_str96[2] = ".\012";
+static const uint8_t gs_str97[6] = "VmRSS:";
+static const uint8_t gs_str98[3] = " kB";
+static const uint8_t gs_str99[13] = "SKEIN_THREADS";
+static const uint8_t gs_str100[66] = "path_bytes: entries, dofs, vectors and mesh >= 0, and threads >= 1";
+static const uint8_t gs_str101[13] = "/proc/meminfo";
+static const uint8_t gs_str102[13] = "MemAvailable:";
+static const uint8_t gs_str103[17] = "/proc/self/cgroup";
+static const uint8_t gs_str104[4] = "0::/";
+static const uint8_t gs_str105[14] = "/sys/fs/cgroup";
+static const uint8_t gs_str106[11] = "/memory.max";
+static const uint8_t gs_str107[15] = "/memory.current";
+static const uint8_t gs_str108[1] = "/";
+static const uint8_t gs_str109[41] = "direct_solve: direct_setup of the pattern";
+static const uint8_t gs_str110[58] = "direct_solve: a solve grows no array of the state (rule 3)";
+static const uint8_t gs_str111[58] = "add_cell: the matrix and the source of the nodes of a cell";
+static const uint8_t gs_str112[37] = "entry: r and c are rows of the matrix";
+static const uint8_t gs_str113[69] = "cell_matrix: c < cell_count(), a physics, dim 2 or 3 and order 1 or 2";
+static const uint8_t gs_str114[68] = "elastic_tet10: a cell, the physics, dim 3, 10 nodes and 3 components";
+static const uint8_t gs_str115[63] = "heat_tri3: a cell, the physics, dim 2, 3 nodes and 1 components";
+static const uint8_t gs_str116[63] = "heat_tet4: a cell, the physics, dim 3, 4 nodes and 1 components";
+static const uint8_t gs_str117[66] = "elastic_hex8: a cell, the physics, dim 3, 8 nodes and 3 components";
+static const uint8_t gs_str118[73] = "cell_geometry: c < cell_count() and shp and grad hold the nodes of a cell";
+static const uint8_t gs_str119[63] = "heat_hex8: a cell, the physics, dim 3, 8 nodes and 1 components";
+static const uint8_t gs_str120[66] = "elastic_tri3: a cell, the physics, dim 2, 3 nodes and 2 components";
+static const uint8_t gs_str121[66] = "elastic_tri6: a cell, the physics, dim 2, 6 nodes and 2 components";
+static const uint8_t gs_str122[45] = "elastic_tri6_0_0: per_cell == 6 && ncomp == 2";
+static const uint8_t gs_str123[45] = "elastic_tri6_0_1: per_cell == 6 && ncomp == 2";
+static const uint8_t gs_str124[45] = "elastic_tri6_1_0: per_cell == 6 && ncomp == 2";
+static const uint8_t gs_str125[45] = "elastic_tri6_1_1: per_cell == 6 && ncomp == 2";
+static const uint8_t gs_str126[66] = "elastic_tet4: a cell, the physics, dim 3, 4 nodes and 3 components";
+static const uint8_t gs_str127[47] = "elastic_tet10_0_0: per_cell == 10 && ncomp == 3";
+static const uint8_t gs_str128[47] = "elastic_tet10_0_1: per_cell == 10 && ncomp == 3";
+static const uint8_t gs_str129[47] = "elastic_tet10_1_0: per_cell == 10 && ncomp == 3";
+static const uint8_t gs_str130[47] = "elastic_tet10_1_1: per_cell == 10 && ncomp == 3";
+static const uint8_t gs_str131[63] = "heat_tri6: a cell, the physics, dim 2, 6 nodes and 1 components";
+static const uint8_t gs_str132[65] = "heat_tet10: a cell, the physics, dim 3, 10 nodes and 1 components";
+static const uint8_t gs_str133[59] = "rigid_terms: the first call of a step assembles the tangent";
+static const uint8_t gs_str134[40] = "rows_start: no workers yet, and a matrix";
+static const uint8_t gs_str135[59] = "multiply: x and y have one entry for each row of the matrix";
+static const uint8_t gs_str136[50] = "rows_multiply: x and y have one entry for each row";
+static const uint8_t gs_str137[19] = "dot: a.len == b.len";
+static const uint8_t gs_str138[58] = "solve_system: a solve grows no array of the state (rule 3)";
+static const uint8_t gs_str139[79] = "multiply_rows: row_start has y.len + 1 entries, and col and val hold these rows";
+static const uint8_t gs_str140[81] = "multiply: row_start has y.len + 1 entries, col and val one size, x and y one size";
+static const uint8_t gs_str141[10] = "SKEIN_WARM";
+static const uint8_t gs_str142[7] = "amg.sig";
+static const uint8_t gs_str143[5] = "amg.n";
+static const uint8_t gs_str144[6] = "amg.rs";
+static const uint8_t gs_str145[7] = "amg.col";
+static const uint8_t gs_str146[7] = "amg.val";
+static const uint8_t gs_str147[7] = "amg.prs";
+static const uint8_t gs_str148[8] = "amg.pcol";
+static const uint8_t gs_str149[8] = "amg.pval";
+static const uint8_t gs_str150[8] = "amg.chol";
+static const uint8_t gs_str151[19] = "amg_keep: amg_setup";
+static const uint8_t gs_str152[1] = ".";
+static const uint8_t gs_str153[48] = "push_level: n + 1 row starts that end at col.len";
+static const uint8_t gs_str154[72] = "near_null_space: ncomp dofs and 3 coordinates for each node, in 2D or 3D";
+static const uint8_t gs_str155[38] = "thin_axis: 3 coordinates for each node";
+static const uint8_t gs_str156[79] = "amg_setup_modes: a CSR matrix with the dofs in blocks, and nb modes of each dof";
+static const uint8_t gs_str157[26] = "dot: a and b have one size";
+static const uint8_t gs_str158[22] = "spmm: two CSR matrices";
+static const uint8_t gs_str159[23] = "transpose: a CSR matrix";
+static const uint8_t gs_str160[59] = "amg_apply: amg_setup, and r and z of the size of its matrix";
+static const uint8_t gs_str161[2] = "  ";
+static const uint8_t gs_str162[1] = ",";
+static const uint8_t gs_str163[3] = "yes";
+static const uint8_t gs_str164[2] = "no";
+static const uint8_t gs_str165[34] = "save_state: a solution of each dof";
+static const uint8_t gs_str166[12] = ".state_sizes";
+static const uint8_t gs_str167[10] = ".state_law";
+static const uint8_t gs_str168[13] = ".state_coords";
+static const uint8_t gs_str169[11] = ".state_conn";
+static const uint8_t gs_str170[10] = ".state_sol";
+static const uint8_t gs_str171[38] = "load_magnitude: the arrays of the dofs";
+static const uint8_t gs_str172[11] = "equilibrium";
+static const uint8_t gs_str173[1] = " ";
+static const uint8_t gs_str174[7] = "  post,";
+static const uint8_t gs_str175[6] = ",pass,";
+static const uint8_t gs_str176[6] = ",fail,";
+static const uint8_t gs_str177[50] = "all_reaction: a physics and the arrays of the dofs";
+static const uint8_t gs_str178[48] = "total_load: a physics and the arrays of the dofs";
+static const uint8_t gs_str179[1] = "c";
+static const uint8_t gs_str180[52] = "add_node_force: a physics and the arrays of the dofs";
+static const uint8_t gs_str181[6] = "normal";
+static const uint8_t gs_str182[30] = "rigid_face: an elastic physics";
+static const uint8_t gs_str183[39] = "also_point: a mesh and at most 16 parts";
+static const uint8_t gs_str184[5] = "slide";
+static const uint8_t gs_str185[41] = ".skein/results/contact_cattaneo/slide.vtu";
+static const uint8_t gs_str186[38] = "write_vtu_file: a solution of each dof";
+static const uint8_t gs_str187[32] = "<DataArray type=\"Float64\" Name=\"";
+static const uint8_t gs_str188[22] = "\" NumberOfComponents=\"";
+static const uint8_t gs_str189[18] = "\" format=\"ascii\">\012";
+static const uint8_t gs_str190[13] = "</DataArray>\012";
+static const uint8_t gs_str191[25] = "skein run: cannot write '";
+static const uint8_t gs_str192[38] = "rigid_moment: a rigid face of the step";
+static const uint8_t gs_str193[44] = "rigid_moment: a face that is not on one line";
+static const uint8_t gs_str194[46] = "write_edge_vtu: an edge physics and a solution";
+static const uint8_t gs_str195[5] = "curl_";
+static const uint8_t gs_str196[5] = "_imag";
+static const uint8_t gs_str197[41] = "\" NumberOfComponents=\"3\" format=\"ascii\">\012";
+static const uint8_t gs_str198[114] = "<?xml version=\"1.0\"?>\012<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">\012<UnstructuredGrid>";
+static const uint8_t gs_str199[23] = "<Piece NumberOfPoints=\"";
+static const uint8_t gs_str200[17] = "\" NumberOfCells=\"";
+static const uint8_t gs_str201[3] = "\">\012";
+static const uint8_t gs_str202[74] = "<Points>\012<DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">\012";
+static const uint8_t gs_str203[31] = "</DataArray>\012</Points>\012<Cells>\012";
+static const uint8_t gs_str204[60] = "<DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\012";
+static const uint8_t gs_str205[68] = "</DataArray>\012<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\012";
+static const uint8_t gs_str206[66] = "</DataArray>\012<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\012";
+static const uint8_t gs_str207[34] = "</DataArray>\012</Cells>\012<PointData>\012";
+static const uint8_t gs_str208[29] = "barycentric: c < cell_count()";
+static const uint8_t gs_str209[61] = "cell_field: a field, 0 <= comp < 9 and a solution of each dof";
+static const uint8_t gs_str210[6] = "expect";
+static const uint8_t gs_str211[2] = ": ";
+static const uint8_t gs_str212[35] = "field_at: a field and 0 <= comp < 9";
+static const uint8_t gs_str213[46] = "cell_matrix: a cell with the nodes of its type";
+static const uint8_t gs_str214[26] = "hex8i_matrix: a hex8i cell";
+static const uint8_t gs_str215[43] = "hex27_stiffness: a hex27 cell with 27 nodes";
+static const uint8_t gs_str216[26] = "gauss_hex3: empty xi and w";
+static const uint8_t gs_str217[27] = "hex27_shape: empty n and dn";
+static const uint8_t gs_str218[23] = "shape_1d_ds: 0 <= a < 3";
+static const uint8_t gs_str219[53] = "cell_jacobian: a cell and 3 derivatives for each node";
+static const uint8_t gs_str220[33] = "cell_lame: a cell with a material";
+static const uint8_t gs_str221[20] = "shape_1d: 0 <= a < 3";
+static const uint8_t gs_str222[56] = "hex27_stiffness_0_0: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str223[56] = "hex27_stiffness_0_1: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str224[56] = "hex27_stiffness_0_2: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str225[56] = "hex27_stiffness_1_0: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str226[56] = "hex27_stiffness_1_1: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str227[56] = "hex27_stiffness_1_2: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str228[56] = "hex27_stiffness_2_0: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str229[56] = "hex27_stiffness_2_1: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str230[56] = "hex27_stiffness_2_2: grad.len == 81 && ke.len == 81 * 81";
+static const uint8_t gs_str231[41] = "hex8i_condense: a hex8i cell with 8 nodes";
+static const uint8_t gs_str232[37] = "hex8i_full: a hex8i cell with 8 nodes";
+static const uint8_t gs_str233[26] = "gauss_hex2: empty xi and w";
+static const uint8_t gs_str234[26] = "hex8_shape: empty n and dn";
+static const uint8_t gs_str235[50] = "mode_gradient: det != 0 and 9 entries of g from at";
+static const uint8_t gs_str236[51] = "hex8i_full_0_0: grad.len == 33 && ke.len == 33 * 33";
+static const uint8_t gs_str237[51] = "hex8i_full_0_1: grad.len == 33 && ke.len == 33 * 33";
+static const uint8_t gs_str238[51] = "hex8i_full_1_0: grad.len == 33 && ke.len == 33 * 33";
+static const uint8_t gs_str239[51] = "hex8i_full_1_1: grad.len == 33 && ke.len == 33 * 33";
+static const uint8_t gs_str240[2] = "x0";
+static const uint8_t gs_str241[2] = "x1";
+static const uint8_t gs_str242[2] = "y0";
+static const uint8_t gs_str243[2] = "y1";
+static const uint8_t gs_str244[2] = "z0";
+static const uint8_t gs_str245[2] = "z1";
+static const uint8_t gs_str246[2] = "r0";
+static const uint8_t gs_str247[2] = "r1";
+static const uint8_t gs_str248[2] = "t0";
+static const uint8_t gs_str249[2] = "t1";
+static const uint8_t gs_str250[13] = "box cg jacobi";
+static const uint8_t gs_str251[10] = "box cg amg";
+static const uint8_t gs_str252[18] = "box cg amg bending";
+static const uint8_t gs_str253[14] = "box gmres ilu0";
+static const uint8_t gs_str254[14] = "simplex cg amg";
+static const uint8_t gs_str255[22] = "simplex elastic cg amg";
+static const uint8_t gs_str256[24] = "simplex modal lobpcg amg";
+static const uint8_t gs_str257[27] = "simplex buckling lobpcg amg";
+static const uint8_t gs_str258[26] = "simplex central_difference";
+static const uint8_t gs_str259[12] = "lattice ldlt";
+static const uint8_t gs_str260[18] = "shell skyline ldlt";
+static const uint8_t gs_str261[23] = "simplex wave gmres ilu0";
+static const uint8_t gs_str262[22] = "flow newton gmres ilu0";
+static const uint8_t gs_str263[15] = "grid gmres ilu0";
+static const uint8_t gs_str264[11] = "grid ssprk3";
+static const uint8_t gs_str265[19] = "meshless skyline lu";
+static const uint8_t gs_str266[16] = "simplex mixed cg";
+static const uint8_t gs_str267[15] = "radiation dense";
+static const uint8_t gs_str268[16] = "q4 band cholesky";
+static const uint8_t gs_str269[2] = "cg";
+static const uint8_t gs_str270[6] = "jacobi";
+static const uint8_t gs_str271[4] = "tri3";
+static const uint8_t gs_str272[4] = "tri6";
+static const uint8_t gs_str273[4] = "tet4";
+static const uint8_t gs_str274[5] = "tet10";
+static const uint8_t gs_str275[4] = "hex8";
+static const uint8_t gs_str276[5] = "hex27";
+static const uint8_t gs_str277[11] = "quad4_shell";
+static const uint8_t gs_str278[5] = "beam2";
+static const uint8_t gs_str279[5] = "hex8i";
+static const uint8_t gs_str280[5] = "quad4";
+static const uint8_t gs_str281[53] = "</PointData>\012</Piece>\012</UnstructuredGrid>\012</VTKFile>\012";
 #pragma pack(pop)
 
 /* ---- data ---- */
@@ -1729,6 +1732,8 @@ typedef struct {
     double PI_g;
     double TAU_g;
     int64_t elements_MAX_NODES_g8;
+    uint8_t elements_hex_cells_g8;
+    a24_i64 elements_HEX_CORNERS_g8;
     a2_i64 elements_LINE_EDGES_g8;
     a6_i64 elements_TRI_EDGES_g8;
     a12_i64 elements_TET_EDGES_g8;
@@ -1736,6 +1741,7 @@ typedef struct {
     double elements_TET_B_g8;
     double elements_LINE_G_g8;
     a24_i64 elements_TET_FACES_g8;
+    a24_i64 elements_HEX_FACES_g8;
     int64_t mesher_BOX_g6;
     int64_t mesher_CYLINDER_g6;
     int64_t mesher_RECT_g6;
@@ -2130,6 +2136,14 @@ typedef struct {
     double elements_conductivity_g8;
     double elements_source_g8;
     a3_f64 elements_volume_force_g8;
+    double elements_curve_lo_g8;
+    double elements_curve_step_g8;
+    gs_rhdr elements_curve_k_g8;
+    gs_stack gs_gstk_elements_curve_k_g8;
+    double elements_initial_value_g8;
+    uint8_t elements_state_valid_g8;
+    uint8_t elements_keep_factor_g8;
+    uint8_t elements_factor_ready_g8;
     gs_rhdr elements_fixed_g8;
     gs_stack gs_gstk_elements_fixed_g8;
     gs_rhdr elements_prescribed_g8;
@@ -2148,6 +2162,7 @@ typedef struct {
     a10_f64 elements_shp_g8;
     a30_f64 elements_dref_g8;
     a30_f64 elements_grad_g8;
+    a9_f64 elements_jinv_g8;
     a900_f64 elements_ke_g8;
     a30_f64 elements_fe_g8;
     gs_rhdr elements_assembled_source_g8;
@@ -2156,6 +2171,9 @@ typedef struct {
     gs_rhdr elements_direct_path_g8;
     gs_stack gs_gstk_elements_direct_path_g8;
     int64_t elements_direct_vectors_g8;
+    uint8_t elements_incompatible_modes_g8;
+    int64_t elements_MODES_g8;
+    int64_t elements_NODE_DOFS_g8;
     l16_elements_Part_g8 elements_region_g8;
     l8_elements_Part_g8 elements_region_out_g8;
     int64_t elements_region_body_g8;
@@ -2165,6 +2183,14 @@ typedef struct {
     gs_stack gs_gstk_elements_film_facet_g8;
     gs_rhdr elements_film_h_g8;
     gs_stack gs_gstk_elements_film_h_g8;
+    gs_rhdr elements_amb_cell_g8;
+    gs_stack gs_gstk_elements_amb_cell_g8;
+    gs_rhdr elements_amb_facet_g8;
+    gs_stack gs_gstk_elements_amb_facet_g8;
+    gs_rhdr elements_amb_c_g8;
+    gs_stack gs_gstk_elements_amb_c_g8;
+    gs_rhdr elements_amb_t_g8;
+    gs_stack gs_gstk_elements_amb_t_g8;
     gs_rhdr elements_internal_g8;
     gs_stack gs_gstk_elements_internal_g8;
     int64_t elements_SUB_g8;
@@ -2185,6 +2211,9 @@ typedef struct {
     double elements_last_seconds_g8;
     double elements_CG_TOLERANCE_g8;
     double elements_cg_tolerance_g8;
+    int64_t elements_NL_STEPS_g8;
+    double elements_nl_tolerance_g8;
+    int64_t elements_nl_steps_g8;
     int64_t elements_MASS_g8;
     int64_t elements_GEOMETRIC_g8;
     double elements_EIGEN_TOLERANCE_g8;
@@ -2371,6 +2400,19 @@ typedef struct {
     uint8_t elements_newton_direct_g8;
     a6_f64 elements_pt_s_g8;
     a36_f64 elements_pt_d_g8;
+    double elements_capacity_g8;
+    gs_rhdr elements_th_k_g8;
+    gs_stack gs_gstk_elements_th_k_g8;
+    gs_rhdr elements_th_b_g8;
+    gs_stack gs_gstk_elements_th_b_g8;
+    gs_rhdr elements_th_load_g8;
+    gs_stack gs_gstk_elements_th_load_g8;
+    gs_rhdr elements_th_work_g8;
+    gs_stack gs_gstk_elements_th_work_g8;
+    double elements_th_start_g8;
+    int64_t elements_th_index_g8;
+    int64_t elements_th_steps_g8;
+    double elements_th_dt_g8;
     int64_t elements_X_g8;
     int64_t elements_Y_g8;
     int64_t elements_Z_g8;
@@ -2630,6 +2672,7 @@ GS_API uint8_t gs_trim_memory(void);
 /* ---- extern prototypes ---- */
 double round(double);
 double ceil(double);
+double floor(double);
 
 /* ---- prototypes ---- */
 static void main_g(int64_t gs_sp);
@@ -2707,16 +2750,17 @@ static int64_t elements_edge_node_g8(int64_t p0, int64_t p1, int64_t p2);
 static int64_t elements_cell_node_g8(int64_t p0, int64_t p1, int64_t gs_sp);
 static void elements_snap_edges_g8(int64_t p0, int64_t gs_sp);
 static void elements_boundary_edges_g8(int64_t p0, gs_stack *gs_dst0, dictionary_g_i64_i64 *gs_rl0, int64_t gs_sp);
+static int64_t elements_facet_count_g8(int64_t p0);
 static int64_t elements_facet_node_g8(int64_t p0, int64_t p1, int64_t p2);
-static void sort_g_187(void *p0_data, int64_t p0_len);
 static void sort_g_188(void *p0_data, int64_t p0_len);
-static int64_t sort_pivot_g_194(void *p0_data, int64_t p0_len);
+static void sort_g_189(void *p0_data, int64_t p0_len);
+static int64_t sort_pivot_g_195(void *p0_data, int64_t p0_len);
 static double elements_shape_gap_g8(int64_t p0, int64_t p1, int64_t gs_sp);
 static double elements_node_x_g8(int64_t p0, int64_t p1, int64_t gs_sp);
-static uint8_t elements_folded_g8(int64_t p0, int64_t p1, int64_t gs_sp);
 static int64_t elements_quad_count_g8(int64_t p0);
 static a3_f64 elements_quad_point_g8(int64_t p0, int64_t p1, double *gs_r1);
-static void elements_shape_g8_213(int64_t p0, int64_t p1, a3_f64 p2, a10_f64 * p3, a30_f64 * p4);
+static void elements_shape_g8_214(int64_t p0, int64_t p1, a3_f64 p2, a10_f64 * p3, a30_f64 * p4);
+static GS_NOINLINE void elements_cube_shape_g8_215(int64_t p0, a3_f64 p1, a10_f64 * p2, a30_f64 * p3);
 static double elements_bary_grad_g8(int64_t p0, int64_t p1);
 static double elements_cell_jacobian_g8(int64_t p0, a9_f64 * p1, int64_t gs_sp);
 static void elements_set_elastic_g8(double p0, double p1, int64_t p2, double p3, int64_t gs_sp);
@@ -2730,8 +2774,11 @@ static int64_t elements_add_slave_g8(double p0, double p1, double p2, int64_t gs
 static uint8_t elements_dofs_sized_g8(int64_t gs_sp);
 static GS_INLINE a3_f64 elements_ct_quad_point_g8(int64_t p0, double *gs_r1);
 static GS_INLINE a3_f64 elements_facet_at_g8(int64_t p0, int64_t p1, a3_f64 p2, a10_f64 * p3, a6_f64 * p4, double *gs_r1, int64_t gs_sp);
-static void elements_shape_g8_247(int64_t p0, int64_t p1, a3_f64 p2, a10_f64 * p3, a30_f64 * p4);
+static void elements_shape_g8_250(int64_t p0, int64_t p1, a3_f64 p2, a10_f64 * p3, a30_f64 * p4);
+static GS_NOINLINE void elements_cube_shape_g8_251(int64_t p0, a3_f64 p1, a10_f64 * p2, a30_f64 * p3);
 static a3_f64 elements_project_g8(int64_t p0, a3_f64 p1, double *gs_r1, a3_f64 *gs_r2, uint8_t *gs_r3, int64_t gs_sp);
+static void elements_shape_g8_254(int64_t p0, int64_t p1, a3_f64 p2, a10_f64 * p3, a30_f64 * p4);
+static GS_NOINLINE void elements_cube_shape_g8_255(int64_t p0, a3_f64 p1, a10_f64 * p2, a30_f64 * p3);
 static void elements_clear_bcs_g8(int64_t gs_sp);
 static void elements_fix_g8(int64_t p0, double p1, int64_t gs_sp);
 static uint8_t elements_solve_contact_g8(int64_t p0, int64_t gs_sp);
@@ -2740,17 +2787,17 @@ static void solvers_zeros_g7(gs_rhdr *p0_hdr, gs_stack *p0_stk, int64_t p1);
 static void elements_build_pattern_g8(int64_t gs_sp);
 static uint8_t elements_direct_setup_g8(int64_t gs_sp);
 static int64_t elements_cuthill_nodes_g8(int64_t p0, int64_t p1, gs_rhdr *p2_hdr, gs_stack *p2_stk, gs_rhdr *p3_hdr, gs_stack *p3_stk, int64_t gs_sp);
-static void sort_g_274(void *p0_data, int64_t p0_len, int64_t gs_sp);
+static void sort_g_280(void *p0_data, int64_t p0_len, int64_t gs_sp);
 static int64_t sort_run_g(void *p0_data, int64_t p0_len, int64_t gs_sp);
-static int64_t sort_pivot_g_277(void *p0_data, int64_t p0_len, int64_t gs_sp);
+static int64_t sort_pivot_g_283(void *p0_data, int64_t p0_len, int64_t gs_sp);
 static GS_NOINLINE int64_t sort_median3_g(void *p0_data, int64_t p0_len, int64_t p1, int64_t p2, int64_t p3, int64_t gs_sp);
 static void sort_heap_g(void *p0_data, int64_t p0_len, int64_t gs_sp);
 static void solvers_memory_check_g7(void *p0_data, int64_t p0_len, int64_t p1, int64_t p2, int64_t p3, int64_t p4, void *p5_data, int64_t p5_len, int64_t gs_sp);
 static double solvers_resident_bytes_g7(int64_t gs_sp);
 static double solvers_proc_kb_g7(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, int64_t gs_sp);
-static GS_INLINE int64_t parse_int_g_303(void *p0_data, int64_t p0_len, int64_t p1, uint8_t *gs_r1);
+static GS_INLINE int64_t parse_int_g_309(void *p0_data, int64_t p0_len, int64_t p1, uint8_t *gs_r1);
 static int64_t solvers_case_threads_g7(int64_t gs_sp);
-static int64_t parse_int_g_307(void *p0_data, int64_t p0_len, int64_t p1, uint8_t *gs_r1);
+static int64_t parse_int_g_313(void *p0_data, int64_t p0_len, int64_t p1, uint8_t *gs_r1);
 static double solvers_path_bytes_g7(solvers_MemoryPath_g7 p0, int64_t p1, int64_t p2, int64_t p3, int64_t p4, int64_t p5);
 static double solvers_free_bytes_g7(int64_t gs_sp);
 static sl_u8 trim_g(void *p0_data, int64_t p0_len);
@@ -2760,8 +2807,11 @@ static void elements_solid_assemble_g8(int64_t gs_sp);
 static void elements_solid_cell_g8(int64_t p0, void *p1_data, int64_t p1_len, uint8_t p2, int64_t gs_sp);
 static void elements_cell_terms_g8(int64_t p0, int64_t gs_sp);
 static void elements_cell_matrix_g8(int64_t p0, int64_t gs_sp);
-static void elements_elastic_tri3_g8(int64_t p0, int64_t gs_sp);
+static GS_NOINLINE void elements_elastic_hex8_g8(int64_t p0, int64_t gs_sp);
 static double elements_cell_geometry_g8(int64_t p0, a3_f64 p1, int64_t gs_sp);
+static GS_NOINLINE void elements_heat_hex8_g8(int64_t p0, int64_t gs_sp);
+static double elements_conductivity_at_g8(int64_t p0, int64_t gs_sp);
+static void elements_elastic_tri3_g8(int64_t p0, int64_t gs_sp);
 static void elements_elastic_tri6_g8(int64_t p0, int64_t gs_sp);
 static void elements_elastic_tet4_g8(int64_t p0, int64_t gs_sp);
 static void elements_elastic_tet10_0_0_g8(double p0, int64_t gs_sp);
@@ -2780,9 +2830,9 @@ static a3_f64 elements_point_traction_g8(int64_t p0, a3_f64 p1, a9_f64 * p2, int
 static uint8_t elements_cg_solve_g8(double p0, int64_t p1, uint8_t p2, int64_t gs_sp);
 static void elements_zeros_g8(int64_t p0, gs_stack *gs_dst0, int64_t *gs_rl0, int64_t gs_sp);
 static void solvers_rows_worker_g7(uint8_t *p0, int64_t gs_sp);
-static GS_NOINLINE void solvers_multiply_g7_386(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, void *p2_data, int64_t p2_len, void *p3_data, int64_t p3_len, void *p4_data, int64_t p4_len);
+static GS_NOINLINE void solvers_multiply_g7_399(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, void *p2_data, int64_t p2_len, void *p3_data, int64_t p3_len, void *p4_data, int64_t p4_len);
 static double elements_warm_scale_g8(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, int64_t gs_sp);
-static GS_NOINLINE void solvers_multiply_g7_392(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, void *p2_data, int64_t p2_len, void *p3_data, int64_t p3_len, void *p4_data, int64_t p4_len);
+static GS_NOINLINE void solvers_multiply_g7_405(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, void *p2_data, int64_t p2_len, void *p3_data, int64_t p3_len, void *p4_data, int64_t p4_len);
 static uint8_t elements_setup_preconditioner_g8(int64_t p0, int64_t gs_sp);
 static void solvers_warm_path_g7(int64_t p0, void *p1_data, int64_t p1_len, gs_stack *gs_dst0, int64_t *gs_rl0, int64_t gs_sp);
 static GS_INLINE uint8_t solvers_load_i64s_g7(void *p0_data, int64_t p0_len, gs_stack *gs_dst0, int64_t *gs_rl0, int64_t gs_sp);
@@ -2801,7 +2851,7 @@ static void solvers_tentative_g7(void *p0_data, int64_t p0_len, int64_t p1, int6
 static uint8_t solvers_factor_last_g7(int64_t gs_sp);
 static void solvers_amg_apply_g7(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, int64_t gs_sp);
 static void solvers_sweep_g7(int64_t p0, uint8_t p1, int64_t gs_sp);
-static GS_NOINLINE void solvers_multiply_g7_440(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, void *p2_data, int64_t p2_len, void *p3_data, int64_t p3_len, void *p4_data, int64_t p4_len);
+static GS_NOINLINE void solvers_multiply_g7_453(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, void *p2_data, int64_t p2_len, void *p3_data, int64_t p3_len, void *p4_data, int64_t p4_len);
 static void nonlinear_g(void *p0_data, int64_t p0_len, uint8_t p1, int64_t gs_sp);
 static uint8_t elements_write_state_g8(void *p0_data, int64_t p0_len, void *p1_data, int64_t p1_len, int64_t gs_sp);
 static void equilibrium_g(void *p0_data, int64_t p0_len, int64_t gs_sp);
@@ -2809,8 +2859,8 @@ static GS_INLINE double elements_total_reaction_g8(double *gs_r1, double *gs_r2,
 static GS_INLINE double elements_row_force_g8(int64_t p0, double *gs_r1, int64_t gs_sp);
 static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, int64_t gs_sp);
 static double elements_film_heat_g8(int64_t gs_sp);
-static void toon_g_470(gs_rhdr *p0_hdr, gs_stack *p0_stk, void *p1_data, int64_t p1_len);
-static void toon_g_471(gs_rhdr *p0_hdr, gs_stack *p0_stk, void *p1_data, int64_t p1_len);
+static void toon_g_483(gs_rhdr *p0_hdr, gs_stack *p0_stk, void *p1_data, int64_t p1_len);
+static void toon_g_484(gs_rhdr *p0_hdr, gs_stack *p0_stk, void *p1_data, int64_t p1_len);
 static void step_normal_g(int64_t gs_sp);
 static int64_t elements_set_rigid_g8(int64_t gs_sp);
 static uint8_t elements_point_g8(double p0, double p1, double p2, int64_t gs_sp);
@@ -2820,6 +2870,7 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *p0_data, int64_t p0_
 static void elements_vtu_mesh_g8(gs_rhdr *p0_hdr, gs_stack *p0_stk, int64_t gs_sp);
 static void elements_edge_nodal_g8(uint8_t p0, gs_stack *gs_dst0, int64_t *gs_rl0, int64_t gs_sp);
 static a4_f64 elements_barycentric_g8(int64_t p0, a3_f64 p1, int64_t gs_sp);
+static GS_NOINLINE a4_f64 elements_cube_coordinates_g8(int64_t p0, a3_f64 p1, int64_t gs_sp);
 static double elements_cell_field_g8(int64_t p0, a3_f64 p1, int64_t p2, int64_t p3, int64_t gs_sp);
 static void expect_g(void *p0_data, int64_t p0_len, double p1, double p2, double p3, uint8_t p4, void *p5_data, int64_t p5_len, void *p6_data, int64_t p6_len, int64_t gs_sp);
 static GS_INLINE double elements_stress_at_g8(int64_t p0, int64_t p1, double p2, double p3, double p4, uint8_t *gs_r1, int64_t gs_sp);
@@ -2921,116 +2972,116 @@ static void main_g(int64_t gs_sp) {
     sl_u8 t88;
     sl_u8 t96;
     sl_u8 t97;
-    sl_u8 t104;
+    sl_u8 t106;
     sl_u8 name_g_2;
-    gs_rhdr t106;
-    sl_u8 t111;
+    gs_rhdr t108;
     sl_u8 t113;
-    sl_u8 t114;
-    sl_u8 t120;
+    sl_u8 t115;
+    sl_u8 t116;
+    sl_u8 t122;
     sl_u8 name_g_3;
-    gs_rhdr t122;
-    sl_u8 t127;
+    gs_rhdr t124;
     sl_u8 t129;
-    sl_u8 t130;
+    sl_u8 t131;
     sl_u8 t132;
+    sl_u8 t134;
     sl_u8 what_g;
-    gs_rhdr t134;
-    sl_u8 t139;
+    gs_rhdr t136;
     sl_u8 t141;
-    sl_u8 t142;
-    sl_u8 t146;
+    sl_u8 t143;
+    sl_u8 t144;
+    sl_u8 t148;
     sl_u8 name_g_4;
-    gs_rhdr t148;
-    sl_u8 t153;
+    gs_rhdr t150;
     sl_u8 t155;
-    sl_u8 t156;
-    sl_u8 t159;
+    sl_u8 t157;
+    sl_u8 t158;
+    sl_u8 t161;
     sl_u8 name_g_5;
-    gs_rhdr t161;
-    sl_u8 t166;
+    gs_rhdr t163;
     sl_u8 t168;
-    sl_u8 t169;
     sl_u8 t170;
     sl_u8 t171;
+    sl_u8 t172;
     sl_u8 t173;
+    sl_u8 t175;
     sl_u8 dir_g;
-    sl_u8 t174;
+    sl_u8 t176;
     sl_u8 step_g;
-    gs_rhdr t178;
-    sl_u8 t183;
-    sl_u8 t186;
+    gs_rhdr t180;
+    sl_u8 t185;
     sl_u8 t188;
-    sl_u8 t189;
     sl_u8 t190;
-    sl_u8 t196;
+    sl_u8 t191;
+    sl_u8 t192;
+    sl_u8 t198;
     sl_u8 name_g_6;
-    gs_rhdr t198;
-    sl_u8 t203;
+    gs_rhdr t200;
     sl_u8 t205;
-    sl_u8 t206;
-    sl_u8 t212;
-    sl_u8 t213;
+    sl_u8 t207;
+    sl_u8 t208;
+    sl_u8 t214;
+    sl_u8 t215;
     gs_rhdr sum_g;
     gs_rhdr count_g;
     a4_f64 b_g;
-    a3_f64 t234;
-    a4_f64 t238;
-    a3_f64 t243;
-    sl_u8 t256;
+    a3_f64 t236;
+    a4_f64 t240;
+    a3_f64 t245;
+    sl_u8 t258;
     sl_u8 expr_g;
-    gs_rhdr t258;
-    sl_u8 t263;
+    gs_rhdr t260;
     sl_u8 t265;
-    sl_u8 t266;
     sl_u8 t267;
     sl_u8 t268;
-    sl_u8 t273;
-    sl_u8 t274;
+    sl_u8 t269;
+    sl_u8 t270;
     sl_u8 t275;
+    sl_u8 t276;
     sl_u8 t277;
+    sl_u8 t279;
     sl_u8 expr_g_2;
-    gs_rhdr t279;
-    sl_u8 t284;
+    gs_rhdr t281;
     sl_u8 t286;
-    sl_u8 t287;
     sl_u8 t288;
     sl_u8 t289;
-    sl_u8 t294;
-    sl_u8 t295;
+    sl_u8 t290;
+    sl_u8 t291;
     sl_u8 t296;
+    sl_u8 t297;
+    sl_u8 t298;
     gs_rhdr s_g;
-    sl_u8 t332;
+    sl_u8 t334;
     sl_u8 key_g;
     gs_rhdr s_g_2;
-    sl_u8 t334;
-    sl_u8 t335;
-    gs_rref t336;
-    gs_rref t337;
-    sl_u8 t341;
-    sl_u8 t348;
-    sl_u8 t349;
+    sl_u8 t336;
+    sl_u8 t337;
+    gs_rref t338;
+    gs_rref t339;
+    sl_u8 t343;
+    sl_u8 t350;
+    sl_u8 t351;
     {
-        uint8_t *t350 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t351 = GS_GL->mesher_shapes_g6.len;
-        uint8_t *t352 = (&GS_GL->gs_gstk_mesher_polygon_points_g6)->top;
-        int64_t t353 = GS_GL->mesher_polygon_points_g6.len;
-        t350 = (uint8_t *)((GS_GL->mesher_shapes_g6.base));
-        t351 = 0;
-        t352 = (uint8_t *)((GS_GL->mesher_polygon_points_g6.base));
+        uint8_t *t352 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t353 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t354 = (&GS_GL->gs_gstk_mesher_polygon_points_g6)->top;
+        int64_t t355 = GS_GL->mesher_polygon_points_g6.len;
+        t352 = (uint8_t *)((GS_GL->mesher_shapes_g6.base));
         t353 = 0;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t350;
-        GS_GL->mesher_shapes_g6.len = t351;
-        (&GS_GL->gs_gstk_mesher_polygon_points_g6)->top = t352;
-        GS_GL->mesher_polygon_points_g6.len = t353;
+        t354 = (uint8_t *)((GS_GL->mesher_polygon_points_g6.base));
+        t355 = 0;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t352;
+        GS_GL->mesher_shapes_g6.len = t353;
+        (&GS_GL->gs_gstk_mesher_polygon_points_g6)->top = t354;
+        GS_GL->mesher_polygon_points_g6.len = t355;
     }
     {
-        uint8_t *t354 = (&GS_GL->gs_gstk_mesher_targets_g6)->top;
-        int64_t t355 = GS_GL->mesher_targets_g6.len;
-        t354 = (uint8_t *)((GS_GL->mesher_targets_g6.base));
-        t355 = 0;
-        (&GS_GL->gs_gstk_mesher_targets_g6)->top = t354;
-        GS_GL->mesher_targets_g6.len = t355;
+        uint8_t *t356 = (&GS_GL->gs_gstk_mesher_targets_g6)->top;
+        int64_t t357 = GS_GL->mesher_targets_g6.len;
+        t356 = (uint8_t *)((GS_GL->mesher_targets_g6.base));
+        t357 = 0;
+        (&GS_GL->gs_gstk_mesher_targets_g6)->top = t356;
+        GS_GL->mesher_targets_g6.len = t357;
     }
     t2.e[0] = -20.0;
     t2.e[1] = -20.0;
@@ -3042,23 +3093,23 @@ static void main_g(int64_t gs_sp) {
     t2.e[7] = 0.0;
     p_g = t2;
     {
-        uint8_t *t356 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t357 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t358 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t359 = GS_GL->mesher_shapes_g6.len;
         t4.kind_g = 2;
         t4.a_g = -1;
         t4.b_g = -1;
         t4.p_g = p_g;
         t5 = t4;
-        mesher_Shape_g6 *t6 = (mesher_Shape_g6 *)t356;
-        *(mesher_Shape_g6 *)t356 = t5;
-        t356 += 88;
-        t357++;
-        (void)(gs_sub_i64((int64_t)(((t357))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t356;
-        GS_GL->mesher_shapes_g6.len = t357;
+        mesher_Shape_g6 *t6 = (mesher_Shape_g6 *)t358;
+        *(mesher_Shape_g6 *)t358 = t5;
+        t358 += 88;
+        t359++;
+        (void)(gs_sub_i64((int64_t)(((t359))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t358;
+        GS_GL->mesher_shapes_g6.len = t359;
         goto L3;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t356;
-        GS_GL->mesher_shapes_g6.len = t357;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t358;
+        GS_GL->mesher_shapes_g6.len = t359;
     }
     L3:;
     t7.e[0] = 0.0;
@@ -3071,23 +3122,23 @@ static void main_g(int64_t gs_sp) {
     t7.e[7] = 0.0;
     p_g_2 = t7;
     {
-        uint8_t *t358 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t359 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t360 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t361 = GS_GL->mesher_shapes_g6.len;
         t9.kind_g = 3;
         t9.a_g = -1;
         t9.b_g = -1;
         t9.p_g = p_g_2;
         t10 = t9;
-        mesher_Shape_g6 *t11 = (mesher_Shape_g6 *)t358;
-        *(mesher_Shape_g6 *)t358 = t10;
-        t358 += 88;
-        t359++;
-        (void)(gs_sub_i64((int64_t)(((t359))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t358;
-        GS_GL->mesher_shapes_g6.len = t359;
+        mesher_Shape_g6 *t11 = (mesher_Shape_g6 *)t360;
+        *(mesher_Shape_g6 *)t360 = t10;
+        t360 += 88;
+        t361++;
+        (void)(gs_sub_i64((int64_t)(((t361))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t360;
+        GS_GL->mesher_shapes_g6.len = t361;
         goto L8;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t358;
-        GS_GL->mesher_shapes_g6.len = t359;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t360;
+        GS_GL->mesher_shapes_g6.len = t361;
     }
     L8:;
     t12.e[0] = -12.0;
@@ -3100,23 +3151,23 @@ static void main_g(int64_t gs_sp) {
     t12.e[7] = 0.0;
     p_g_3 = t12;
     {
-        uint8_t *t360 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t361 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t362 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t363 = GS_GL->mesher_shapes_g6.len;
         t14.kind_g = 2;
         t14.a_g = -1;
         t14.b_g = -1;
         t14.p_g = p_g_3;
         t15 = t14;
-        mesher_Shape_g6 *t16 = (mesher_Shape_g6 *)t360;
-        *(mesher_Shape_g6 *)t360 = t15;
-        t360 += 88;
-        t361++;
-        (void)(gs_sub_i64((int64_t)(((t361))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t360;
-        GS_GL->mesher_shapes_g6.len = t361;
+        mesher_Shape_g6 *t16 = (mesher_Shape_g6 *)t362;
+        *(mesher_Shape_g6 *)t362 = t15;
+        t362 += 88;
+        t363++;
+        (void)(gs_sub_i64((int64_t)(((t363))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t362;
+        GS_GL->mesher_shapes_g6.len = t363;
         goto L13;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t360;
-        GS_GL->mesher_shapes_g6.len = t361;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t362;
+        GS_GL->mesher_shapes_g6.len = t363;
     }
     L13:;
     t17.e[0] = 0.0;
@@ -3129,23 +3180,23 @@ static void main_g(int64_t gs_sp) {
     t17.e[7] = 0.0;
     p_g_4 = t17;
     {
-        uint8_t *t362 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t363 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t364 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t365 = GS_GL->mesher_shapes_g6.len;
         t19.kind_g = 8;
         t19.a_g = 1;
         t19.b_g = 2;
         t19.p_g = p_g_4;
         t20 = t19;
-        mesher_Shape_g6 *t21 = (mesher_Shape_g6 *)t362;
-        *(mesher_Shape_g6 *)t362 = t20;
-        t362 += 88;
-        t363++;
-        (void)(gs_sub_i64((int64_t)(((t363))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t362;
-        GS_GL->mesher_shapes_g6.len = t363;
+        mesher_Shape_g6 *t21 = (mesher_Shape_g6 *)t364;
+        *(mesher_Shape_g6 *)t364 = t20;
+        t364 += 88;
+        t365++;
+        (void)(gs_sub_i64((int64_t)(((t365))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t364;
+        GS_GL->mesher_shapes_g6.len = t365;
         goto L18;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t362;
-        GS_GL->mesher_shapes_g6.len = t363;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t364;
+        GS_GL->mesher_shapes_g6.len = t365;
     }
     L18:;
     t22.e[0] = 0.0;
@@ -3158,23 +3209,23 @@ static void main_g(int64_t gs_sp) {
     t22.e[7] = 0.0;
     p_g_5 = t22;
     {
-        uint8_t *t364 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t365 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t366 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t367 = GS_GL->mesher_shapes_g6.len;
         t24.kind_g = 7;
         t24.a_g = 0;
         t24.b_g = 3;
         t24.p_g = p_g_5;
         t25 = t24;
-        mesher_Shape_g6 *t26 = (mesher_Shape_g6 *)t364;
-        *(mesher_Shape_g6 *)t364 = t25;
-        t364 += 88;
-        t365++;
-        (void)(gs_sub_i64((int64_t)(((t365))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t364;
-        GS_GL->mesher_shapes_g6.len = t365;
+        mesher_Shape_g6 *t26 = (mesher_Shape_g6 *)t366;
+        *(mesher_Shape_g6 *)t366 = t25;
+        t366 += 88;
+        t367++;
+        (void)(gs_sub_i64((int64_t)(((t367))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t366;
+        GS_GL->mesher_shapes_g6.len = t367;
         goto L23;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t364;
-        GS_GL->mesher_shapes_g6.len = t365;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t366;
+        GS_GL->mesher_shapes_g6.len = t367;
     }
     L23:;
     t27.e[0] = -20.0;
@@ -3187,23 +3238,23 @@ static void main_g(int64_t gs_sp) {
     t27.e[7] = 0.0;
     p_g_6 = t27;
     {
-        uint8_t *t366 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t367 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t368 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t369 = GS_GL->mesher_shapes_g6.len;
         t29.kind_g = 2;
         t29.a_g = -1;
         t29.b_g = -1;
         t29.p_g = p_g_6;
         t30 = t29;
-        mesher_Shape_g6 *t31 = (mesher_Shape_g6 *)t366;
-        *(mesher_Shape_g6 *)t366 = t30;
-        t366 += 88;
-        t367++;
-        (void)(gs_sub_i64((int64_t)(((t367))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t366;
-        GS_GL->mesher_shapes_g6.len = t367;
+        mesher_Shape_g6 *t31 = (mesher_Shape_g6 *)t368;
+        *(mesher_Shape_g6 *)t368 = t30;
+        t368 += 88;
+        t369++;
+        (void)(gs_sub_i64((int64_t)(((t369))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t368;
+        GS_GL->mesher_shapes_g6.len = t369;
         goto L28;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t366;
-        GS_GL->mesher_shapes_g6.len = t367;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t368;
+        GS_GL->mesher_shapes_g6.len = t369;
     }
     L28:;
     t32.e[0] = 0.0;
@@ -3216,23 +3267,23 @@ static void main_g(int64_t gs_sp) {
     t32.e[7] = 0.0;
     p_g_7 = t32;
     {
-        uint8_t *t368 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t369 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t370 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t371 = GS_GL->mesher_shapes_g6.len;
         t34.kind_g = 3;
         t34.a_g = -1;
         t34.b_g = -1;
         t34.p_g = p_g_7;
         t35 = t34;
-        mesher_Shape_g6 *t36 = (mesher_Shape_g6 *)t368;
-        *(mesher_Shape_g6 *)t368 = t35;
-        t368 += 88;
-        t369++;
-        (void)(gs_sub_i64((int64_t)(((t369))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t368;
-        GS_GL->mesher_shapes_g6.len = t369;
+        mesher_Shape_g6 *t36 = (mesher_Shape_g6 *)t370;
+        *(mesher_Shape_g6 *)t370 = t35;
+        t370 += 88;
+        t371++;
+        (void)(gs_sub_i64((int64_t)(((t371))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t370;
+        GS_GL->mesher_shapes_g6.len = t371;
         goto L33;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t368;
-        GS_GL->mesher_shapes_g6.len = t369;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t370;
+        GS_GL->mesher_shapes_g6.len = t371;
     }
     L33:;
     t37.e[0] = -12.0;
@@ -3245,23 +3296,23 @@ static void main_g(int64_t gs_sp) {
     t37.e[7] = 0.0;
     p_g_8 = t37;
     {
-        uint8_t *t370 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t371 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t372 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t373 = GS_GL->mesher_shapes_g6.len;
         t39.kind_g = 2;
         t39.a_g = -1;
         t39.b_g = -1;
         t39.p_g = p_g_8;
         t40 = t39;
-        mesher_Shape_g6 *t41 = (mesher_Shape_g6 *)t370;
-        *(mesher_Shape_g6 *)t370 = t40;
-        t370 += 88;
-        t371++;
-        (void)(gs_sub_i64((int64_t)(((t371))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t370;
-        GS_GL->mesher_shapes_g6.len = t371;
+        mesher_Shape_g6 *t41 = (mesher_Shape_g6 *)t372;
+        *(mesher_Shape_g6 *)t372 = t40;
+        t372 += 88;
+        t373++;
+        (void)(gs_sub_i64((int64_t)(((t373))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t372;
+        GS_GL->mesher_shapes_g6.len = t373;
         goto L38;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t370;
-        GS_GL->mesher_shapes_g6.len = t371;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t372;
+        GS_GL->mesher_shapes_g6.len = t373;
     }
     L38:;
     t42.e[0] = 0.0;
@@ -3274,23 +3325,23 @@ static void main_g(int64_t gs_sp) {
     t42.e[7] = 0.0;
     p_g_9 = t42;
     {
-        uint8_t *t372 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t373 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t374 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t375 = GS_GL->mesher_shapes_g6.len;
         t44.kind_g = 8;
         t44.a_g = 6;
         t44.b_g = 7;
         t44.p_g = p_g_9;
         t45 = t44;
-        mesher_Shape_g6 *t46 = (mesher_Shape_g6 *)t372;
-        *(mesher_Shape_g6 *)t372 = t45;
-        t372 += 88;
-        t373++;
-        (void)(gs_sub_i64((int64_t)(((t373))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t372;
-        GS_GL->mesher_shapes_g6.len = t373;
+        mesher_Shape_g6 *t46 = (mesher_Shape_g6 *)t374;
+        *(mesher_Shape_g6 *)t374 = t45;
+        t374 += 88;
+        t375++;
+        (void)(gs_sub_i64((int64_t)(((t375))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t374;
+        GS_GL->mesher_shapes_g6.len = t375;
         goto L43;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t372;
-        GS_GL->mesher_shapes_g6.len = t373;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t374;
+        GS_GL->mesher_shapes_g6.len = t375;
     }
     L43:;
     t47.e[0] = 0.0;
@@ -3303,23 +3354,23 @@ static void main_g(int64_t gs_sp) {
     t47.e[7] = 0.0;
     p_g_10 = t47;
     {
-        uint8_t *t374 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t375 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t376 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t377 = GS_GL->mesher_shapes_g6.len;
         t49.kind_g = 3;
         t49.a_g = -1;
         t49.b_g = -1;
         t49.p_g = p_g_10;
         t50 = t49;
-        mesher_Shape_g6 *t51 = (mesher_Shape_g6 *)t374;
-        *(mesher_Shape_g6 *)t374 = t50;
-        t374 += 88;
-        t375++;
-        (void)(gs_sub_i64((int64_t)(((t375))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t374;
-        GS_GL->mesher_shapes_g6.len = t375;
+        mesher_Shape_g6 *t51 = (mesher_Shape_g6 *)t376;
+        *(mesher_Shape_g6 *)t376 = t50;
+        t376 += 88;
+        t377++;
+        (void)(gs_sub_i64((int64_t)(((t377))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t376;
+        GS_GL->mesher_shapes_g6.len = t377;
         goto L48;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t374;
-        GS_GL->mesher_shapes_g6.len = t375;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t376;
+        GS_GL->mesher_shapes_g6.len = t377;
     }
     L48:;
     t52.e[0] = -1.4;
@@ -3332,23 +3383,23 @@ static void main_g(int64_t gs_sp) {
     t52.e[7] = 0.0;
     p_g_11 = t52;
     {
-        uint8_t *t376 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
-        int64_t t377 = GS_GL->mesher_shapes_g6.len;
+        uint8_t *t378 = (&GS_GL->gs_gstk_mesher_shapes_g6)->top;
+        int64_t t379 = GS_GL->mesher_shapes_g6.len;
         t54.kind_g = 2;
         t54.a_g = -1;
         t54.b_g = -1;
         t54.p_g = p_g_11;
         t55 = t54;
-        mesher_Shape_g6 *t56 = (mesher_Shape_g6 *)t376;
-        *(mesher_Shape_g6 *)t376 = t55;
-        t376 += 88;
-        t377++;
-        (void)(gs_sub_i64((int64_t)(((t377))), 1, gs_file0, 44));
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t376;
-        GS_GL->mesher_shapes_g6.len = t377;
+        mesher_Shape_g6 *t56 = (mesher_Shape_g6 *)t378;
+        *(mesher_Shape_g6 *)t378 = t55;
+        t378 += 88;
+        t379++;
+        (void)(gs_sub_i64((int64_t)(((t379))), 1, gs_file0, 44));
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t378;
+        GS_GL->mesher_shapes_g6.len = t379;
         goto L53;
-        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t376;
-        GS_GL->mesher_shapes_g6.len = t377;
+        (&GS_GL->gs_gstk_mesher_shapes_g6)->top = t378;
+        GS_GL->mesher_shapes_g6.len = t379;
     }
     L53:;
     {
@@ -3357,18 +3408,18 @@ static void main_g(int64_t gs_sp) {
             t59 = t58;
             gs_abort_msg(t59.data, t59.len, gs_file1, 41);
         }
-        uint8_t *t378 = (&GS_GL->gs_gstk_mesher_targets_g6)->top;
-        int64_t t379 = GS_GL->mesher_targets_g6.len;
+        uint8_t *t380 = (&GS_GL->gs_gstk_mesher_targets_g6)->top;
+        int64_t t381 = GS_GL->mesher_targets_g6.len;
         t60.g_g = 10;
         t60.size_g = 0.04;
         t60.surface_g = 0;
         t61 = t60;
-        mesher_Target_g6 *t62 = (mesher_Target_g6 *)t378;
-        *(mesher_Target_g6 *)t378 = t61;
-        t378 += 17;
-        t379++;
-        (&GS_GL->gs_gstk_mesher_targets_g6)->top = t378;
-        GS_GL->mesher_targets_g6.len = t379;
+        mesher_Target_g6 *t62 = (mesher_Target_g6 *)t380;
+        *(mesher_Target_g6 *)t380 = t61;
+        t380 += 17;
+        t381++;
+        (&GS_GL->gs_gstk_mesher_targets_g6)->top = t380;
+        GS_GL->mesher_targets_g6.len = t381;
     }
     t63.e[0] = 5;
     t63.e[1] = 8;
@@ -3403,30 +3454,30 @@ static void main_g(int64_t gs_sp) {
     name_g = t74;
     {
         if ((uint8_t)(!found_g)) {
-            uint8_t *t380 = GS(gs_sp + 0)->top;
-            t76.base = t380; t76.len = 0;
-            uint8_t *t77 = t380;
+            uint8_t *t382 = GS(gs_sp + 0)->top;
+            t76.base = t382; t76.len = 0;
+            uint8_t *t77 = t382;
             int64_t t78 = 0;
             int64_t t79 = 52;
-            gs_memcpy(t380, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t79);
-            t380 += t79;
+            gs_memcpy(t382, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t79);
+            t382 += t79;
             t78 += t79;
             t81 = name_g;
             int64_t t80 = t81.len;
-            gs_memcpy(t380, (const uint8_t *)(t81.data), (size_t)t80);
-            t380 += t80;
+            gs_memcpy(t382, (const uint8_t *)(t81.data), (size_t)t80);
+            t382 += t80;
             t78 += t80;
             int64_t t82 = 21;
-            gs_memcpy(t380, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t82);
-            t380 += t82;
+            gs_memcpy(t382, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t82);
+            t382 += t82;
             t78 += t82;
             t76.len = t78;
             t83.data = (uint8_t *)((t76.base)); t83.len = (t76.len);
             t84 = t83;
             gs_os_write_stderr(t84);
-            t380 = t76.base;
+            t382 = t76.base;
             gs_exit(3);
-            GS(gs_sp + 0)->top = t380;
+            GS(gs_sp + 0)->top = t382;
         }
     }
     int64_t t85;
@@ -3436,10 +3487,10 @@ static void main_g(int64_t gs_sp) {
             t88 = t87;
             gs_abort_msg(t88.data, t88.len, gs_file2, 69);
         }
-        uint8_t *t381 = (&GS_GL->gs_gstk_elements_ct_master_g8)->top;
-        int64_t t382 = GS_GL->elements_ct_master_g8.len;
-        t381 = (uint8_t *)((GS_GL->elements_ct_master_g8.base));
-        t382 = 0;
+        uint8_t *t383 = (&GS_GL->gs_gstk_elements_ct_master_g8)->top;
+        int64_t t384 = GS_GL->elements_ct_master_g8.len;
+        t383 = (uint8_t *)((GS_GL->elements_ct_master_g8.base));
+        t384 = 0;
         int64_t t89;
         if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) > (int64_t)(0))) {
             t89 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
@@ -3456,140 +3507,153 @@ static void main_g(int64_t gs_sp) {
                 {
                     t96.data = ((uint8_t *)gs_str6); t96.len = 24;
                     t97 = t96;
-                    gs_abort_msg(t97.data, t97.len, gs_file3, 121);
+                    gs_abort_msg(t97.data, t97.len, gs_file3, 180);
                 }
                 L95:;
-                t93 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 122);
+                int64_t d_g_2 = d_g;
+                {
+                    if (!(GS_GL->elements_hex_cells_g8)) goto L98;
+                    if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L98;
+                    goto L99;
+                }
+                L99:;
+                if (!((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3)))) goto L98;
+                {
+                    t93 = 6;
+                    goto L94;
+                }
+                L98:;
+                t93 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 182);
                 goto L94;
             }
             L94:;
-            int64_t t98 = t93;
-            for (int64_t f_g = 0; f_g < t98; f_g++) {
-                uint8_t t101 = elements_region_facet_g8(c_g, f_g, gs_sp + 0);
-                if (t101) {
-                    int64_t t102 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(4), c_g, gs_file2, 72)), f_g, gs_file2, 72);
-                    int64_t *t103 = (int64_t *)t381;
-                    *(int64_t *)t381 = t102;
-                    t381 += 8;
-                    t382++;
+            int64_t t100 = t93;
+            for (int64_t f_g = 0; f_g < t100; f_g++) {
+                uint8_t t103 = elements_region_facet_g8(c_g, f_g, gs_sp + 0);
+                if (t103) {
+                    int64_t t104 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(4), c_g, gs_file2, 72)), f_g, gs_file2, 72);
+                    int64_t *t105 = (int64_t *)t383;
+                    *(int64_t *)t383 = t104;
+                    t383 += 8;
+                    t384++;
                 }
             }
         }
-        t85 = ((t382));
-        (&GS_GL->gs_gstk_elements_ct_master_g8)->top = t381;
-        GS_GL->elements_ct_master_g8.len = t382;
+        t85 = ((t384));
+        (&GS_GL->gs_gstk_elements_ct_master_g8)->top = t383;
+        GS_GL->elements_ct_master_g8.len = t384;
         goto L86;
-        (&GS_GL->gs_gstk_elements_ct_master_g8)->top = t381;
-        GS_GL->elements_ct_master_g8.len = t382;
+        (&GS_GL->gs_gstk_elements_ct_master_g8)->top = t383;
+        GS_GL->elements_ct_master_g8.len = t384;
     }
     L86:;
     uint8_t found_g_2 = (uint8_t)((int64_t)((int64_t)(t85)) > (int64_t)(0));
-    t104.data = ((uint8_t *)gs_str2); t104.len = 10;
-    name_g_2 = t104;
+    t106.data = ((uint8_t *)gs_str2); t106.len = 10;
+    name_g_2 = t106;
     {
         if ((uint8_t)(!found_g_2)) {
-            uint8_t *t383 = GS(gs_sp + 0)->top;
-            t106.base = t383; t106.len = 0;
-            uint8_t *t107 = t383;
-            int64_t t108 = 0;
-            int64_t t109 = 52;
-            gs_memcpy(t383, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t109);
-            t383 += t109;
-            t108 += t109;
-            t111 = name_g_2;
-            int64_t t110 = t111.len;
-            gs_memcpy(t383, (const uint8_t *)(t111.data), (size_t)t110);
-            t383 += t110;
-            t108 += t110;
-            int64_t t112 = 21;
-            gs_memcpy(t383, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t112);
-            t383 += t112;
-            t108 += t112;
-            t106.len = t108;
-            t113.data = (uint8_t *)((t106.base)); t113.len = (t106.len);
-            t114 = t113;
-            gs_os_write_stderr(t114);
-            t383 = t106.base;
+            uint8_t *t385 = GS(gs_sp + 0)->top;
+            t108.base = t385; t108.len = 0;
+            uint8_t *t109 = t385;
+            int64_t t110 = 0;
+            int64_t t111 = 52;
+            gs_memcpy(t385, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t111);
+            t385 += t111;
+            t110 += t111;
+            t113 = name_g_2;
+            int64_t t112 = t113.len;
+            gs_memcpy(t385, (const uint8_t *)(t113.data), (size_t)t112);
+            t385 += t112;
+            t110 += t112;
+            int64_t t114 = 21;
+            gs_memcpy(t385, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t114);
+            t385 += t114;
+            t110 += t114;
+            t108.len = t110;
+            t115.data = (uint8_t *)((t108.base)); t115.len = (t108.len);
+            t116 = t115;
+            gs_os_write_stderr(t116);
+            t385 = t108.base;
             gs_exit(3);
-            GS(gs_sp + 0)->top = t383;
+            GS(gs_sp + 0)->top = t385;
         }
     }
-    uint8_t t115;
+    uint8_t t117;
     {
         GS_GL->elements_region_g8.len = 0;
         GS_GL->elements_region_out_g8.len = 0;
         GS_GL->elements_region_body_g8 = -1;
-        uint8_t t117 = elements_also_surface_g8(9, gs_sp + 0);
-        t115 = t117;
-        goto L116;
+        uint8_t t119 = elements_also_surface_g8(9, gs_sp + 0);
+        t117 = t119;
+        goto L118;
     }
-    L116:;
-    uint8_t t118 = (uint8_t)(t115 != 0);
-    if (t118) {
-        uint8_t t119 = elements_in_body_g8(1, gs_sp + 0);
-        t118 = (uint8_t)(t119 != 0);
+    L118:;
+    uint8_t t120 = (uint8_t)(t117 != 0);
+    if (t120) {
+        uint8_t t121 = elements_in_body_g8(1, gs_sp + 0);
+        t120 = (uint8_t)(t121 != 0);
     }
-    uint8_t found_g_3 = t118;
-    t120.data = ((uint8_t *)gs_str7); t120.len = 8;
-    name_g_3 = t120;
+    uint8_t found_g_3 = t120;
+    t122.data = ((uint8_t *)gs_str7); t122.len = 8;
+    name_g_3 = t122;
     {
         if ((uint8_t)(!found_g_3)) {
-            uint8_t *t384 = GS(gs_sp + 0)->top;
-            t122.base = t384; t122.len = 0;
-            uint8_t *t123 = t384;
-            int64_t t124 = 0;
-            int64_t t125 = 52;
-            gs_memcpy(t384, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t125);
-            t384 += t125;
-            t124 += t125;
-            t127 = name_g_3;
-            int64_t t126 = t127.len;
-            gs_memcpy(t384, (const uint8_t *)(t127.data), (size_t)t126);
-            t384 += t126;
-            t124 += t126;
-            int64_t t128 = 21;
-            gs_memcpy(t384, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t128);
-            t384 += t128;
-            t124 += t128;
-            t122.len = t124;
-            t129.data = (uint8_t *)((t122.base)); t129.len = (t122.len);
-            t130 = t129;
-            gs_os_write_stderr(t130);
-            t384 = t122.base;
+            uint8_t *t386 = GS(gs_sp + 0)->top;
+            t124.base = t386; t124.len = 0;
+            uint8_t *t125 = t386;
+            int64_t t126 = 0;
+            int64_t t127 = 52;
+            gs_memcpy(t386, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t127);
+            t386 += t127;
+            t126 += t127;
+            t129 = name_g_3;
+            int64_t t128 = t129.len;
+            gs_memcpy(t386, (const uint8_t *)(t129.data), (size_t)t128);
+            t386 += t128;
+            t126 += t128;
+            int64_t t130 = 21;
+            gs_memcpy(t386, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t130);
+            t386 += t130;
+            t126 += t130;
+            t124.len = t126;
+            t131.data = (uint8_t *)((t124.base)); t131.len = (t124.len);
+            t132 = t131;
+            gs_os_write_stderr(t132);
+            t386 = t124.base;
             gs_exit(3);
-            GS(gs_sp + 0)->top = t384;
+            GS(gs_sp + 0)->top = t386;
         }
     }
-    int64_t t131 = elements_add_slave_g8(10000000.0, 10000000.0, 0.3, gs_sp + 0);
-    uint8_t found_g_4 = (uint8_t)((int64_t)((int64_t)(t131)) > (int64_t)(0));
-    t132.data = ((uint8_t *)gs_str8); t132.len = 13;
-    what_g = t132;
+    int64_t t133 = elements_add_slave_g8(10000000.0, 10000000.0, 0.3, gs_sp + 0);
+    uint8_t found_g_4 = (uint8_t)((int64_t)((int64_t)(t133)) > (int64_t)(0));
+    t134.data = ((uint8_t *)gs_str8); t134.len = 13;
+    what_g = t134;
     {
         if ((uint8_t)(!found_g_4)) {
-            uint8_t *t385 = GS(gs_sp + 0)->top;
-            t134.base = t385; t134.len = 0;
-            uint8_t *t135 = t385;
-            int64_t t136 = 0;
-            int64_t t137 = 40;
-            gs_memcpy(t385, (const uint8_t *)(((uint8_t *)gs_str9)), (size_t)t137);
-            t385 += t137;
-            t136 += t137;
-            t139 = what_g;
-            int64_t t138 = t139.len;
-            gs_memcpy(t385, (const uint8_t *)(t139.data), (size_t)t138);
-            t385 += t138;
-            t136 += t138;
-            int64_t t140 = 21;
-            gs_memcpy(t385, (const uint8_t *)(((uint8_t *)gs_str10)), (size_t)t140);
-            t385 += t140;
-            t136 += t140;
-            t134.len = t136;
-            t141.data = (uint8_t *)((t134.base)); t141.len = (t134.len);
-            t142 = t141;
-            gs_os_write_stderr(t142);
-            t385 = t134.base;
+            uint8_t *t387 = GS(gs_sp + 0)->top;
+            t136.base = t387; t136.len = 0;
+            uint8_t *t137 = t387;
+            int64_t t138 = 0;
+            int64_t t139 = 40;
+            gs_memcpy(t387, (const uint8_t *)(((uint8_t *)gs_str9)), (size_t)t139);
+            t387 += t139;
+            t138 += t139;
+            t141 = what_g;
+            int64_t t140 = t141.len;
+            gs_memcpy(t387, (const uint8_t *)(t141.data), (size_t)t140);
+            t387 += t140;
+            t138 += t140;
+            int64_t t142 = 21;
+            gs_memcpy(t387, (const uint8_t *)(((uint8_t *)gs_str10)), (size_t)t142);
+            t387 += t142;
+            t138 += t142;
+            t136.len = t138;
+            t143.data = (uint8_t *)((t136.base)); t143.len = (t136.len);
+            t144 = t143;
+            gs_os_write_stderr(t144);
+            t387 = t136.base;
             GS_GL->failed_g = 1;
-            GS(gs_sp + 0)->top = t385;
+            GS(gs_sp + 0)->top = t387;
         }
     }
     {
@@ -3599,39 +3663,39 @@ static void main_g(int64_t gs_sp) {
             GS_GL->elements_region_g8.len = 0;
             GS_GL->elements_region_out_g8.len = 0;
             GS_GL->elements_region_body_g8 = -1;
-            uint8_t t145 = elements_also_plane_g8(1, -20.0, gs_sp + 0);
-            found_g_5 = t145;
-            goto L144;
+            uint8_t t147 = elements_also_plane_g8(1, -20.0, gs_sp + 0);
+            found_g_5 = t147;
+            goto L146;
         }
-        L144:;
-        t146.data = ((uint8_t *)gs_str11); t146.len = 6;
-        name_g_4 = t146;
+        L146:;
+        t148.data = ((uint8_t *)gs_str11); t148.len = 6;
+        name_g_4 = t148;
         {
             if ((uint8_t)(!found_g_5)) {
-                uint8_t *t386 = GS(gs_sp + 0)->top;
-                t148.base = t386; t148.len = 0;
-                uint8_t *t149 = t386;
-                int64_t t150 = 0;
-                int64_t t151 = 52;
-                gs_memcpy(t386, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t151);
-                t386 += t151;
-                t150 += t151;
-                t153 = name_g_4;
-                int64_t t152 = t153.len;
-                gs_memcpy(t386, (const uint8_t *)(t153.data), (size_t)t152);
-                t386 += t152;
-                t150 += t152;
-                int64_t t154 = 21;
-                gs_memcpy(t386, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t154);
-                t386 += t154;
-                t150 += t154;
-                t148.len = t150;
-                t155.data = (uint8_t *)((t148.base)); t155.len = (t148.len);
-                t156 = t155;
-                gs_os_write_stderr(t156);
-                t386 = t148.base;
+                uint8_t *t388 = GS(gs_sp + 0)->top;
+                t150.base = t388; t150.len = 0;
+                uint8_t *t151 = t388;
+                int64_t t152 = 0;
+                int64_t t153 = 52;
+                gs_memcpy(t388, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t153);
+                t388 += t153;
+                t152 += t153;
+                t155 = name_g_4;
+                int64_t t154 = t155.len;
+                gs_memcpy(t388, (const uint8_t *)(t155.data), (size_t)t154);
+                t388 += t154;
+                t152 += t154;
+                int64_t t156 = 21;
+                gs_memcpy(t388, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t156);
+                t388 += t156;
+                t152 += t156;
+                t150.len = t152;
+                t157.data = (uint8_t *)((t150.base)); t157.len = (t150.len);
+                t158 = t157;
+                gs_os_write_stderr(t158);
+                t388 = t150.base;
                 gs_exit(3);
-                GS(gs_sp + 0)->top = t386;
+                GS(gs_sp + 0)->top = t388;
             }
         }
         elements_fix_g8(0, 0.0, gs_sp + 0);
@@ -3641,503 +3705,503 @@ static void main_g(int64_t gs_sp) {
             GS_GL->elements_region_g8.len = 0;
             GS_GL->elements_region_out_g8.len = 0;
             GS_GL->elements_region_body_g8 = -1;
-            uint8_t t158 = elements_also_plane_g8(1, 20.0, gs_sp + 0);
-            found_g_6 = t158;
-            goto L157;
+            uint8_t t160 = elements_also_plane_g8(1, 20.0, gs_sp + 0);
+            found_g_6 = t160;
+            goto L159;
         }
-        L157:;
-        t159.data = ((uint8_t *)gs_str12); t159.len = 3;
-        name_g_5 = t159;
+        L159:;
+        t161.data = ((uint8_t *)gs_str12); t161.len = 3;
+        name_g_5 = t161;
         {
             if ((uint8_t)(!found_g_6)) {
-                uint8_t *t387 = GS(gs_sp + 0)->top;
-                t161.base = t387; t161.len = 0;
-                uint8_t *t162 = t387;
-                int64_t t163 = 0;
-                int64_t t164 = 52;
-                gs_memcpy(t387, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t164);
-                t387 += t164;
-                t163 += t164;
-                t166 = name_g_5;
-                int64_t t165 = t166.len;
-                gs_memcpy(t387, (const uint8_t *)(t166.data), (size_t)t165);
-                t387 += t165;
-                t163 += t165;
-                int64_t t167 = 21;
-                gs_memcpy(t387, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t167);
-                t387 += t167;
-                t163 += t167;
-                t161.len = t163;
-                t168.data = (uint8_t *)((t161.base)); t168.len = (t161.len);
-                t169 = t168;
-                gs_os_write_stderr(t169);
-                t387 = t161.base;
-                gs_exit(3);
-                GS(gs_sp + 0)->top = t387;
-            }
-        }
-        elements_fix_g8(0, 0.0, gs_sp + 0);
-        elements_fix_g8(1, -0.02, gs_sp + 0);
-        t170.data = ((uint8_t *)gs_str13); t170.len = 5;
-        t171 = t170;
-        uint8_t t172 = elements_solve_contact_g8(1, gs_sp + 0);
-        nonlinear_g(t171.data, t171.len, t172, gs_sp + 0);
-        t173.data = ((uint8_t *)gs_str14); t173.len = 31;
-        dir_g = t173;
-        t174.data = ((uint8_t *)gs_str13); t174.len = 5;
-        step_g = t174;
-        {
-            if (!(GS_GL->converged_g)) goto L176;
-            uint8_t t177 = elements_write_state_g8(dir_g.data, dir_g.len, step_g.data, step_g.len, gs_sp + 0);
-            if (t177) goto L176;
-            {
-                uint8_t *t388 = GS(gs_sp + 0)->top;
-                t178.base = t388; t178.len = 0;
-                uint8_t *t179 = t388;
-                int64_t t180 = 0;
-                int64_t t181 = 43;
-                gs_memcpy(t388, (const uint8_t *)(((uint8_t *)gs_str15)), (size_t)t181);
-                t388 += t181;
-                t180 += t181;
-                t183 = step_g;
-                int64_t t182 = t183.len;
-                gs_memcpy(t388, (const uint8_t *)(t183.data), (size_t)t182);
-                t388 += t182;
-                t180 += t182;
-                int64_t t184 = 6;
-                gs_memcpy(t388, (const uint8_t *)(((uint8_t *)gs_str16)), (size_t)t184);
-                t388 += t184;
-                t180 += t184;
-                t186 = dir_g;
-                int64_t t185 = t186.len;
-                gs_memcpy(t388, (const uint8_t *)(t186.data), (size_t)t185);
-                t388 += t185;
-                t180 += t185;
-                int64_t t187 = 2;
-                gs_memcpy(t388, (const uint8_t *)(((uint8_t *)gs_str17)), (size_t)t187);
-                t388 += t187;
-                t180 += t187;
-                t178.len = t180;
-                t188.data = (uint8_t *)((t178.base)); t188.len = (t178.len);
-                t189 = t188;
-                gs_os_write_stderr(t189);
-                t388 = t178.base;
-                GS_GL->failed_g = 1;
-                GS(gs_sp + 0)->top = t388;
-            }
-            L176:;
-        }
-        t190.data = ((uint8_t *)gs_str18); t190.len = 1;
-        equilibrium_g(t190.data, t190.len, gs_sp + 0);
-    }
-    step_normal_g(gs_sp + 0);
-    step_slide_g(gs_sp + 0);
-    {
-        uint8_t t191;
-        {
-            GS_GL->elements_region_g8.len = 0;
-            GS_GL->elements_region_out_g8.len = 0;
-            GS_GL->elements_region_body_g8 = -1;
-            uint8_t t193 = elements_also_plane_g8(1, 0.0, gs_sp + 0);
-            t191 = t193;
-            goto L192;
-        }
-        L192:;
-        uint8_t t194 = (uint8_t)(t191 != 0);
-        if (t194) {
-            uint8_t t195 = elements_in_body_g8(0, gs_sp + 0);
-            t194 = (uint8_t)(t195 != 0);
-        }
-        uint8_t found_g_7 = t194;
-        t196.data = ((uint8_t *)gs_str2); t196.len = 10;
-        name_g_6 = t196;
-        {
-            if ((uint8_t)(!found_g_7)) {
                 uint8_t *t389 = GS(gs_sp + 0)->top;
-                t198.base = t389; t198.len = 0;
-                uint8_t *t199 = t389;
-                int64_t t200 = 0;
-                int64_t t201 = 52;
-                gs_memcpy(t389, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t201);
-                t389 += t201;
-                t200 += t201;
-                t203 = name_g_6;
-                int64_t t202 = t203.len;
-                gs_memcpy(t389, (const uint8_t *)(t203.data), (size_t)t202);
-                t389 += t202;
-                t200 += t202;
-                int64_t t204 = 21;
-                gs_memcpy(t389, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t204);
-                t389 += t204;
-                t200 += t204;
-                t198.len = t200;
-                t205.data = (uint8_t *)((t198.base)); t205.len = (t198.len);
-                t206 = t205;
-                gs_os_write_stderr(t206);
-                t389 = t198.base;
+                t163.base = t389; t163.len = 0;
+                uint8_t *t164 = t389;
+                int64_t t165 = 0;
+                int64_t t166 = 52;
+                gs_memcpy(t389, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t166);
+                t389 += t166;
+                t165 += t166;
+                t168 = name_g_5;
+                int64_t t167 = t168.len;
+                gs_memcpy(t389, (const uint8_t *)(t168.data), (size_t)t167);
+                t389 += t167;
+                t165 += t167;
+                int64_t t169 = 21;
+                gs_memcpy(t389, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t169);
+                t389 += t169;
+                t165 += t169;
+                t163.len = t165;
+                t170.data = (uint8_t *)((t163.base)); t170.len = (t163.len);
+                t171 = t170;
+                gs_os_write_stderr(t171);
+                t389 = t163.base;
                 gs_exit(3);
                 GS(gs_sp + 0)->top = t389;
             }
         }
+        elements_fix_g8(0, 0.0, gs_sp + 0);
+        elements_fix_g8(1, -0.02, gs_sp + 0);
+        t172.data = ((uint8_t *)gs_str13); t172.len = 5;
+        t173 = t172;
+        uint8_t t174 = elements_solve_contact_g8(1, gs_sp + 0);
+        nonlinear_g(t173.data, t173.len, t174, gs_sp + 0);
+        t175.data = ((uint8_t *)gs_str14); t175.len = 31;
+        dir_g = t175;
+        t176.data = ((uint8_t *)gs_str13); t176.len = 5;
+        step_g = t176;
+        {
+            if (!(GS_GL->converged_g)) goto L178;
+            uint8_t t179 = elements_write_state_g8(dir_g.data, dir_g.len, step_g.data, step_g.len, gs_sp + 0);
+            if (t179) goto L178;
+            {
+                uint8_t *t390 = GS(gs_sp + 0)->top;
+                t180.base = t390; t180.len = 0;
+                uint8_t *t181 = t390;
+                int64_t t182 = 0;
+                int64_t t183 = 43;
+                gs_memcpy(t390, (const uint8_t *)(((uint8_t *)gs_str15)), (size_t)t183);
+                t390 += t183;
+                t182 += t183;
+                t185 = step_g;
+                int64_t t184 = t185.len;
+                gs_memcpy(t390, (const uint8_t *)(t185.data), (size_t)t184);
+                t390 += t184;
+                t182 += t184;
+                int64_t t186 = 6;
+                gs_memcpy(t390, (const uint8_t *)(((uint8_t *)gs_str16)), (size_t)t186);
+                t390 += t186;
+                t182 += t186;
+                t188 = dir_g;
+                int64_t t187 = t188.len;
+                gs_memcpy(t390, (const uint8_t *)(t188.data), (size_t)t187);
+                t390 += t187;
+                t182 += t187;
+                int64_t t189 = 2;
+                gs_memcpy(t390, (const uint8_t *)(((uint8_t *)gs_str17)), (size_t)t189);
+                t390 += t189;
+                t182 += t189;
+                t180.len = t182;
+                t190.data = (uint8_t *)((t180.base)); t190.len = (t180.len);
+                t191 = t190;
+                gs_os_write_stderr(t191);
+                t390 = t180.base;
+                GS_GL->failed_g = 1;
+                GS(gs_sp + 0)->top = t390;
+            }
+            L178:;
+        }
+        t192.data = ((uint8_t *)gs_str18); t192.len = 1;
+        equilibrium_g(t192.data, t192.len, gs_sp + 0);
+    }
+    step_normal_g(gs_sp + 0);
+    step_slide_g(gs_sp + 0);
+    {
+        uint8_t t193;
+        {
+            GS_GL->elements_region_g8.len = 0;
+            GS_GL->elements_region_out_g8.len = 0;
+            GS_GL->elements_region_body_g8 = -1;
+            uint8_t t195 = elements_also_plane_g8(1, 0.0, gs_sp + 0);
+            t193 = t195;
+            goto L194;
+        }
+        L194:;
+        uint8_t t196 = (uint8_t)(t193 != 0);
+        if (t196) {
+            uint8_t t197 = elements_in_body_g8(0, gs_sp + 0);
+            t196 = (uint8_t)(t197 != 0);
+        }
+        uint8_t found_g_7 = t196;
+        t198.data = ((uint8_t *)gs_str2); t198.len = 10;
+        name_g_6 = t198;
+        {
+            if ((uint8_t)(!found_g_7)) {
+                uint8_t *t391 = GS(gs_sp + 0)->top;
+                t200.base = t391; t200.len = 0;
+                uint8_t *t201 = t391;
+                int64_t t202 = 0;
+                int64_t t203 = 52;
+                gs_memcpy(t391, (const uint8_t *)(((uint8_t *)gs_str3)), (size_t)t203);
+                t391 += t203;
+                t202 += t203;
+                t205 = name_g_6;
+                int64_t t204 = t205.len;
+                gs_memcpy(t391, (const uint8_t *)(t205.data), (size_t)t204);
+                t391 += t204;
+                t202 += t204;
+                int64_t t206 = 21;
+                gs_memcpy(t391, (const uint8_t *)(((uint8_t *)gs_str4)), (size_t)t206);
+                t391 += t206;
+                t202 += t206;
+                t200.len = t202;
+                t207.data = (uint8_t *)((t200.base)); t207.len = (t200.len);
+                t208 = t207;
+                gs_os_write_stderr(t208);
+                t391 = t200.base;
+                gs_exit(3);
+                GS(gs_sp + 0)->top = t391;
+            }
+        }
         double m_g;
         {
-            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0)))) goto L209;
-            int64_t t210 = ((GS_GL->elements_sol_g8.len));
-            int64_t t211 = elements_dof_total_g8(gs_sp + 0);
-            if ((uint8_t)((int64_t)(t210) == (int64_t)(t211))) goto L208;
-            L209:;
+            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0)))) goto L211;
+            int64_t t212 = ((GS_GL->elements_sol_g8.len));
+            int64_t t213 = elements_dof_total_g8(gs_sp + 0);
+            if ((uint8_t)((int64_t)(t212) == (int64_t)(t213))) goto L210;
+            L211:;
             {
-                t212.data = ((uint8_t *)gs_str19); t212.len = 65;
-                t213 = t212;
-                gs_abort_msg(t213.data, t213.len, gs_file4, 151);
+                t214.data = ((uint8_t *)gs_str19); t214.len = 65;
+                t215 = t214;
+                gs_abort_msg(t215.data, t215.len, gs_file4, 184);
             }
-            L208:;
+            L210:;
             sum_g.base = GS(gs_sp + 0)->top; sum_g.len = 0;
             sum_g.len = 0;
             count_g.base = GS(gs_sp + 1)->top; count_g.len = 0;
             count_g.len = 0;
-            int64_t t214 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
-            uint8_t *t390 = GS(gs_sp + 0)->top;
-            uint8_t *t391 = GS(gs_sp + 1)->top;
-            for (int64_t n_g = 0; n_g < t214; n_g++) {
-                double t217 = 0.0;
-                double *t218 = (double *)t390;
-                *(double *)t390 = t217;
-                t390 += 8;
-                sum_g.len++;
+            int64_t t216 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
+            uint8_t *t392 = GS(gs_sp + 0)->top;
+            uint8_t *t393 = GS(gs_sp + 1)->top;
+            for (int64_t n_g = 0; n_g < t216; n_g++) {
                 double t219 = 0.0;
-                double *t220 = (double *)t391;
-                *(double *)t391 = t219;
-                t391 += 8;
+                double *t220 = (double *)t392;
+                *(double *)t392 = t219;
+                t392 += 8;
+                sum_g.len++;
+                double t221 = 0.0;
+                double *t222 = (double *)t393;
+                *(double *)t393 = t221;
+                t393 += 8;
                 count_g.len++;
             }
-            GS(gs_sp + 0)->top = t390;
-            GS(gs_sp + 1)->top = t391;
-            int64_t t221;
+            GS(gs_sp + 0)->top = t392;
+            GS(gs_sp + 1)->top = t393;
+            int64_t t223;
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) > (int64_t)(0))) {
-                t221 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
+                t223 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
             } else {
-                t221 = 0;
+                t223 = 0;
             }
-            int64_t t222 = t221;
-            for (int64_t c_g_2 = 0; c_g_2 < t222; c_g_2++) {
+            int64_t t224 = t223;
+            for (int64_t c_g_2 = 0; c_g_2 < t224; c_g_2++) {
                 int64_t c_g_3 = c_g_2;
                 {
-                    if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_dead_g8.len)))) == (int64_t)(0))) goto L225;
-                    int64_t t227 = c_g_3;
-                    if ((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_dead_g8.base) + GS_IDX((int64_t)(t227), (GS_GL->elements_dead_g8.len), gs_file5, 78) * 1))))) == (uint8_t)(0))) goto L225;
+                    if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_dead_g8.len)))) == (int64_t)(0))) goto L227;
+                    int64_t t229 = c_g_3;
+                    if ((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_dead_g8.base) + GS_IDX((int64_t)(t229), (GS_GL->elements_dead_g8.len), gs_file5, 78) * 1))))) == (uint8_t)(0))) goto L227;
+                    goto L228;
+                }
+                L228:;
+                {
                     goto L226;
                 }
-                L226:;
-                {
-                    goto L224;
-                }
-                L225:;
-                int64_t t228 = GS_GL->elements_per_cell_g8;
-                for (int64_t l_g = 0; l_g < t228; l_g++) {
+                L227:;
+                int64_t t230 = GS_GL->elements_per_cell_g8;
+                for (int64_t l_g = 0; l_g < t230; l_g++) {
                     int64_t n_g_2;
-                    int64_t t231 = elements_cell_node_g8(c_g_2, l_g, gs_sp + 2);
-                    n_g_2 = t231;
-                    uint8_t t232 = elements_on_region_g8(n_g_2, gs_sp + 2);
-                    if ((uint8_t)(!t232)) {
-                        goto L230;
+                    int64_t t233 = elements_cell_node_g8(c_g_2, l_g, gs_sp + 2);
+                    n_g_2 = t233;
+                    uint8_t t234 = elements_on_region_g8(n_g_2, gs_sp + 2);
+                    if ((uint8_t)(!t234)) {
+                        goto L232;
                     }
-                    int64_t t233 = c_g_2;
-                    double t235 = elements_node_x_g8(n_g_2, 0, gs_sp + 2);
-                    t234.e[0] = t235;
-                    double t236 = elements_node_x_g8(n_g_2, 1, gs_sp + 2);
-                    t234.e[1] = t236;
-                    double t237 = elements_node_x_g8(n_g_2, 2, gs_sp + 2);
-                    t234.e[2] = t237;
-                    t238 = elements_barycentric_g8(t233, t234, gs_sp + 2);
-                    b_g = t238;
-                    int64_t t239 = n_g_2;
-                    double *t240 = &((((double *)((sum_g.base)))[GS_IDX((int64_t)(t239), (sum_g.len), gs_file4, 164)]));
-                    double t241 = (*t240);
-                    double t242 = -1.0;
-                    t243.e[0] = b_g.e[1];
-                    t243.e[1] = b_g.e[2];
-                    t243.e[2] = b_g.e[3];
-                    double t244 = elements_cell_field_g8(c_g_2, t243, 1, 4, gs_sp + 2);
-                    (*t240) = (t241 + (((double)(t242) * (double)(t244))));
-                    int64_t t245 = n_g_2;
-                    double *t246 = &((((double *)((count_g.base)))[t245]));
-                    (*t246) = ((*t246) + (1.0));
-                    L230:;
+                    int64_t t235 = c_g_2;
+                    double t237 = elements_node_x_g8(n_g_2, 0, gs_sp + 2);
+                    t236.e[0] = t237;
+                    double t238 = elements_node_x_g8(n_g_2, 1, gs_sp + 2);
+                    t236.e[1] = t238;
+                    double t239 = elements_node_x_g8(n_g_2, 2, gs_sp + 2);
+                    t236.e[2] = t239;
+                    t240 = elements_barycentric_g8(t235, t236, gs_sp + 2);
+                    b_g = t240;
+                    int64_t t241 = n_g_2;
+                    double *t242 = &((((double *)((sum_g.base)))[GS_IDX((int64_t)(t241), (sum_g.len), gs_file4, 197)]));
+                    double t243 = (*t242);
+                    double t244 = -1.0;
+                    t245.e[0] = b_g.e[1];
+                    t245.e[1] = b_g.e[2];
+                    t245.e[2] = b_g.e[3];
+                    double t246 = elements_cell_field_g8(c_g_2, t245, 1, 4, gs_sp + 2);
+                    (*t242) = (t243 + (((double)(t244) * (double)(t246))));
+                    int64_t t247 = n_g_2;
+                    double *t248 = &((((double *)((count_g.base)))[t247]));
+                    (*t248) = ((*t248) + (1.0));
+                    L232:;
                 }
-                L224:;
+                L226:;
             }
             double most_g = NAN;
-            int64_t t247 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
-            for (int64_t n_g_3 = 0; n_g_3 < t247; n_g_3++) {
-                int64_t t250 = n_g_3;
-                uint8_t t251 = (uint8_t)((uint8_t)((double)((double)((((double *)((count_g.base)))[t250]))) > (double)(0.0)) != 0);
+            int64_t t249 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
+            for (int64_t n_g_3 = 0; n_g_3 < t249; n_g_3++) {
                 int64_t t252 = n_g_3;
-                int64_t t253 = n_g_3;
-                if ((uint8_t)(t251 & (uint8_t)((uint8_t)(!(uint8_t)((double)((double)(most_g)) >= (double)(((double)((double)((((double *)((sum_g.base)))[t252]))) / (double)((((double *)((count_g.base)))[t253])))))) != 0))) {
-                    int64_t t254 = n_g_3;
-                    int64_t t255 = n_g_3;
-                    most_g = ((double)((double)((((double *)((sum_g.base)))[t254]))) / (double)((((double *)((count_g.base)))[t255])));
+                uint8_t t253 = (uint8_t)((uint8_t)((double)((double)((((double *)((count_g.base)))[t252]))) > (double)(0.0)) != 0);
+                int64_t t254 = n_g_3;
+                int64_t t255 = n_g_3;
+                if ((uint8_t)(t253 & (uint8_t)((uint8_t)(!(uint8_t)((double)((double)(most_g)) >= (double)(((double)((double)((((double *)((sum_g.base)))[t254]))) / (double)((((double *)((count_g.base)))[t255])))))) != 0))) {
+                    int64_t t256 = n_g_3;
+                    int64_t t257 = n_g_3;
+                    most_g = ((double)((double)((((double *)((sum_g.base)))[t256]))) / (double)((((double *)((count_g.base)))[t257])));
                 }
             }
             m_g = most_g;
             GS(gs_sp + 1)->top = count_g.base;
             GS(gs_sp + 0)->top = sum_g.base;
-            goto L207;
+            goto L209;
             GS(gs_sp + 1)->top = count_g.base;
             GS(gs_sp + 0)->top = sum_g.base;
         }
-        L207:;
+        L209:;
         uint8_t found_m_g = (uint8_t)((double)((double)(m_g)) == (double)(m_g));
         double v_g = ((double)((double)(1.0)) * (double)(m_g));
         uint8_t found_v_g = found_m_g;
         uint8_t found_g_8 = found_v_g;
-        t256.data = ((uint8_t *)gs_str20); t256.len = 2;
-        expr_g = t256;
+        t258.data = ((uint8_t *)gs_str20); t258.len = 2;
+        expr_g = t258;
         {
             if ((uint8_t)(!found_g_8)) {
-                uint8_t *t392 = GS(gs_sp + 0)->top;
-                t258.base = t392; t258.len = 0;
-                uint8_t *t259 = t392;
-                int64_t t260 = 0;
-                int64_t t261 = 25;
-                gs_memcpy(t392, (const uint8_t *)(((uint8_t *)gs_str21)), (size_t)t261);
-                t392 += t261;
-                t260 += t261;
-                t263 = expr_g;
-                int64_t t262 = t263.len;
-                gs_memcpy(t392, (const uint8_t *)(t263.data), (size_t)t262);
-                t392 += t262;
-                t260 += t262;
-                int64_t t264 = 21;
-                gs_memcpy(t392, (const uint8_t *)(((uint8_t *)gs_str22)), (size_t)t264);
-                t392 += t264;
-                t260 += t264;
-                t258.len = t260;
-                t265.data = (uint8_t *)((t258.base)); t265.len = (t258.len);
-                t266 = t265;
-                gs_os_write_stderr(t266);
-                t392 = t258.base;
+                uint8_t *t394 = GS(gs_sp + 0)->top;
+                t260.base = t394; t260.len = 0;
+                uint8_t *t261 = t394;
+                int64_t t262 = 0;
+                int64_t t263 = 25;
+                gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str21)), (size_t)t263);
+                t394 += t263;
+                t262 += t263;
+                t265 = expr_g;
+                int64_t t264 = t265.len;
+                gs_memcpy(t394, (const uint8_t *)(t265.data), (size_t)t264);
+                t394 += t264;
+                t262 += t264;
+                int64_t t266 = 21;
+                gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str22)), (size_t)t266);
+                t394 += t266;
+                t262 += t266;
+                t260.len = t262;
+                t267.data = (uint8_t *)((t260.base)); t267.len = (t260.len);
+                t268 = t267;
+                gs_os_write_stderr(t268);
+                t394 = t260.base;
                 GS_GL->failed_g = 1;
-                GS(gs_sp + 0)->top = t392;
+                GS(gs_sp + 0)->top = t394;
             }
         }
-        t267.data = ((uint8_t *)gs_str20); t267.len = 2;
-        t268 = t267;
-        double t269 = v_g;
-        double t270 = 2874.69;
-        double t271 = 0.02;
-        uint8_t t272 = 1;
-        t273.data = ((uint8_t *)gs_str23); t273.len = 3;
-        t274 = t273;
-        t275.data = ((uint8_t *)gs_str24); t275.len = 13;
-        expect_g(t268.data, t268.len, t269, t270, t271, t272, t274.data, t274.len, t275.data, t275.len, gs_sp + 0);
+        t269.data = ((uint8_t *)gs_str20); t269.len = 2;
+        t270 = t269;
+        double t271 = v_g;
+        double t272 = 2874.69;
+        double t273 = 0.02;
+        uint8_t t274 = 1;
+        t275.data = ((uint8_t *)gs_str23); t275.len = 3;
+        t276 = t275;
+        t277.data = ((uint8_t *)gs_str24); t277.len = 13;
+        expect_g(t270.data, t270.len, t271, t272, t273, t274, t276.data, t276.len, t277.data, t277.len, gs_sp + 0);
     }
     {
         double v_g_2;
         uint8_t found_v_g_2;
-        double t276 = elements_stress_at_g8(0, 1, 0.0, -0.02, 0.0, &found_v_g_2, gs_sp + 0);
-        v_g_2 = t276;
+        double t278 = elements_stress_at_g8(0, 1, 0.0, -0.02, 0.0, &found_v_g_2, gs_sp + 0);
+        v_g_2 = t278;
         uint8_t found_g_9 = found_v_g_2;
-        t277.data = ((uint8_t *)gs_str25); t277.len = 8;
-        expr_g_2 = t277;
+        t279.data = ((uint8_t *)gs_str25); t279.len = 8;
+        expr_g_2 = t279;
         {
             if ((uint8_t)(!found_g_9)) {
-                uint8_t *t393 = GS(gs_sp + 0)->top;
-                t279.base = t393; t279.len = 0;
-                uint8_t *t280 = t393;
-                int64_t t281 = 0;
-                int64_t t282 = 25;
-                gs_memcpy(t393, (const uint8_t *)(((uint8_t *)gs_str21)), (size_t)t282);
-                t393 += t282;
-                t281 += t282;
-                t284 = expr_g_2;
-                int64_t t283 = t284.len;
-                gs_memcpy(t393, (const uint8_t *)(t284.data), (size_t)t283);
-                t393 += t283;
-                t281 += t283;
-                int64_t t285 = 21;
-                gs_memcpy(t393, (const uint8_t *)(((uint8_t *)gs_str22)), (size_t)t285);
-                t393 += t285;
-                t281 += t285;
-                t279.len = t281;
-                t286.data = (uint8_t *)((t279.base)); t286.len = (t279.len);
-                t287 = t286;
-                gs_os_write_stderr(t287);
-                t393 = t279.base;
+                uint8_t *t395 = GS(gs_sp + 0)->top;
+                t281.base = t395; t281.len = 0;
+                uint8_t *t282 = t395;
+                int64_t t283 = 0;
+                int64_t t284 = 25;
+                gs_memcpy(t395, (const uint8_t *)(((uint8_t *)gs_str21)), (size_t)t284);
+                t395 += t284;
+                t283 += t284;
+                t286 = expr_g_2;
+                int64_t t285 = t286.len;
+                gs_memcpy(t395, (const uint8_t *)(t286.data), (size_t)t285);
+                t395 += t285;
+                t283 += t285;
+                int64_t t287 = 21;
+                gs_memcpy(t395, (const uint8_t *)(((uint8_t *)gs_str22)), (size_t)t287);
+                t395 += t287;
+                t283 += t287;
+                t281.len = t283;
+                t288.data = (uint8_t *)((t281.base)); t288.len = (t281.len);
+                t289 = t288;
+                gs_os_write_stderr(t289);
+                t395 = t281.base;
                 GS_GL->failed_g = 1;
-                GS(gs_sp + 0)->top = t393;
+                GS(gs_sp + 0)->top = t395;
             }
         }
-        t288.data = ((uint8_t *)gs_str25); t288.len = 8;
-        t289 = t288;
-        double t290 = v_g_2;
-        double t291 = 431.203;
-        double t292 = 0.02;
-        uint8_t t293 = 1;
-        t294.data = ((uint8_t *)gs_str23); t294.len = 3;
-        t295 = t294;
-        t296.data = ((uint8_t *)gs_str26); t296.len = 21;
-        expect_g(t289.data, t289.len, t290, t291, t292, t293, t295.data, t295.len, t296.data, t296.len, gs_sp + 0);
+        t290.data = ((uint8_t *)gs_str25); t290.len = 8;
+        t291 = t290;
+        double t292 = v_g_2;
+        double t293 = 431.203;
+        double t294 = 0.02;
+        uint8_t t295 = 1;
+        t296.data = ((uint8_t *)gs_str23); t296.len = 3;
+        t297 = t296;
+        t298.data = ((uint8_t *)gs_str26); t298.len = 21;
+        expect_g(t291.data, t291.len, t292, t293, t294, t295, t297.data, t297.len, t298.data, t298.len, gs_sp + 0);
     }
     {
-        uint8_t *t394 = GS(gs_sp + 0)->top;
-        s_g.base = t394; s_g.len = 0;
+        uint8_t *t396 = GS(gs_sp + 0)->top;
+        s_g.base = t396; s_g.len = 0;
         s_g.len = 0;
-        int64_t t298 = 7;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str27)), (size_t)t298);
-        t394 += t298;
-        s_g.len += t298;
-        int64_t t299 = gs_fmt_i64(t394, (int64_t)(0));
-        t394 += t299;
-        s_g.len += t299;
-        int64_t t300 = 20;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str28)), (size_t)t300);
-        t394 += t300;
+        int64_t t300 = 7;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str27)), (size_t)t300);
+        t396 += t300;
         s_g.len += t300;
-        int64_t t302 = (GS_GL->reports_g.len);
-        int64_t t301 = t302;
-        gs_memcpy(t394, (const uint8_t *)((GS_GL->reports_g.base)), (size_t)t301);
-        t394 += t301;
+        int64_t t301 = gs_fmt_i64(t396, (int64_t)(0));
+        t396 += t301;
         s_g.len += t301;
-        int64_t t303 = 7;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str29)), (size_t)t303);
-        t394 += t303;
+        int64_t t302 = 20;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str28)), (size_t)t302);
+        t396 += t302;
+        s_g.len += t302;
+        int64_t t304 = (GS_GL->reports_g.len);
+        int64_t t303 = t304;
+        gs_memcpy(t396, (const uint8_t *)((GS_GL->reports_g.base)), (size_t)t303);
+        t396 += t303;
         s_g.len += t303;
-        int64_t t304 = gs_fmt_i64(t394, (int64_t)(GS_GL->check_count_g));
-        t394 += t304;
-        s_g.len += t304;
-        int64_t t305 = 32;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str30)), (size_t)t305);
-        t394 += t305;
+        int64_t t305 = 7;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str29)), (size_t)t305);
+        t396 += t305;
         s_g.len += t305;
-        int64_t t307 = (GS_GL->checks_g.len);
-        int64_t t306 = t307;
-        gs_memcpy(t394, (const uint8_t *)((GS_GL->checks_g.base)), (size_t)t306);
-        t394 += t306;
+        int64_t t306 = gs_fmt_i64(t396, (int64_t)(GS_GL->check_count_g));
+        t396 += t306;
         s_g.len += t306;
-        int64_t t308 = 6;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str31)), (size_t)t308);
-        t394 += t308;
+        int64_t t307 = 32;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str30)), (size_t)t307);
+        t396 += t307;
+        s_g.len += t307;
+        int64_t t309 = (GS_GL->checks_g.len);
+        int64_t t308 = t309;
+        gs_memcpy(t396, (const uint8_t *)((GS_GL->checks_g.base)), (size_t)t308);
+        t396 += t308;
         s_g.len += t308;
-        int64_t t309 = gs_fmt_i64(t394, (int64_t)(GS_GL->solve_count_g));
-        t394 += t309;
-        s_g.len += t309;
-        int64_t t310 = 52;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str32)), (size_t)t310);
-        t394 += t310;
+        int64_t t310 = 6;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str31)), (size_t)t310);
+        t396 += t310;
         s_g.len += t310;
-        int64_t t312 = (GS_GL->solves_g.len);
-        int64_t t311 = t312;
-        gs_memcpy(t394, (const uint8_t *)((GS_GL->solves_g.base)), (size_t)t311);
-        t394 += t311;
+        int64_t t311 = gs_fmt_i64(t396, (int64_t)(GS_GL->solve_count_g));
+        t396 += t311;
         s_g.len += t311;
-        int64_t t313 = 8;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str33)), (size_t)t313);
-        t394 += t313;
+        int64_t t312 = 52;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str32)), (size_t)t312);
+        t396 += t312;
+        s_g.len += t312;
+        int64_t t314 = (GS_GL->solves_g.len);
+        int64_t t313 = t314;
+        gs_memcpy(t396, (const uint8_t *)((GS_GL->solves_g.base)), (size_t)t313);
+        t396 += t313;
         s_g.len += t313;
-        int64_t t314 = gs_fmt_i64(t394, (int64_t)(GS_GL->result_count_g));
-        t394 += t314;
-        s_g.len += t314;
-        int64_t t315 = 3;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str34)), (size_t)t315);
-        t394 += t315;
+        int64_t t315 = 8;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str33)), (size_t)t315);
+        t396 += t315;
         s_g.len += t315;
-        int64_t t317 = (GS_GL->results_g.len);
-        int64_t t316 = t317;
-        gs_memcpy(t394, (const uint8_t *)((GS_GL->results_g.base)), (size_t)t316);
-        t394 += t316;
+        int64_t t316 = gs_fmt_i64(t396, (int64_t)(GS_GL->result_count_g));
+        t396 += t316;
         s_g.len += t316;
-        int64_t t318 = 0;
-        uint8_t *t319 = t394;
+        int64_t t317 = 3;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str34)), (size_t)t317);
+        t396 += t317;
+        s_g.len += t317;
+        int64_t t319 = (GS_GL->results_g.len);
+        int64_t t318 = t319;
+        gs_memcpy(t396, (const uint8_t *)((GS_GL->results_g.base)), (size_t)t318);
+        t396 += t318;
+        s_g.len += t318;
         int64_t t320 = 0;
-        int64_t t321 = 15;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str35)), (size_t)t321);
-        t394 += t321;
-        t320 += t321;
-        int64_t t322 = gs_fmt_i64(t394, (int64_t)(GS_GL->solvers_memory_checks_g7));
-        t394 += t322;
-        t320 += t322;
-        int64_t t323 = 14;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str36)), (size_t)t323);
-        t394 += t323;
-        t320 += t323;
-        int64_t t325;
+        uint8_t *t321 = t396;
+        int64_t t322 = 0;
+        int64_t t323 = 15;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str35)), (size_t)t323);
+        t396 += t323;
+        t322 += t323;
+        int64_t t324 = gs_fmt_i64(t396, (int64_t)(GS_GL->solvers_memory_checks_g7));
+        t396 += t324;
+        t322 += t324;
+        int64_t t325 = 14;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str36)), (size_t)t325);
+        t396 += t325;
+        t322 += t325;
+        int64_t t327;
         double bytes_g = GS_GL->solvers_largest_estimate_g7;
         {
-            double t327 = ((double)((double)(bytes_g)) / (double)(1000000.0));
-            double t328 = round(t327);
-            t325 = (int64_t)gs_f2iwrap(t328);
-            goto L326;
+            double t329 = ((double)((double)(bytes_g)) / (double)(1000000.0));
+            double t330 = round(t329);
+            t327 = (int64_t)gs_f2iwrap(t330);
+            goto L328;
         }
-        L326:;
-        int64_t t324 = gs_fmt_i64(t394, (int64_t)(t325));
-        t394 += t324;
-        t320 += t324;
-        int64_t t329 = 10;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str37)), (size_t)t329);
-        t394 += t329;
-        t320 += t329;
-        int64_t t331;
+        L328:;
+        int64_t t326 = gs_fmt_i64(t396, (int64_t)(t327));
+        t396 += t326;
+        t322 += t326;
+        int64_t t331 = 10;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str37)), (size_t)t331);
+        t396 += t331;
+        t322 += t331;
+        int64_t t333;
         double bytes_g_2;
-        t332.data = ((uint8_t *)gs_str38); t332.len = 6;
-        key_g = t332;
+        t334.data = ((uint8_t *)gs_str38); t334.len = 6;
+        key_g = t334;
         {
             s_g_2.base = GS(gs_sp + 1)->top; s_g_2.len = 0;
             s_g_2.len = 0;
-            t334.data = ((uint8_t *)gs_str39); t334.len = 17;
-            t335 = t334;
-            t336.hdr = (gs_rhdr *)&s_g_2; t336.stk = GS(gs_sp + 1);
+            t336.data = ((uint8_t *)gs_str39); t336.len = 17;
             t337 = t336;
-            GS(gs_sp + 0)->top = t394;
-            uint8_t t338 = gs_os_read_file(t335, t337);
-            t394 = GS(gs_sp + 0)->top;
-            if (!(t338)) {
+            t338.hdr = (gs_rhdr *)&s_g_2; t338.stk = GS(gs_sp + 1);
+            t339 = t338;
+            GS(gs_sp + 0)->top = t396;
+            uint8_t t340 = gs_os_read_file(t337, t339);
+            t396 = GS(gs_sp + 0)->top;
+            if (!(t340)) {
                 bytes_g_2 = 0.0;
                 GS(gs_sp + 1)->top = s_g_2.base;
-                goto L333;
+                goto L335;
             }
-            double t339 = 1024.0;
-            double t340;
+            double t341 = 1024.0;
+            double t342;
             double b_g_2;
-            t341.data = (uint8_t *)((s_g_2.base)); t341.len = (s_g_2.len);
-            double t342 = solvers_proc_kb_g7(t341.data, t341.len, key_g.data, key_g.len, gs_sp + 2);
-            b_g_2 = t342;
+            t343.data = (uint8_t *)((s_g_2.base)); t343.len = (s_g_2.len);
+            double t344 = solvers_proc_kb_g7(t343.data, t343.len, key_g.data, key_g.len, gs_sp + 2);
+            b_g_2 = t344;
             {
                 if ((uint8_t)((double)((double)(0.0)) < (double)(b_g_2))) {
-                    t340 = b_g_2;
-                    goto L343;
+                    t342 = b_g_2;
+                    goto L345;
                 }
-                t340 = 0.0;
-                goto L343;
+                t342 = 0.0;
+                goto L345;
             }
-            L343:;
-            bytes_g_2 = ((double)(t339) * (double)(t340));
+            L345:;
+            bytes_g_2 = ((double)(t341) * (double)(t342));
             GS(gs_sp + 1)->top = s_g_2.base;
-            goto L333;
+            goto L335;
             GS(gs_sp + 1)->top = s_g_2.base;
         }
-        L333:;
+        L335:;
         {
-            double t345 = ((double)((double)(bytes_g_2)) / (double)(1000000.0));
-            double t346 = round(t345);
-            t331 = (int64_t)gs_f2iwrap(t346);
-            goto L344;
+            double t347 = ((double)((double)(bytes_g_2)) / (double)(1000000.0));
+            double t348 = round(t347);
+            t333 = (int64_t)gs_f2iwrap(t348);
+            goto L346;
         }
-        L344:;
-        int64_t t330 = gs_fmt_i64(t394, (int64_t)(t331));
-        t394 += t330;
-        t320 += t330;
-        int64_t t347 = 1;
-        gs_memcpy(t394, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t347);
-        t394 += t347;
-        t320 += t347;
-        t318 = t320;
-        s_g.len += t318;
-        t348.data = (uint8_t *)((s_g.base)); t348.len = (s_g.len);
-        t349 = t348;
-        gs_os_write_stdout(t349);
-        GS(gs_sp + 0)->top = t394;
+        L346:;
+        int64_t t332 = gs_fmt_i64(t396, (int64_t)(t333));
+        t396 += t332;
+        t322 += t332;
+        int64_t t349 = 1;
+        gs_memcpy(t396, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t349);
+        t396 += t349;
+        t322 += t349;
+        t320 = t322;
+        s_g.len += t320;
+        t350.data = (uint8_t *)((s_g.base)); t350.len = (s_g.len);
+        t351 = t350;
+        gs_os_write_stdout(t351);
+        GS(gs_sp + 0)->top = t396;
         GS(gs_sp + 0)->top = s_g.base;
     }
     if (GS_GL->failed_g) {
@@ -4427,7 +4491,7 @@ static uint8_t elements_mesh_bodies_g8(int64_t d_g, int64_t ord_g, void *shapes_
     }
     L1:;
     return t0;
-    GS_UNREACHABLE(gs_file7, 79);
+    GS_UNREACHABLE(gs_file7, 87);
     uint8_t t64 = {0};
     return t64;
 }
@@ -14922,7 +14986,7 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
     dictionary_slot_g_i64_i64 t159;
     if (!((uint8_t)((int64_t)((int64_t)((xyz_g.len))) >= (int64_t)(3)))) goto L1;
     if (!((uint8_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)((xyz_g.len)))) % (uint64_t)((int64_t)(3))))) == (int64_t)(0)))) goto L1;
-    if (!((uint8_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)((vertices_g.len)))) % (uint64_t)((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 267)))))) == (int64_t)(0)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)((vertices_g.len)))) % (uint64_t)((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 288)))))) == (int64_t)(0)))) goto L1;
     if ((uint8_t)((int64_t)((int64_t)((vertices_g.len))) == (int64_t)(0))) goto L0;
     int64_t t3;
     xs_g = vertices_g;
@@ -14963,7 +15027,7 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
     {
         t15.data = ((uint8_t *)gs_str48); t15.len = 82;
         t16 = t15;
-        gs_abort_msg(t16.data, t16.len, gs_file16, 267);
+        gs_abort_msg(t16.data, t16.len, gs_file16, 288);
     }
     L0:;
     uint8_t *t174 = (&GS_GL->gs_gstk_elements_coords_g8)->top;
@@ -14991,9 +15055,9 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
             int64_t t31 = t_g;
             int64_t t32 = t_g;
             double a_g = lo_g.e[t32];
-            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), n_g, gs_file16, 274)), t_g, gs_file16, 274);
+            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), n_g, gs_file16, 295)), t_g, gs_file16, 295);
             double *t34 = xyz_g.data;
-            double b_g = t34[GS_IDX((int64_t)(t33), xyz_g.len, gs_file16, 274)];
+            double b_g = t34[GS_IDX((int64_t)(t33), xyz_g.len, gs_file16, 295)];
             {
                 if ((uint8_t)((double)((double)(b_g)) < (double)(a_g))) {
                     lo_g.e[t31] = b_g;
@@ -15006,9 +15070,9 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
             int64_t t36 = t_g;
             int64_t t37 = t_g;
             double a_g_2 = hi_g.e[t37];
-            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), n_g, gs_file16, 275)), t_g, gs_file16, 275);
+            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), n_g, gs_file16, 296)), t_g, gs_file16, 296);
             double *t39 = xyz_g.data;
-            double b_g_2 = t39[GS_IDX((int64_t)(t38), xyz_g.len, gs_file16, 275)];
+            double b_g_2 = t39[GS_IDX((int64_t)(t38), xyz_g.len, gs_file16, 296)];
             {
                 if ((uint8_t)((double)((double)(a_g_2)) < (double)(b_g_2))) {
                     hi_g.e[t36] = b_g_2;
@@ -15047,6 +15111,7 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
         int64_t t183 = GS_GL->elements_body_shapes_g8.len;
         GS_GL->elements_dim_g8 = d_g_2;
         GS_GL->elements_order_g8 = ord_g_2;
+        GS_GL->elements_hex_cells_g8 = 0;
         int64_t t47 = elements_node_count_of_g8(d_g_2, ord_g_2);
         GS_GL->elements_per_cell_g8 = t47;
         t174 = (uint8_t *)((GS_GL->elements_coords_g8.base));
@@ -15084,15 +15149,15 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
     mid_g.slots_g.base = GS(gs_sp + 0)->top;
     mid_g.slots_g.len = 0;
     mid_g.slots_g.len = 0;
-    int64_t t50 = (int64_t)((uint64_t)((int64_t)((int64_t)((vertices_g.len)))) / (uint64_t)((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 282))));
+    int64_t t50 = (int64_t)((uint64_t)((int64_t)((int64_t)((vertices_g.len)))) / (uint64_t)((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 303))));
     uint8_t *t184 = (&GS_GL->gs_gstk_elements_conn_g8)->top;
     int64_t t185 = GS_GL->elements_conn_g8.len;
     for (int64_t c_g = 0; c_g < t50; c_g++) {
         int64_t *t53 = vertices_g.data;
         int64_t t54 = vertices_g.len;
-        int64_t t55 = gs_mul_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 283)), c_g, gs_file16, 283);
-        int64_t t56 = gs_mul_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 283)), gs_add_i64((int64_t)(c_g), 1, gs_file16, 283), gs_file16, 283);
-        if (t55 < 0 || t56 < t55 || t56 > t54) gs_abort(GS_E_SLICE, gs_file16, 283);
+        int64_t t55 = gs_mul_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 304)), c_g, gs_file16, 304);
+        int64_t t56 = gs_mul_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file16, 304)), gs_add_i64((int64_t)(c_g), 1, gs_file16, 304), gs_file16, 304);
+        if (t55 < 0 || t56 < t55 || t56 > t54) gs_abort(GS_E_SLICE, gs_file16, 304);
         v_g.data = t53 + t55; v_g.len = t56 - t55;
         t57 = v_g;
         int64_t t58 = t57.len;
@@ -15111,7 +15176,7 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
             {
                 t63.data = ((uint8_t *)gs_str50); t63.len = 23;
                 t64 = t63;
-                gs_abort_msg(t64.data, t64.len, gs_file3, 21);
+                gs_abort_msg(t64.data, t64.len, gs_file3, 34);
             }
             L61:;
             if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(1))) {
@@ -15134,13 +15199,13 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
             int64_t t70 = elements_edge_node_g8(d_g, e_g, 0);
             int64_t t71 = t70;
             int64_t *t72 = t68;
-            int64_t a_g_3 = t72[GS_IDX((int64_t)(t71), t69, gs_file16, 287)];
+            int64_t a_g_3 = t72[GS_IDX((int64_t)(t71), t69, gs_file16, 308)];
             int64_t *t73 = v_g.data;
             int64_t t74 = v_g.len;
             int64_t t75 = elements_edge_node_g8(d_g, e_g, 1);
             int64_t t76 = t75;
             int64_t *t77 = t73;
-            int64_t b_g_3 = t77[GS_IDX((int64_t)(t76), t74, gs_file16, 288)];
+            int64_t b_g_3 = t77[GS_IDX((int64_t)(t76), t74, gs_file16, 309)];
             int64_t t78;
             int64_t a_g_4 = a_g_3;
             int64_t b_g_4 = b_g_3;
@@ -15153,7 +15218,7 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
                 goto L79;
             }
             L79:;
-            int64_t t80 = gs_mul_i64((int64_t)(t78), nv_g, gs_file16, 289);
+            int64_t t80 = gs_mul_i64((int64_t)(t78), nv_g, gs_file16, 310);
             int64_t t81;
             int64_t a_g_5 = a_g_3;
             int64_t b_g_5 = b_g_3;
@@ -15166,7 +15231,7 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
                 goto L82;
             }
             L82:;
-            int64_t key_g = gs_add_i64(t80, t81, gs_file16, 289);
+            int64_t key_g = gs_add_i64(t80, t81, gs_file16, 310);
             int64_t m_g_3;
             int64_t key_g_2 = key_g;
             int64_t v0_g = (int64_t)((uint64_t)((int64_t)((int64_t)(((t175))))) / (uint64_t)((int64_t)(3)));
@@ -15397,11 +15462,11 @@ static void elements_build_simplices_g8(int64_t d_g, int64_t ord_g, void *xyz_g_
             if ((uint8_t)((int64_t)((int64_t)(m_g_3)) == (int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)(((t175))))) / (uint64_t)((int64_t)(3)))))) {
                 int64_t t163 = 3;
                 for (int64_t t_g_5 = 0; t_g_5 < t163; t_g_5++) {
-                    int64_t t166 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g_3, gs_file16, 292)), t_g_5, gs_file16, 292);
+                    int64_t t166 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g_3, gs_file16, 313)), t_g_5, gs_file16, 313);
                     double *t167 = xyz_g.data;
-                    int64_t t168 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), b_g_3, gs_file16, 292)), t_g_5, gs_file16, 292);
+                    int64_t t168 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), b_g_3, gs_file16, 313)), t_g_5, gs_file16, 313);
                     double *t169 = xyz_g.data;
-                    double t170 = ((double)((double)(0.5)) * (double)(((double)((double)(t167[GS_IDX((int64_t)(t166), xyz_g.len, gs_file16, 292)])) + (double)(t169[GS_IDX((int64_t)(t168), xyz_g.len, gs_file16, 292)]))));
+                    double t170 = ((double)((double)(0.5)) * (double)(((double)((double)(t167[GS_IDX((int64_t)(t166), xyz_g.len, gs_file16, 313)])) + (double)(t169[GS_IDX((int64_t)(t168), xyz_g.len, gs_file16, 313)]))));
                     double *t171 = (double *)t174;
                     *(double *)t174 = t170;
                     t174 += 8;
@@ -15436,22 +15501,39 @@ static int64_t elements_node_count_of_g8(int64_t d_g, int64_t order_g) {
     {
         t2.data = ((uint8_t *)gs_str51); t2.len = 43;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file3, 36);
+        gs_abort_msg(t3.data, t3.len, gs_file3, 53);
     }
     L0:;
-    if ((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1))) {
-        int64_t t4;
-        t4 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 37);
-        return t4;
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L4;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L4;
+        goto L5;
     }
-    int64_t t5;
-    int64_t t6 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 38);
-    int64_t t7 = elements_edge_count_g8(d_g);
-    t5 = gs_add_i64(t6, t7, gs_file3, 38);
-    return t5;
-    GS_UNREACHABLE(gs_file3, 35);
-    int64_t t8 = {0};
+    L5:;
+    {
+        int64_t t6;
+        if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3))) {
+            t6 = 8;
+        } else {
+            t6 = 4;
+        }
+        return t6;
+    }
+    L4:;
+    if ((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1))) {
+        int64_t t7;
+        t7 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 55);
+        return t7;
+    }
+    int64_t t8;
+    int64_t t9 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 56);
+    int64_t t10 = elements_edge_count_g8(d_g);
+    t8 = gs_add_i64(t9, t10, gs_file3, 56);
     return t8;
+    GS_UNREACHABLE(gs_file3, 52);
+    int64_t t11 = {0};
+    return t11;
 }
 
 static int64_t elements_edge_count_g8(int64_t d_g) {
@@ -15463,7 +15545,7 @@ static int64_t elements_edge_count_g8(int64_t d_g) {
     {
         t2.data = ((uint8_t *)gs_str50); t2.len = 23;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file3, 21);
+        gs_abort_msg(t3.data, t3.len, gs_file3, 34);
     }
     L0:;
     if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(1))) {
@@ -15479,7 +15561,7 @@ static int64_t elements_edge_count_g8(int64_t d_g) {
     int64_t t6;
     t6 = 6;
     return t6;
-    GS_UNREACHABLE(gs_file3, 20);
+    GS_UNREACHABLE(gs_file3, 33);
     int64_t t7 = {0};
     return t7;
 }
@@ -15497,26 +15579,26 @@ static int64_t elements_edge_node_g8(int64_t d_g, int64_t e_g, int64_t side_g) {
     {
         t4.data = ((uint8_t *)gs_str52); t4.len = 44;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file3, 29);
+        gs_abort_msg(t5.data, t5.len, gs_file3, 46);
     }
     L0:;
     if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(1))) {
         int64_t t6;
-        int64_t t7 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file3, 30)), side_g, gs_file3, 30);
-        t6 = GS_GL->elements_LINE_EDGES_g8.e[GS_IDX((int64_t)(t7), 2, gs_file3, 30)];
+        int64_t t7 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file3, 47)), side_g, gs_file3, 47);
+        t6 = GS_GL->elements_LINE_EDGES_g8.e[GS_IDX((int64_t)(t7), 2, gs_file3, 47)];
         return t6;
     }
     if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(2))) {
         int64_t t8;
-        int64_t t9 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file3, 31)), side_g, gs_file3, 31);
-        t8 = GS_GL->elements_TRI_EDGES_g8.e[GS_IDX((int64_t)(t9), 6, gs_file3, 31)];
+        int64_t t9 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file3, 48)), side_g, gs_file3, 48);
+        t8 = GS_GL->elements_TRI_EDGES_g8.e[GS_IDX((int64_t)(t9), 6, gs_file3, 48)];
         return t8;
     }
     int64_t t10;
-    int64_t t11 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file3, 32)), side_g, gs_file3, 32);
-    t10 = GS_GL->elements_TET_EDGES_g8.e[GS_IDX((int64_t)(t11), 12, gs_file3, 32)];
+    int64_t t11 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), e_g, gs_file3, 49)), side_g, gs_file3, 49);
+    t10 = GS_GL->elements_TET_EDGES_g8.e[GS_IDX((int64_t)(t11), 12, gs_file3, 49)];
     return t10;
-    GS_UNREACHABLE(gs_file3, 28);
+    GS_UNREACHABLE(gs_file3, 45);
     int64_t t12 = {0};
     return t12;
 }
@@ -15539,14 +15621,14 @@ static int64_t elements_cell_node_g8(int64_t c_g, int64_t l_g, int64_t gs_sp) {
     {
         t4.data = ((uint8_t *)gs_str53); t4.len = 44;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file17, 112);
+        gs_abort_msg(t5.data, t5.len, gs_file17, 152);
     }
     L0:;
     int64_t t6;
-    int64_t t7 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), c_g, gs_file17, 113)), l_g, gs_file17, 113);
-    t6 = (((int64_t *)((GS_GL->elements_conn_g8.base)))[GS_IDX((int64_t)(t7), (GS_GL->elements_conn_g8.len), gs_file17, 113)]);
+    int64_t t7 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), c_g, gs_file17, 153)), l_g, gs_file17, 153);
+    t6 = (((int64_t *)((GS_GL->elements_conn_g8.base)))[GS_IDX((int64_t)(t7), (GS_GL->elements_conn_g8.len), gs_file17, 153)]);
     return t6;
-    GS_UNREACHABLE(gs_file17, 111);
+    GS_UNREACHABLE(gs_file17, 151);
     int64_t t8 = {0};
     return t8;
 }
@@ -15561,8 +15643,18 @@ static void elements_snap_edges_g8(int64_t d_g, int64_t gs_sp) {
     a3_f64 grad_g;
     a3_f64 lo_g;
     a3_f64 hi_g;
-    sl_u8 t145;
-    sl_u8 t146;
+    a3_f64 t142;
+    a3_f64 xi_g;
+    a3_f64 t148;
+    a3_f64 p_g;
+    a3_f64 t151;
+    a9_f64 t161;
+    a9_f64 jac_g;
+    a3_f64 t182;
+    a9_f64 t183;
+    a9_f64 p1_g;
+    sl_u8 t205;
+    sl_u8 t206;
     double tol_g;
     {
         double size_g = 0.0;
@@ -15615,7 +15707,7 @@ static void elements_snap_edges_g8(int64_t d_g, int64_t gs_sp) {
             {
                 t19.data = ((uint8_t *)gs_str50); t19.len = 23;
                 t20 = t19;
-                gs_abort_msg(t20.data, t20.len, gs_file3, 21);
+                gs_abort_msg(t20.data, t20.len, gs_file3, 34);
             }
             L17:;
             if ((uint8_t)((int64_t)((int64_t)(d_g_2)) == (int64_t)(1))) {
@@ -15922,59 +16014,179 @@ static void elements_snap_edges_g8(int64_t d_g, int64_t gs_sp) {
         }
         int64_t t137 = t136;
         for (int64_t c_g_4 = 0; c_g_4 < t137; c_g_4++) {
-            uint8_t t140 = elements_folded_g8(d_g, c_g_4, gs_sp + 1);
-            if (!(t140)) {
+            int64_t d_g_3 = d_g;
+            int64_t c_g_5 = c_g_4;
+            {
+                double lo_g_2 = 1e+300;
+                t142.e[0] = 0.0;
+                t142.e[1] = 0.0;
+                t142.e[2] = 0.0;
+                xi_g = t142;
+                int64_t t143 = elements_quad_count_g8(d_g_3);
+                int64_t t144 = gs_add_i64((int64_t)(t143), d_g_3, gs_file6, 142);
+                int64_t t145 = gs_add_i64(t144, 1, gs_file6, 142);
+                for (int64_t q_g_2 = 0; q_g_2 < t145; q_g_2++) {
+                    t148.e[0] = 0.0;
+                    t148.e[1] = 0.0;
+                    t148.e[2] = 0.0;
+                    xi_g = t148;
+                    int64_t t149 = q_g_2;
+                    int64_t t150 = elements_quad_count_g8(d_g_3);
+                    if ((uint8_t)((int64_t)(t149) < (int64_t)(t150))) {
+                        double w_g;
+                        t151 = elements_quad_point_g8(d_g_3, q_g_2, &w_g);
+                        p_g = t151;
+                        xi_g = p_g;
+                    } else {
+                        int64_t t152 = q_g_2;
+                        int64_t t153 = elements_quad_count_g8(d_g_3);
+                        if ((uint8_t)((int64_t)(t152) > (int64_t)(t153))) {
+                            double *t154 = xi_g.e;
+                            int64_t t155 = 3;
+                            int64_t t156 = q_g_2;
+                            int64_t t157 = elements_quad_count_g8(d_g_3);
+                            int64_t t158 = gs_sub_i64(t156, t157, gs_file6, 148);
+                            int64_t t159 = gs_sub_i64(t158, 1, gs_file6, 148);
+                            double *t160 = &(t154[GS_IDX((int64_t)(t159), t155, gs_file6, 148)]);
+                            (*t160) = 1.0;
+                        }
+                    }
+                    elements_shape_g8_214(GS_GL->elements_dim_g8, GS_GL->elements_order_g8, xi_g, &GS_GL->elements_shp_g8, &GS_GL->elements_dref_g8);
+                    double t162 = 0.0;
+                    for (int64_t t163 = 0; t163 < 9; t163++) {
+                        t161.e[t163] = t162;
+                    }
+                    jac_g = t161;
+                    double a_g_6 = lo_g_2;
+                    double b_g_6;
+                    int64_t c_g_6 = c_g_5;
+                    a9_f64 * jac_g_2 = &jac_g;
+                    {
+                        int64_t t165 = GS_GL->elements_per_cell_g8;
+                        for (int64_t l_g_2 = 0; l_g_2 < t165; l_g_2++) {
+                            int64_t n_g_3;
+                            int64_t t168 = elements_cell_node_g8(c_g_6, l_g_2, gs_sp + 1);
+                            n_g_3 = t168;
+                            int64_t t169 = GS_GL->elements_dim_g8;
+                            for (int64_t r_g = 0; r_g < t169; r_g++) {
+                                int64_t t172 = GS_GL->elements_dim_g8;
+                                for (int64_t t_g_6 = 0; t_g_6 < t172; t_g_6++) {
+                                    int64_t t175 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g, gs_file17, 162)), t_g_6, gs_file17, 162);
+                                    double *t176 = &((*jac_g_2).e[GS_IDX((int64_t)(t175), 9, gs_file17, 162)]);
+                                    double t177 = (*t176);
+                                    int64_t t178 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file17, 162)), r_g, gs_file17, 162);
+                                    double t179 = GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t178), 30, gs_file17, 162)];
+                                    double t180 = elements_node_x_g8(n_g_3, t_g_6, gs_sp + 1);
+                                    (*t176) = (t177 + (((double)(t179) * (double)(t180))));
+                                }
+                            }
+                        }
+                        if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2))) {
+                            b_g_6 = ((double)((double)(((double)((double)((*jac_g_2).e[0])) * (double)((*jac_g_2).e[4])))) - (double)(((double)((double)((*jac_g_2).e[1])) * (double)((*jac_g_2).e[3]))));
+                            goto L164;
+                        }
+                        b_g_6 = ((double)((double)(((double)((double)(((double)((double)((*jac_g_2).e[0])) * (double)(((double)((double)(((double)((double)((*jac_g_2).e[4])) * (double)((*jac_g_2).e[8])))) - (double)(((double)((double)((*jac_g_2).e[5])) * (double)((*jac_g_2).e[7])))))))) - (double)(((double)((double)((*jac_g_2).e[1])) * (double)(((double)((double)(((double)((double)((*jac_g_2).e[3])) * (double)((*jac_g_2).e[8])))) - (double)(((double)((double)((*jac_g_2).e[5])) * (double)((*jac_g_2).e[6])))))))))) + (double)(((double)((double)((*jac_g_2).e[2])) * (double)(((double)((double)(((double)((double)((*jac_g_2).e[3])) * (double)((*jac_g_2).e[7])))) - (double)(((double)((double)((*jac_g_2).e[4])) * (double)((*jac_g_2).e[6]))))))));
+                        goto L164;
+                    }
+                    L164:;
+                    {
+                        if ((uint8_t)((double)((double)(b_g_6)) < (double)(a_g_6))) {
+                            lo_g_2 = b_g_6;
+                            goto L181;
+                        }
+                        lo_g_2 = a_g_6;
+                        goto L181;
+                    }
+                    L181:;
+                }
+                t182.e[0] = 0.0;
+                t182.e[1] = 0.0;
+                t182.e[2] = 0.0;
+                elements_shape_g8_214(GS_GL->elements_dim_g8, 1, t182, &GS_GL->elements_shp_g8, &GS_GL->elements_dref_g8);
+                double t184 = 0.0;
+                for (int64_t t185 = 0; t185 < 9; t185++) {
+                    t183.e[t185] = t184;
+                }
+                p1_g = t183;
+                int64_t t186 = gs_add_i64((int64_t)(d_g_3), 1, gs_file6, 157);
+                for (int64_t l_g_3 = 0; l_g_3 < t186; l_g_3++) {
+                    int64_t t189 = d_g_3;
+                    for (int64_t r_g_2 = 0; r_g_2 < t189; r_g_2++) {
+                        int64_t t192 = d_g_3;
+                        for (int64_t t_g_7 = 0; t_g_7 < t192; t_g_7++) {
+                            int64_t t195 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g_2, gs_file6, 159)), t_g_7, gs_file6, 159);
+                            double t196 = p1_g.e[t195];
+                            int64_t t197 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_3, gs_file6, 159)), r_g_2, gs_file6, 159);
+                            double t198 = GS_GL->elements_dref_g8.e[t197];
+                            int64_t t199 = elements_cell_node_g8(c_g_5, l_g_3, gs_sp + 1);
+                            double t200 = elements_node_x_g8(t199, t_g_7, gs_sp + 1);
+                            p1_g.e[t195] = (t196 + (((double)(t198) * (double)(t200))));
+                        }
+                    }
+                }
+                double det0_g;
+                if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(2))) {
+                    det0_g = ((double)((double)(((double)((double)(p1_g.e[0])) * (double)(p1_g.e[4])))) - (double)(((double)((double)(p1_g.e[1])) * (double)(p1_g.e[3]))));
+                } else {
+                    det0_g = ((double)((double)(((double)((double)(((double)((double)(p1_g.e[0])) * (double)(((double)((double)(((double)((double)(p1_g.e[4])) * (double)(p1_g.e[8])))) - (double)(((double)((double)(p1_g.e[5])) * (double)(p1_g.e[7])))))))) - (double)(((double)((double)(p1_g.e[1])) * (double)(((double)((double)(((double)((double)(p1_g.e[3])) * (double)(p1_g.e[8])))) - (double)(((double)((double)(p1_g.e[5])) * (double)(p1_g.e[6])))))))))) + (double)(((double)((double)(p1_g.e[2])) * (double)(((double)((double)(((double)((double)(p1_g.e[3])) * (double)(p1_g.e[7])))) - (double)(((double)((double)(p1_g.e[4])) * (double)(p1_g.e[6]))))))));
+                }
+                if ((uint8_t)((double)((double)(lo_g_2)) < (double)(((double)((double)(0.2)) * (double)(det0_g))))) goto L140;
+                goto L141;
+            }
+            L141:;
+            {
                 goto L139;
             }
-            int64_t t141;
-            int64_t d_g_3 = d_g;
+            L140:;
+            int64_t t201;
+            int64_t d_g_4 = d_g;
             {
-                if (!((uint8_t)((int64_t)((int64_t)(d_g_3)) >= (int64_t)(1)))) goto L144;
-                if ((uint8_t)((int64_t)((int64_t)(d_g_3)) <= (int64_t)(3))) goto L143;
-                L144:;
+                if (!((uint8_t)((int64_t)((int64_t)(d_g_4)) >= (int64_t)(1)))) goto L204;
+                if ((uint8_t)((int64_t)((int64_t)(d_g_4)) <= (int64_t)(3))) goto L203;
+                L204:;
                 {
-                    t145.data = ((uint8_t *)gs_str50); t145.len = 23;
-                    t146 = t145;
-                    gs_abort_msg(t146.data, t146.len, gs_file3, 21);
+                    t205.data = ((uint8_t *)gs_str50); t205.len = 23;
+                    t206 = t205;
+                    gs_abort_msg(t206.data, t206.len, gs_file3, 34);
                 }
-                L143:;
-                if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(1))) {
-                    t141 = 1;
-                    goto L142;
+                L203:;
+                if ((uint8_t)((int64_t)((int64_t)(d_g_4)) == (int64_t)(1))) {
+                    t201 = 1;
+                    goto L202;
                 }
-                if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(2))) {
-                    t141 = 3;
-                    goto L142;
+                if ((uint8_t)((int64_t)((int64_t)(d_g_4)) == (int64_t)(2))) {
+                    t201 = 3;
+                    goto L202;
                 }
-                t141 = 6;
-                goto L142;
+                t201 = 6;
+                goto L202;
             }
-            L142:;
-            int64_t t147 = t141;
-            for (int64_t e_g_3 = 0; e_g_3 < t147; e_g_3++) {
+            L202:;
+            int64_t t207 = t201;
+            for (int64_t e_g_3 = 0; e_g_3 < t207; e_g_3++) {
                 int64_t m_g_2;
-                int64_t t150 = elements_cell_node_g8(c_g_4, gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file6, 130)), e_g_3, gs_file6, 130), gs_sp + 1);
-                m_g_2 = t150;
-                int64_t a_g_6;
-                int64_t t151 = c_g_4;
-                int64_t t152 = elements_edge_node_g8(d_g, e_g_3, 0);
-                int64_t t153 = elements_cell_node_g8(t151, t152, gs_sp + 1);
-                a_g_6 = t153;
-                int64_t b_g_6;
-                int64_t t154 = c_g_4;
-                int64_t t155 = elements_edge_node_g8(d_g, e_g_3, 1);
-                int64_t t156 = elements_cell_node_g8(t154, t155, gs_sp + 1);
-                b_g_6 = t156;
+                int64_t t210 = elements_cell_node_g8(c_g_4, gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file6, 130)), e_g_3, gs_file6, 130), gs_sp + 1);
+                m_g_2 = t210;
+                int64_t a_g_7;
+                int64_t t211 = c_g_4;
+                int64_t t212 = elements_edge_node_g8(d_g, e_g_3, 0);
+                int64_t t213 = elements_cell_node_g8(t211, t212, gs_sp + 1);
+                a_g_7 = t213;
+                int64_t b_g_7;
+                int64_t t214 = c_g_4;
+                int64_t t215 = elements_edge_node_g8(d_g, e_g_3, 1);
+                int64_t t216 = elements_cell_node_g8(t214, t215, gs_sp + 1);
+                b_g_7 = t216;
                 {
-                    int64_t t158 = 3;
-                    for (int64_t t_g_6 = 0; t_g_6 < t158; t_g_6++) {
-                        int64_t t161 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), m_g_2, gs_file6, 169)), t_g_6, gs_file6, 169);
-                        double *t162 = &((((double *)((GS_GL->elements_coords_g8.base)))[GS_IDX((int64_t)(t161), (GS_GL->elements_coords_g8.len), gs_file6, 169)]));
-                        double t163 = 0.5;
-                        double t164 = elements_node_x_g8(a_g_6, t_g_6, gs_sp + 1);
-                        double t165 = t164;
-                        double t166 = elements_node_x_g8(b_g_6, t_g_6, gs_sp + 1);
-                        (*t162) = ((double)(t163) * (double)(((double)(t165) + (double)(t166))));
+                    int64_t t218 = 3;
+                    for (int64_t t_g_8 = 0; t_g_8 < t218; t_g_8++) {
+                        int64_t t221 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), m_g_2, gs_file6, 169)), t_g_8, gs_file6, 169);
+                        double *t222 = &((((double *)((GS_GL->elements_coords_g8.base)))[GS_IDX((int64_t)(t221), (GS_GL->elements_coords_g8.len), gs_file6, 169)]));
+                        double t223 = 0.5;
+                        double t224 = elements_node_x_g8(a_g_7, t_g_8, gs_sp + 1);
+                        double t225 = t224;
+                        double t226 = elements_node_x_g8(b_g_7, t_g_8, gs_sp + 1);
+                        (*t222) = ((double)(t223) * (double)(((double)(t225) + (double)(t226))));
                     }
                 }
             }
@@ -15996,31 +16208,31 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
     dictionary_g_i64_i64 count_g;
     sl_u8 t9;
     sl_u8 t10;
-    a3_i64 t15;
+    a3_i64 t17;
     a3_i64 v_g;
-    sl_i64 t28;
-    dictionary_slot_g_i64_i64 t32;
-    dictionary_slot_g_i64_i64 t35;
+    sl_i64 t30;
+    dictionary_slot_g_i64_i64 t34;
+    dictionary_slot_g_i64_i64 t37;
     dictionary_slot_g_i64_i64 e_g;
-    dictionary_slot_g_i64_i64 t61;
-    dictionary_slot_g_i64_i64 t64;
+    dictionary_slot_g_i64_i64 t63;
+    dictionary_slot_g_i64_i64 t66;
     dictionary_slot_g_i64_i64 e_g_2;
-    dictionary_slot_g_i64_i64 t105;
+    dictionary_slot_g_i64_i64 t107;
     dictionary_g_i64_i64 edges_g;
-    sl_u8 t116;
-    sl_u8 t117;
-    a3_i64 t122;
+    sl_u8 t118;
+    sl_u8 t119;
+    a3_i64 t126;
     a3_i64 v_g_2;
-    sl_i64 t135;
-    dictionary_slot_g_i64_i64 t171;
-    dictionary_slot_g_i64_i64 t174;
+    sl_i64 t139;
+    dictionary_slot_g_i64_i64 t175;
+    dictionary_slot_g_i64_i64 t178;
     dictionary_slot_g_i64_i64 e_g_3;
-    dictionary_slot_g_i64_i64 t200;
-    dictionary_slot_g_i64_i64 t203;
+    dictionary_slot_g_i64_i64 t204;
+    dictionary_slot_g_i64_i64 t207;
     dictionary_slot_g_i64_i64 e_g_4;
-    dictionary_slot_g_i64_i64 t244;
-    dictionary_slot_g_i64_i64 t249;
-    dictionary_g_i64_i64 t252;
+    dictionary_slot_g_i64_i64 t248;
+    dictionary_slot_g_i64_i64 t253;
+    dictionary_g_i64_i64 t256;
     int64_t nv_g = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
     if (!((uint8_t)((int64_t)((int64_t)(nv_g)) < (int64_t)(2000000)))) {
         t0.data = ((uint8_t *)gs_str54); t0.len = 36;
@@ -16047,227 +16259,240 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
             {
                 t9.data = ((uint8_t *)gs_str6); t9.len = 24;
                 t10 = t9;
-                gs_abort_msg(t10.data, t10.len, gs_file3, 121);
+                gs_abort_msg(t10.data, t10.len, gs_file3, 180);
             }
             L8:;
-            t6 = gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 122);
+            int64_t d_g_3 = d_g_2;
+            {
+                if (!(GS_GL->elements_hex_cells_g8)) goto L11;
+                if (!((uint8_t)((int64_t)((int64_t)(d_g_3)) >= (int64_t)(2)))) goto L11;
+                goto L12;
+            }
+            L12:;
+            if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) == (int64_t)(3)))) goto L11;
+            {
+                t6 = 6;
+                goto L7;
+            }
+            L11:;
+            t6 = gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 182);
             goto L7;
         }
         L7:;
-        int64_t t11 = t6;
-        uint8_t *t253 = GS(gs_sp + 0)->top;
-        for (int64_t f_g = 0; f_g < t11; f_g++) {
+        int64_t t13 = t6;
+        uint8_t *t257 = GS(gs_sp + 0)->top;
+        for (int64_t f_g = 0; f_g < t13; f_g++) {
             int64_t key_g;
-            int64_t d_g_3 = d_g;
+            int64_t d_g_4 = d_g;
             int64_t c_g_2 = c_g;
             int64_t f_g_2 = f_g;
             {
                 int64_t nv_g_2 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
-                t15.e[0] = 0;
-                t15.e[1] = 0;
-                t15.e[2] = 0;
-                v_g = t15;
-                int64_t t16 = d_g_3;
-                for (int64_t l_g = 0; l_g < t16; l_g++) {
-                    int64_t t19 = l_g;
-                    int64_t t20 = c_g_2;
-                    int64_t t21 = elements_facet_node_g8(d_g_3, f_g_2, l_g);
-                    int64_t t22 = elements_cell_node_g8(t20, t21, gs_sp + 1);
-                    v_g.e[t19] = t22;
+                t17.e[0] = 0;
+                t17.e[1] = 0;
+                t17.e[2] = 0;
+                v_g = t17;
+                int64_t t18 = d_g_4;
+                for (int64_t l_g = 0; l_g < t18; l_g++) {
+                    int64_t t21 = l_g;
+                    int64_t t22 = c_g_2;
+                    int64_t t23 = elements_facet_node_g8(d_g_4, f_g_2, l_g);
+                    int64_t t24 = elements_cell_node_g8(t22, t23, gs_sp + 1);
+                    v_g.e[t21] = t24;
                 }
-                if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(2))) {
-                    int64_t t23;
+                if ((uint8_t)((int64_t)((int64_t)(d_g_4)) == (int64_t)(2))) {
+                    int64_t t25;
                     int64_t a_g = v_g.e[0];
                     int64_t b_g = v_g.e[1];
                     {
                         if ((uint8_t)((int64_t)((int64_t)(b_g)) < (int64_t)(a_g))) {
-                            t23 = b_g;
-                            goto L24;
+                            t25 = b_g;
+                            goto L26;
                         }
-                        t23 = a_g;
-                        goto L24;
+                        t25 = a_g;
+                        goto L26;
                     }
-                    L24:;
-                    int64_t t25 = gs_mul_i64((int64_t)(t23), nv_g_2, gs_file6, 204);
-                    int64_t t26;
+                    L26:;
+                    int64_t t27 = gs_mul_i64((int64_t)(t25), nv_g_2, gs_file6, 204);
+                    int64_t t28;
                     int64_t a_g_2 = v_g.e[0];
                     int64_t b_g_2 = v_g.e[1];
                     {
                         if ((uint8_t)((int64_t)((int64_t)(a_g_2)) < (int64_t)(b_g_2))) {
-                            t26 = b_g_2;
-                            goto L27;
+                            t28 = b_g_2;
+                            goto L29;
                         }
-                        t26 = a_g_2;
-                        goto L27;
+                        t28 = a_g_2;
+                        goto L29;
                     }
-                    L27:;
-                    key_g = gs_add_i64(t25, t26, gs_file6, 204);
-                    goto L14;
+                    L29:;
+                    key_g = gs_add_i64(t27, t28, gs_file6, 204);
+                    goto L16;
                 }
-                t28.data = v_g.e; t28.len = 3;
-                sort_g_187(t28.data, t28.len);
+                t30.data = v_g.e; t30.len = 3;
+                sort_g_188(t30.data, t30.len);
                 key_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(v_g.e[0]), nv_g_2, gs_file6, 206)), v_g.e[1], gs_file6, 206)), nv_g_2, gs_file6, 206)), v_g.e[2], gs_file6, 206);
-                goto L14;
+                goto L16;
             }
-            L14:;
+            L16:;
             {
                 {
                     if ((uint8_t)((int64_t)((int64_t)(((count_g.slots_g.len)))) == (int64_t)(0))) {
                         {
                             int64_t old_g = ((count_g.slots_g.len));
-                            int64_t t33;
-                            GS_MEMZERO(&t33, sizeof(t33));
-                            t32.key_g = t33;
-                            int64_t t34;
-                            GS_MEMZERO(&t34, sizeof(t34));
-                            t32.val_g = t34;
-                            t32.tag_g = 0;
-                            t35 = t32;
-                            int64_t t36 = (count_g.slots_g.len);
+                            int64_t t35;
+                            GS_MEMZERO(&t35, sizeof(t35));
+                            t34.key_g = t35;
+                            int64_t t36;
+                            GS_MEMZERO(&t36, sizeof(t36));
+                            t34.val_g = t36;
+                            t34.tag_g = 0;
+                            t37 = t34;
+                            int64_t t38 = (count_g.slots_g.len);
                             if ((int64_t)(8) < 0) gs_abort(GS_E_RESIZENEG, gs_file15, 84);
-                            if (8 < t36) {
+                            if (8 < t38) {
                                 count_g.slots_g.len = (int64_t)8;
-                                t253 = (uint8_t *)((count_g.slots_g.base)) + 8 * 20;
-                            } else if (8 > t36) {
-                                uint8_t *t37 = t253;
-                                for (int64_t t38 = t36; t38 < 8; t38++) {
-                                    *(dictionary_slot_g_i64_i64 *)t37 = t35;
-                                    t37 += 20;
+                                t257 = (uint8_t *)((count_g.slots_g.base)) + 8 * 20;
+                            } else if (8 > t38) {
+                                uint8_t *t39 = t257;
+                                for (int64_t t40 = t38; t40 < 8; t40++) {
+                                    *(dictionary_slot_g_i64_i64 *)t39 = t37;
+                                    t39 += 20;
                                 }
-                                t253 = t37;
+                                t257 = t39;
                                 count_g.slots_g.len = (int64_t)8;
                             }
                             if ((uint8_t)((int64_t)((int64_t)(count_g.count_g)) == (int64_t)(0))) {
-                                goto L31;
+                                goto L33;
                             }
                             int64_t s_g = 0;
-                            uint8_t *t39 = (count_g.slots_g.base);
-                            int64_t t40 = (count_g.slots_g.len);
+                            uint8_t *t41 = (count_g.slots_g.base);
+                            int64_t t42 = (count_g.slots_g.len);
                             for (;;) {
-                                int64_t t43 = s_g;
-                                if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t39) + GS_IDX((int64_t)(t43), t40, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L41;
+                                int64_t t45 = s_g;
+                                if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t41) + GS_IDX((int64_t)(t45), t42, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L43;
                                 s_g = gs_add_i64(s_g, 1, gs_file15, 88);
                             }
-                            L41:;
-                            uint8_t *t44 = (count_g.slots_g.base);
-                            int64_t t45 = (count_g.slots_g.len);
-                            int64_t t46 = 1;
-                            int64_t t47 = old_g;
-                            for (int64_t k_g = t46; k_g < t47; k_g++) {
+                            L43:;
+                            uint8_t *t46 = (count_g.slots_g.base);
+                            int64_t t47 = (count_g.slots_g.len);
+                            int64_t t48 = 1;
+                            int64_t t49 = old_g;
+                            for (int64_t k_g = t48; k_g < t49; k_g++) {
                                 int64_t p_g = gs_add_i64((int64_t)(s_g), k_g, gs_file15, 90);
                                 if ((uint8_t)((int64_t)((int64_t)(p_g)) >= (int64_t)(old_g))) {
                                     p_g = gs_sub_i64(p_g, old_g, gs_file15, 91);
                                 }
-                                int64_t t50 = p_g;
-                                uint32_t t_g = (*(dictionary_slot_g_i64_i64 *)(((t44) + GS_IDX((int64_t)(t50), t45, gs_file15, 92) * 20))).tag_g;
+                                int64_t t52 = p_g;
+                                uint32_t t_g = (*(dictionary_slot_g_i64_i64 *)(((t46) + GS_IDX((int64_t)(t52), t47, gs_file15, 92) * 20))).tag_g;
                                 if ((uint8_t)(!((uint32_t)((uint32_t)(t_g)) == (uint32_t)(0)))) {
                                     int64_t q_g = (int64_t)((int64_t)((int64_t)((int64_t)(t_g))) & (int64_t)(7));
-                                    int64_t t51 = p_g;
-                                    e_g = (*(dictionary_slot_g_i64_i64 *)(((t44) + t51 * 20)));
-                                    int64_t t52 = p_g;
-                                    uint32_t *t53 = &((*(dictionary_slot_g_i64_i64 *)(((t44) + t52 * 20))).tag_g);
-                                    (*t53) = 0;
+                                    int64_t t53 = p_g;
+                                    e_g = (*(dictionary_slot_g_i64_i64 *)(((t46) + t53 * 20)));
+                                    int64_t t54 = p_g;
+                                    uint32_t *t55 = &((*(dictionary_slot_g_i64_i64 *)(((t46) + t54 * 20))).tag_g);
+                                    (*t55) = 0;
                                     for (;;) {
-                                        int64_t t56 = q_g;
-                                        if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t44) + GS_IDX((int64_t)(t56), t45, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L54;
+                                        int64_t t58 = q_g;
+                                        if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t46) + GS_IDX((int64_t)(t58), t47, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L56;
                                         q_g = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(q_g), 1, gs_file15, 98))) & (int64_t)(7));
                                     }
-                                    L54:;
-                                    int64_t t57 = q_g;
-                                    dictionary_slot_g_i64_i64 *t58 = &((*(dictionary_slot_g_i64_i64 *)(((t44) + t57 * 20))));
-                                    (*t58) = e_g;
+                                    L56:;
+                                    int64_t t59 = q_g;
+                                    dictionary_slot_g_i64_i64 *t60 = &((*(dictionary_slot_g_i64_i64 *)(((t46) + t59 * 20))));
+                                    (*t60) = e_g;
                                 }
                             }
                         }
-                        L31:;
+                        L33:;
                     } else {
                         if ((uint8_t)((int64_t)((int64_t)(gs_mul_i64((int64_t)(gs_add_i64((int64_t)(count_g.count_g), 1, gs_file15, 72)), 3, gs_file15, 72))) > (int64_t)(gs_mul_i64((int64_t)(((count_g.slots_g.len))), 2, gs_file15, 72)))) {
                             int64_t cap_g = gs_mul_i64((int64_t)(((count_g.slots_g.len))), 2, gs_file15, 73);
                             {
                                 int64_t old_g_2 = ((count_g.slots_g.len));
-                                int64_t t60 = cap_g;
-                                int64_t t62;
-                                GS_MEMZERO(&t62, sizeof(t62));
-                                t61.key_g = t62;
-                                int64_t t63;
-                                GS_MEMZERO(&t63, sizeof(t63));
-                                t61.val_g = t63;
-                                t61.tag_g = 0;
-                                t64 = t61;
-                                int64_t t65 = (count_g.slots_g.len);
-                                if ((int64_t)(t60) < 0) gs_abort(GS_E_RESIZENEG, gs_file15, 84);
-                                if (t60 < t65) {
-                                    count_g.slots_g.len = (int64_t)t60;
-                                    t253 = (uint8_t *)((count_g.slots_g.base)) + t60 * 20;
-                                } else if (t60 > t65) {
-                                    uint8_t *t66 = t253;
-                                    for (int64_t t67 = t65; t67 < t60; t67++) {
-                                        *(dictionary_slot_g_i64_i64 *)t66 = t64;
-                                        t66 += 20;
+                                int64_t t62 = cap_g;
+                                int64_t t64;
+                                GS_MEMZERO(&t64, sizeof(t64));
+                                t63.key_g = t64;
+                                int64_t t65;
+                                GS_MEMZERO(&t65, sizeof(t65));
+                                t63.val_g = t65;
+                                t63.tag_g = 0;
+                                t66 = t63;
+                                int64_t t67 = (count_g.slots_g.len);
+                                if ((int64_t)(t62) < 0) gs_abort(GS_E_RESIZENEG, gs_file15, 84);
+                                if (t62 < t67) {
+                                    count_g.slots_g.len = (int64_t)t62;
+                                    t257 = (uint8_t *)((count_g.slots_g.base)) + t62 * 20;
+                                } else if (t62 > t67) {
+                                    uint8_t *t68 = t257;
+                                    for (int64_t t69 = t67; t69 < t62; t69++) {
+                                        *(dictionary_slot_g_i64_i64 *)t68 = t66;
+                                        t68 += 20;
                                     }
-                                    t253 = t66;
-                                    count_g.slots_g.len = (int64_t)t60;
+                                    t257 = t68;
+                                    count_g.slots_g.len = (int64_t)t62;
                                 }
                                 if ((uint8_t)((int64_t)((int64_t)(count_g.count_g)) == (int64_t)(0))) {
-                                    goto L59;
+                                    goto L61;
                                 }
                                 int64_t mask_g = gs_sub_i64((int64_t)(cap_g), 1, gs_file15, 86);
                                 int64_t s_g_2 = 0;
-                                uint8_t *t68 = (count_g.slots_g.base);
-                                int64_t t69 = (count_g.slots_g.len);
+                                uint8_t *t70 = (count_g.slots_g.base);
+                                int64_t t71 = (count_g.slots_g.len);
                                 for (;;) {
-                                    int64_t t72 = s_g_2;
-                                    if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t68) + GS_IDX((int64_t)(t72), t69, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L70;
+                                    int64_t t74 = s_g_2;
+                                    if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t70) + GS_IDX((int64_t)(t74), t71, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L72;
                                     s_g_2 = gs_add_i64(s_g_2, 1, gs_file15, 88);
                                 }
-                                L70:;
-                                uint8_t *t73 = (count_g.slots_g.base);
-                                int64_t t74 = (count_g.slots_g.len);
-                                int64_t t75 = 1;
-                                int64_t t76 = old_g_2;
-                                for (int64_t k_g_2 = t75; k_g_2 < t76; k_g_2++) {
+                                L72:;
+                                uint8_t *t75 = (count_g.slots_g.base);
+                                int64_t t76 = (count_g.slots_g.len);
+                                int64_t t77 = 1;
+                                int64_t t78 = old_g_2;
+                                for (int64_t k_g_2 = t77; k_g_2 < t78; k_g_2++) {
                                     int64_t p_g_2 = gs_add_i64((int64_t)(s_g_2), k_g_2, gs_file15, 90);
                                     if ((uint8_t)((int64_t)((int64_t)(p_g_2)) >= (int64_t)(old_g_2))) {
                                         p_g_2 = gs_sub_i64(p_g_2, old_g_2, gs_file15, 91);
                                     }
-                                    int64_t t79 = p_g_2;
-                                    uint32_t t_g_2 = (*(dictionary_slot_g_i64_i64 *)(((t73) + GS_IDX((int64_t)(t79), t74, gs_file15, 92) * 20))).tag_g;
+                                    int64_t t81 = p_g_2;
+                                    uint32_t t_g_2 = (*(dictionary_slot_g_i64_i64 *)(((t75) + GS_IDX((int64_t)(t81), t76, gs_file15, 92) * 20))).tag_g;
                                     if ((uint8_t)(!((uint32_t)((uint32_t)(t_g_2)) == (uint32_t)(0)))) {
                                         int64_t q_g_2 = (int64_t)((int64_t)((int64_t)((int64_t)(t_g_2))) & (int64_t)(mask_g));
                                         if ((uint8_t)((int64_t)((int64_t)(mask_g)) >= (int64_t)(2147483648LL))) {
-                                            uint64_t t80;
-                                            int64_t t81 = p_g_2;
-                                            int64_t x_g = (*(dictionary_slot_g_i64_i64 *)(((t73) + t81 * 20))).key_g;
+                                            uint64_t t82;
+                                            int64_t t83 = p_g_2;
+                                            int64_t x_g = (*(dictionary_slot_g_i64_i64 *)(((t75) + t83 * 20))).key_g;
                                             {
                                                 uint64_t x_g_2 = (uint64_t)(x_g);
                                                 {
                                                     uint64_t h_g = gs_mul_u64((uint64_t)(x_g_2), 11400714819323198485ULL);
                                                     h_g = (uint64_t)((uint64_t)((uint64_t)(h_g)) ^ (uint64_t)(gs_shr_u64((uint64_t)(h_g), (int64_t)(32))));
-                                                    t80 = h_g;
-                                                    goto L83;
+                                                    t82 = h_g;
+                                                    goto L85;
                                                 }
-                                                L83:;
+                                                L85:;
                                             }
-                                            q_g_2 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(t80)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g), 0, 9223372036854775807LL, "u64", gs_file15, 95))), 9223372036854775807ULL, "i64", gs_file15, 95);
+                                            q_g_2 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(t82)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g), 0, 9223372036854775807LL, "u64", gs_file15, 95))), 9223372036854775807ULL, "i64", gs_file15, 95);
                                         }
-                                        int64_t t84 = p_g_2;
-                                        e_g_2 = (*(dictionary_slot_g_i64_i64 *)(((t73) + t84 * 20)));
-                                        int64_t t85 = p_g_2;
-                                        uint32_t *t86 = &((*(dictionary_slot_g_i64_i64 *)(((t73) + t85 * 20))).tag_g);
-                                        (*t86) = 0;
+                                        int64_t t86 = p_g_2;
+                                        e_g_2 = (*(dictionary_slot_g_i64_i64 *)(((t75) + t86 * 20)));
+                                        int64_t t87 = p_g_2;
+                                        uint32_t *t88 = &((*(dictionary_slot_g_i64_i64 *)(((t75) + t87 * 20))).tag_g);
+                                        (*t88) = 0;
                                         for (;;) {
-                                            int64_t t89 = q_g_2;
-                                            if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t73) + GS_IDX((int64_t)(t89), t74, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L87;
+                                            int64_t t91 = q_g_2;
+                                            if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t75) + GS_IDX((int64_t)(t91), t76, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L89;
                                             q_g_2 = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(q_g_2), 1, gs_file15, 98))) & (int64_t)(mask_g));
                                         }
-                                        L87:;
-                                        int64_t t90 = q_g_2;
-                                        dictionary_slot_g_i64_i64 *t91 = &((*(dictionary_slot_g_i64_i64 *)(((t73) + t90 * 20))));
-                                        (*t91) = e_g_2;
+                                        L89:;
+                                        int64_t t92 = q_g_2;
+                                        dictionary_slot_g_i64_i64 *t93 = &((*(dictionary_slot_g_i64_i64 *)(((t75) + t92 * 20))));
+                                        (*t93) = e_g_2;
                                     }
                                 }
                             }
-                            L59:;
+                            L61:;
                         }
                     }
                 }
@@ -16279,9 +16504,9 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
                         uint64_t h_g_3 = gs_mul_u64((uint64_t)(x_g_4), 11400714819323198485ULL);
                         h_g_3 = (uint64_t)((uint64_t)((uint64_t)(h_g_3)) ^ (uint64_t)(gs_shr_u64((uint64_t)(h_g_3), (int64_t)(32))));
                         h_g_2 = h_g_3;
-                        goto L93;
+                        goto L95;
                     }
-                    L93:;
+                    L95:;
                 }
                 int64_t i_g;
                 int64_t key_g_2 = key_g;
@@ -16294,140 +16519,153 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
                     }
                     int64_t mask_g_2 = gs_sub_i64((int64_t)(((count_g.slots_g.len))), 1, gs_file15, 51);
                     int64_t i_g_2 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(h_g_4)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g_2), 0, 9223372036854775807LL, "u64", gs_file15, 52))), 9223372036854775807ULL, "i64", gs_file15, 52);
-                    uint8_t *t96 = (count_g.slots_g.base);
-                    int64_t t97 = (count_g.slots_g.len);
+                    uint8_t *t98 = (count_g.slots_g.base);
+                    int64_t t99 = (count_g.slots_g.len);
                     for (;;) {
-                        int64_t t100 = i_g_2;
-                        uint32_t t_g_3 = (*(dictionary_slot_g_i64_i64 *)(((t96) + GS_IDX((int64_t)(t100), t97, gs_file15, 54) * 20))).tag_g;
+                        int64_t t102 = i_g_2;
+                        uint32_t t_g_3 = (*(dictionary_slot_g_i64_i64 *)(((t98) + GS_IDX((int64_t)(t102), t99, gs_file15, 54) * 20))).tag_g;
                         if ((uint8_t)((uint32_t)((uint32_t)(t_g_3)) == (uint32_t)(tag_g))) {
-                            int64_t t101 = i_g_2;
-                            if ((uint8_t)((int64_t)((int64_t)((*(dictionary_slot_g_i64_i64 *)(((t96) + t101 * 20))).key_g)) == (int64_t)(key_g_2))) {
+                            int64_t t103 = i_g_2;
+                            if ((uint8_t)((int64_t)((int64_t)((*(dictionary_slot_g_i64_i64 *)(((t98) + t103 * 20))).key_g)) == (int64_t)(key_g_2))) {
                                 i_g = i_g_2;
-                                goto L94;
+                                goto L96;
                             }
                         } else {
                             if ((uint8_t)((uint32_t)((uint32_t)(t_g_3)) == (uint32_t)(0))) {
                                 i_g = i_g_2;
-                                goto L94;
+                                goto L96;
                             }
                         }
                         i_g_2 = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(i_g_2), 1, gs_file15, 60))) & (int64_t)(mask_g_2));
                     }
                 }
-                L94:;
-                int64_t t102 = i_g;
-                if ((uint8_t)((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + GS_IDX((int64_t)(t102), (count_g.slots_g.len), gs_file15, 148) * 20))).tag_g)) == (uint32_t)(0))) {
-                    int64_t t103 = i_g;
-                    dictionary_slot_g_i64_i64 *t104 = &((*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + t103 * 20))));
-                    t105.key_g = key_g;
-                    t105.val_g = 0;
+                L96:;
+                int64_t t104 = i_g;
+                if ((uint8_t)((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + GS_IDX((int64_t)(t104), (count_g.slots_g.len), gs_file15, 148) * 20))).tag_g)) == (uint32_t)(0))) {
+                    int64_t t105 = i_g;
+                    dictionary_slot_g_i64_i64 *t106 = &((*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + t105 * 20))));
+                    t107.key_g = key_g;
+                    t107.val_g = 0;
                     uint64_t h_g_6 = h_g_2;
                     {
-                        t105.tag_g = (uint32_t)((uint32_t)((uint32_t)((uint32_t)(h_g_6))) | (uint32_t)(2147483648LL));
+                        t107.tag_g = (uint32_t)((uint32_t)((uint32_t)((uint32_t)(h_g_6))) | (uint32_t)(2147483648LL));
                     }
-                    (*t104) = t105;
-                    int64_t *t107 = &(count_g.count_g);
-                    (*t107) = gs_add_i64((*t107), 1, gs_file15, 150);
+                    (*t106) = t107;
+                    int64_t *t109 = &(count_g.count_g);
+                    (*t109) = gs_add_i64((*t109), 1, gs_file15, 150);
                 }
                 {
-                    int64_t t108 = i_g;
-                    int64_t * it_g = &(*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + t108 * 20))).val_g;
+                    int64_t t110 = i_g;
+                    int64_t * it_g = &(*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + t110 * 20))).val_g;
                     (*it_g) = gs_add_i64((*it_g), 1, gs_file6, 180);
                 }
             }
         }
-        GS(gs_sp + 0)->top = t253;
+        GS(gs_sp + 0)->top = t257;
     }
     edges_g.count_g = 0;
     edges_g.slots_g.base = GS(gs_sp + 1)->top;
     edges_g.slots_g.len = 0;
     edges_g.slots_g.len = 0;
-    int64_t t109;
+    int64_t t111;
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) > (int64_t)(0))) {
-        t109 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
+        t111 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
     } else {
-        t109 = 0;
+        t111 = 0;
     }
-    int64_t t110 = t109;
-    for (int64_t c_g_3 = 0; c_g_3 < t110; c_g_3++) {
-        int64_t t113;
-        int64_t d_g_4 = d_g;
+    int64_t t112 = t111;
+    for (int64_t c_g_3 = 0; c_g_3 < t112; c_g_3++) {
+        int64_t t115;
+        int64_t d_g_5 = d_g;
         {
-            if ((uint8_t)((int64_t)((int64_t)(d_g_4)) == (int64_t)(2))) goto L115;
-            if ((uint8_t)((int64_t)((int64_t)(d_g_4)) == (int64_t)(3))) goto L115;
+            if ((uint8_t)((int64_t)((int64_t)(d_g_5)) == (int64_t)(2))) goto L117;
+            if ((uint8_t)((int64_t)((int64_t)(d_g_5)) == (int64_t)(3))) goto L117;
             {
-                t116.data = ((uint8_t *)gs_str6); t116.len = 24;
-                t117 = t116;
-                gs_abort_msg(t117.data, t117.len, gs_file3, 121);
+                t118.data = ((uint8_t *)gs_str6); t118.len = 24;
+                t119 = t118;
+                gs_abort_msg(t119.data, t119.len, gs_file3, 180);
             }
-            L115:;
-            t113 = gs_add_i64((int64_t)(d_g_4), 1, gs_file3, 122);
-            goto L114;
+            L117:;
+            int64_t d_g_6 = d_g_5;
+            {
+                if (!(GS_GL->elements_hex_cells_g8)) goto L120;
+                if (!((uint8_t)((int64_t)((int64_t)(d_g_6)) >= (int64_t)(2)))) goto L120;
+                goto L121;
+            }
+            L121:;
+            if (!((uint8_t)((int64_t)((int64_t)(d_g_5)) == (int64_t)(3)))) goto L120;
+            {
+                t115 = 6;
+                goto L116;
+            }
+            L120:;
+            t115 = gs_add_i64((int64_t)(d_g_5), 1, gs_file3, 182);
+            goto L116;
         }
-        L114:;
-        int64_t t118 = t113;
-        for (int64_t f_g_3 = 0; f_g_3 < t118; f_g_3++) {
+        L116:;
+        int64_t t122 = t115;
+        for (int64_t f_g_3 = 0; f_g_3 < t122; f_g_3++) {
             int64_t * shared_g;
             int64_t key_g_3;
-            int64_t d_g_5 = d_g;
+            int64_t d_g_7 = d_g;
             int64_t c_g_4 = c_g_3;
             int64_t f_g_4 = f_g_3;
             {
                 int64_t nv_g_3 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
-                t122.e[0] = 0;
-                t122.e[1] = 0;
-                t122.e[2] = 0;
-                v_g_2 = t122;
-                int64_t t123 = d_g_5;
-                for (int64_t l_g_2 = 0; l_g_2 < t123; l_g_2++) {
-                    int64_t t126 = l_g_2;
-                    int64_t t127 = c_g_4;
-                    int64_t t128 = elements_facet_node_g8(d_g_5, f_g_4, l_g_2);
-                    int64_t t129 = elements_cell_node_g8(t127, t128, gs_sp + 2);
-                    v_g_2.e[t126] = t129;
+                t126.e[0] = 0;
+                t126.e[1] = 0;
+                t126.e[2] = 0;
+                v_g_2 = t126;
+                int64_t t127 = d_g_7;
+                for (int64_t l_g_2 = 0; l_g_2 < t127; l_g_2++) {
+                    int64_t t130 = l_g_2;
+                    int64_t t131 = c_g_4;
+                    int64_t t132 = elements_facet_node_g8(d_g_7, f_g_4, l_g_2);
+                    int64_t t133 = elements_cell_node_g8(t131, t132, gs_sp + 2);
+                    v_g_2.e[t130] = t133;
                 }
-                if ((uint8_t)((int64_t)((int64_t)(d_g_5)) == (int64_t)(2))) {
-                    int64_t t130;
+                if ((uint8_t)((int64_t)((int64_t)(d_g_7)) == (int64_t)(2))) {
+                    int64_t t134;
                     int64_t a_g_3 = v_g_2.e[0];
                     int64_t b_g_3 = v_g_2.e[1];
                     {
                         if ((uint8_t)((int64_t)((int64_t)(b_g_3)) < (int64_t)(a_g_3))) {
-                            t130 = b_g_3;
-                            goto L131;
+                            t134 = b_g_3;
+                            goto L135;
                         }
-                        t130 = a_g_3;
-                        goto L131;
+                        t134 = a_g_3;
+                        goto L135;
                     }
-                    L131:;
-                    int64_t t132 = gs_mul_i64((int64_t)(t130), nv_g_3, gs_file6, 204);
-                    int64_t t133;
+                    L135:;
+                    int64_t t136 = gs_mul_i64((int64_t)(t134), nv_g_3, gs_file6, 204);
+                    int64_t t137;
                     int64_t a_g_4 = v_g_2.e[0];
                     int64_t b_g_4 = v_g_2.e[1];
                     {
                         if ((uint8_t)((int64_t)((int64_t)(a_g_4)) < (int64_t)(b_g_4))) {
-                            t133 = b_g_4;
-                            goto L134;
+                            t137 = b_g_4;
+                            goto L138;
                         }
-                        t133 = a_g_4;
-                        goto L134;
+                        t137 = a_g_4;
+                        goto L138;
                     }
-                    L134:;
-                    key_g_3 = gs_add_i64(t132, t133, gs_file6, 204);
-                    goto L121;
+                    L138:;
+                    key_g_3 = gs_add_i64(t136, t137, gs_file6, 204);
+                    goto L125;
                 }
-                t135.data = v_g_2.e; t135.len = 3;
-                sort_g_187(t135.data, t135.len);
+                t139.data = v_g_2.e; t139.len = 3;
+                sort_g_188(t139.data, t139.len);
                 key_g_3 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(v_g_2.e[0]), nv_g_3, gs_file6, 206)), v_g_2.e[1], gs_file6, 206)), nv_g_3, gs_file6, 206)), v_g_2.e[2], gs_file6, 206);
-                goto L121;
+                goto L125;
             }
-            L121:;
+            L125:;
             {
                 int64_t i_g_3;
                 int64_t key_g_4 = key_g_3;
                 {
                     if ((uint8_t)((int64_t)((int64_t)(count_g.count_g)) == (int64_t)(0))) {
                         i_g_3 = -1;
-                        goto L137;
+                        goto L141;
                     }
                     uint64_t h_g_7;
                     int64_t x_g_5 = key_g_4;
@@ -16437,9 +16675,9 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
                             uint64_t h_g_8 = gs_mul_u64((uint64_t)(x_g_6), 11400714819323198485ULL);
                             h_g_8 = (uint64_t)((uint64_t)((uint64_t)(h_g_8)) ^ (uint64_t)(gs_shr_u64((uint64_t)(h_g_8), (int64_t)(32))));
                             h_g_7 = h_g_8;
-                            goto L139;
+                            goto L143;
                         }
-                        L139:;
+                        L143:;
                     }
                     uint32_t tag_g_2;
                     uint64_t h_g_9 = h_g_7;
@@ -16448,243 +16686,243 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
                     }
                     int64_t mask_g_3 = gs_sub_i64((int64_t)(((count_g.slots_g.len))), 1, gs_file15, 34);
                     int64_t i_g_4 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(h_g_7)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g_3), 0, 9223372036854775807LL, "u64", gs_file15, 35))), 9223372036854775807ULL, "i64", gs_file15, 35);
-                    uint8_t *t141 = (count_g.slots_g.base);
-                    int64_t t142 = (count_g.slots_g.len);
+                    uint8_t *t145 = (count_g.slots_g.base);
+                    int64_t t146 = (count_g.slots_g.len);
                     for (;;) {
-                        int64_t t145 = i_g_4;
-                        uint32_t t_g_4 = (*(dictionary_slot_g_i64_i64 *)(((t141) + GS_IDX((int64_t)(t145), t142, gs_file15, 37) * 20))).tag_g;
+                        int64_t t149 = i_g_4;
+                        uint32_t t_g_4 = (*(dictionary_slot_g_i64_i64 *)(((t145) + GS_IDX((int64_t)(t149), t146, gs_file15, 37) * 20))).tag_g;
                         if ((uint8_t)((uint32_t)((uint32_t)(t_g_4)) == (uint32_t)(tag_g_2))) {
-                            int64_t t146 = i_g_4;
-                            if ((uint8_t)((int64_t)((int64_t)((*(dictionary_slot_g_i64_i64 *)(((t141) + t146 * 20))).key_g)) == (int64_t)(key_g_4))) {
+                            int64_t t150 = i_g_4;
+                            if ((uint8_t)((int64_t)((int64_t)((*(dictionary_slot_g_i64_i64 *)(((t145) + t150 * 20))).key_g)) == (int64_t)(key_g_4))) {
                                 i_g_3 = i_g_4;
-                                goto L137;
+                                goto L141;
                             }
                         } else {
                             if ((uint8_t)((uint32_t)((uint32_t)(t_g_4)) == (uint32_t)(0))) {
                                 i_g_3 = -1;
-                                goto L137;
+                                goto L141;
                             }
                         }
                         i_g_4 = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(i_g_4), 1, gs_file15, 43))) & (int64_t)(mask_g_3));
                     }
                 }
-                L137:;
+                L141:;
                 if ((uint8_t)((int64_t)((int64_t)(i_g_3)) < (int64_t)(0))) {
                     shared_g = NULL;
-                    goto L136;
+                    goto L140;
                 }
-                int64_t t147 = i_g_3;
-                shared_g = &(*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + GS_IDX((int64_t)(t147), (count_g.slots_g.len), gs_file15, 108) * 20))).val_g;
-                goto L136;
+                int64_t t151 = i_g_3;
+                shared_g = &(*(dictionary_slot_g_i64_i64 *)(((count_g.slots_g.base) + GS_IDX((int64_t)(t151), (count_g.slots_g.len), gs_file15, 108) * 20))).val_g;
+                goto L140;
             }
-            L136:;
-            if (!((shared_g != NULL))) goto L149;
-            if ((uint8_t)((int64_t)((int64_t)((*shared_g))) == (int64_t)(1))) goto L148;
-            L149:;
+            L140:;
+            if (!((shared_g != NULL))) goto L153;
+            if ((uint8_t)((int64_t)((int64_t)((*shared_g))) == (int64_t)(1))) goto L152;
+            L153:;
             {
-                goto L120;
+                goto L124;
             }
-            L148:;
-            int64_t t150 = d_g;
-            for (int64_t i_g_5 = 0; i_g_5 < t150; i_g_5++) {
-                int64_t t153 = gs_add_i64((int64_t)(i_g_5), 1, gs_file6, 188);
-                int64_t t154 = d_g;
-                uint8_t *t254 = GS(gs_sp + 1)->top;
-                for (int64_t j_g = t153; j_g < t154; j_g++) {
+            L152:;
+            int64_t t154 = d_g;
+            for (int64_t i_g_5 = 0; i_g_5 < t154; i_g_5++) {
+                int64_t t157 = gs_add_i64((int64_t)(i_g_5), 1, gs_file6, 188);
+                int64_t t158 = d_g;
+                uint8_t *t258 = GS(gs_sp + 1)->top;
+                for (int64_t j_g = t157; j_g < t158; j_g++) {
                     int64_t a_g_5;
-                    int64_t t157 = c_g_3;
-                    int64_t t158 = elements_facet_node_g8(d_g, f_g_3, i_g_5);
-                    int64_t t159 = elements_cell_node_g8(t157, t158, gs_sp + 2);
-                    a_g_5 = t159;
+                    int64_t t161 = c_g_3;
+                    int64_t t162 = elements_facet_node_g8(d_g, f_g_3, i_g_5);
+                    int64_t t163 = elements_cell_node_g8(t161, t162, gs_sp + 2);
+                    a_g_5 = t163;
                     int64_t b_g_5;
-                    int64_t t160 = c_g_3;
-                    int64_t t161 = elements_facet_node_g8(d_g, f_g_3, j_g);
-                    int64_t t162 = elements_cell_node_g8(t160, t161, gs_sp + 2);
-                    b_g_5 = t162;
-                    int64_t t163;
+                    int64_t t164 = c_g_3;
+                    int64_t t165 = elements_facet_node_g8(d_g, f_g_3, j_g);
+                    int64_t t166 = elements_cell_node_g8(t164, t165, gs_sp + 2);
+                    b_g_5 = t166;
+                    int64_t t167;
                     int64_t a_g_6 = a_g_5;
                     int64_t b_g_6 = b_g_5;
                     {
                         if ((uint8_t)((int64_t)((int64_t)(b_g_6)) < (int64_t)(a_g_6))) {
-                            t163 = b_g_6;
-                            goto L164;
+                            t167 = b_g_6;
+                            goto L168;
                         }
-                        t163 = a_g_6;
-                        goto L164;
+                        t167 = a_g_6;
+                        goto L168;
                     }
-                    L164:;
-                    int64_t t165 = gs_mul_i64((int64_t)(t163), nv_g, gs_file6, 191);
-                    int64_t t166;
+                    L168:;
+                    int64_t t169 = gs_mul_i64((int64_t)(t167), nv_g, gs_file6, 191);
+                    int64_t t170;
                     int64_t a_g_7 = a_g_5;
                     int64_t b_g_7 = b_g_5;
                     {
                         if ((uint8_t)((int64_t)((int64_t)(a_g_7)) < (int64_t)(b_g_7))) {
-                            t166 = b_g_7;
-                            goto L167;
+                            t170 = b_g_7;
+                            goto L171;
                         }
-                        t166 = a_g_7;
-                        goto L167;
+                        t170 = a_g_7;
+                        goto L171;
                     }
-                    L167:;
-                    int64_t key_g_5 = gs_add_i64(t165, t166, gs_file6, 191);
+                    L171:;
+                    int64_t key_g_5 = gs_add_i64(t169, t170, gs_file6, 191);
                     {
                         {
                             if ((uint8_t)((int64_t)((int64_t)(((edges_g.slots_g.len)))) == (int64_t)(0))) {
                                 {
                                     int64_t old_g_3 = ((edges_g.slots_g.len));
-                                    int64_t t172;
-                                    GS_MEMZERO(&t172, sizeof(t172));
-                                    t171.key_g = t172;
-                                    int64_t t173;
-                                    GS_MEMZERO(&t173, sizeof(t173));
-                                    t171.val_g = t173;
-                                    t171.tag_g = 0;
-                                    t174 = t171;
-                                    int64_t t175 = (edges_g.slots_g.len);
+                                    int64_t t176;
+                                    GS_MEMZERO(&t176, sizeof(t176));
+                                    t175.key_g = t176;
+                                    int64_t t177;
+                                    GS_MEMZERO(&t177, sizeof(t177));
+                                    t175.val_g = t177;
+                                    t175.tag_g = 0;
+                                    t178 = t175;
+                                    int64_t t179 = (edges_g.slots_g.len);
                                     if ((int64_t)(8) < 0) gs_abort(GS_E_RESIZENEG, gs_file15, 84);
-                                    if (8 < t175) {
+                                    if (8 < t179) {
                                         edges_g.slots_g.len = (int64_t)8;
-                                        t254 = (uint8_t *)((edges_g.slots_g.base)) + 8 * 20;
-                                    } else if (8 > t175) {
-                                        uint8_t *t176 = t254;
-                                        for (int64_t t177 = t175; t177 < 8; t177++) {
-                                            *(dictionary_slot_g_i64_i64 *)t176 = t174;
-                                            t176 += 20;
+                                        t258 = (uint8_t *)((edges_g.slots_g.base)) + 8 * 20;
+                                    } else if (8 > t179) {
+                                        uint8_t *t180 = t258;
+                                        for (int64_t t181 = t179; t181 < 8; t181++) {
+                                            *(dictionary_slot_g_i64_i64 *)t180 = t178;
+                                            t180 += 20;
                                         }
-                                        t254 = t176;
+                                        t258 = t180;
                                         edges_g.slots_g.len = (int64_t)8;
                                     }
                                     if ((uint8_t)((int64_t)((int64_t)(edges_g.count_g)) == (int64_t)(0))) {
-                                        goto L170;
+                                        goto L174;
                                     }
                                     int64_t s_g_3 = 0;
-                                    uint8_t *t178 = (edges_g.slots_g.base);
-                                    int64_t t179 = (edges_g.slots_g.len);
+                                    uint8_t *t182 = (edges_g.slots_g.base);
+                                    int64_t t183 = (edges_g.slots_g.len);
                                     for (;;) {
-                                        int64_t t182 = s_g_3;
-                                        if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t178) + GS_IDX((int64_t)(t182), t179, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L180;
+                                        int64_t t186 = s_g_3;
+                                        if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t182) + GS_IDX((int64_t)(t186), t183, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L184;
                                         s_g_3 = gs_add_i64(s_g_3, 1, gs_file15, 88);
                                     }
-                                    L180:;
-                                    uint8_t *t183 = (edges_g.slots_g.base);
-                                    int64_t t184 = (edges_g.slots_g.len);
-                                    int64_t t185 = 1;
-                                    int64_t t186 = old_g_3;
-                                    for (int64_t k_g_3 = t185; k_g_3 < t186; k_g_3++) {
+                                    L184:;
+                                    uint8_t *t187 = (edges_g.slots_g.base);
+                                    int64_t t188 = (edges_g.slots_g.len);
+                                    int64_t t189 = 1;
+                                    int64_t t190 = old_g_3;
+                                    for (int64_t k_g_3 = t189; k_g_3 < t190; k_g_3++) {
                                         int64_t p_g_3 = gs_add_i64((int64_t)(s_g_3), k_g_3, gs_file15, 90);
                                         if ((uint8_t)((int64_t)((int64_t)(p_g_3)) >= (int64_t)(old_g_3))) {
                                             p_g_3 = gs_sub_i64(p_g_3, old_g_3, gs_file15, 91);
                                         }
-                                        int64_t t189 = p_g_3;
-                                        uint32_t t_g_5 = (*(dictionary_slot_g_i64_i64 *)(((t183) + GS_IDX((int64_t)(t189), t184, gs_file15, 92) * 20))).tag_g;
+                                        int64_t t193 = p_g_3;
+                                        uint32_t t_g_5 = (*(dictionary_slot_g_i64_i64 *)(((t187) + GS_IDX((int64_t)(t193), t188, gs_file15, 92) * 20))).tag_g;
                                         if ((uint8_t)(!((uint32_t)((uint32_t)(t_g_5)) == (uint32_t)(0)))) {
                                             int64_t q_g_3 = (int64_t)((int64_t)((int64_t)((int64_t)(t_g_5))) & (int64_t)(7));
-                                            int64_t t190 = p_g_3;
-                                            e_g_3 = (*(dictionary_slot_g_i64_i64 *)(((t183) + t190 * 20)));
-                                            int64_t t191 = p_g_3;
-                                            uint32_t *t192 = &((*(dictionary_slot_g_i64_i64 *)(((t183) + t191 * 20))).tag_g);
-                                            (*t192) = 0;
+                                            int64_t t194 = p_g_3;
+                                            e_g_3 = (*(dictionary_slot_g_i64_i64 *)(((t187) + t194 * 20)));
+                                            int64_t t195 = p_g_3;
+                                            uint32_t *t196 = &((*(dictionary_slot_g_i64_i64 *)(((t187) + t195 * 20))).tag_g);
+                                            (*t196) = 0;
                                             for (;;) {
-                                                int64_t t195 = q_g_3;
-                                                if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t183) + GS_IDX((int64_t)(t195), t184, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L193;
+                                                int64_t t199 = q_g_3;
+                                                if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t187) + GS_IDX((int64_t)(t199), t188, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L197;
                                                 q_g_3 = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(q_g_3), 1, gs_file15, 98))) & (int64_t)(7));
                                             }
-                                            L193:;
-                                            int64_t t196 = q_g_3;
-                                            dictionary_slot_g_i64_i64 *t197 = &((*(dictionary_slot_g_i64_i64 *)(((t183) + t196 * 20))));
-                                            (*t197) = e_g_3;
+                                            L197:;
+                                            int64_t t200 = q_g_3;
+                                            dictionary_slot_g_i64_i64 *t201 = &((*(dictionary_slot_g_i64_i64 *)(((t187) + t200 * 20))));
+                                            (*t201) = e_g_3;
                                         }
                                     }
                                 }
-                                L170:;
+                                L174:;
                             } else {
                                 if ((uint8_t)((int64_t)((int64_t)(gs_mul_i64((int64_t)(gs_add_i64((int64_t)(edges_g.count_g), 1, gs_file15, 72)), 3, gs_file15, 72))) > (int64_t)(gs_mul_i64((int64_t)(((edges_g.slots_g.len))), 2, gs_file15, 72)))) {
                                     int64_t cap_g_2 = gs_mul_i64((int64_t)(((edges_g.slots_g.len))), 2, gs_file15, 73);
                                     {
                                         int64_t old_g_4 = ((edges_g.slots_g.len));
-                                        int64_t t199 = cap_g_2;
-                                        int64_t t201;
-                                        GS_MEMZERO(&t201, sizeof(t201));
-                                        t200.key_g = t201;
-                                        int64_t t202;
-                                        GS_MEMZERO(&t202, sizeof(t202));
-                                        t200.val_g = t202;
-                                        t200.tag_g = 0;
-                                        t203 = t200;
-                                        int64_t t204 = (edges_g.slots_g.len);
-                                        if ((int64_t)(t199) < 0) gs_abort(GS_E_RESIZENEG, gs_file15, 84);
-                                        if (t199 < t204) {
-                                            edges_g.slots_g.len = (int64_t)t199;
-                                            t254 = (uint8_t *)((edges_g.slots_g.base)) + t199 * 20;
-                                        } else if (t199 > t204) {
-                                            uint8_t *t205 = t254;
-                                            for (int64_t t206 = t204; t206 < t199; t206++) {
-                                                *(dictionary_slot_g_i64_i64 *)t205 = t203;
-                                                t205 += 20;
+                                        int64_t t203 = cap_g_2;
+                                        int64_t t205;
+                                        GS_MEMZERO(&t205, sizeof(t205));
+                                        t204.key_g = t205;
+                                        int64_t t206;
+                                        GS_MEMZERO(&t206, sizeof(t206));
+                                        t204.val_g = t206;
+                                        t204.tag_g = 0;
+                                        t207 = t204;
+                                        int64_t t208 = (edges_g.slots_g.len);
+                                        if ((int64_t)(t203) < 0) gs_abort(GS_E_RESIZENEG, gs_file15, 84);
+                                        if (t203 < t208) {
+                                            edges_g.slots_g.len = (int64_t)t203;
+                                            t258 = (uint8_t *)((edges_g.slots_g.base)) + t203 * 20;
+                                        } else if (t203 > t208) {
+                                            uint8_t *t209 = t258;
+                                            for (int64_t t210 = t208; t210 < t203; t210++) {
+                                                *(dictionary_slot_g_i64_i64 *)t209 = t207;
+                                                t209 += 20;
                                             }
-                                            t254 = t205;
-                                            edges_g.slots_g.len = (int64_t)t199;
+                                            t258 = t209;
+                                            edges_g.slots_g.len = (int64_t)t203;
                                         }
                                         if ((uint8_t)((int64_t)((int64_t)(edges_g.count_g)) == (int64_t)(0))) {
-                                            goto L198;
+                                            goto L202;
                                         }
                                         int64_t mask_g_4 = gs_sub_i64((int64_t)(cap_g_2), 1, gs_file15, 86);
                                         int64_t s_g_4 = 0;
-                                        uint8_t *t207 = (edges_g.slots_g.base);
-                                        int64_t t208 = (edges_g.slots_g.len);
+                                        uint8_t *t211 = (edges_g.slots_g.base);
+                                        int64_t t212 = (edges_g.slots_g.len);
                                         for (;;) {
-                                            int64_t t211 = s_g_4;
-                                            if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t207) + GS_IDX((int64_t)(t211), t208, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L209;
+                                            int64_t t215 = s_g_4;
+                                            if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t211) + GS_IDX((int64_t)(t215), t212, gs_file15, 88) * 20))).tag_g)) == (uint32_t)(0))))) goto L213;
                                             s_g_4 = gs_add_i64(s_g_4, 1, gs_file15, 88);
                                         }
-                                        L209:;
-                                        uint8_t *t212 = (edges_g.slots_g.base);
-                                        int64_t t213 = (edges_g.slots_g.len);
-                                        int64_t t214 = 1;
-                                        int64_t t215 = old_g_4;
-                                        for (int64_t k_g_4 = t214; k_g_4 < t215; k_g_4++) {
+                                        L213:;
+                                        uint8_t *t216 = (edges_g.slots_g.base);
+                                        int64_t t217 = (edges_g.slots_g.len);
+                                        int64_t t218 = 1;
+                                        int64_t t219 = old_g_4;
+                                        for (int64_t k_g_4 = t218; k_g_4 < t219; k_g_4++) {
                                             int64_t p_g_4 = gs_add_i64((int64_t)(s_g_4), k_g_4, gs_file15, 90);
                                             if ((uint8_t)((int64_t)((int64_t)(p_g_4)) >= (int64_t)(old_g_4))) {
                                                 p_g_4 = gs_sub_i64(p_g_4, old_g_4, gs_file15, 91);
                                             }
-                                            int64_t t218 = p_g_4;
-                                            uint32_t t_g_6 = (*(dictionary_slot_g_i64_i64 *)(((t212) + GS_IDX((int64_t)(t218), t213, gs_file15, 92) * 20))).tag_g;
+                                            int64_t t222 = p_g_4;
+                                            uint32_t t_g_6 = (*(dictionary_slot_g_i64_i64 *)(((t216) + GS_IDX((int64_t)(t222), t217, gs_file15, 92) * 20))).tag_g;
                                             if ((uint8_t)(!((uint32_t)((uint32_t)(t_g_6)) == (uint32_t)(0)))) {
                                                 int64_t q_g_4 = (int64_t)((int64_t)((int64_t)((int64_t)(t_g_6))) & (int64_t)(mask_g_4));
                                                 if ((uint8_t)((int64_t)((int64_t)(mask_g_4)) >= (int64_t)(2147483648LL))) {
-                                                    uint64_t t219;
-                                                    int64_t t220 = p_g_4;
-                                                    int64_t x_g_7 = (*(dictionary_slot_g_i64_i64 *)(((t212) + t220 * 20))).key_g;
+                                                    uint64_t t223;
+                                                    int64_t t224 = p_g_4;
+                                                    int64_t x_g_7 = (*(dictionary_slot_g_i64_i64 *)(((t216) + t224 * 20))).key_g;
                                                     {
                                                         uint64_t x_g_8 = (uint64_t)(x_g_7);
                                                         {
                                                             uint64_t h_g_10 = gs_mul_u64((uint64_t)(x_g_8), 11400714819323198485ULL);
                                                             h_g_10 = (uint64_t)((uint64_t)((uint64_t)(h_g_10)) ^ (uint64_t)(gs_shr_u64((uint64_t)(h_g_10), (int64_t)(32))));
-                                                            t219 = h_g_10;
-                                                            goto L222;
+                                                            t223 = h_g_10;
+                                                            goto L226;
                                                         }
-                                                        L222:;
+                                                        L226:;
                                                     }
-                                                    q_g_4 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(t219)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g_4), 0, 9223372036854775807LL, "u64", gs_file15, 95))), 9223372036854775807ULL, "i64", gs_file15, 95);
+                                                    q_g_4 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(t223)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g_4), 0, 9223372036854775807LL, "u64", gs_file15, 95))), 9223372036854775807ULL, "i64", gs_file15, 95);
                                                 }
-                                                int64_t t223 = p_g_4;
-                                                e_g_4 = (*(dictionary_slot_g_i64_i64 *)(((t212) + t223 * 20)));
-                                                int64_t t224 = p_g_4;
-                                                uint32_t *t225 = &((*(dictionary_slot_g_i64_i64 *)(((t212) + t224 * 20))).tag_g);
-                                                (*t225) = 0;
+                                                int64_t t227 = p_g_4;
+                                                e_g_4 = (*(dictionary_slot_g_i64_i64 *)(((t216) + t227 * 20)));
+                                                int64_t t228 = p_g_4;
+                                                uint32_t *t229 = &((*(dictionary_slot_g_i64_i64 *)(((t216) + t228 * 20))).tag_g);
+                                                (*t229) = 0;
                                                 for (;;) {
-                                                    int64_t t228 = q_g_4;
-                                                    if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t212) + GS_IDX((int64_t)(t228), t213, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L226;
+                                                    int64_t t232 = q_g_4;
+                                                    if (!((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((t216) + GS_IDX((int64_t)(t232), t217, gs_file15, 98) * 20))).tag_g)) == (uint32_t)(0))))) goto L230;
                                                     q_g_4 = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(q_g_4), 1, gs_file15, 98))) & (int64_t)(mask_g_4));
                                                 }
-                                                L226:;
-                                                int64_t t229 = q_g_4;
-                                                dictionary_slot_g_i64_i64 *t230 = &((*(dictionary_slot_g_i64_i64 *)(((t212) + t229 * 20))));
-                                                (*t230) = e_g_4;
+                                                L230:;
+                                                int64_t t233 = q_g_4;
+                                                dictionary_slot_g_i64_i64 *t234 = &((*(dictionary_slot_g_i64_i64 *)(((t216) + t233 * 20))));
+                                                (*t234) = e_g_4;
                                             }
                                         }
                                     }
-                                    L198:;
+                                    L202:;
                                 }
                             }
                         }
@@ -16696,9 +16934,9 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
                                 uint64_t h_g_12 = gs_mul_u64((uint64_t)(x_g_10), 11400714819323198485ULL);
                                 h_g_12 = (uint64_t)((uint64_t)((uint64_t)(h_g_12)) ^ (uint64_t)(gs_shr_u64((uint64_t)(h_g_12), (int64_t)(32))));
                                 h_g_11 = h_g_12;
-                                goto L232;
+                                goto L236;
                             }
-                            L232:;
+                            L236:;
                         }
                         int64_t i_g_6;
                         int64_t key_g_6 = key_g_5;
@@ -16711,135 +16949,167 @@ static void elements_boundary_edges_g8(int64_t d_g, gs_stack *gs_dst0, dictionar
                             }
                             int64_t mask_g_5 = gs_sub_i64((int64_t)(((edges_g.slots_g.len))), 1, gs_file15, 51);
                             int64_t i_g_7 = (int64_t)GS_RANGE_U((uint64_t)((uint64_t)((uint64_t)(h_g_13)) & (uint64_t)((uint64_t)GS_RANGE((int64_t)(mask_g_5), 0, 9223372036854775807LL, "u64", gs_file15, 52))), 9223372036854775807ULL, "i64", gs_file15, 52);
-                            uint8_t *t235 = (edges_g.slots_g.base);
-                            int64_t t236 = (edges_g.slots_g.len);
+                            uint8_t *t239 = (edges_g.slots_g.base);
+                            int64_t t240 = (edges_g.slots_g.len);
                             for (;;) {
-                                int64_t t239 = i_g_7;
-                                uint32_t t_g_7 = (*(dictionary_slot_g_i64_i64 *)(((t235) + GS_IDX((int64_t)(t239), t236, gs_file15, 54) * 20))).tag_g;
+                                int64_t t243 = i_g_7;
+                                uint32_t t_g_7 = (*(dictionary_slot_g_i64_i64 *)(((t239) + GS_IDX((int64_t)(t243), t240, gs_file15, 54) * 20))).tag_g;
                                 if ((uint8_t)((uint32_t)((uint32_t)(t_g_7)) == (uint32_t)(tag_g_3))) {
-                                    int64_t t240 = i_g_7;
-                                    if ((uint8_t)((int64_t)((int64_t)((*(dictionary_slot_g_i64_i64 *)(((t235) + t240 * 20))).key_g)) == (int64_t)(key_g_6))) {
+                                    int64_t t244 = i_g_7;
+                                    if ((uint8_t)((int64_t)((int64_t)((*(dictionary_slot_g_i64_i64 *)(((t239) + t244 * 20))).key_g)) == (int64_t)(key_g_6))) {
                                         i_g_6 = i_g_7;
-                                        goto L233;
+                                        goto L237;
                                     }
                                 } else {
                                     if ((uint8_t)((uint32_t)((uint32_t)(t_g_7)) == (uint32_t)(0))) {
                                         i_g_6 = i_g_7;
-                                        goto L233;
+                                        goto L237;
                                     }
                                 }
                                 i_g_7 = (int64_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(i_g_7), 1, gs_file15, 60))) & (int64_t)(mask_g_5));
                             }
                         }
-                        L233:;
-                        int64_t t241 = i_g_6;
-                        if ((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + GS_IDX((int64_t)(t241), (edges_g.slots_g.len), gs_file15, 120) * 20))).tag_g)) == (uint32_t)(0)))) {
-                            int64_t t242 = i_g_6;
-                            dictionary_slot_g_i64_i64 *t243 = &((*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t242 * 20))));
-                            int64_t t245 = i_g_6;
-                            t244.key_g = (*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t245 * 20))).key_g;
-                            t244.val_g = 0;
+                        L237:;
+                        int64_t t245 = i_g_6;
+                        if ((uint8_t)(!((uint32_t)((uint32_t)((*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + GS_IDX((int64_t)(t245), (edges_g.slots_g.len), gs_file15, 120) * 20))).tag_g)) == (uint32_t)(0)))) {
                             int64_t t246 = i_g_6;
-                            t244.tag_g = (*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t246 * 20))).tag_g;
-                            (*t243) = t244;
+                            dictionary_slot_g_i64_i64 *t247 = &((*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t246 * 20))));
+                            int64_t t249 = i_g_6;
+                            t248.key_g = (*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t249 * 20))).key_g;
+                            t248.val_g = 0;
+                            int64_t t250 = i_g_6;
+                            t248.tag_g = (*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t250 * 20))).tag_g;
+                            (*t247) = t248;
                             (void)(0);
-                            goto L168;
+                            goto L172;
                         }
-                        int64_t t247 = i_g_6;
-                        dictionary_slot_g_i64_i64 *t248 = &((*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t247 * 20))));
-                        t249.key_g = key_g_5;
-                        t249.val_g = 0;
+                        int64_t t251 = i_g_6;
+                        dictionary_slot_g_i64_i64 *t252 = &((*(dictionary_slot_g_i64_i64 *)(((edges_g.slots_g.base) + t251 * 20))));
+                        t253.key_g = key_g_5;
+                        t253.val_g = 0;
                         uint64_t h_g_15 = h_g_11;
                         {
-                            t249.tag_g = (uint32_t)((uint32_t)((uint32_t)((uint32_t)(h_g_15))) | (uint32_t)(2147483648LL));
+                            t253.tag_g = (uint32_t)((uint32_t)((uint32_t)((uint32_t)(h_g_15))) | (uint32_t)(2147483648LL));
                         }
-                        (*t248) = t249;
-                        int64_t *t251 = &(edges_g.count_g);
-                        (*t251) = gs_add_i64((*t251), 1, gs_file15, 127);
+                        (*t252) = t253;
+                        int64_t *t255 = &(edges_g.count_g);
+                        (*t255) = gs_add_i64((*t255), 1, gs_file15, 127);
                         (void)(1);
-                        goto L168;
+                        goto L172;
                     }
-                    L168:;
+                    L172:;
                 }
-                GS(gs_sp + 1)->top = t254;
+                GS(gs_sp + 1)->top = t258;
             }
-            L120:;
+            L124:;
         }
     }
-    t252 = edges_g;
-    (*gs_rl0) = t252;
+    t256 = edges_g;
+    (*gs_rl0) = t256;
     (*gs_rl0).slots_g.base = gs_dst0->top;
-    gs_memcpy(gs_dst0->top, t252.slots_g.base, (size_t)((t252.slots_g.len) * 20));
-    gs_dst0->top += (t252.slots_g.len) * 20;
+    gs_memcpy(gs_dst0->top, t256.slots_g.base, (size_t)((t256.slots_g.len) * 20));
+    gs_dst0->top += (t256.slots_g.len) * 20;
     GS(gs_sp + 1)->top = edges_g.slots_g.base;
     GS(gs_sp + 0)->top = count_g.slots_g.base;
     return;
     GS(gs_sp + 1)->top = edges_g.slots_g.base;
     GS(gs_sp + 0)->top = count_g.slots_g.base;
     return;
+}
+
+static int64_t elements_facet_count_g8(int64_t d_g) {
+    sl_u8 t1;
+    sl_u8 t2;
+    if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(2))) goto L0;
+    if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3))) goto L0;
+    {
+        t1.data = ((uint8_t *)gs_str6); t1.len = 24;
+        t2 = t1;
+        gs_abort_msg(t2.data, t2.len, gs_file3, 180);
+    }
+    L0:;
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L3;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L3;
+        goto L4;
+    }
+    L4:;
+    if (!((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3)))) goto L3;
+    {
+        int64_t t5;
+        t5 = 6;
+        return t5;
+    }
+    L3:;
+    int64_t t6;
+    t6 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 182);
+    return t6;
+    GS_UNREACHABLE(gs_file3, 179);
+    int64_t t7 = {0};
+    return t7;
 }
 
 static int64_t elements_facet_node_g8(int64_t d_g, int64_t f_g, int64_t l_g) {
     sl_u8 t6;
     sl_u8 t7;
-    sl_u8 t10;
-    sl_u8 t11;
     if (!((uint8_t)((int64_t)((int64_t)(f_g)) >= (int64_t)(0)))) goto L1;
     int64_t t2 = f_g;
-    int64_t t3;
-    int64_t d_g_2 = d_g;
-    {
-        if ((uint8_t)((int64_t)((int64_t)(d_g_2)) == (int64_t)(2))) goto L5;
-        if ((uint8_t)((int64_t)((int64_t)(d_g_2)) == (int64_t)(3))) goto L5;
-        {
-            t6.data = ((uint8_t *)gs_str6); t6.len = 24;
-            t7 = t6;
-            gs_abort_msg(t7.data, t7.len, gs_file3, 121);
-        }
-        L5:;
-        t3 = gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 122);
-        goto L4;
-    }
-    L4:;
+    int64_t t3 = elements_facet_count_g8(d_g);
     if (!((uint8_t)((int64_t)(t2) < (int64_t)(t3)))) goto L1;
     if (!((uint8_t)((int64_t)((int64_t)(l_g)) >= (int64_t)(0)))) goto L1;
-    int64_t t8 = l_g;
-    int64_t t9 = elements_node_count_of_g8(gs_sub_i64((int64_t)(d_g), 1, gs_file3, 126), 2);
-    if ((uint8_t)((int64_t)(t8) < (int64_t)(t9))) goto L0;
+    int64_t t4 = l_g;
+    int64_t t5 = elements_node_count_of_g8(gs_sub_i64((int64_t)(d_g), 1, gs_file3, 195), 2);
+    if ((uint8_t)((int64_t)(t4) < (int64_t)(t5))) goto L0;
     L1:;
     {
-        t10.data = ((uint8_t *)gs_str55); t10.len = 59;
-        t11 = t10;
-        gs_abort_msg(t11.data, t11.len, gs_file3, 126);
+        t6.data = ((uint8_t *)gs_str55); t6.len = 59;
+        t7 = t6;
+        gs_abort_msg(t7.data, t7.len, gs_file3, 195);
     }
     L0:;
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L8;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L8;
+        goto L9;
+    }
+    L9:;
+    if (!((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3)))) goto L8;
+    {
+        int64_t t10;
+        int64_t t11 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(4), f_g, gs_file3, 196)), l_g, gs_file3, 196);
+        t10 = GS_GL->elements_HEX_FACES_g8.e[GS_IDX((int64_t)(t11), 24, gs_file3, 196)];
+        return t10;
+    }
+    L8:;
     if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3))) {
         int64_t t12;
-        int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), f_g, gs_file3, 127)), l_g, gs_file3, 127);
-        t12 = GS_GL->elements_TET_FACES_g8.e[GS_IDX((int64_t)(t13), 24, gs_file3, 127)];
+        int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), f_g, gs_file3, 197)), l_g, gs_file3, 197);
+        t12 = GS_GL->elements_TET_FACES_g8.e[GS_IDX((int64_t)(t13), 24, gs_file3, 197)];
         return t12;
     }
     if ((uint8_t)((int64_t)((int64_t)(l_g)) < (int64_t)(2))) {
         int64_t t14;
-        int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), f_g, gs_file3, 128)), l_g, gs_file3, 128);
-        t14 = GS_GL->elements_TRI_EDGES_g8.e[GS_IDX((int64_t)(t15), 6, gs_file3, 128)];
+        int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), f_g, gs_file3, 198)), l_g, gs_file3, 198);
+        t14 = GS_GL->elements_TRI_EDGES_g8.e[GS_IDX((int64_t)(t15), 6, gs_file3, 198)];
         return t14;
     }
     int64_t t16;
-    t16 = gs_add_i64((int64_t)(3), f_g, gs_file3, 129);
+    t16 = gs_add_i64((int64_t)(3), f_g, gs_file3, 199);
     return t16;
-    GS_UNREACHABLE(gs_file3, 125);
+    GS_UNREACHABLE(gs_file3, 194);
     int64_t t17 = {0};
     return t17;
 }
 
-static void sort_g_187(void *xs_g_data, int64_t xs_g_len) {
+static void sort_g_188(void *xs_g_data, int64_t xs_g_len) {
     sl_i64 xs_g; xs_g.data = xs_g_data; xs_g.len = xs_g_len;
-    sort_g_188(xs_g.data, xs_g.len);
+    sort_g_189(xs_g.data, xs_g.len);
     return;
 }
 
-static void sort_g_188(void *xs_g_data, int64_t xs_g_len) {
+static void sort_g_189(void *xs_g_data, int64_t xs_g_len) {
     sl_i64 xs_g; xs_g.data = xs_g_data; xs_g.len = xs_g_len;
     sl_i64 v_g;
     sl_i64 v_g_2;
@@ -17032,7 +17302,7 @@ static void sort_g_188(void *xs_g_data, int64_t xs_g_len) {
             limit_g = gs_sub_i64(limit_g, 1, gs_file14, 647);
             xs_g_4 = v_g_3;
             int64_t j_g_4;
-            int64_t t66 = sort_pivot_g_194(v_g_3.data, v_g_3.len);
+            int64_t t66 = sort_pivot_g_195(v_g_3.data, v_g_3.len);
             j_g_4 = t66;
             {
                 int64_t *t68 = xs_g_4.data;
@@ -17480,7 +17750,7 @@ static void sort_g_188(void *xs_g_data, int64_t xs_g_len) {
     return;
 }
 
-static int64_t sort_pivot_g_194(void *v_g_data, int64_t v_g_len) {
+static int64_t sort_pivot_g_195(void *v_g_data, int64_t v_g_len) {
     sl_i64 v_g; v_g.data = v_g_data; v_g.len = v_g_len;
     sl_i64 v_g_2;
     sl_i64 v_g_3;
@@ -17908,189 +18178,6 @@ static double elements_node_x_g8(int64_t n_g, int64_t t_g, int64_t gs_sp) {
     return t6;
 }
 
-static uint8_t elements_folded_g8(int64_t d_g, int64_t c_g, int64_t gs_sp) {
-    a3_f64 t0;
-    a3_f64 xi_g;
-    a3_f64 t6;
-    sl_u8 t12;
-    sl_u8 t13;
-    a3_f64 p_g;
-    a3_f64 t14;
-    sl_u8 t20;
-    sl_u8 t21;
-    sl_u8 t29;
-    sl_u8 t30;
-    a9_f64 t34;
-    a9_f64 jac_g;
-    a3_f64 t55;
-    a9_f64 t56;
-    a9_f64 p1_g;
-    double lo_g = 1e+300;
-    t0.e[0] = 0.0;
-    t0.e[1] = 0.0;
-    t0.e[2] = 0.0;
-    xi_g = t0;
-    int64_t t1 = elements_quad_count_g8(d_g);
-    int64_t t2 = gs_add_i64((int64_t)(t1), d_g, gs_file6, 142);
-    int64_t t3 = gs_add_i64(t2, 1, gs_file6, 142);
-    for (int64_t q_g = 0; q_g < t3; q_g++) {
-        t6.e[0] = 0.0;
-        t6.e[1] = 0.0;
-        t6.e[2] = 0.0;
-        xi_g = t6;
-        int64_t t7 = q_g;
-        int64_t t8;
-        int64_t d_g_2 = d_g;
-        {
-            if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(1)))) goto L11;
-            if ((uint8_t)((int64_t)((int64_t)(d_g_2)) <= (int64_t)(3))) goto L10;
-            L11:;
-            {
-                t12.data = ((uint8_t *)gs_str57); t12.len = 23;
-                t13 = t12;
-                gs_abort_msg(t13.data, t13.len, gs_file3, 88);
-            }
-            L10:;
-            t8 = gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 89);
-            goto L9;
-        }
-        L9:;
-        if ((uint8_t)((int64_t)(t7) < (int64_t)(t8))) {
-            double w_g;
-            t14 = elements_quad_point_g8(d_g, q_g, &w_g);
-            p_g = t14;
-            xi_g = p_g;
-        } else {
-            int64_t t15 = q_g;
-            int64_t t16;
-            int64_t d_g_3 = d_g;
-            {
-                if (!((uint8_t)((int64_t)((int64_t)(d_g_3)) >= (int64_t)(1)))) goto L19;
-                if ((uint8_t)((int64_t)((int64_t)(d_g_3)) <= (int64_t)(3))) goto L18;
-                L19:;
-                {
-                    t20.data = ((uint8_t *)gs_str57); t20.len = 23;
-                    t21 = t20;
-                    gs_abort_msg(t21.data, t21.len, gs_file3, 88);
-                }
-                L18:;
-                t16 = gs_add_i64((int64_t)(d_g_3), 1, gs_file3, 89);
-                goto L17;
-            }
-            L17:;
-            if ((uint8_t)((int64_t)(t15) > (int64_t)(t16))) {
-                double *t22 = xi_g.e;
-                int64_t t23 = 3;
-                int64_t t24 = q_g;
-                int64_t t25;
-                int64_t d_g_4 = d_g;
-                {
-                    if (!((uint8_t)((int64_t)((int64_t)(d_g_4)) >= (int64_t)(1)))) goto L28;
-                    if ((uint8_t)((int64_t)((int64_t)(d_g_4)) <= (int64_t)(3))) goto L27;
-                    L28:;
-                    {
-                        t29.data = ((uint8_t *)gs_str57); t29.len = 23;
-                        t30 = t29;
-                        gs_abort_msg(t30.data, t30.len, gs_file3, 88);
-                    }
-                    L27:;
-                    t25 = gs_add_i64((int64_t)(d_g_4), 1, gs_file3, 89);
-                    goto L26;
-                }
-                L26:;
-                int64_t t31 = gs_sub_i64(t24, t25, gs_file6, 148);
-                int64_t t32 = gs_sub_i64(t31, 1, gs_file6, 148);
-                double *t33 = &(t22[GS_IDX((int64_t)(t32), t23, gs_file6, 148)]);
-                (*t33) = 1.0;
-            }
-        }
-        elements_shape_g8_213(GS_GL->elements_dim_g8, GS_GL->elements_order_g8, xi_g, &GS_GL->elements_shp_g8, &GS_GL->elements_dref_g8);
-        double t35 = 0.0;
-        for (int64_t t36 = 0; t36 < 9; t36++) {
-            t34.e[t36] = t35;
-        }
-        jac_g = t34;
-        double a_g = lo_g;
-        double b_g;
-        int64_t c_g_2 = c_g;
-        a9_f64 * jac_g_2 = &jac_g;
-        {
-            int64_t t38 = GS_GL->elements_per_cell_g8;
-            for (int64_t l_g = 0; l_g < t38; l_g++) {
-                int64_t n_g;
-                int64_t t41 = elements_cell_node_g8(c_g_2, l_g, gs_sp + 0);
-                n_g = t41;
-                int64_t t42 = GS_GL->elements_dim_g8;
-                for (int64_t r_g = 0; r_g < t42; r_g++) {
-                    int64_t t45 = GS_GL->elements_dim_g8;
-                    for (int64_t t_g = 0; t_g < t45; t_g++) {
-                        int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g, gs_file17, 122)), t_g, gs_file17, 122);
-                        double *t49 = &((*jac_g_2).e[GS_IDX((int64_t)(t48), 9, gs_file17, 122)]);
-                        double t50 = (*t49);
-                        int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 122)), r_g, gs_file17, 122);
-                        double t52 = GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t51), 30, gs_file17, 122)];
-                        double t53 = elements_node_x_g8(n_g, t_g, gs_sp + 0);
-                        (*t49) = (t50 + (((double)(t52) * (double)(t53))));
-                    }
-                }
-            }
-            if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2))) {
-                b_g = ((double)((double)(((double)((double)((*jac_g_2).e[0])) * (double)((*jac_g_2).e[4])))) - (double)(((double)((double)((*jac_g_2).e[1])) * (double)((*jac_g_2).e[3]))));
-                goto L37;
-            }
-            b_g = ((double)((double)(((double)((double)(((double)((double)((*jac_g_2).e[0])) * (double)(((double)((double)(((double)((double)((*jac_g_2).e[4])) * (double)((*jac_g_2).e[8])))) - (double)(((double)((double)((*jac_g_2).e[5])) * (double)((*jac_g_2).e[7])))))))) - (double)(((double)((double)((*jac_g_2).e[1])) * (double)(((double)((double)(((double)((double)((*jac_g_2).e[3])) * (double)((*jac_g_2).e[8])))) - (double)(((double)((double)((*jac_g_2).e[5])) * (double)((*jac_g_2).e[6])))))))))) + (double)(((double)((double)((*jac_g_2).e[2])) * (double)(((double)((double)(((double)((double)((*jac_g_2).e[3])) * (double)((*jac_g_2).e[7])))) - (double)(((double)((double)((*jac_g_2).e[4])) * (double)((*jac_g_2).e[6]))))))));
-            goto L37;
-        }
-        L37:;
-        {
-            if ((uint8_t)((double)((double)(b_g)) < (double)(a_g))) {
-                lo_g = b_g;
-                goto L54;
-            }
-            lo_g = a_g;
-            goto L54;
-        }
-        L54:;
-    }
-    t55.e[0] = 0.0;
-    t55.e[1] = 0.0;
-    t55.e[2] = 0.0;
-    elements_shape_g8_213(GS_GL->elements_dim_g8, 1, t55, &GS_GL->elements_shp_g8, &GS_GL->elements_dref_g8);
-    double t57 = 0.0;
-    for (int64_t t58 = 0; t58 < 9; t58++) {
-        t56.e[t58] = t57;
-    }
-    p1_g = t56;
-    int64_t t59 = gs_add_i64((int64_t)(d_g), 1, gs_file6, 157);
-    for (int64_t l_g_2 = 0; l_g_2 < t59; l_g_2++) {
-        int64_t t62 = d_g;
-        for (int64_t r_g_2 = 0; r_g_2 < t62; r_g_2++) {
-            int64_t t65 = d_g;
-            for (int64_t t_g_2 = 0; t_g_2 < t65; t_g_2++) {
-                int64_t t68 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g_2, gs_file6, 159)), t_g_2, gs_file6, 159);
-                double t69 = p1_g.e[t68];
-                int64_t t70 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file6, 159)), r_g_2, gs_file6, 159);
-                double t71 = GS_GL->elements_dref_g8.e[t70];
-                int64_t t72 = elements_cell_node_g8(c_g, l_g_2, gs_sp + 0);
-                double t73 = elements_node_x_g8(t72, t_g_2, gs_sp + 0);
-                p1_g.e[t68] = (t69 + (((double)(t71) * (double)(t73))));
-            }
-        }
-    }
-    double det0_g;
-    if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(2))) {
-        det0_g = ((double)((double)(((double)((double)(p1_g.e[0])) * (double)(p1_g.e[4])))) - (double)(((double)((double)(p1_g.e[1])) * (double)(p1_g.e[3]))));
-    } else {
-        det0_g = ((double)((double)(((double)((double)(((double)((double)(p1_g.e[0])) * (double)(((double)((double)(((double)((double)(p1_g.e[4])) * (double)(p1_g.e[8])))) - (double)(((double)((double)(p1_g.e[5])) * (double)(p1_g.e[7])))))))) - (double)(((double)((double)(p1_g.e[1])) * (double)(((double)((double)(((double)((double)(p1_g.e[3])) * (double)(p1_g.e[8])))) - (double)(((double)((double)(p1_g.e[5])) * (double)(p1_g.e[6])))))))))) + (double)(((double)((double)(p1_g.e[2])) * (double)(((double)((double)(((double)((double)(p1_g.e[3])) * (double)(p1_g.e[7])))) - (double)(((double)((double)(p1_g.e[4])) * (double)(p1_g.e[6]))))))));
-    }
-    uint8_t t74;
-    t74 = (uint8_t)((double)((double)(lo_g)) < (double)(((double)((double)(0.2)) * (double)(det0_g))));
-    return t74;
-    GS_UNREACHABLE(gs_file6, 139);
-    uint8_t t75 = {0};
-    return t75;
-}
-
 static int64_t elements_quad_count_g8(int64_t d_g) {
     sl_u8 t2;
     sl_u8 t3;
@@ -18100,32 +18187,48 @@ static int64_t elements_quad_count_g8(int64_t d_g) {
     {
         t2.data = ((uint8_t *)gs_str57); t2.len = 23;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file3, 88);
+        gs_abort_msg(t3.data, t3.len, gs_file3, 129);
     }
     L0:;
-    int64_t t4;
-    t4 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 89);
-    return t4;
-    GS_UNREACHABLE(gs_file3, 87);
-    int64_t t5 = {0};
-    return t5;
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L4;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L4;
+        goto L5;
+    }
+    L5:;
+    {
+        int64_t t6;
+        t6 = gs_shl_i64((int64_t)(1), (int64_t)(d_g));
+        return t6;
+    }
+    L4:;
+    int64_t t7;
+    t7 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 131);
+    return t7;
+    GS_UNREACHABLE(gs_file3, 128);
+    int64_t t8 = {0};
+    return t8;
 }
 
 static a3_f64 elements_quad_point_g8(int64_t d_g, int64_t q_g, double *gs_r1) {
     sl_u8 t4;
     sl_u8 t5;
-    a3_f64 t6;
-    a3_f64 t7;
-    a3_f64 t9;
-    a3_f64 t10;
-    a3_f64 t12;
-    a3_f64 t13;
-    a3_f64 t15;
+    a3_f64 t8;
+    a3_f64 p_g;
     a3_f64 t16;
     a3_f64 t18;
-    a3_f64 p_g;
+    a3_f64 t19;
     a3_f64 t21;
-    a3_f64 t23;
+    a3_f64 t22;
+    a3_f64 t24;
+    a3_f64 t25;
+    a3_f64 t27;
+    a3_f64 t28;
+    a3_f64 t30;
+    a3_f64 p_g_2;
+    a3_f64 t33;
+    a3_f64 t35;
     if (!((uint8_t)((int64_t)((int64_t)(q_g)) >= (int64_t)(0)))) goto L1;
     int64_t t2 = q_g;
     int64_t t3 = elements_quad_count_g8(d_g);
@@ -18134,9 +18237,39 @@ static a3_f64 elements_quad_point_g8(int64_t d_g, int64_t q_g, double *gs_r1) {
     {
         t4.data = ((uint8_t *)gs_str58); t4.len = 34;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file3, 93);
+        gs_abort_msg(t5.data, t5.len, gs_file3, 135);
     }
     L0:;
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L6;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L6;
+        goto L7;
+    }
+    L7:;
+    {
+        double t9 = 0.0;
+        for (int64_t t10 = 0; t10 < 3; t10++) {
+            t8.e[t10] = t9;
+        }
+        p_g = t8;
+        int64_t t11 = d_g;
+        for (int64_t r_g = 0; r_g < t11; r_g++) {
+            int64_t t14 = r_g;
+            double *t15 = &(p_g.e[GS_IDX((int64_t)(t14), 3, gs_file3, 139)]);
+            if ((uint8_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)(q_g))) >> ((int64_t)(r_g) & 63))))) % (uint64_t)((int64_t)(2))))) == (int64_t)(0))) {
+                (*t15) = 0.21132486540518713;
+            } else {
+                (*t15) = 0.7886751345948129;
+            }
+        }
+        t16 = p_g;
+        double t17;
+        t17 = ((double)((double)(1.0)) / (double)((double)(gs_shl_i64((int64_t)(1), (int64_t)(d_g)))));
+        *gs_r1 = t17;
+        return t16;
+    }
+    L6:;
     if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(1))) {
         double s_g;
         if ((uint8_t)((int64_t)((int64_t)(q_g)) == (int64_t)(0))) {
@@ -18144,152 +18277,223 @@ static a3_f64 elements_quad_point_g8(int64_t d_g, int64_t q_g, double *gs_r1) {
         } else {
             s_g = 0.7886751345948129;
         }
-        t7.e[0] = s_g;
-        t7.e[1] = 0.0;
-        t7.e[2] = 0.0;
-        t6 = t7;
-        double t8;
-        t8 = 0.5;
-        *gs_r1 = t8;
-        return t6;
+        t19.e[0] = s_g;
+        t19.e[1] = 0.0;
+        t19.e[2] = 0.0;
+        t18 = t19;
+        double t20;
+        t20 = 0.5;
+        *gs_r1 = t20;
+        return t18;
     }
     if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(2))) {
         if ((uint8_t)((int64_t)((int64_t)(q_g)) == (int64_t)(0))) {
-            t10.e[0] = 0.16666666666666666;
-            t10.e[1] = 0.16666666666666666;
-            t10.e[2] = 0.0;
-            t9 = t10;
-            double t11;
-            t11 = 0.16666666666666666;
-            *gs_r1 = t11;
-            return t9;
+            t22.e[0] = 0.16666666666666666;
+            t22.e[1] = 0.16666666666666666;
+            t22.e[2] = 0.0;
+            t21 = t22;
+            double t23;
+            t23 = 0.16666666666666666;
+            *gs_r1 = t23;
+            return t21;
         }
         if ((uint8_t)((int64_t)((int64_t)(q_g)) == (int64_t)(1))) {
-            t13.e[0] = 0.6666666666666666;
-            t13.e[1] = 0.16666666666666666;
-            t13.e[2] = 0.0;
-            t12 = t13;
-            double t14;
-            t14 = 0.16666666666666666;
-            *gs_r1 = t14;
-            return t12;
+            t25.e[0] = 0.6666666666666666;
+            t25.e[1] = 0.16666666666666666;
+            t25.e[2] = 0.0;
+            t24 = t25;
+            double t26;
+            t26 = 0.16666666666666666;
+            *gs_r1 = t26;
+            return t24;
         }
-        t16.e[0] = 0.16666666666666666;
-        t16.e[1] = 0.6666666666666666;
-        t16.e[2] = 0.0;
-        t15 = t16;
-        double t17;
-        t17 = 0.16666666666666666;
-        *gs_r1 = t17;
-        return t15;
+        t28.e[0] = 0.16666666666666666;
+        t28.e[1] = 0.6666666666666666;
+        t28.e[2] = 0.0;
+        t27 = t28;
+        double t29;
+        t29 = 0.16666666666666666;
+        *gs_r1 = t29;
+        return t27;
     }
-    t18.e[0] = 0.1381966011250105;
-    t18.e[1] = 0.1381966011250105;
-    t18.e[2] = 0.1381966011250105;
-    p_g = t18;
+    t30.e[0] = 0.1381966011250105;
+    t30.e[1] = 0.1381966011250105;
+    t30.e[2] = 0.1381966011250105;
+    p_g_2 = t30;
     if ((uint8_t)((int64_t)((int64_t)(q_g)) > (int64_t)(0))) {
-        int64_t t19 = gs_sub_i64((int64_t)(q_g), 1, gs_file3, 104);
-        double *t20 = &(p_g.e[GS_IDX((int64_t)(t19), 3, gs_file3, 104)]);
-        (*t20) = 0.5854101966249685;
+        int64_t t31 = gs_sub_i64((int64_t)(q_g), 1, gs_file3, 152);
+        double *t32 = &(p_g_2.e[GS_IDX((int64_t)(t31), 3, gs_file3, 152)]);
+        (*t32) = 0.5854101966249685;
     }
-    t21 = p_g;
-    double t22;
-    t22 = 0.041666666666666664;
-    *gs_r1 = t22;
-    return t21;
-    GS_UNREACHABLE(gs_file3, 92);
-    t23 = (a3_f64){0};
-    return t23;
+    t33 = p_g_2;
+    double t34;
+    t34 = 0.041666666666666664;
+    *gs_r1 = t34;
+    return t33;
+    GS_UNREACHABLE(gs_file3, 134);
+    t35 = (a3_f64){0};
+    return t35;
 }
 
-static void elements_shape_g8_213(int64_t d_g, int64_t order_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
+static void elements_shape_g8_214(int64_t d_g, int64_t order_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
     sl_u8 t1;
     sl_u8 t2;
-    a4_f64 t3;
+    a4_f64 t5;
     a4_f64 bc_g;
     int64_t t0 = elements_node_count_of_g8(d_g, order_g);
     if (!((uint8_t)((int64_t)((int64_t)(t0)) <= (int64_t)(10)))) {
         t1.data = ((uint8_t *)gs_str59); t1.len = 45;
         t2 = t1;
-        gs_abort_msg(t2.data, t2.len, gs_file3, 52);
+        gs_abort_msg(t2.data, t2.len, gs_file3, 89);
     }
-    t3.e[0] = 1.0;
-    t3.e[1] = 0.0;
-    t3.e[2] = 0.0;
-    t3.e[3] = 0.0;
-    bc_g = t3;
-    int64_t t4 = d_g;
-    for (int64_t r_g = 0; r_g < t4; r_g++) {
-        int64_t t7 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 55);
-        double *t8 = &(bc_g.e[GS_IDX((int64_t)(t7), 4, gs_file3, 55)]);
-        int64_t t9 = r_g;
-        (*t8) = xi_g.e[t9];
-        int64_t t10 = r_g;
-        bc_g.e[0] = (bc_g.e[0] - (xi_g.e[t10]));
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L3;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L3;
+        goto L4;
     }
-    int64_t t11 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 58);
-    for (int64_t l_g = 0; l_g < t11; l_g++) {
-        uint8_t t14 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
-        int64_t t15 = l_g;
-        (void)GS_IDX((int64_t)(t15), 10, gs_file3, (t14) ? 60 : 63);
-        if (t14) {
-            int64_t t16 = l_g;
-            int64_t t17 = l_g;
-            (*n_g).e[t16] = bc_g.e[GS_IDX((int64_t)(t17), 4, gs_file3, 60)];
-            int64_t t18 = d_g;
-            for (int64_t r_g_2 = 0; r_g_2 < t18; r_g_2++) {
-                int64_t t21 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 61)), r_g_2, gs_file3, 61);
-                double *t22 = &((*dn_g).e[GS_IDX((int64_t)(t21), 30, gs_file3, 61)]);
-                double t23 = elements_bary_grad_g8(l_g, r_g_2);
-                (*t22) = t23;
+    L4:;
+    {
+        elements_cube_shape_g8_215(d_g, xi_g, n_g, dn_g);
+        return;
+    }
+    L3:;
+    t5.e[0] = 1.0;
+    t5.e[1] = 0.0;
+    t5.e[2] = 0.0;
+    t5.e[3] = 0.0;
+    bc_g = t5;
+    int64_t t6 = d_g;
+    for (int64_t r_g = 0; r_g < t6; r_g++) {
+        int64_t t9 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 96);
+        double *t10 = &(bc_g.e[GS_IDX((int64_t)(t9), 4, gs_file3, 96)]);
+        int64_t t11 = r_g;
+        (*t10) = xi_g.e[t11];
+        int64_t t12 = r_g;
+        bc_g.e[0] = (bc_g.e[0] - (xi_g.e[t12]));
+    }
+    int64_t t13 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 99);
+    for (int64_t l_g = 0; l_g < t13; l_g++) {
+        uint8_t t16 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
+        int64_t t17 = l_g;
+        (void)GS_IDX((int64_t)(t17), 10, gs_file3, (t16) ? 101 : 104);
+        if (t16) {
+            int64_t t18 = l_g;
+            int64_t t19 = l_g;
+            (*n_g).e[t18] = bc_g.e[GS_IDX((int64_t)(t19), 4, gs_file3, 101)];
+            int64_t t20 = d_g;
+            for (int64_t r_g_2 = 0; r_g_2 < t20; r_g_2++) {
+                int64_t t23 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 102)), r_g_2, gs_file3, 102);
+                double *t24 = &((*dn_g).e[GS_IDX((int64_t)(t23), 30, gs_file3, 102)]);
+                double t25 = elements_bary_grad_g8(l_g, r_g_2);
+                (*t24) = t25;
             }
         } else {
-            int64_t t24 = l_g;
-            int64_t t25 = l_g;
             int64_t t26 = l_g;
-            (*n_g).e[t24] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t25), 4, gs_file3, 63)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t26])))) - (double)(1.0))));
-            int64_t t27 = d_g;
-            for (int64_t r_g_3 = 0; r_g_3 < t27; r_g_3++) {
-                int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 64)), r_g_3, gs_file3, 64);
-                double *t31 = &((*dn_g).e[GS_IDX((int64_t)(t30), 30, gs_file3, 64)]);
-                int64_t t32 = l_g;
-                double t33 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t32])))) - (double)(1.0));
-                double t34 = elements_bary_grad_g8(l_g, r_g_3);
-                (*t31) = ((double)(t33) * (double)(t34));
+            int64_t t27 = l_g;
+            int64_t t28 = l_g;
+            (*n_g).e[t26] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t27), 4, gs_file3, 104)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t28])))) - (double)(1.0))));
+            int64_t t29 = d_g;
+            for (int64_t r_g_3 = 0; r_g_3 < t29; r_g_3++) {
+                int64_t t32 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 105)), r_g_3, gs_file3, 105);
+                double *t33 = &((*dn_g).e[GS_IDX((int64_t)(t32), 30, gs_file3, 105)]);
+                int64_t t34 = l_g;
+                double t35 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t34])))) - (double)(1.0));
+                double t36 = elements_bary_grad_g8(l_g, r_g_3);
+                (*t33) = ((double)(t35) * (double)(t36));
             }
         }
     }
     if (!((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(2)))) {
         return;
     }
-    int64_t t35 = elements_edge_count_g8(d_g);
-    int64_t t36 = t35;
-    for (int64_t e_g = 0; e_g < t36; e_g++) {
+    int64_t t37 = elements_edge_count_g8(d_g);
+    int64_t t38 = t37;
+    for (int64_t e_g = 0; e_g < t38; e_g++) {
         int64_t a_g;
-        int64_t t39 = elements_edge_node_g8(d_g, e_g, 0);
-        a_g = t39;
+        int64_t t41 = elements_edge_node_g8(d_g, e_g, 0);
+        a_g = t41;
         int64_t b_g;
-        int64_t t40 = elements_edge_node_g8(d_g, e_g, 1);
-        b_g = t40;
-        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file3, 71)), e_g, gs_file3, 71);
-        int64_t t41 = l_g_2;
-        double *t42 = &((*n_g).e[GS_IDX((int64_t)(t41), 10, gs_file3, 72)]);
-        int64_t t43 = a_g;
-        int64_t t44 = b_g;
-        (*t42) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t43), 4, gs_file3, 72)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t44), 4, gs_file3, 72)]));
-        int64_t t45 = d_g;
-        for (int64_t r_g_4 = 0; r_g_4 < t45; r_g_4++) {
-            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 73)), r_g_4, gs_file3, 73);
-            double *t49 = &((*dn_g).e[GS_IDX((int64_t)(t48), 30, gs_file3, 73)]);
-            double t50 = 4.0;
-            int64_t t51 = b_g;
-            double t52 = bc_g.e[t51];
-            double t53 = elements_bary_grad_g8(a_g, r_g_4);
-            double t54 = ((double)(t52) * (double)(t53));
-            int64_t t55 = a_g;
-            double t56 = bc_g.e[t55];
-            double t57 = elements_bary_grad_g8(b_g, r_g_4);
-            (*t49) = ((double)(t50) * (double)(((double)(t54) + (double)(((double)(t56) * (double)(t57))))));
+        int64_t t42 = elements_edge_node_g8(d_g, e_g, 1);
+        b_g = t42;
+        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file3, 112)), e_g, gs_file3, 112);
+        int64_t t43 = l_g_2;
+        double *t44 = &((*n_g).e[GS_IDX((int64_t)(t43), 10, gs_file3, 113)]);
+        int64_t t45 = a_g;
+        int64_t t46 = b_g;
+        (*t44) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t45), 4, gs_file3, 113)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t46), 4, gs_file3, 113)]));
+        int64_t t47 = d_g;
+        for (int64_t r_g_4 = 0; r_g_4 < t47; r_g_4++) {
+            int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 114)), r_g_4, gs_file3, 114);
+            double *t51 = &((*dn_g).e[GS_IDX((int64_t)(t50), 30, gs_file3, 114)]);
+            double t52 = 4.0;
+            int64_t t53 = b_g;
+            double t54 = bc_g.e[t53];
+            double t55 = elements_bary_grad_g8(a_g, r_g_4);
+            double t56 = ((double)(t54) * (double)(t55));
+            int64_t t57 = a_g;
+            double t58 = bc_g.e[t57];
+            double t59 = elements_bary_grad_g8(b_g, r_g_4);
+            (*t51) = ((double)(t52) * (double)(((double)(t56) + (double)(((double)(t58) * (double)(t59))))));
+        }
+    }
+    return;
+}
+
+static GS_NOINLINE void elements_cube_shape_g8_215(int64_t d_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
+    a3_f64 t4;
+    a3_f64 f_g;
+    a3_f64 t7;
+    a3_f64 df_g;
+    int64_t t0 = elements_node_count_of_g8(d_g, 1);
+    int64_t t1 = t0;
+    for (int64_t l_g = 0; l_g < t1; l_g++) {
+        double t5 = 1.0;
+        for (int64_t t6 = 0; t6 < 3; t6++) {
+            t4.e[t6] = t5;
+        }
+        f_g = t4;
+        double t8 = 0.0;
+        for (int64_t t9 = 0; t9 < 3; t9++) {
+            t7.e[t9] = t8;
+        }
+        df_g = t7;
+        int64_t t10 = d_g;
+        for (int64_t r_g = 0; r_g < t10; r_g++) {
+            int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 73)), r_g, gs_file3, 73);
+            uint8_t up_g = (uint8_t)((int64_t)((int64_t)(GS_GL->elements_HEX_CORNERS_g8.e[GS_IDX((int64_t)(t13), 24, gs_file3, 73)])) == (int64_t)(1));
+            int64_t t14 = r_g;
+            double *t15 = &(f_g.e[GS_IDX((int64_t)(t14), 3, gs_file3, 74)]);
+            if (up_g) {
+                int64_t t16 = r_g;
+                (*t15) = xi_g.e[t16];
+            } else {
+                int64_t t17 = r_g;
+                (*t15) = ((double)((double)(1.0)) - (double)(xi_g.e[t17]));
+            }
+            int64_t t18 = r_g;
+            if (up_g) {
+                df_g.e[t18] = 1.0;
+            } else {
+                df_g.e[t18] = -1.0;
+            }
+        }
+        int64_t t19 = l_g;
+        double *t20 = &((*n_g).e[GS_IDX((int64_t)(t19), 10, gs_file3, 77)]);
+        (*t20) = ((double)((double)(((double)((double)(f_g.e[0])) * (double)(f_g.e[1])))) * (double)(f_g.e[2]));
+        int64_t t21 = d_g;
+        for (int64_t r_g_2 = 0; r_g_2 < t21; r_g_2++) {
+            int64_t t24 = r_g_2;
+            double g_g = df_g.e[GS_IDX((int64_t)(t24), 3, gs_file3, 79)];
+            int64_t t25 = d_g;
+            for (int64_t t_g = 0; t_g < t25; t_g++) {
+                if ((uint8_t)(!((int64_t)((int64_t)(t_g)) == (int64_t)(r_g_2)))) {
+                    int64_t t28 = t_g;
+                    g_g = (g_g * (f_g.e[GS_IDX((int64_t)(t28), 3, gs_file3, 80)]));
+                }
+            }
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 81)), r_g_2, gs_file3, 81);
+            (*dn_g).e[t29] = g_g;
         }
     }
     return;
@@ -18306,7 +18510,7 @@ static double elements_bary_grad_g8(int64_t k_g, int64_t r_g) {
     {
         t2.data = ((uint8_t *)gs_str60); t2.len = 37;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file3, 43);
+        gs_abort_msg(t3.data, t3.len, gs_file3, 61);
     }
     L0:;
     if ((uint8_t)((int64_t)((int64_t)(k_g)) == (int64_t)(0))) {
@@ -18314,7 +18518,7 @@ static double elements_bary_grad_g8(int64_t k_g, int64_t r_g) {
         t4 = -1.0;
         return t4;
     }
-    if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(k_g), 1, gs_file3, 45))) == (int64_t)(r_g))) {
+    if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(k_g), 1, gs_file3, 63))) == (int64_t)(r_g))) {
         double t5;
         t5 = 1.0;
         return t5;
@@ -18322,7 +18526,7 @@ static double elements_bary_grad_g8(int64_t k_g, int64_t r_g) {
     double t6;
     t6 = 0.0;
     return t6;
-    GS_UNREACHABLE(gs_file3, 42);
+    GS_UNREACHABLE(gs_file3, 60);
     double t7 = {0};
     return t7;
 }
@@ -18337,11 +18541,11 @@ static double elements_cell_jacobian_g8(int64_t c_g, a9_f64 * jac_g, int64_t gs_
         for (int64_t r_g = 0; r_g < t4; r_g++) {
             int64_t t7 = GS_GL->elements_dim_g8;
             for (int64_t t_g = 0; t_g < t7; t_g++) {
-                int64_t t10 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g, gs_file17, 122)), t_g, gs_file17, 122);
-                double *t11 = &((*jac_g).e[GS_IDX((int64_t)(t10), 9, gs_file17, 122)]);
+                int64_t t10 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g, gs_file17, 162)), t_g, gs_file17, 162);
+                double *t11 = &((*jac_g).e[GS_IDX((int64_t)(t10), 9, gs_file17, 162)]);
                 double t12 = (*t11);
-                int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 122)), r_g, gs_file17, 122);
-                double t14 = GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t13), 30, gs_file17, 122)];
+                int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 162)), r_g, gs_file17, 162);
+                double t14 = GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t13), 30, gs_file17, 162)];
                 double t15 = elements_node_x_g8(n_g, t_g, gs_sp + 0);
                 (*t11) = (t12 + (((double)(t14) * (double)(t15))));
             }
@@ -18355,7 +18559,7 @@ static double elements_cell_jacobian_g8(int64_t c_g, a9_f64 * jac_g, int64_t gs_
     double t17;
     t17 = ((double)((double)(((double)((double)(((double)((double)((*jac_g).e[0])) * (double)(((double)((double)(((double)((double)((*jac_g).e[4])) * (double)((*jac_g).e[8])))) - (double)(((double)((double)((*jac_g).e[5])) * (double)((*jac_g).e[7])))))))) - (double)(((double)((double)((*jac_g).e[1])) * (double)(((double)((double)(((double)((double)((*jac_g).e[3])) * (double)((*jac_g).e[8])))) - (double)(((double)((double)((*jac_g).e[5])) * (double)((*jac_g).e[6])))))))))) + (double)(((double)((double)((*jac_g).e[2])) * (double)(((double)((double)(((double)((double)((*jac_g).e[3])) * (double)((*jac_g).e[7])))) - (double)(((double)((double)((*jac_g).e[4])) * (double)((*jac_g).e[6]))))))));
     return t17;
-    GS_UNREACHABLE(gs_file17, 118);
+    GS_UNREACHABLE(gs_file17, 158);
     double t18 = {0};
     return t18;
 }
@@ -18376,7 +18580,7 @@ static void elements_set_elastic_g8(double E_g, double nu_g, int64_t assumption_
     {
         t2.data = ((uint8_t *)gs_str61); t2.len = 63;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file17, 87);
+        gs_abort_msg(t3.data, t3.len, gs_file17, 98);
     }
     L0:;
     int64_t comps_g = GS_GL->elements_dim_g8;
@@ -18388,7 +18592,7 @@ static void elements_set_elastic_g8(double E_g, double nu_g, int64_t assumption_
         {
             t7.data = ((uint8_t *)gs_str62); t7.len = 54;
             t8 = t7;
-            gs_abort_msg(t8.data, t8.len, gs_file17, 68);
+            gs_abort_msg(t8.data, t8.len, gs_file17, 79);
         }
         L5:;
         uint8_t *t28 = (&GS_GL->gs_gstk_elements_fixed_g8)->top;
@@ -18626,11 +18830,11 @@ static int64_t elements_dof_total_g8(int64_t gs_sp) {
     goto L3;
     L1:;
     {
-        t0 = gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3))), gs_file17, 52);
+        t0 = gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3))), gs_file17, 63);
     }
     L3:;
     return t0;
-    GS_UNREACHABLE(gs_file17, 52);
+    GS_UNREACHABLE(gs_file17, 63);
     int64_t t4 = {0};
     return t4;
 }
@@ -18651,7 +18855,7 @@ static uint8_t elements_also_plane_g8(int64_t axis_g, double value_g, int64_t gs
     {
         t2.data = ((uint8_t *)gs_str63); t2.len = 46;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file7, 315);
+        gs_abort_msg(t3.data, t3.len, gs_file7, 326);
     }
     L0:;
     t4.hole_g = 0;
@@ -18665,11 +18869,11 @@ static uint8_t elements_also_plane_g8(int64_t axis_g, double value_g, int64_t gs
     t4.node_g = -1;
     t6 = t4;
     int64_t t7 = (int64_t)GS_GL->elements_region_g8.len;
-    if (t7 >= 16) gs_abort(GS_E_CAPACITY, gs_file7, 316);
+    if (t7 >= 16) gs_abort(GS_E_CAPACITY, gs_file7, 327);
     elements_Part_g8 *t8 = (elements_Part_g8 *)(GS_GL->elements_region_g8.e + t7);
     *(elements_Part_g8 *)t8 = t6;
     GS_GL->elements_region_g8.len = (uint8_t)(t7 + 1);
-    int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file7, 317);
+    int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file7, 328);
     int64_t t9 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
     for (int64_t n_g = 0; n_g < t9; n_g++) {
         int64_t n_g_2 = n_g;
@@ -18683,7 +18887,7 @@ static uint8_t elements_also_plane_g8(int64_t axis_g, double value_g, int64_t gs
             {
                 t16.data = ((uint8_t *)gs_str64); t16.len = 44;
                 t17 = t16;
-                gs_abort_msg(t17.data, t17.len, gs_file17, 367);
+                gs_abort_msg(t17.data, t17.len, gs_file17, 513);
             }
             L14:;
             int64_t t18 = k_g_2;
@@ -18725,7 +18929,7 @@ static uint8_t elements_also_plane_g8(int64_t axis_g, double value_g, int64_t gs
                 int64_t g_g;
                 if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0))) {
                     int64_t t28 = GS_GL->elements_region_body_g8;
-                    g_g = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t28), (GS_GL->elements_body_shapes_g8.len), gs_file17, 375)]);
+                    g_g = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t28), (GS_GL->elements_body_shapes_g8.len), gs_file17, 521)]);
                 } else {
                     g_g = GS_GL->elements_body_shape_g8;
                 }
@@ -18783,7 +18987,7 @@ static uint8_t elements_also_plane_g8(int64_t axis_g, double value_g, int64_t gs
     uint8_t t41;
     t41 = 0;
     return t41;
-    GS_UNREACHABLE(gs_file7, 314);
+    GS_UNREACHABLE(gs_file7, 325);
     uint8_t t42 = {0};
     return t42;
 }
@@ -18797,7 +19001,7 @@ static uint8_t elements_in_body_g8(int64_t k_g, int64_t gs_sp) {
     {
         t2.data = ((uint8_t *)gs_str65); t2.len = 30;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file7, 380);
+        gs_abort_msg(t3.data, t3.len, gs_file7, 391);
     }
     L0:;
     GS_GL->elements_region_body_g8 = k_g;
@@ -18809,7 +19013,7 @@ static uint8_t elements_in_body_g8(int64_t k_g, int64_t gs_sp) {
         for (int64_t n_g = 0; n_g < t7; n_g++) {
             uint8_t t10 = elements_on_region_g8(n_g, gs_sp + 0);
             if (t10) {
-                count_g = gs_add_i64(count_g, 1, gs_file17, 392);
+                count_g = gs_add_i64(count_g, 1, gs_file17, 538);
             }
         }
         t5 = count_g;
@@ -18818,7 +19022,7 @@ static uint8_t elements_in_body_g8(int64_t k_g, int64_t gs_sp) {
     L6:;
     t4 = (uint8_t)((int64_t)((int64_t)(t5)) > (int64_t)(0));
     return t4;
-    GS_UNREACHABLE(gs_file7, 379);
+    GS_UNREACHABLE(gs_file7, 390);
     uint8_t t11 = {0};
     return t11;
 }
@@ -18837,12 +19041,12 @@ static uint8_t elements_on_region_g8(int64_t n_g, int64_t gs_sp) {
     {
         t2.data = ((uint8_t *)gs_str66); t2.len = 27;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file17, 383);
+        gs_abort_msg(t3.data, t3.len, gs_file17, 529);
     }
     L0:;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0)))) goto L4;
     int64_t t5 = n_g;
-    if (!((uint8_t)(!((int64_t)((int64_t)((((int64_t *)((GS_GL->elements_node_body_g8.base)))[GS_IDX((int64_t)(t5), (GS_GL->elements_node_body_g8.len), gs_file17, 384)]))) == (int64_t)(GS_GL->elements_region_body_g8))))) goto L4;
+    if (!((uint8_t)(!((int64_t)((int64_t)((((int64_t *)((GS_GL->elements_node_body_g8.base)))[GS_IDX((int64_t)(t5), (GS_GL->elements_node_body_g8.len), gs_file17, 530)]))) == (int64_t)(GS_GL->elements_region_body_g8))))) goto L4;
     {
         uint8_t t6;
         t6 = 0;
@@ -18891,7 +19095,7 @@ static uint8_t elements_on_region_g8(int64_t n_g, int64_t gs_sp) {
             int64_t g_g;
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0))) {
                 int64_t t22 = GS_GL->elements_region_body_g8;
-                g_g = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t22), (GS_GL->elements_body_shapes_g8.len), gs_file17, 375)]);
+                g_g = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t22), (GS_GL->elements_body_shapes_g8.len), gs_file17, 521)]);
             } else {
                 g_g = GS_GL->elements_body_shape_g8;
             }
@@ -18956,7 +19160,7 @@ static uint8_t elements_on_region_g8(int64_t n_g, int64_t gs_sp) {
             {
                 t42.data = ((uint8_t *)gs_str64); t42.len = 44;
                 t43 = t42;
-                gs_abort_msg(t43.data, t43.len, gs_file17, 367);
+                gs_abort_msg(t43.data, t43.len, gs_file17, 513);
             }
             L40:;
             int64_t t44 = k_g_2;
@@ -18998,7 +19202,7 @@ static uint8_t elements_on_region_g8(int64_t n_g, int64_t gs_sp) {
                 int64_t g_g_2;
                 if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0))) {
                     int64_t t54 = GS_GL->elements_region_body_g8;
-                    g_g_2 = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t54), (GS_GL->elements_body_shapes_g8.len), gs_file17, 375)]);
+                    g_g_2 = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t54), (GS_GL->elements_body_shapes_g8.len), gs_file17, 521)]);
                 } else {
                     g_g_2 = GS_GL->elements_body_shape_g8;
                 }
@@ -19056,18 +19260,20 @@ static uint8_t elements_on_region_g8(int64_t n_g, int64_t gs_sp) {
     uint8_t t67;
     t67 = 0;
     return t67;
-    GS_UNREACHABLE(gs_file17, 382);
+    GS_UNREACHABLE(gs_file17, 528);
     uint8_t t68 = {0};
     return t68;
 }
 
 static uint8_t elements_region_facet_g8(int64_t c_g, int64_t f_g, int64_t gs_sp) {
-    sl_u8 t16;
-    sl_u8 t17;
+    sl_u8 t9;
+    sl_u8 t10;
+    sl_u8 t23;
+    sl_u8 t24;
     elements_Part_g8 p_g;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0)))) goto L0;
     int64_t t1 = c_g;
-    if (!((uint8_t)(!((int64_t)((int64_t)((((int64_t *)((GS_GL->elements_cell_body_g8.base)))[GS_IDX((int64_t)(t1), (GS_GL->elements_cell_body_g8.len), gs_file17, 496)]))) == (int64_t)(GS_GL->elements_region_body_g8))))) goto L0;
+    if (!((uint8_t)(!((int64_t)((int64_t)((((int64_t *)((GS_GL->elements_cell_body_g8.base)))[GS_IDX((int64_t)(t1), (GS_GL->elements_cell_body_g8.len), gs_file17, 642)]))) == (int64_t)(GS_GL->elements_region_body_g8))))) goto L0;
     {
         uint8_t t2;
         t2 = 0;
@@ -19077,130 +19283,158 @@ static uint8_t elements_region_facet_g8(int64_t c_g, int64_t f_g, int64_t gs_sp)
     int64_t t3 = ((int64_t)GS_GL->elements_region_g8.len);
     for (int64_t k_g = 0; k_g < t3; k_g++) {
         uint8_t all_g = 1;
-        int64_t t6 = GS_GL->elements_dim_g8;
-        for (int64_t l_g = 0; l_g < t6; l_g++) {
+        int64_t t6;
+        int64_t d_g = GS_GL->elements_dim_g8;
+        {
+            if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(2))) goto L8;
+            if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3))) goto L8;
+            {
+                t9.data = ((uint8_t *)gs_str67); t9.len = 27;
+                t10 = t9;
+                gs_abort_msg(t10.data, t10.len, gs_file3, 189);
+            }
+            L8:;
+            int64_t d_g_2 = d_g;
+            {
+                if (!(GS_GL->elements_hex_cells_g8)) goto L11;
+                if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L11;
+                goto L12;
+            }
+            L12:;
+            if (!((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3)))) goto L11;
+            {
+                t6 = 4;
+                goto L7;
+            }
+            L11:;
+            t6 = d_g;
+            goto L7;
+        }
+        L7:;
+        int64_t t13 = t6;
+        for (int64_t l_g = 0; l_g < t13; l_g++) {
             int64_t n_g;
-            int64_t t10 = c_g;
-            int64_t t11 = elements_facet_node_g8(GS_GL->elements_dim_g8, f_g, l_g);
-            int64_t t12 = elements_cell_node_g8(t10, t11, gs_sp + 0);
-            n_g = t12;
+            int64_t t17 = c_g;
+            int64_t t18 = elements_facet_node_g8(GS_GL->elements_dim_g8, f_g, l_g);
+            int64_t t19 = elements_cell_node_g8(t17, t18, gs_sp + 0);
+            n_g = t19;
             int64_t k_g_2 = k_g;
             {
-                if (!((uint8_t)((int64_t)((int64_t)(n_g)) >= (int64_t)(0)))) goto L15;
-                if (!((uint8_t)((int64_t)((int64_t)(n_g)) < (int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3))))))) goto L15;
-                if (!((uint8_t)((int64_t)((int64_t)(k_g_2)) >= (int64_t)(0)))) goto L15;
-                if ((uint8_t)((int64_t)((int64_t)(k_g_2)) < (int64_t)(((int64_t)GS_GL->elements_region_g8.len)))) goto L14;
-                L15:;
+                if (!((uint8_t)((int64_t)((int64_t)(n_g)) >= (int64_t)(0)))) goto L22;
+                if (!((uint8_t)((int64_t)((int64_t)(n_g)) < (int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3))))))) goto L22;
+                if (!((uint8_t)((int64_t)((int64_t)(k_g_2)) >= (int64_t)(0)))) goto L22;
+                if ((uint8_t)((int64_t)((int64_t)(k_g_2)) < (int64_t)(((int64_t)GS_GL->elements_region_g8.len)))) goto L21;
+                L22:;
                 {
-                    t16.data = ((uint8_t *)gs_str64); t16.len = 44;
-                    t17 = t16;
-                    gs_abort_msg(t17.data, t17.len, gs_file17, 367);
+                    t23.data = ((uint8_t *)gs_str64); t23.len = 44;
+                    t24 = t23;
+                    gs_abort_msg(t24.data, t24.len, gs_file17, 513);
                 }
-                L14:;
-                int64_t t18 = k_g_2;
-                p_g = GS_GL->elements_region_g8.e[t18];
+                L21:;
+                int64_t t25 = k_g_2;
+                p_g = GS_GL->elements_region_g8.e[t25];
                 int64_t n_g_2 = n_g;
                 {
                     if ((uint8_t)((int64_t)((int64_t)(p_g.node_g)) >= (int64_t)(0))) {
-                        if ((uint8_t)((int64_t)((int64_t)(n_g_2)) == (int64_t)(p_g.node_g))) goto L9;
-                        goto L19;
+                        if ((uint8_t)((int64_t)((int64_t)(n_g_2)) == (int64_t)(p_g.node_g))) goto L16;
+                        goto L26;
                     }
                     double tol_g;
                     {
                         double size_g = 0.0;
-                        int64_t t21 = 3;
-                        for (int64_t t_g = 0; t_g < t21; t_g++) {
+                        int64_t t28 = 3;
+                        for (int64_t t_g = 0; t_g < t28; t_g++) {
                             double a_g = size_g;
-                            int64_t t24 = t_g;
-                            int64_t t25 = t_g;
-                            double b_g = ((double)((double)(GS_GL->elements_bbox_hi_g8.e[t24])) - (double)(GS_GL->elements_bbox_lo_g8.e[t25]));
+                            int64_t t31 = t_g;
+                            int64_t t32 = t_g;
+                            double b_g = ((double)((double)(GS_GL->elements_bbox_hi_g8.e[t31])) - (double)(GS_GL->elements_bbox_lo_g8.e[t32]));
                             {
                                 if ((uint8_t)((double)((double)(a_g)) < (double)(b_g))) {
                                     size_g = b_g;
-                                    goto L26;
+                                    goto L33;
                                 }
                                 size_g = a_g;
-                                goto L26;
+                                goto L33;
                             }
-                            L26:;
+                            L33:;
                         }
                         tol_g = ((double)((double)(1e-06)) * (double)(size_g));
-                        goto L20;
+                        goto L27;
                     }
-                    L20:;
+                    L27:;
                     if ((uint8_t)((int64_t)((int64_t)(p_g.shape_g)) >= (int64_t)(0))) {
-                        double t27 = elements_shape_gap_g8(p_g.shape_g, n_g_2, gs_sp + 0);
-                        if ((uint8_t)((double)((double)(t27)) <= (double)(tol_g))) goto L9;
-                        goto L19;
+                        double t34 = elements_shape_gap_g8(p_g.shape_g, n_g_2, gs_sp + 0);
+                        if ((uint8_t)((double)((double)(t34)) <= (double)(tol_g))) goto L16;
+                        goto L26;
                     }
                     int64_t g_g;
                     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0))) {
-                        int64_t t28 = GS_GL->elements_region_body_g8;
-                        g_g = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t28), (GS_GL->elements_body_shapes_g8.len), gs_file17, 375)]);
+                        int64_t t35 = GS_GL->elements_region_body_g8;
+                        g_g = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t35), (GS_GL->elements_body_shapes_g8.len), gs_file17, 521)]);
                     } else {
                         g_g = GS_GL->elements_body_shape_g8;
                     }
                     if ((uint8_t)(!p_g.hole_g)) {
-                        double t30;
-                        double t31 = elements_node_x_g8(n_g_2, p_g.axis_g, gs_sp + 0);
-                        double x_g = ((double)((double)(t31)) - (double)(p_g.value_g));
+                        double t37;
+                        double t38 = elements_node_x_g8(n_g_2, p_g.axis_g, gs_sp + 0);
+                        double x_g = ((double)((double)(t38)) - (double)(p_g.value_g));
                         {
                             if ((uint8_t)((double)((double)(x_g)) < (double)(0.0))) {
-                                t30 = (-x_g);
-                                goto L32;
+                                t37 = (-x_g);
+                                goto L39;
                             }
-                            t30 = x_g;
-                            goto L32;
-                        }
-                        L32:;
-                        if (!((uint8_t)((double)((double)(t30)) <= (double)(tol_g)))) goto L29;
-                        if ((uint8_t)((int64_t)((int64_t)(g_g)) < (int64_t)(0))) goto L9;
-                        double t33 = elements_shape_gap_g8(g_g, n_g_2, gs_sp + 0);
-                        if ((uint8_t)((double)((double)(t33)) <= (double)(tol_g))) goto L9;
-                        L29:;
-                        goto L19;
-                    }
-                    double t34 = elements_node_x_g8(n_g_2, 0, gs_sp + 0);
-                    double dx_g = ((double)((double)(t34)) - (double)(p_g.c_g.e[0]));
-                    double t35 = elements_node_x_g8(n_g_2, 1, gs_sp + 0);
-                    double dy_g = ((double)((double)(t35)) - (double)(p_g.c_g.e[1]));
-                    double t36;
-                    double t37 = ((double)((double)(((double)((double)(dx_g)) * (double)(dx_g)))) + (double)(((double)((double)(dy_g)) * (double)(dy_g))));
-                    double t38 = gs_sqrt(t37);
-                    double x_g_2 = ((double)((double)(t38)) - (double)(p_g.r_g));
-                    {
-                        if ((uint8_t)((double)((double)(x_g_2)) < (double)(0.0))) {
-                            t36 = (-x_g_2);
+                            t37 = x_g;
                             goto L39;
                         }
-                        t36 = x_g_2;
-                        goto L39;
+                        L39:;
+                        if (!((uint8_t)((double)((double)(t37)) <= (double)(tol_g)))) goto L36;
+                        if ((uint8_t)((int64_t)((int64_t)(g_g)) < (int64_t)(0))) goto L16;
+                        double t40 = elements_shape_gap_g8(g_g, n_g_2, gs_sp + 0);
+                        if ((uint8_t)((double)((double)(t40)) <= (double)(tol_g))) goto L16;
+                        L36:;
+                        goto L26;
                     }
-                    L39:;
-                    if ((uint8_t)((double)((double)(t36)) <= (double)(tol_g))) goto L9;
-                    goto L19;
+                    double t41 = elements_node_x_g8(n_g_2, 0, gs_sp + 0);
+                    double dx_g = ((double)((double)(t41)) - (double)(p_g.c_g.e[0]));
+                    double t42 = elements_node_x_g8(n_g_2, 1, gs_sp + 0);
+                    double dy_g = ((double)((double)(t42)) - (double)(p_g.c_g.e[1]));
+                    double t43;
+                    double t44 = ((double)((double)(((double)((double)(dx_g)) * (double)(dx_g)))) + (double)(((double)((double)(dy_g)) * (double)(dy_g))));
+                    double t45 = gs_sqrt(t44);
+                    double x_g_2 = ((double)((double)(t45)) - (double)(p_g.r_g));
+                    {
+                        if ((uint8_t)((double)((double)(x_g_2)) < (double)(0.0))) {
+                            t43 = (-x_g_2);
+                            goto L46;
+                        }
+                        t43 = x_g_2;
+                        goto L46;
+                    }
+                    L46:;
+                    if ((uint8_t)((double)((double)(t43)) <= (double)(tol_g))) goto L16;
+                    goto L26;
                 }
-                L19:;
-                goto L13;
+                L26:;
+                goto L20;
             }
-            L13:;
+            L20:;
             {
                 all_g = 0;
             }
-            L9:;
+            L16:;
         }
         if (all_g) {
-            uint8_t t40;
-            t40 = 1;
-            return t40;
+            uint8_t t47;
+            t47 = 1;
+            return t47;
         }
     }
-    uint8_t t41;
-    t41 = 0;
-    return t41;
-    GS_UNREACHABLE(gs_file17, 495);
-    uint8_t t42 = {0};
-    return t42;
+    uint8_t t48;
+    t48 = 0;
+    return t48;
+    GS_UNREACHABLE(gs_file17, 641);
+    uint8_t t49 = {0};
+    return t49;
 }
 
 static uint8_t elements_also_surface_g8(int64_t g_g, int64_t gs_sp) {
@@ -19216,9 +19450,9 @@ static uint8_t elements_also_surface_g8(int64_t g_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(((int64_t)GS_GL->elements_region_g8.len))) < (int64_t)(16))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str67); t2.len = 42;
+        t2.data = ((uint8_t *)gs_str68); t2.len = 42;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file7, 345);
+        gs_abort_msg(t3.data, t3.len, gs_file7, 356);
     }
     L0:;
     t4.hole_g = 0;
@@ -19232,11 +19466,11 @@ static uint8_t elements_also_surface_g8(int64_t g_g, int64_t gs_sp) {
     t4.node_g = -1;
     t6 = t4;
     int64_t t7 = (int64_t)GS_GL->elements_region_g8.len;
-    if (t7 >= 16) gs_abort(GS_E_CAPACITY, gs_file7, 346);
+    if (t7 >= 16) gs_abort(GS_E_CAPACITY, gs_file7, 357);
     elements_Part_g8 *t8 = (elements_Part_g8 *)(GS_GL->elements_region_g8.e + t7);
     *(elements_Part_g8 *)t8 = t6;
     GS_GL->elements_region_g8.len = (uint8_t)(t7 + 1);
-    int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file7, 347);
+    int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file7, 358);
     int64_t t9 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
     for (int64_t n_g = 0; n_g < t9; n_g++) {
         int64_t n_g_2 = n_g;
@@ -19250,7 +19484,7 @@ static uint8_t elements_also_surface_g8(int64_t g_g, int64_t gs_sp) {
             {
                 t16.data = ((uint8_t *)gs_str64); t16.len = 44;
                 t17 = t16;
-                gs_abort_msg(t17.data, t17.len, gs_file17, 367);
+                gs_abort_msg(t17.data, t17.len, gs_file17, 513);
             }
             L14:;
             int64_t t18 = k_g_2;
@@ -19292,7 +19526,7 @@ static uint8_t elements_also_surface_g8(int64_t g_g, int64_t gs_sp) {
                 int64_t g_g_2;
                 if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_region_body_g8)) >= (int64_t)(0))) {
                     int64_t t28 = GS_GL->elements_region_body_g8;
-                    g_g_2 = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t28), (GS_GL->elements_body_shapes_g8.len), gs_file17, 375)]);
+                    g_g_2 = (((int64_t *)((GS_GL->elements_body_shapes_g8.base)))[GS_IDX((int64_t)(t28), (GS_GL->elements_body_shapes_g8.len), gs_file17, 521)]);
                 } else {
                     g_g_2 = GS_GL->elements_body_shape_g8;
                 }
@@ -19350,7 +19584,7 @@ static uint8_t elements_also_surface_g8(int64_t g_g, int64_t gs_sp) {
     uint8_t t41;
     t41 = 0;
     return t41;
-    GS_UNREACHABLE(gs_file7, 344);
+    GS_UNREACHABLE(gs_file7, 355);
     uint8_t t42 = {0};
     return t42;
 }
@@ -19369,33 +19603,26 @@ static int64_t elements_add_slave_g8(double kn_g, double kt_g, double mu_g, int6
     sl_u8 t25;
     sl_u8 t26;
     a3_f64 xi_g;
-    a3_f64 t35;
-    a3_f64 x_g;
-    a3_f64 t36;
     a3_f64 t37;
+    a3_f64 x_g;
+    a3_f64 t38;
+    a3_f64 t39;
     a3_f64 best_xi_g;
-    a3_f64 t40;
+    a3_f64 t42;
     a3_f64 best_n_g;
     a3_f64 mxi_g;
     a3_f64 n_g;
-    a3_f64 t48;
-    a3_f64 xi_g_2;
-    sl_u8 t58;
-    sl_u8 t59;
-    a4_f64 t60;
-    a4_f64 bc_g;
-    sl_u8 t96;
-    sl_u8 t97;
-    a3_f64 t141;
-    a3_f64 t140;
-    a3_f64 t145;
-    a3_f64 t144;
-    a3_f64 t151;
-    a3_f64 t150;
-    a3_f64 t157;
-    a3_f64 t156;
-    a3_f64 t163;
-    a3_f64 t162;
+    a3_f64 t50;
+    a3_f64 t79;
+    a3_f64 t78;
+    a3_f64 t83;
+    a3_f64 t82;
+    a3_f64 t89;
+    a3_f64 t88;
+    a3_f64 t95;
+    a3_f64 t94;
+    a3_f64 t101;
+    a3_f64 t100;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0)))) goto L1;
     uint8_t t2 = elements_dofs_sized_g8(gs_sp + 0);
     if (!(t2)) goto L1;
@@ -19404,7 +19631,7 @@ static int64_t elements_add_slave_g8(double kn_g, double kt_g, double mu_g, int6
     if ((uint8_t)((double)((double)(mu_g)) >= (double)(0.0))) goto L0;
     L1:;
     {
-        t3.data = ((uint8_t *)gs_str68); t3.len = 62;
+        t3.data = ((uint8_t *)gs_str69); t3.len = 62;
         t4 = t3;
         gs_abort_msg(t4.data, t4.len, gs_file2, 164);
     }
@@ -19450,239 +19677,137 @@ static int64_t elements_add_slave_g8(double kn_g, double kt_g, double mu_g, int6
             {
                 t25.data = ((uint8_t *)gs_str6); t25.len = 24;
                 t26 = t25;
-                gs_abort_msg(t26.data, t26.len, gs_file3, 121);
+                gs_abort_msg(t26.data, t26.len, gs_file3, 180);
             }
             L24:;
-            t22 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 122);
+            int64_t d_g_2 = d_g;
+            {
+                if (!(GS_GL->elements_hex_cells_g8)) goto L27;
+                if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L27;
+                goto L28;
+            }
+            L28:;
+            if (!((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(3)))) goto L27;
+            {
+                t22 = 6;
+                goto L23;
+            }
+            L27:;
+            t22 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 182);
             goto L23;
         }
         L23:;
-        int64_t t27 = t22;
-        for (int64_t f_g = 0; f_g < t27; f_g++) {
-            uint8_t t30 = elements_region_facet_g8(c_g, f_g, gs_sp + 0);
-            if ((uint8_t)(!t30)) {
-                goto L29;
+        int64_t t29 = t22;
+        for (int64_t f_g = 0; f_g < t29; f_g++) {
+            uint8_t t32 = elements_region_facet_g8(c_g, f_g, gs_sp + 0);
+            if ((uint8_t)(!t32)) {
+                goto L31;
             }
-            int64_t t31;
+            int64_t t33;
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2))) {
-                t31 = 4;
+                t33 = 4;
             } else {
-                t31 = 6;
+                t33 = 6;
             }
-            int64_t t32 = t31;
-            uint8_t *t172 = (&GS_GL->gs_gstk_elements_ct_n_g8)->top;
-            int64_t t173 = GS_GL->elements_ct_n_g8.len;
-            uint8_t *t174 = (&GS_GL->gs_gstk_elements_ct_area_g8)->top;
-            int64_t t175 = GS_GL->elements_ct_area_g8.len;
-            uint8_t *t176 = (&GS_GL->gs_gstk_elements_ct_g0_g8)->top;
-            int64_t t177 = GS_GL->elements_ct_g0_g8.len;
-            uint8_t *t178 = (&GS_GL->gs_gstk_elements_ct_law_g8)->top;
-            int64_t t179 = GS_GL->elements_ct_law_g8.len;
-            uint8_t *t180 = (&GS_GL->gs_gstk_elements_ct_t_g8)->top;
-            int64_t t181 = GS_GL->elements_ct_t_g8.len;
-            uint8_t *t182 = (&GS_GL->gs_gstk_elements_ct_r_g8)->top;
-            int64_t t183 = GS_GL->elements_ct_r_g8.len;
-            uint8_t *t184 = (&GS_GL->gs_gstk_elements_ct_trial_t_g8)->top;
-            int64_t t185 = GS_GL->elements_ct_trial_t_g8.len;
-            uint8_t *t186 = (&GS_GL->gs_gstk_elements_ct_trial_r_g8)->top;
-            int64_t t187 = GS_GL->elements_ct_trial_r_g8.len;
-            uint8_t *t188 = (&GS_GL->gs_gstk_elements_ct_p_g8)->top;
-            int64_t t189 = GS_GL->elements_ct_p_g8.len;
-            for (int64_t q_g = 0; q_g < t32; q_g++) {
+            int64_t t34 = t33;
+            uint8_t *t110 = (&GS_GL->gs_gstk_elements_ct_n_g8)->top;
+            int64_t t111 = GS_GL->elements_ct_n_g8.len;
+            uint8_t *t112 = (&GS_GL->gs_gstk_elements_ct_area_g8)->top;
+            int64_t t113 = GS_GL->elements_ct_area_g8.len;
+            uint8_t *t114 = (&GS_GL->gs_gstk_elements_ct_g0_g8)->top;
+            int64_t t115 = GS_GL->elements_ct_g0_g8.len;
+            uint8_t *t116 = (&GS_GL->gs_gstk_elements_ct_law_g8)->top;
+            int64_t t117 = GS_GL->elements_ct_law_g8.len;
+            uint8_t *t118 = (&GS_GL->gs_gstk_elements_ct_t_g8)->top;
+            int64_t t119 = GS_GL->elements_ct_t_g8.len;
+            uint8_t *t120 = (&GS_GL->gs_gstk_elements_ct_r_g8)->top;
+            int64_t t121 = GS_GL->elements_ct_r_g8.len;
+            uint8_t *t122 = (&GS_GL->gs_gstk_elements_ct_trial_t_g8)->top;
+            int64_t t123 = GS_GL->elements_ct_trial_t_g8.len;
+            uint8_t *t124 = (&GS_GL->gs_gstk_elements_ct_trial_r_g8)->top;
+            int64_t t125 = GS_GL->elements_ct_trial_r_g8.len;
+            uint8_t *t126 = (&GS_GL->gs_gstk_elements_ct_p_g8)->top;
+            int64_t t127 = GS_GL->elements_ct_p_g8.len;
+            for (int64_t q_g = 0; q_g < t34; q_g++) {
                 double w_g;
-                t35 = elements_ct_quad_point_g8(q_g, &w_g);
-                xi_g = t35;
+                t37 = elements_ct_quad_point_g8(q_g, &w_g);
+                xi_g = t37;
                 double da_g;
-                t36 = elements_facet_at_g8(c_g, f_g, xi_g, &sv_g, &tan_g, &da_g, gs_sp + 0);
-                x_g = t36;
+                t38 = elements_facet_at_g8(c_g, f_g, xi_g, &sv_g, &tan_g, &da_g, gs_sp + 0);
+                x_g = t38;
                 int64_t best_g = -1;
-                double t38 = 0.0;
-                for (int64_t t39 = 0; t39 < 3; t39++) {
-                    t37.e[t39] = t38;
+                double t40 = 0.0;
+                for (int64_t t41 = 0; t41 < 3; t41++) {
+                    t39.e[t41] = t40;
                 }
-                best_xi_g = t37;
+                best_xi_g = t39;
                 double best_gap_g = 0.0;
-                double t41 = 0.0;
-                for (int64_t t42 = 0; t42 < 3; t42++) {
-                    t40.e[t42] = t41;
+                double t43 = 0.0;
+                for (int64_t t44 = 0; t44 < 3; t44++) {
+                    t42.e[t44] = t43;
                 }
-                best_n_g = t40;
-                int64_t t43 = (GS_GL->elements_ct_master_g8.len);
-                uint8_t *t44 = (uint8_t *)((GS_GL->elements_ct_master_g8.base));
-                for (int64_t t45 = 0; t45 < (t43); t45++) {
-                    int64_t m_g = (*(int64_t *)((t44) + t45 * 8));
+                best_n_g = t42;
+                int64_t t45 = (GS_GL->elements_ct_master_g8.len);
+                uint8_t *t46 = (uint8_t *)((GS_GL->elements_ct_master_g8.base));
+                for (int64_t t47 = 0; t47 < (t45); t47++) {
+                    int64_t m_g = (*(int64_t *)((t46) + t47 * 8));
                     double gap_g;
                     uint8_t inside_g;
-                    t48 = elements_project_g8(m_g, x_g, &gap_g, &n_g, &inside_g, gs_sp + 0);
-                    mxi_g = t48;
-                    if (!(inside_g)) goto L49;
-                    if ((uint8_t)((int64_t)((int64_t)(best_g)) < (int64_t)(0))) goto L50;
-                    double t51;
+                    t50 = elements_project_g8(m_g, x_g, &gap_g, &n_g, &inside_g, gs_sp + 0);
+                    mxi_g = t50;
+                    if (!(inside_g)) goto L51;
+                    if ((uint8_t)((int64_t)((int64_t)(best_g)) < (int64_t)(0))) goto L52;
+                    double t53;
                     double x_g_2 = gap_g;
                     {
                         if ((uint8_t)((double)((double)(x_g_2)) < (double)(0.0))) {
-                            t51 = (-x_g_2);
-                            goto L52;
+                            t53 = (-x_g_2);
+                            goto L54;
                         }
-                        t51 = x_g_2;
-                        goto L52;
+                        t53 = x_g_2;
+                        goto L54;
                     }
-                    L52:;
-                    double t53 = t51;
-                    double t54;
+                    L54:;
+                    double t55 = t53;
+                    double t56;
                     double x_g_3 = best_gap_g;
                     {
                         if ((uint8_t)((double)((double)(x_g_3)) < (double)(0.0))) {
-                            t54 = (-x_g_3);
-                            goto L55;
+                            t56 = (-x_g_3);
+                            goto L57;
                         }
-                        t54 = x_g_3;
-                        goto L55;
+                        t56 = x_g_3;
+                        goto L57;
                     }
-                    L55:;
-                    if (!((uint8_t)((double)(t53) < (double)(t54)))) goto L49;
-                    L50:;
+                    L57:;
+                    if (!((uint8_t)((double)(t55) < (double)(t56)))) goto L51;
+                    L52:;
                     {
                         best_g = m_g;
                         best_xi_g = mxi_g;
                         best_gap_g = gap_g;
                         best_n_g = n_g;
                     }
-                    L49:;
+                    L51:;
                 }
                 if ((uint8_t)((int64_t)((int64_t)(best_g)) < (int64_t)(0))) {
-                    goto L34;
+                    goto L36;
                 }
-                int64_t d_g_2 = fd_g;
-                int64_t order_g = GS_GL->elements_order_g8;
-                xi_g_2 = best_xi_g;
-                a10_f64 * n_g_2 = &mv_g;
-                a30_f64 * dn_g = &dref_g;
-                {
-                    int64_t t57 = elements_node_count_of_g8(d_g_2, order_g);
-                    if (!((uint8_t)((int64_t)((int64_t)(t57)) <= (int64_t)(10)))) {
-                        t58.data = ((uint8_t *)gs_str59); t58.len = 45;
-                        t59 = t58;
-                        gs_abort_msg(t59.data, t59.len, gs_file3, 52);
-                    }
-                    t60.e[0] = 1.0;
-                    t60.e[1] = 0.0;
-                    t60.e[2] = 0.0;
-                    t60.e[3] = 0.0;
-                    bc_g = t60;
-                    int64_t t61 = d_g_2;
-                    for (int64_t r_g = 0; r_g < t61; r_g++) {
-                        int64_t t64 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 55);
-                        double *t65 = &(bc_g.e[GS_IDX((int64_t)(t64), 4, gs_file3, 55)]);
-                        int64_t t66 = r_g;
-                        (*t65) = xi_g_2.e[t66];
-                        int64_t t67 = r_g;
-                        bc_g.e[0] = (bc_g.e[0] - (xi_g_2.e[t67]));
-                    }
-                    int64_t t68 = gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 58);
-                    for (int64_t l_g = 0; l_g < t68; l_g++) {
-                        uint8_t t71 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
-                        int64_t t72 = l_g;
-                        (void)GS_IDX((int64_t)(t72), 10, gs_file3, (t71) ? 60 : 63);
-                        if (t71) {
-                            int64_t t73 = l_g;
-                            int64_t t74 = l_g;
-                            (*n_g_2).e[t73] = bc_g.e[GS_IDX((int64_t)(t74), 4, gs_file3, 60)];
-                            int64_t t75 = d_g_2;
-                            for (int64_t r_g_2 = 0; r_g_2 < t75; r_g_2++) {
-                                int64_t t78 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 61)), r_g_2, gs_file3, 61);
-                                double *t79 = &((*dn_g).e[GS_IDX((int64_t)(t78), 30, gs_file3, 61)]);
-                                double t80 = elements_bary_grad_g8(l_g, r_g_2);
-                                (*t79) = t80;
-                            }
-                        } else {
-                            int64_t t81 = l_g;
-                            int64_t t82 = l_g;
-                            int64_t t83 = l_g;
-                            (*n_g_2).e[t81] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t82), 4, gs_file3, 63)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t83])))) - (double)(1.0))));
-                            int64_t t84 = d_g_2;
-                            for (int64_t r_g_3 = 0; r_g_3 < t84; r_g_3++) {
-                                int64_t t87 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 64)), r_g_3, gs_file3, 64);
-                                double *t88 = &((*dn_g).e[GS_IDX((int64_t)(t87), 30, gs_file3, 64)]);
-                                int64_t t89 = l_g;
-                                double t90 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t89])))) - (double)(1.0));
-                                double t91 = elements_bary_grad_g8(l_g, r_g_3);
-                                (*t88) = ((double)(t90) * (double)(t91));
-                            }
-                        }
-                    }
-                    if (!((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(2)))) {
-                        goto L56;
-                    }
-                    int64_t t92;
-                    int64_t d_g_3 = d_g_2;
-                    {
-                        if (!((uint8_t)((int64_t)((int64_t)(d_g_3)) >= (int64_t)(1)))) goto L95;
-                        if ((uint8_t)((int64_t)((int64_t)(d_g_3)) <= (int64_t)(3))) goto L94;
-                        L95:;
-                        {
-                            t96.data = ((uint8_t *)gs_str50); t96.len = 23;
-                            t97 = t96;
-                            gs_abort_msg(t97.data, t97.len, gs_file3, 21);
-                        }
-                        L94:;
-                        if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(1))) {
-                            t92 = 1;
-                            goto L93;
-                        }
-                        if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(2))) {
-                            t92 = 3;
-                            goto L93;
-                        }
-                        t92 = 6;
-                        goto L93;
-                    }
-                    L93:;
-                    int64_t t98 = t92;
-                    for (int64_t e_g = 0; e_g < t98; e_g++) {
-                        int64_t a_g;
-                        int64_t t101 = elements_edge_node_g8(d_g_2, e_g, 0);
-                        a_g = t101;
-                        int64_t b_g;
-                        int64_t t102 = elements_edge_node_g8(d_g_2, e_g, 1);
-                        b_g = t102;
-                        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 71)), e_g, gs_file3, 71);
-                        int64_t t103 = l_g_2;
-                        double *t104 = &((*n_g_2).e[GS_IDX((int64_t)(t103), 10, gs_file3, 72)]);
-                        int64_t t105 = a_g;
-                        int64_t t106 = b_g;
-                        (*t104) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t105), 4, gs_file3, 72)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t106), 4, gs_file3, 72)]));
-                        int64_t t107 = d_g_2;
-                        for (int64_t r_g_4 = 0; r_g_4 < t107; r_g_4++) {
-                            int64_t t110 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 73)), r_g_4, gs_file3, 73);
-                            double *t111 = &((*dn_g).e[GS_IDX((int64_t)(t110), 30, gs_file3, 73)]);
-                            double t112 = 4.0;
-                            int64_t t113 = b_g;
-                            double t114 = bc_g.e[t113];
-                            double t115 = elements_bary_grad_g8(a_g, r_g_4);
-                            double t116 = ((double)(t114) * (double)(t115));
-                            int64_t t117 = a_g;
-                            double t118 = bc_g.e[t117];
-                            double t119 = elements_bary_grad_g8(b_g, r_g_4);
-                            (*t111) = ((double)(t112) * (double)(((double)(t116) + (double)(((double)(t118) * (double)(t119))))));
-                        }
-                    }
-                }
-                L56:;
-                int64_t t120 = 12;
-                uint8_t *t190 = (&GS_GL->gs_gstk_elements_ct_node_g8)->top;
-                int64_t t191 = GS_GL->elements_ct_node_g8.len;
-                uint8_t *t192 = (&GS_GL->gs_gstk_elements_ct_w_g8)->top;
-                int64_t t193 = GS_GL->elements_ct_w_g8.len;
-                for (int64_t k_g = 0; k_g < t120; k_g++) {
+                elements_shape_g8_254(fd_g, GS_GL->elements_order_g8, best_xi_g, &mv_g, &dref_g);
+                int64_t t58 = 12;
+                uint8_t *t128 = (&GS_GL->gs_gstk_elements_ct_node_g8)->top;
+                int64_t t129 = GS_GL->elements_ct_node_g8.len;
+                uint8_t *t130 = (&GS_GL->gs_gstk_elements_ct_w_g8)->top;
+                int64_t t131 = GS_GL->elements_ct_w_g8.len;
+                for (int64_t k_g = 0; k_g < t58; k_g++) {
                     uint8_t on_slave_g = (uint8_t)((int64_t)((int64_t)(k_g)) < (int64_t)(fn_count_g));
-                    int64_t l_g_3;
+                    int64_t l_g;
                     if (on_slave_g) {
-                        l_g_3 = k_g;
+                        l_g = k_g;
                     } else {
-                        l_g_3 = gs_sub_i64((int64_t)(k_g), fn_count_g, gs_file2, 195);
+                        l_g = gs_sub_i64((int64_t)(k_g), fn_count_g, gs_file2, 195);
                     }
-                    uint8_t used_g = (uint8_t)((int64_t)((int64_t)(l_g_3)) < (int64_t)(fn_count_g));
+                    uint8_t used_g = (uint8_t)((int64_t)((int64_t)(l_g)) < (int64_t)(fn_count_g));
                     int64_t cell_g;
                     if (on_slave_g) {
                         cell_g = c_g;
@@ -19695,140 +19820,140 @@ static int64_t elements_add_slave_g8(double kn_g, double kt_g, double mu_g, int6
                     } else {
                         facet_g = (int64_t)((uint64_t)((int64_t)((int64_t)(best_g))) % (uint64_t)((int64_t)(4)));
                     }
-                    int64_t t123;
+                    int64_t t61;
                     if (used_g) {
-                        int64_t t124 = cell_g;
-                        int64_t t125 = elements_facet_node_g8(GS_GL->elements_dim_g8, facet_g, l_g_3);
-                        int64_t t126 = elements_cell_node_g8(t124, t125, gs_sp + 0);
-                        t123 = t126;
+                        int64_t t62 = cell_g;
+                        int64_t t63 = elements_facet_node_g8(GS_GL->elements_dim_g8, facet_g, l_g);
+                        int64_t t64 = elements_cell_node_g8(t62, t63, gs_sp + 0);
+                        t61 = t64;
                     } else {
-                        t123 = -1;
+                        t61 = -1;
                     }
-                    int64_t t127 = t123;
-                    int64_t *t128 = (int64_t *)t190;
-                    *(int64_t *)t190 = t127;
-                    t190 += 8;
-                    t191++;
-                    double t129;
+                    int64_t t65 = t61;
+                    int64_t *t66 = (int64_t *)t128;
+                    *(int64_t *)t128 = t65;
+                    t128 += 8;
+                    t129++;
+                    double t67;
                     if ((uint8_t)(!used_g)) {
-                        t129 = 0.0;
+                        t67 = 0.0;
                     } else {
                         if (on_slave_g) {
-                            int64_t t130 = l_g_3;
-                            t129 = sv_g.e[GS_IDX((int64_t)(t130), 10, gs_file2, 200)];
+                            int64_t t68 = l_g;
+                            t67 = sv_g.e[GS_IDX((int64_t)(t68), 10, gs_file2, 200)];
                         } else {
-                            int64_t t131 = l_g_3;
-                            t129 = (-mv_g.e[GS_IDX((int64_t)(t131), 10, gs_file2, 200)]);
+                            int64_t t69 = l_g;
+                            t67 = (-mv_g.e[GS_IDX((int64_t)(t69), 10, gs_file2, 200)]);
                         }
                     }
-                    double t132 = t129;
-                    double *t133 = (double *)t192;
-                    *(double *)t192 = t132;
-                    t192 += 8;
-                    t193++;
+                    double t70 = t67;
+                    double *t71 = (double *)t130;
+                    *(double *)t130 = t70;
+                    t130 += 8;
+                    t131++;
                 }
-                (&GS_GL->gs_gstk_elements_ct_node_g8)->top = t190;
-                GS_GL->elements_ct_node_g8.len = t191;
-                (&GS_GL->gs_gstk_elements_ct_w_g8)->top = t192;
-                GS_GL->elements_ct_w_g8.len = t193;
-                int64_t t134 = 3;
-                int64_t t135 = t134;
-                gs_memcpy(t172, best_n_g.e, (size_t)((t135) * 8));
-                t172 += (t135) * 8;
-                t173 += t135;
-                double t136 = ((double)((double)(w_g)) * (double)(da_g));
-                double *t137 = (double *)t174;
-                *(double *)t174 = t136;
-                t174 += 8;
-                t175++;
-                double t138 = best_gap_g;
-                double *t139 = (double *)t176;
-                *(double *)t176 = t138;
-                t176 += 8;
-                t177++;
-                t141.e[0] = kn_g;
-                t141.e[1] = kt_g;
-                t141.e[2] = mu_g;
-                t140 = t141;
-                int64_t t142 = 3;
-                int64_t t143 = t142;
-                gs_memcpy(t178, t140.e, (size_t)((t143) * 8));
-                t178 += (t143) * 8;
-                t179 += t143;
-                double t146 = 0.0;
-                for (int64_t t147 = 0; t147 < 3; t147++) {
-                    t145.e[t147] = t146;
+                (&GS_GL->gs_gstk_elements_ct_node_g8)->top = t128;
+                GS_GL->elements_ct_node_g8.len = t129;
+                (&GS_GL->gs_gstk_elements_ct_w_g8)->top = t130;
+                GS_GL->elements_ct_w_g8.len = t131;
+                int64_t t72 = 3;
+                int64_t t73 = t72;
+                gs_memcpy(t110, best_n_g.e, (size_t)((t73) * 8));
+                t110 += (t73) * 8;
+                t111 += t73;
+                double t74 = ((double)((double)(w_g)) * (double)(da_g));
+                double *t75 = (double *)t112;
+                *(double *)t112 = t74;
+                t112 += 8;
+                t113++;
+                double t76 = best_gap_g;
+                double *t77 = (double *)t114;
+                *(double *)t114 = t76;
+                t114 += 8;
+                t115++;
+                t79.e[0] = kn_g;
+                t79.e[1] = kt_g;
+                t79.e[2] = mu_g;
+                t78 = t79;
+                int64_t t80 = 3;
+                int64_t t81 = t80;
+                gs_memcpy(t116, t78.e, (size_t)((t81) * 8));
+                t116 += (t81) * 8;
+                t117 += t81;
+                double t84 = 0.0;
+                for (int64_t t85 = 0; t85 < 3; t85++) {
+                    t83.e[t85] = t84;
                 }
-                t144 = t145;
-                int64_t t148 = 3;
-                int64_t t149 = t148;
-                gs_memcpy(t180, t144.e, (size_t)((t149) * 8));
-                t180 += (t149) * 8;
-                t181 += t149;
-                double t152 = 0.0;
-                for (int64_t t153 = 0; t153 < 3; t153++) {
-                    t151.e[t153] = t152;
+                t82 = t83;
+                int64_t t86 = 3;
+                int64_t t87 = t86;
+                gs_memcpy(t118, t82.e, (size_t)((t87) * 8));
+                t118 += (t87) * 8;
+                t119 += t87;
+                double t90 = 0.0;
+                for (int64_t t91 = 0; t91 < 3; t91++) {
+                    t89.e[t91] = t90;
                 }
-                t150 = t151;
-                int64_t t154 = 3;
-                int64_t t155 = t154;
-                gs_memcpy(t182, t150.e, (size_t)((t155) * 8));
-                t182 += (t155) * 8;
-                t183 += t155;
-                double t158 = 0.0;
-                for (int64_t t159 = 0; t159 < 3; t159++) {
-                    t157.e[t159] = t158;
+                t88 = t89;
+                int64_t t92 = 3;
+                int64_t t93 = t92;
+                gs_memcpy(t120, t88.e, (size_t)((t93) * 8));
+                t120 += (t93) * 8;
+                t121 += t93;
+                double t96 = 0.0;
+                for (int64_t t97 = 0; t97 < 3; t97++) {
+                    t95.e[t97] = t96;
                 }
-                t156 = t157;
-                int64_t t160 = 3;
-                int64_t t161 = t160;
-                gs_memcpy(t184, t156.e, (size_t)((t161) * 8));
-                t184 += (t161) * 8;
-                t185 += t161;
-                double t164 = 0.0;
-                for (int64_t t165 = 0; t165 < 3; t165++) {
-                    t163.e[t165] = t164;
+                t94 = t95;
+                int64_t t98 = 3;
+                int64_t t99 = t98;
+                gs_memcpy(t122, t94.e, (size_t)((t99) * 8));
+                t122 += (t99) * 8;
+                t123 += t99;
+                double t102 = 0.0;
+                for (int64_t t103 = 0; t103 < 3; t103++) {
+                    t101.e[t103] = t102;
                 }
-                t162 = t163;
-                int64_t t166 = 3;
-                int64_t t167 = t166;
-                gs_memcpy(t186, t162.e, (size_t)((t167) * 8));
-                t186 += (t167) * 8;
-                t187 += t167;
-                double t168 = 0.0;
-                double *t169 = (double *)t188;
-                *(double *)t188 = t168;
-                t188 += 8;
-                t189++;
-                L34:;
+                t100 = t101;
+                int64_t t104 = 3;
+                int64_t t105 = t104;
+                gs_memcpy(t124, t100.e, (size_t)((t105) * 8));
+                t124 += (t105) * 8;
+                t125 += t105;
+                double t106 = 0.0;
+                double *t107 = (double *)t126;
+                *(double *)t126 = t106;
+                t126 += 8;
+                t127++;
+                L36:;
             }
-            (&GS_GL->gs_gstk_elements_ct_n_g8)->top = t172;
-            GS_GL->elements_ct_n_g8.len = t173;
-            (&GS_GL->gs_gstk_elements_ct_area_g8)->top = t174;
-            GS_GL->elements_ct_area_g8.len = t175;
-            (&GS_GL->gs_gstk_elements_ct_g0_g8)->top = t176;
-            GS_GL->elements_ct_g0_g8.len = t177;
-            (&GS_GL->gs_gstk_elements_ct_law_g8)->top = t178;
-            GS_GL->elements_ct_law_g8.len = t179;
-            (&GS_GL->gs_gstk_elements_ct_t_g8)->top = t180;
-            GS_GL->elements_ct_t_g8.len = t181;
-            (&GS_GL->gs_gstk_elements_ct_r_g8)->top = t182;
-            GS_GL->elements_ct_r_g8.len = t183;
-            (&GS_GL->gs_gstk_elements_ct_trial_t_g8)->top = t184;
-            GS_GL->elements_ct_trial_t_g8.len = t185;
-            (&GS_GL->gs_gstk_elements_ct_trial_r_g8)->top = t186;
-            GS_GL->elements_ct_trial_r_g8.len = t187;
-            (&GS_GL->gs_gstk_elements_ct_p_g8)->top = t188;
-            GS_GL->elements_ct_p_g8.len = t189;
-            L29:;
+            (&GS_GL->gs_gstk_elements_ct_n_g8)->top = t110;
+            GS_GL->elements_ct_n_g8.len = t111;
+            (&GS_GL->gs_gstk_elements_ct_area_g8)->top = t112;
+            GS_GL->elements_ct_area_g8.len = t113;
+            (&GS_GL->gs_gstk_elements_ct_g0_g8)->top = t114;
+            GS_GL->elements_ct_g0_g8.len = t115;
+            (&GS_GL->gs_gstk_elements_ct_law_g8)->top = t116;
+            GS_GL->elements_ct_law_g8.len = t117;
+            (&GS_GL->gs_gstk_elements_ct_t_g8)->top = t118;
+            GS_GL->elements_ct_t_g8.len = t119;
+            (&GS_GL->gs_gstk_elements_ct_r_g8)->top = t120;
+            GS_GL->elements_ct_r_g8.len = t121;
+            (&GS_GL->gs_gstk_elements_ct_trial_t_g8)->top = t122;
+            GS_GL->elements_ct_trial_t_g8.len = t123;
+            (&GS_GL->gs_gstk_elements_ct_trial_r_g8)->top = t124;
+            GS_GL->elements_ct_trial_r_g8.len = t125;
+            (&GS_GL->gs_gstk_elements_ct_p_g8)->top = t126;
+            GS_GL->elements_ct_p_g8.len = t127;
+            L31:;
         }
     }
-    int64_t t170;
-    t170 = gs_sub_i64((int64_t)(((GS_GL->elements_ct_area_g8.len))), first_g, gs_file2, 214);
-    return t170;
+    int64_t t108;
+    t108 = gs_sub_i64((int64_t)(((GS_GL->elements_ct_area_g8.len))), first_g, gs_file2, 214);
+    return t108;
     GS_UNREACHABLE(gs_file2, 163);
-    int64_t t171 = {0};
-    return t171;
+    int64_t t109 = {0};
+    return t109;
 }
 
 static uint8_t elements_dofs_sized_g8(int64_t gs_sp) {
@@ -19851,7 +19976,7 @@ static uint8_t elements_dofs_sized_g8(int64_t gs_sp) {
     if (t6) {
         uint8_t t7 = (uint8_t)((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_row_start_g8.len)))) == (int64_t)(0)) != 0);
         if (!t7) {
-            uint8_t t8 = (uint8_t)((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_row_start_g8.len)))) == (int64_t)(gs_add_i64((int64_t)(((GS_GL->elements_fixed_g8.len))), 1, gs_file17, 58))) != 0);
+            uint8_t t8 = (uint8_t)((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_row_start_g8.len)))) == (int64_t)(gs_add_i64((int64_t)(((GS_GL->elements_fixed_g8.len))), 1, gs_file17, 69))) != 0);
             if (t8) {
                 t8 = (uint8_t)((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_assembled_source_g8.len)))) == (int64_t)(((GS_GL->elements_fixed_g8.len)))) != 0);
             }
@@ -19861,7 +19986,7 @@ static uint8_t elements_dofs_sized_g8(int64_t gs_sp) {
     }
     t0 = t6;
     return t0;
-    GS_UNREACHABLE(gs_file17, 56);
+    GS_UNREACHABLE(gs_file17, 67);
     uint8_t t9 = {0};
     return t9;
 }
@@ -19914,7 +20039,7 @@ static GS_INLINE a3_f64 elements_facet_at_g8(int64_t c_g, int64_t f_g, a3_f64 xi
         t0.e[t2] = t1;
     }
     dref_g = t0;
-    elements_shape_g8_247(fd_g, GS_GL->elements_order_g8, xi_g, sv_g, &dref_g);
+    elements_shape_g8_250(fd_g, GS_GL->elements_order_g8, xi_g, sv_g, &dref_g);
     double t4 = 0.0;
     for (int64_t t5 = 0; t5 < 3; t5++) {
         t3.e[t5] = t4;
@@ -19976,94 +20101,165 @@ static GS_INLINE a3_f64 elements_facet_at_g8(int64_t c_g, int64_t f_g, a3_f64 xi
     return t41;
 }
 
-static void elements_shape_g8_247(int64_t d_g, int64_t order_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
+static void elements_shape_g8_250(int64_t d_g, int64_t order_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
     sl_u8 t1;
     sl_u8 t2;
-    a4_f64 t3;
+    a4_f64 t5;
     a4_f64 bc_g;
     int64_t t0 = elements_node_count_of_g8(d_g, order_g);
     if (!((uint8_t)((int64_t)((int64_t)(t0)) <= (int64_t)(10)))) {
         t1.data = ((uint8_t *)gs_str59); t1.len = 45;
         t2 = t1;
-        gs_abort_msg(t2.data, t2.len, gs_file3, 52);
+        gs_abort_msg(t2.data, t2.len, gs_file3, 89);
     }
-    t3.e[0] = 1.0;
-    t3.e[1] = 0.0;
-    t3.e[2] = 0.0;
-    t3.e[3] = 0.0;
-    bc_g = t3;
-    int64_t t4 = d_g;
-    for (int64_t r_g = 0; r_g < t4; r_g++) {
-        int64_t t7 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 55);
-        double *t8 = &(bc_g.e[GS_IDX((int64_t)(t7), 4, gs_file3, 55)]);
-        int64_t t9 = r_g;
-        (*t8) = xi_g.e[t9];
-        int64_t t10 = r_g;
-        bc_g.e[0] = (bc_g.e[0] - (xi_g.e[t10]));
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L3;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L3;
+        goto L4;
     }
-    int64_t t11 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 58);
-    for (int64_t l_g = 0; l_g < t11; l_g++) {
-        uint8_t t14 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
-        int64_t t15 = l_g;
-        (void)GS_IDX((int64_t)(t15), 10, gs_file3, (t14) ? 60 : 63);
-        if (t14) {
-            int64_t t16 = l_g;
-            int64_t t17 = l_g;
-            (*n_g).e[t16] = bc_g.e[GS_IDX((int64_t)(t17), 4, gs_file3, 60)];
-            int64_t t18 = d_g;
-            for (int64_t r_g_2 = 0; r_g_2 < t18; r_g_2++) {
-                int64_t t21 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 61)), r_g_2, gs_file3, 61);
-                double *t22 = &((*dn_g).e[GS_IDX((int64_t)(t21), 30, gs_file3, 61)]);
-                double t23 = elements_bary_grad_g8(l_g, r_g_2);
-                (*t22) = t23;
+    L4:;
+    {
+        elements_cube_shape_g8_251(d_g, xi_g, n_g, dn_g);
+        return;
+    }
+    L3:;
+    t5.e[0] = 1.0;
+    t5.e[1] = 0.0;
+    t5.e[2] = 0.0;
+    t5.e[3] = 0.0;
+    bc_g = t5;
+    int64_t t6 = d_g;
+    for (int64_t r_g = 0; r_g < t6; r_g++) {
+        int64_t t9 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 96);
+        double *t10 = &(bc_g.e[GS_IDX((int64_t)(t9), 4, gs_file3, 96)]);
+        int64_t t11 = r_g;
+        (*t10) = xi_g.e[t11];
+        int64_t t12 = r_g;
+        bc_g.e[0] = (bc_g.e[0] - (xi_g.e[t12]));
+    }
+    int64_t t13 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 99);
+    for (int64_t l_g = 0; l_g < t13; l_g++) {
+        uint8_t t16 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
+        int64_t t17 = l_g;
+        (void)GS_IDX((int64_t)(t17), 10, gs_file3, (t16) ? 101 : 104);
+        if (t16) {
+            int64_t t18 = l_g;
+            int64_t t19 = l_g;
+            (*n_g).e[t18] = bc_g.e[GS_IDX((int64_t)(t19), 4, gs_file3, 101)];
+            int64_t t20 = d_g;
+            for (int64_t r_g_2 = 0; r_g_2 < t20; r_g_2++) {
+                int64_t t23 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 102)), r_g_2, gs_file3, 102);
+                double *t24 = &((*dn_g).e[GS_IDX((int64_t)(t23), 30, gs_file3, 102)]);
+                double t25 = elements_bary_grad_g8(l_g, r_g_2);
+                (*t24) = t25;
             }
         } else {
-            int64_t t24 = l_g;
-            int64_t t25 = l_g;
             int64_t t26 = l_g;
-            (*n_g).e[t24] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t25), 4, gs_file3, 63)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t26])))) - (double)(1.0))));
-            int64_t t27 = d_g;
-            for (int64_t r_g_3 = 0; r_g_3 < t27; r_g_3++) {
-                int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 64)), r_g_3, gs_file3, 64);
-                double *t31 = &((*dn_g).e[GS_IDX((int64_t)(t30), 30, gs_file3, 64)]);
-                int64_t t32 = l_g;
-                double t33 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t32])))) - (double)(1.0));
-                double t34 = elements_bary_grad_g8(l_g, r_g_3);
-                (*t31) = ((double)(t33) * (double)(t34));
+            int64_t t27 = l_g;
+            int64_t t28 = l_g;
+            (*n_g).e[t26] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t27), 4, gs_file3, 104)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t28])))) - (double)(1.0))));
+            int64_t t29 = d_g;
+            for (int64_t r_g_3 = 0; r_g_3 < t29; r_g_3++) {
+                int64_t t32 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 105)), r_g_3, gs_file3, 105);
+                double *t33 = &((*dn_g).e[GS_IDX((int64_t)(t32), 30, gs_file3, 105)]);
+                int64_t t34 = l_g;
+                double t35 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t34])))) - (double)(1.0));
+                double t36 = elements_bary_grad_g8(l_g, r_g_3);
+                (*t33) = ((double)(t35) * (double)(t36));
             }
         }
     }
     if (!((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(2)))) {
         return;
     }
-    int64_t t35 = elements_edge_count_g8(d_g);
-    int64_t t36 = t35;
-    for (int64_t e_g = 0; e_g < t36; e_g++) {
+    int64_t t37 = elements_edge_count_g8(d_g);
+    int64_t t38 = t37;
+    for (int64_t e_g = 0; e_g < t38; e_g++) {
         int64_t a_g;
-        int64_t t39 = elements_edge_node_g8(d_g, e_g, 0);
-        a_g = t39;
+        int64_t t41 = elements_edge_node_g8(d_g, e_g, 0);
+        a_g = t41;
         int64_t b_g;
-        int64_t t40 = elements_edge_node_g8(d_g, e_g, 1);
-        b_g = t40;
-        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file3, 71)), e_g, gs_file3, 71);
-        int64_t t41 = l_g_2;
-        double *t42 = &((*n_g).e[GS_IDX((int64_t)(t41), 10, gs_file3, 72)]);
-        int64_t t43 = a_g;
-        int64_t t44 = b_g;
-        (*t42) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t43), 4, gs_file3, 72)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t44), 4, gs_file3, 72)]));
-        int64_t t45 = d_g;
-        for (int64_t r_g_4 = 0; r_g_4 < t45; r_g_4++) {
-            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 73)), r_g_4, gs_file3, 73);
-            double *t49 = &((*dn_g).e[GS_IDX((int64_t)(t48), 30, gs_file3, 73)]);
-            double t50 = 4.0;
-            int64_t t51 = b_g;
-            double t52 = bc_g.e[t51];
-            double t53 = elements_bary_grad_g8(a_g, r_g_4);
-            double t54 = ((double)(t52) * (double)(t53));
-            int64_t t55 = a_g;
-            double t56 = bc_g.e[t55];
-            double t57 = elements_bary_grad_g8(b_g, r_g_4);
-            (*t49) = ((double)(t50) * (double)(((double)(t54) + (double)(((double)(t56) * (double)(t57))))));
+        int64_t t42 = elements_edge_node_g8(d_g, e_g, 1);
+        b_g = t42;
+        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file3, 112)), e_g, gs_file3, 112);
+        int64_t t43 = l_g_2;
+        double *t44 = &((*n_g).e[GS_IDX((int64_t)(t43), 10, gs_file3, 113)]);
+        int64_t t45 = a_g;
+        int64_t t46 = b_g;
+        (*t44) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t45), 4, gs_file3, 113)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t46), 4, gs_file3, 113)]));
+        int64_t t47 = d_g;
+        for (int64_t r_g_4 = 0; r_g_4 < t47; r_g_4++) {
+            int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 114)), r_g_4, gs_file3, 114);
+            double *t51 = &((*dn_g).e[GS_IDX((int64_t)(t50), 30, gs_file3, 114)]);
+            double t52 = 4.0;
+            int64_t t53 = b_g;
+            double t54 = bc_g.e[t53];
+            double t55 = elements_bary_grad_g8(a_g, r_g_4);
+            double t56 = ((double)(t54) * (double)(t55));
+            int64_t t57 = a_g;
+            double t58 = bc_g.e[t57];
+            double t59 = elements_bary_grad_g8(b_g, r_g_4);
+            (*t51) = ((double)(t52) * (double)(((double)(t56) + (double)(((double)(t58) * (double)(t59))))));
+        }
+    }
+    return;
+}
+
+static GS_NOINLINE void elements_cube_shape_g8_251(int64_t d_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
+    a3_f64 t4;
+    a3_f64 f_g;
+    a3_f64 t7;
+    a3_f64 df_g;
+    int64_t t0 = elements_node_count_of_g8(d_g, 1);
+    int64_t t1 = t0;
+    for (int64_t l_g = 0; l_g < t1; l_g++) {
+        double t5 = 1.0;
+        for (int64_t t6 = 0; t6 < 3; t6++) {
+            t4.e[t6] = t5;
+        }
+        f_g = t4;
+        double t8 = 0.0;
+        for (int64_t t9 = 0; t9 < 3; t9++) {
+            t7.e[t9] = t8;
+        }
+        df_g = t7;
+        int64_t t10 = d_g;
+        for (int64_t r_g = 0; r_g < t10; r_g++) {
+            int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 73)), r_g, gs_file3, 73);
+            uint8_t up_g = (uint8_t)((int64_t)((int64_t)(GS_GL->elements_HEX_CORNERS_g8.e[GS_IDX((int64_t)(t13), 24, gs_file3, 73)])) == (int64_t)(1));
+            int64_t t14 = r_g;
+            double *t15 = &(f_g.e[GS_IDX((int64_t)(t14), 3, gs_file3, 74)]);
+            if (up_g) {
+                int64_t t16 = r_g;
+                (*t15) = xi_g.e[t16];
+            } else {
+                int64_t t17 = r_g;
+                (*t15) = ((double)((double)(1.0)) - (double)(xi_g.e[t17]));
+            }
+            int64_t t18 = r_g;
+            if (up_g) {
+                df_g.e[t18] = 1.0;
+            } else {
+                df_g.e[t18] = -1.0;
+            }
+        }
+        int64_t t19 = l_g;
+        double *t20 = &((*n_g).e[GS_IDX((int64_t)(t19), 10, gs_file3, 77)]);
+        (*t20) = ((double)((double)(((double)((double)(f_g.e[0])) * (double)(f_g.e[1])))) * (double)(f_g.e[2]));
+        int64_t t21 = d_g;
+        for (int64_t r_g_2 = 0; r_g_2 < t21; r_g_2++) {
+            int64_t t24 = r_g_2;
+            double g_g = df_g.e[GS_IDX((int64_t)(t24), 3, gs_file3, 79)];
+            int64_t t25 = d_g;
+            for (int64_t t_g = 0; t_g < t25; t_g++) {
+                if ((uint8_t)(!((int64_t)((int64_t)(t_g)) == (int64_t)(r_g_2)))) {
+                    int64_t t28 = t_g;
+                    g_g = (g_g * (f_g.e[GS_IDX((int64_t)(t28), 3, gs_file3, 80)]));
+                }
+            }
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 81)), r_g_2, gs_file3, 81);
+            (*dn_g).e[t29] = g_g;
         }
     }
     return;
@@ -20272,17 +20468,181 @@ static a3_f64 elements_project_g8(int64_t m_g, a3_f64 x_g, double *gs_r1, a3_f64
     return t98;
 }
 
+static void elements_shape_g8_254(int64_t d_g, int64_t order_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
+    sl_u8 t1;
+    sl_u8 t2;
+    a4_f64 t5;
+    a4_f64 bc_g;
+    int64_t t0 = elements_node_count_of_g8(d_g, order_g);
+    if (!((uint8_t)((int64_t)((int64_t)(t0)) <= (int64_t)(10)))) {
+        t1.data = ((uint8_t *)gs_str59); t1.len = 45;
+        t2 = t1;
+        gs_abort_msg(t2.data, t2.len, gs_file3, 89);
+    }
+    int64_t d_g_2 = d_g;
+    {
+        if (!(GS_GL->elements_hex_cells_g8)) goto L3;
+        if (!((uint8_t)((int64_t)((int64_t)(d_g_2)) >= (int64_t)(2)))) goto L3;
+        goto L4;
+    }
+    L4:;
+    {
+        elements_cube_shape_g8_255(d_g, xi_g, n_g, dn_g);
+        return;
+    }
+    L3:;
+    t5.e[0] = 1.0;
+    t5.e[1] = 0.0;
+    t5.e[2] = 0.0;
+    t5.e[3] = 0.0;
+    bc_g = t5;
+    int64_t t6 = d_g;
+    for (int64_t r_g = 0; r_g < t6; r_g++) {
+        int64_t t9 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 96);
+        double *t10 = &(bc_g.e[GS_IDX((int64_t)(t9), 4, gs_file3, 96)]);
+        int64_t t11 = r_g;
+        (*t10) = xi_g.e[t11];
+        int64_t t12 = r_g;
+        bc_g.e[0] = (bc_g.e[0] - (xi_g.e[t12]));
+    }
+    int64_t t13 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 99);
+    for (int64_t l_g = 0; l_g < t13; l_g++) {
+        uint8_t t16 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
+        int64_t t17 = l_g;
+        (void)GS_IDX((int64_t)(t17), 10, gs_file3, (t16) ? 101 : 104);
+        if (t16) {
+            int64_t t18 = l_g;
+            int64_t t19 = l_g;
+            (*n_g).e[t18] = bc_g.e[GS_IDX((int64_t)(t19), 4, gs_file3, 101)];
+            int64_t t20 = d_g;
+            for (int64_t r_g_2 = 0; r_g_2 < t20; r_g_2++) {
+                int64_t t23 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 102)), r_g_2, gs_file3, 102);
+                double *t24 = &((*dn_g).e[GS_IDX((int64_t)(t23), 30, gs_file3, 102)]);
+                double t25 = elements_bary_grad_g8(l_g, r_g_2);
+                (*t24) = t25;
+            }
+        } else {
+            int64_t t26 = l_g;
+            int64_t t27 = l_g;
+            int64_t t28 = l_g;
+            (*n_g).e[t26] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t27), 4, gs_file3, 104)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t28])))) - (double)(1.0))));
+            int64_t t29 = d_g;
+            for (int64_t r_g_3 = 0; r_g_3 < t29; r_g_3++) {
+                int64_t t32 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 105)), r_g_3, gs_file3, 105);
+                double *t33 = &((*dn_g).e[GS_IDX((int64_t)(t32), 30, gs_file3, 105)]);
+                int64_t t34 = l_g;
+                double t35 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t34])))) - (double)(1.0));
+                double t36 = elements_bary_grad_g8(l_g, r_g_3);
+                (*t33) = ((double)(t35) * (double)(t36));
+            }
+        }
+    }
+    if (!((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(2)))) {
+        return;
+    }
+    int64_t t37 = elements_edge_count_g8(d_g);
+    int64_t t38 = t37;
+    for (int64_t e_g = 0; e_g < t38; e_g++) {
+        int64_t a_g;
+        int64_t t41 = elements_edge_node_g8(d_g, e_g, 0);
+        a_g = t41;
+        int64_t b_g;
+        int64_t t42 = elements_edge_node_g8(d_g, e_g, 1);
+        b_g = t42;
+        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g), 1, gs_file3, 112)), e_g, gs_file3, 112);
+        int64_t t43 = l_g_2;
+        double *t44 = &((*n_g).e[GS_IDX((int64_t)(t43), 10, gs_file3, 113)]);
+        int64_t t45 = a_g;
+        int64_t t46 = b_g;
+        (*t44) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t45), 4, gs_file3, 113)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t46), 4, gs_file3, 113)]));
+        int64_t t47 = d_g;
+        for (int64_t r_g_4 = 0; r_g_4 < t47; r_g_4++) {
+            int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 114)), r_g_4, gs_file3, 114);
+            double *t51 = &((*dn_g).e[GS_IDX((int64_t)(t50), 30, gs_file3, 114)]);
+            double t52 = 4.0;
+            int64_t t53 = b_g;
+            double t54 = bc_g.e[t53];
+            double t55 = elements_bary_grad_g8(a_g, r_g_4);
+            double t56 = ((double)(t54) * (double)(t55));
+            int64_t t57 = a_g;
+            double t58 = bc_g.e[t57];
+            double t59 = elements_bary_grad_g8(b_g, r_g_4);
+            (*t51) = ((double)(t52) * (double)(((double)(t56) + (double)(((double)(t58) * (double)(t59))))));
+        }
+    }
+    return;
+}
+
+static GS_NOINLINE void elements_cube_shape_g8_255(int64_t d_g, a3_f64 xi_g, a10_f64 * n_g, a30_f64 * dn_g) {
+    a3_f64 t4;
+    a3_f64 f_g;
+    a3_f64 t7;
+    a3_f64 df_g;
+    int64_t t0 = elements_node_count_of_g8(d_g, 1);
+    int64_t t1 = t0;
+    for (int64_t l_g = 0; l_g < t1; l_g++) {
+        double t5 = 1.0;
+        for (int64_t t6 = 0; t6 < 3; t6++) {
+            t4.e[t6] = t5;
+        }
+        f_g = t4;
+        double t8 = 0.0;
+        for (int64_t t9 = 0; t9 < 3; t9++) {
+            t7.e[t9] = t8;
+        }
+        df_g = t7;
+        int64_t t10 = d_g;
+        for (int64_t r_g = 0; r_g < t10; r_g++) {
+            int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 73)), r_g, gs_file3, 73);
+            uint8_t up_g = (uint8_t)((int64_t)((int64_t)(GS_GL->elements_HEX_CORNERS_g8.e[GS_IDX((int64_t)(t13), 24, gs_file3, 73)])) == (int64_t)(1));
+            int64_t t14 = r_g;
+            double *t15 = &(f_g.e[GS_IDX((int64_t)(t14), 3, gs_file3, 74)]);
+            if (up_g) {
+                int64_t t16 = r_g;
+                (*t15) = xi_g.e[t16];
+            } else {
+                int64_t t17 = r_g;
+                (*t15) = ((double)((double)(1.0)) - (double)(xi_g.e[t17]));
+            }
+            int64_t t18 = r_g;
+            if (up_g) {
+                df_g.e[t18] = 1.0;
+            } else {
+                df_g.e[t18] = -1.0;
+            }
+        }
+        int64_t t19 = l_g;
+        double *t20 = &((*n_g).e[GS_IDX((int64_t)(t19), 10, gs_file3, 77)]);
+        (*t20) = ((double)((double)(((double)((double)(f_g.e[0])) * (double)(f_g.e[1])))) * (double)(f_g.e[2]));
+        int64_t t21 = d_g;
+        for (int64_t r_g_2 = 0; r_g_2 < t21; r_g_2++) {
+            int64_t t24 = r_g_2;
+            double g_g = df_g.e[GS_IDX((int64_t)(t24), 3, gs_file3, 79)];
+            int64_t t25 = d_g;
+            for (int64_t t_g = 0; t_g < t25; t_g++) {
+                if ((uint8_t)(!((int64_t)((int64_t)(t_g)) == (int64_t)(r_g_2)))) {
+                    int64_t t28 = t_g;
+                    g_g = (g_g * (f_g.e[GS_IDX((int64_t)(t28), 3, gs_file3, 80)]));
+                }
+            }
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 81)), r_g_2, gs_file3, 81);
+            (*dn_g).e[t29] = g_g;
+        }
+    }
+    return;
+}
+
 static void elements_clear_bcs_g8(int64_t gs_sp) {
     {
-        uint8_t *t33 = (&GS_GL->gs_gstk_elements_held_g8)->top;
-        int64_t t34 = GS_GL->elements_held_g8.len;
-        t33 = (uint8_t *)((GS_GL->elements_held_g8.base));
-        t34 = 0;
+        uint8_t *t34 = (&GS_GL->gs_gstk_elements_held_g8)->top;
+        int64_t t35 = GS_GL->elements_held_g8.len;
+        t34 = (uint8_t *)((GS_GL->elements_held_g8.base));
+        t35 = 0;
         int64_t t1 = (GS_GL->elements_sol_g8.len);
         int64_t t2 = t1;
-        gs_memcpy(t33, (GS_GL->elements_sol_g8.base), (size_t)((t2) * 8));
-        t33 += (t2) * 8;
-        t34 += t2;
+        gs_memcpy(t34, (GS_GL->elements_sol_g8.base), (size_t)((t2) * 8));
+        t34 += (t2) * 8;
+        t35 += t2;
         int64_t t3 = (GS_GL->elements_fixed_g8.len);
         uint8_t *t4 = (uint8_t *)((GS_GL->elements_fixed_g8.base));
         for (int64_t t5 = 0; t5 < (t3); t5++) {
@@ -20307,101 +20667,127 @@ static void elements_clear_bcs_g8(int64_t gs_sp) {
             double * v_g_4 = &(*(double *)((t19) + t20 * 8));
             (*v_g_4) = 0.0;
         }
-        (&GS_GL->gs_gstk_elements_held_g8)->top = t33;
-        GS_GL->elements_held_g8.len = t34;
+        (&GS_GL->gs_gstk_elements_held_g8)->top = t34;
+        GS_GL->elements_held_g8.len = t35;
     }
     {
-        uint8_t *t35 = (&GS_GL->gs_gstk_elements_rigid_nodes_g8)->top;
-        int64_t t36 = GS_GL->elements_rigid_nodes_g8.len;
-        uint8_t *t37 = (&GS_GL->gs_gstk_elements_rigid_q_g8)->top;
-        int64_t t38 = GS_GL->elements_rigid_q_g8.len;
-        t35 = (uint8_t *)((GS_GL->elements_rigid_nodes_g8.base));
-        t36 = 0;
-        t37 = (uint8_t *)((GS_GL->elements_rigid_q_g8.base));
-        t38 = 0;
+        uint8_t *t36 = (&GS_GL->gs_gstk_elements_rigid_nodes_g8)->top;
+        int64_t t37 = GS_GL->elements_rigid_nodes_g8.len;
+        uint8_t *t38 = (&GS_GL->gs_gstk_elements_rigid_q_g8)->top;
+        int64_t t39 = GS_GL->elements_rigid_q_g8.len;
+        t36 = (uint8_t *)((GS_GL->elements_rigid_nodes_g8.base));
+        t37 = 0;
+        t38 = (uint8_t *)((GS_GL->elements_rigid_q_g8.base));
+        t39 = 0;
         GS_GL->elements_rigid_modes_g8 = 0;
         GS_GL->elements_rigid_k_g8 = 0.0;
-        (&GS_GL->gs_gstk_elements_rigid_nodes_g8)->top = t35;
-        GS_GL->elements_rigid_nodes_g8.len = t36;
-        (&GS_GL->gs_gstk_elements_rigid_q_g8)->top = t37;
-        GS_GL->elements_rigid_q_g8.len = t38;
+        (&GS_GL->gs_gstk_elements_rigid_nodes_g8)->top = t36;
+        GS_GL->elements_rigid_nodes_g8.len = t37;
+        (&GS_GL->gs_gstk_elements_rigid_q_g8)->top = t38;
+        GS_GL->elements_rigid_q_g8.len = t39;
     }
     {
-        uint8_t *t39 = (&GS_GL->gs_gstk_elements_film_cell_g8)->top;
-        int64_t t40 = GS_GL->elements_film_cell_g8.len;
-        uint8_t *t41 = (&GS_GL->gs_gstk_elements_film_facet_g8)->top;
-        int64_t t42 = GS_GL->elements_film_facet_g8.len;
-        uint8_t *t43 = (&GS_GL->gs_gstk_elements_film_h_g8)->top;
-        int64_t t44 = GS_GL->elements_film_h_g8.len;
-        t39 = (uint8_t *)((GS_GL->elements_film_cell_g8.base));
-        t40 = 0;
-        t41 = (uint8_t *)((GS_GL->elements_film_facet_g8.base));
-        t42 = 0;
-        t43 = (uint8_t *)((GS_GL->elements_film_h_g8.base));
-        t44 = 0;
-        (&GS_GL->gs_gstk_elements_film_cell_g8)->top = t39;
-        GS_GL->elements_film_cell_g8.len = t40;
-        (&GS_GL->gs_gstk_elements_film_facet_g8)->top = t41;
-        GS_GL->elements_film_facet_g8.len = t42;
-        (&GS_GL->gs_gstk_elements_film_h_g8)->top = t43;
-        GS_GL->elements_film_h_g8.len = t44;
+        uint8_t *t40 = (&GS_GL->gs_gstk_elements_film_cell_g8)->top;
+        int64_t t41 = GS_GL->elements_film_cell_g8.len;
+        uint8_t *t42 = (&GS_GL->gs_gstk_elements_film_facet_g8)->top;
+        int64_t t43 = GS_GL->elements_film_facet_g8.len;
+        uint8_t *t44 = (&GS_GL->gs_gstk_elements_film_h_g8)->top;
+        int64_t t45 = GS_GL->elements_film_h_g8.len;
+        t40 = (uint8_t *)((GS_GL->elements_film_cell_g8.base));
+        t41 = 0;
+        t42 = (uint8_t *)((GS_GL->elements_film_facet_g8.base));
+        t43 = 0;
+        t44 = (uint8_t *)((GS_GL->elements_film_h_g8.base));
+        t45 = 0;
+        (&GS_GL->gs_gstk_elements_film_cell_g8)->top = t40;
+        GS_GL->elements_film_cell_g8.len = t41;
+        (&GS_GL->gs_gstk_elements_film_facet_g8)->top = t42;
+        GS_GL->elements_film_facet_g8.len = t43;
+        (&GS_GL->gs_gstk_elements_film_h_g8)->top = t44;
+        GS_GL->elements_film_h_g8.len = t45;
     }
     {
-        uint8_t *t45 = (&GS_GL->gs_gstk_elements_rad_facet_g8)->top;
-        int64_t t46 = GS_GL->elements_rad_facet_g8.len;
-        uint8_t *t47 = (&GS_GL->gs_gstk_elements_rad_eps_g8)->top;
-        int64_t t48 = GS_GL->elements_rad_eps_g8.len;
-        uint8_t *t49 = (&GS_GL->gs_gstk_elements_rad_xy_g8)->top;
-        int64_t t50 = GS_GL->elements_rad_xy_g8.len;
-        uint8_t *t51 = (&GS_GL->gs_gstk_elements_rad_q_g8)->top;
-        int64_t t52 = GS_GL->elements_rad_q_g8.len;
-        t45 = (uint8_t *)((GS_GL->elements_rad_facet_g8.base));
-        t46 = 0;
-        t47 = (uint8_t *)((GS_GL->elements_rad_eps_g8.base));
-        t48 = 0;
-        t49 = (uint8_t *)((GS_GL->elements_rad_xy_g8.base));
-        t50 = 0;
-        t51 = (uint8_t *)((GS_GL->elements_rad_q_g8.base));
-        t52 = 0;
-        (&GS_GL->gs_gstk_elements_rad_facet_g8)->top = t45;
-        GS_GL->elements_rad_facet_g8.len = t46;
-        (&GS_GL->gs_gstk_elements_rad_eps_g8)->top = t47;
-        GS_GL->elements_rad_eps_g8.len = t48;
-        (&GS_GL->gs_gstk_elements_rad_xy_g8)->top = t49;
-        GS_GL->elements_rad_xy_g8.len = t50;
-        (&GS_GL->gs_gstk_elements_rad_q_g8)->top = t51;
-        GS_GL->elements_rad_q_g8.len = t52;
+        uint8_t *t46 = (&GS_GL->gs_gstk_elements_amb_cell_g8)->top;
+        int64_t t47 = GS_GL->elements_amb_cell_g8.len;
+        uint8_t *t48 = (&GS_GL->gs_gstk_elements_amb_facet_g8)->top;
+        int64_t t49 = GS_GL->elements_amb_facet_g8.len;
+        uint8_t *t50 = (&GS_GL->gs_gstk_elements_amb_c_g8)->top;
+        int64_t t51 = GS_GL->elements_amb_c_g8.len;
+        uint8_t *t52 = (&GS_GL->gs_gstk_elements_amb_t_g8)->top;
+        int64_t t53 = GS_GL->elements_amb_t_g8.len;
+        t46 = (uint8_t *)((GS_GL->elements_amb_cell_g8.base));
+        t47 = 0;
+        t48 = (uint8_t *)((GS_GL->elements_amb_facet_g8.base));
+        t49 = 0;
+        t50 = (uint8_t *)((GS_GL->elements_amb_c_g8.base));
+        t51 = 0;
+        t52 = (uint8_t *)((GS_GL->elements_amb_t_g8.base));
+        t53 = 0;
+        (&GS_GL->gs_gstk_elements_amb_cell_g8)->top = t46;
+        GS_GL->elements_amb_cell_g8.len = t47;
+        (&GS_GL->gs_gstk_elements_amb_facet_g8)->top = t48;
+        GS_GL->elements_amb_facet_g8.len = t49;
+        (&GS_GL->gs_gstk_elements_amb_c_g8)->top = t50;
+        GS_GL->elements_amb_c_g8.len = t51;
+        (&GS_GL->gs_gstk_elements_amb_t_g8)->top = t52;
+        GS_GL->elements_amb_t_g8.len = t53;
     }
     {
-        uint8_t *t53 = (&GS_GL->gs_gstk_elements_imp_facets_g8)->top;
-        int64_t t54 = GS_GL->elements_imp_facets_g8.len;
-        uint8_t *t55 = (&GS_GL->gs_gstk_elements_imp_z_g8)->top;
-        int64_t t56 = GS_GL->elements_imp_z_g8.len;
-        t53 = (uint8_t *)((GS_GL->elements_imp_facets_g8.base));
-        t54 = 0;
-        t55 = (uint8_t *)((GS_GL->elements_imp_z_g8.base));
-        t56 = 0;
-        (&GS_GL->gs_gstk_elements_imp_facets_g8)->top = t53;
-        GS_GL->elements_imp_facets_g8.len = t54;
-        (&GS_GL->gs_gstk_elements_imp_z_g8)->top = t55;
-        GS_GL->elements_imp_z_g8.len = t56;
+        uint8_t *t54 = (&GS_GL->gs_gstk_elements_rad_facet_g8)->top;
+        int64_t t55 = GS_GL->elements_rad_facet_g8.len;
+        uint8_t *t56 = (&GS_GL->gs_gstk_elements_rad_eps_g8)->top;
+        int64_t t57 = GS_GL->elements_rad_eps_g8.len;
+        uint8_t *t58 = (&GS_GL->gs_gstk_elements_rad_xy_g8)->top;
+        int64_t t59 = GS_GL->elements_rad_xy_g8.len;
+        uint8_t *t60 = (&GS_GL->gs_gstk_elements_rad_q_g8)->top;
+        int64_t t61 = GS_GL->elements_rad_q_g8.len;
+        t54 = (uint8_t *)((GS_GL->elements_rad_facet_g8.base));
+        t55 = 0;
+        t56 = (uint8_t *)((GS_GL->elements_rad_eps_g8.base));
+        t57 = 0;
+        t58 = (uint8_t *)((GS_GL->elements_rad_xy_g8.base));
+        t59 = 0;
+        t60 = (uint8_t *)((GS_GL->elements_rad_q_g8.base));
+        t61 = 0;
+        (&GS_GL->gs_gstk_elements_rad_facet_g8)->top = t54;
+        GS_GL->elements_rad_facet_g8.len = t55;
+        (&GS_GL->gs_gstk_elements_rad_eps_g8)->top = t56;
+        GS_GL->elements_rad_eps_g8.len = t57;
+        (&GS_GL->gs_gstk_elements_rad_xy_g8)->top = t58;
+        GS_GL->elements_rad_xy_g8.len = t59;
+        (&GS_GL->gs_gstk_elements_rad_q_g8)->top = t60;
+        GS_GL->elements_rad_q_g8.len = t61;
+    }
+    {
+        uint8_t *t62 = (&GS_GL->gs_gstk_elements_imp_facets_g8)->top;
+        int64_t t63 = GS_GL->elements_imp_facets_g8.len;
+        uint8_t *t64 = (&GS_GL->gs_gstk_elements_imp_z_g8)->top;
+        int64_t t65 = GS_GL->elements_imp_z_g8.len;
+        t62 = (uint8_t *)((GS_GL->elements_imp_facets_g8.base));
+        t63 = 0;
+        t64 = (uint8_t *)((GS_GL->elements_imp_z_g8.base));
+        t65 = 0;
+        (&GS_GL->gs_gstk_elements_imp_facets_g8)->top = t62;
+        GS_GL->elements_imp_facets_g8.len = t63;
+        (&GS_GL->gs_gstk_elements_imp_z_g8)->top = t64;
+        GS_GL->elements_imp_z_g8.len = t65;
     }
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(4))) {
         {
-            uint8_t *t57 = (&GS_GL->gs_gstk_elements_on_pressure_g8)->top;
-            int64_t t58 = GS_GL->elements_on_pressure_g8.len;
-            t57 = (uint8_t *)((GS_GL->elements_on_pressure_g8.base));
-            t58 = 0;
-            int64_t t28 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_facet_cells_g8.len))))) / (uint64_t)((int64_t)(2)));
-            for (int64_t k_g = 0; k_g < t28; k_g++) {
-                uint8_t t31 = 0;
-                uint8_t *t32 = (uint8_t *)t57;
-                *(uint8_t *)t57 = t31;
-                t57 += 1;
-                t58++;
+            uint8_t *t66 = (&GS_GL->gs_gstk_elements_on_pressure_g8)->top;
+            int64_t t67 = GS_GL->elements_on_pressure_g8.len;
+            t66 = (uint8_t *)((GS_GL->elements_on_pressure_g8.base));
+            t67 = 0;
+            int64_t t29 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_facet_cells_g8.len))))) / (uint64_t)((int64_t)(2)));
+            for (int64_t k_g = 0; k_g < t29; k_g++) {
+                uint8_t t32 = 0;
+                uint8_t *t33 = (uint8_t *)t66;
+                *(uint8_t *)t66 = t32;
+                t66 += 1;
+                t67++;
             }
-            (&GS_GL->gs_gstk_elements_on_pressure_g8)->top = t57;
-            GS_GL->elements_on_pressure_g8.len = t58;
+            (&GS_GL->gs_gstk_elements_on_pressure_g8)->top = t66;
+            GS_GL->elements_on_pressure_g8.len = t67;
         }
     }
     return;
@@ -20420,9 +20806,9 @@ static void elements_fix_g8(int64_t comp_g, double v_g, int64_t gs_sp) {
         if (t3) goto L1;
         L2:;
         {
-            t4.data = ((uint8_t *)gs_str69); t4.len = 68;
+            t4.data = ((uint8_t *)gs_str70); t4.len = 68;
             t5 = t4;
-            gs_abort_msg(t5.data, t5.len, gs_file17, 399);
+            gs_abort_msg(t5.data, t5.len, gs_file17, 545);
         }
         L1:;
         int64_t t6 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
@@ -20439,11 +20825,11 @@ static void elements_fix_g8(int64_t comp_g, double v_g, int64_t gs_sp) {
                     goto L12;
                 }
                 L13:;
-                int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 404)), p_g, gs_file17, 404);
-                uint8_t *t15 = &((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t14), (GS_GL->elements_fixed_g8.len), gs_file17, 404) * 1))));
+                int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 550)), p_g, gs_file17, 550);
+                uint8_t *t15 = &((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t14), (GS_GL->elements_fixed_g8.len), gs_file17, 550) * 1))));
                 (*t15) = 1;
-                int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 405)), p_g, gs_file17, 405);
-                double *t17 = &((((double *)((GS_GL->elements_prescribed_g8.base)))[GS_IDX((int64_t)(t16), (GS_GL->elements_prescribed_g8.len), gs_file17, 405)]));
+                int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 551)), p_g, gs_file17, 551);
+                double *t17 = &((((double *)((GS_GL->elements_prescribed_g8.base)))[GS_IDX((int64_t)(t16), (GS_GL->elements_prescribed_g8.len), gs_file17, 551)]));
                 (*t17) = v_g_2;
                 L12:;
             }
@@ -20458,7 +20844,7 @@ static uint8_t elements_solve_contact_g8(int64_t ramp_g, int64_t gs_sp) {
     uint8_t t1 = elements_solve_solid_g8(ramp_g, gs_sp + 0);
     t0 = t1;
     return t0;
-    GS_UNREACHABLE(gs_file7, 480);
+    GS_UNREACHABLE(gs_file7, 511);
     uint8_t t2 = {0};
     return t2;
 }
@@ -20512,7 +20898,7 @@ static uint8_t elements_solve_solid_g8(int64_t ramp_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_nl_u_g8.len)))) == (int64_t)(((GS_GL->elements_sol_g8.len))))) goto L10;
     L11:;
     {
-        t13.data = ((uint8_t *)gs_str70); t13.len = 98;
+        t13.data = ((uint8_t *)gs_str71); t13.len = 98;
         t14 = t13;
         gs_abort_msg(t14.data, t14.len, gs_file18, 276);
     }
@@ -20528,14 +20914,14 @@ static uint8_t elements_solve_solid_g8(int64_t ramp_g, int64_t gs_sp) {
     uint8_t t17 = elements_direct_setup_g8(gs_sp + 0);
     GS_GL->elements_newton_direct_g8 = t17;
     if ((uint8_t)(!GS_GL->elements_newton_direct_g8)) {
-        t18.data = ((uint8_t *)gs_str71); t18.len = 21;
+        t18.data = ((uint8_t *)gs_str72); t18.len = 21;
         t19 = t18;
         int64_t t20 = ((GS_GL->elements_col_g8.len));
         int64_t t21 = elements_dof_total_g8(gs_sp + 0);
         int64_t t22 = t21;
         int64_t t23 = 6;
-        int64_t t24 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(8), gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_add_i64((int64_t)(((GS_GL->elements_coords_g8.len))), ((GS_GL->elements_conn_g8.len)), gs_file17, 279)), ((GS_GL->elements_cell_law_g8.len)), gs_file17, 279)), ((GS_GL->elements_birth_u_g8.len)), gs_file17, 279), gs_file17, 279)), ((GS_GL->elements_dead_g8.len)), gs_file17, 279)), ((GS_GL->elements_born_g8.len)), gs_file17, 279);
-        t25.data = ((uint8_t *)gs_str72); t25.len = 0;
+        int64_t t24 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(8), gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_add_i64((int64_t)(((GS_GL->elements_coords_g8.len))), ((GS_GL->elements_conn_g8.len)), gs_file17, 338)), ((GS_GL->elements_cell_law_g8.len)), gs_file17, 338)), ((GS_GL->elements_birth_u_g8.len)), gs_file17, 338), gs_file17, 338)), ((GS_GL->elements_dead_g8.len)), gs_file17, 338)), ((GS_GL->elements_born_g8.len)), gs_file17, 338);
+        t25.data = ((uint8_t *)gs_str73); t25.len = 0;
         solvers_memory_check_g7(t19.data, t19.len, t20, t22, t23, t24, t25.data, t25.len, gs_sp + 0);
     }
     t120 = (uint8_t *)((GS_GL->elements_assembled_source_g8.base));
@@ -20675,7 +21061,7 @@ static uint8_t elements_solve_solid_g8(int64_t ramp_g, int64_t gs_sp) {
     t120 = (&GS_GL->gs_gstk_elements_assembled_source_g8)->top;
     t121 = GS_GL->elements_assembled_source_g8.len;
     if (!((memcmp(&t100, &sizes_g, 88) == 0))) {
-        t101.data = ((uint8_t *)gs_str73); t101.len = 57;
+        t101.data = ((uint8_t *)gs_str74); t101.len = 57;
         t102 = t101;
         gs_abort_msg(t102.data, t102.len, gs_file18, 309);
     }
@@ -20720,7 +21106,7 @@ static void solvers_zeros_g7(gs_rhdr *v_g_hdr, gs_stack *v_g_stk, int64_t n_g) {
     sl_u8 t0;
     sl_u8 t1;
     if (!((uint8_t)((int64_t)((int64_t)(n_g)) >= (int64_t)(0)))) {
-        t0.data = ((uint8_t *)gs_str74); t0.len = 13;
+        t0.data = ((uint8_t *)gs_str75); t0.len = 13;
         t1 = t0;
         gs_abort_msg(t1.data, t1.len, gs_file19, 37);
     }
@@ -20750,9 +21136,9 @@ static void elements_build_pattern_g8(int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) > (int64_t)(0))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str75); t2.len = 35;
+        t2.data = ((uint8_t *)gs_str76); t2.len = 35;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file17, 178);
+        gs_abort_msg(t3.data, t3.len, gs_file17, 222);
     }
     L0:;
     uint8_t *t73 = (&GS_GL->gs_gstk_elements_row_start_g8)->top;
@@ -20790,9 +21176,9 @@ static void elements_build_pattern_g8(int64_t gs_sp) {
             uint8_t *t79 = GS(gs_sp + 0)->top;
             for (int64_t b_g = 0; b_g < t12; b_g++) {
                 int64_t t15 = elements_cell_node_g8(c_g, a_g, gs_sp + 1);
-                int64_t t16 = gs_mul_i64((int64_t)(t15), nn_g, gs_file17, 184);
+                int64_t t16 = gs_mul_i64((int64_t)(t15), nn_g, gs_file17, 228);
                 int64_t t17 = elements_cell_node_g8(c_g, b_g, gs_sp + 1);
-                int64_t t18 = gs_add_i64(t16, t17, gs_file17, 184);
+                int64_t t18 = gs_add_i64(t16, t17, gs_file17, 228);
                 int64_t *t19 = (int64_t *)t79;
                 *(int64_t *)t79 = t18;
                 t79 += 8;
@@ -20846,7 +21232,7 @@ static void elements_build_pattern_g8(int64_t gs_sp) {
         }
     }
     t42.data = (int64_t *)((keys_g.base)); t42.len = (keys_g.len);
-    sort_g_187(t42.data, t42.len);
+    sort_g_188(t42.data, t42.len);
     int64_t t43 = 0;
     int64_t *t44 = (int64_t *)t73;
     *(int64_t *)t73 = t43;
@@ -20859,9 +21245,9 @@ static void elements_build_pattern_g8(int64_t gs_sp) {
         for (;;) {
             if (!((uint8_t)((int64_t)((int64_t)(last_g)) < (int64_t)(((keys_g.len)))))) goto L48;
             int64_t t50 = last_g;
-            int64_t t51 = (int64_t)((((int64_t *)((keys_g.base)))[GS_IDX((int64_t)(t50), (keys_g.len), gs_file17, 193)]));
-            if (!((uint8_t)((int64_t)((int64_t)(gs_div_i64(t51, nn_g, gs_file17, 193))) == (int64_t)(a_g_4)))) goto L48;
-            last_g = gs_add_i64(last_g, 1, gs_file17, 193);
+            int64_t t51 = (int64_t)((((int64_t *)((keys_g.base)))[GS_IDX((int64_t)(t50), (keys_g.len), gs_file17, 237)]));
+            if (!((uint8_t)((int64_t)((int64_t)(gs_div_i64(t51, nn_g, gs_file17, 237))) == (int64_t)(a_g_4)))) goto L48;
+            last_g = gs_add_i64(last_g, 1, gs_file17, 237);
         }
         L48:;
         int64_t t52 = GS_GL->elements_ncomp_g8;
@@ -20871,7 +21257,7 @@ static void elements_build_pattern_g8(int64_t gs_sp) {
             int64_t t56 = last_g;
             for (int64_t e_g = t55; e_g < t56; e_g++) {
                 int64_t t59 = e_g;
-                if ((uint8_t)((int64_t)((int64_t)((((int64_t *)((keys_g.base)))[GS_IDX((int64_t)(t59), (keys_g.len), gs_file17, 197)]))) == (int64_t)(prev_g))) {
+                if ((uint8_t)((int64_t)((int64_t)((((int64_t *)((keys_g.base)))[GS_IDX((int64_t)(t59), (keys_g.len), gs_file17, 241)]))) == (int64_t)(prev_g))) {
                     goto L58;
                 }
                 int64_t t60 = e_g;
@@ -20879,14 +21265,14 @@ static void elements_build_pattern_g8(int64_t gs_sp) {
                 int64_t t61 = e_g;
                 int64_t t62 = (int64_t)((((int64_t *)((keys_g.base)))[t61]));
                 int64_t t63;
-                int64_t b_g_4 = gs_mod_i64(t63, t62, nn_g, gs_file17, 199);
+                int64_t b_g_4 = gs_mod_i64(t63, t62, nn_g, gs_file17, 243);
                 int64_t t64 = GS_GL->elements_ncomp_g8;
                 uint8_t *t82 = (&GS_GL->gs_gstk_elements_col_g8)->top;
                 int64_t t83 = GS_GL->elements_col_g8.len;
                 uint8_t *t84 = (&GS_GL->gs_gstk_elements_val_g8)->top;
                 int64_t t85 = GS_GL->elements_val_g8.len;
                 for (int64_t q_g = 0; q_g < t64; q_g++) {
-                    int32_t t67 = (int32_t)GS_RANGE((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), b_g_4, gs_file17, 201)), q_g, gs_file17, 201)), (-2147483647 - 1), 2147483647, "i32", gs_file17, 201);
+                    int32_t t67 = (int32_t)GS_RANGE((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), b_g_4, gs_file17, 245)), q_g, gs_file17, 245)), (-2147483647 - 1), 2147483647, "i32", gs_file17, 245);
                     int32_t *t68 = (int32_t *)t82;
                     *(int32_t *)t82 = t67;
                     t82 += 4;
@@ -21177,14 +21563,14 @@ static uint8_t elements_direct_setup_g8(int64_t gs_sp) {
         t128 += 8;
         t129++;
     }
-    t108.data = ((uint8_t *)gs_str76); t108.len = 27;
+    t108.data = ((uint8_t *)gs_str77); t108.len = 27;
     t109 = t108;
     int64_t t110 = n_g_2;
     int64_t t111 = (((int64_t *)((GS_GL->elements_sky_start_g8.base)))[GS_IDX((int64_t)(t110), (t129), gs_file20, 107)]);
     int64_t t112 = n_g_2;
     int64_t t113 = 2;
     int64_t t114 = 0;
-    t115.data = ((uint8_t *)gs_str72); t115.len = 0;
+    t115.data = ((uint8_t *)gs_str73); t115.len = 0;
     solvers_memory_check_g7(t109.data, t109.len, t111, t112, t113, t114, t115.data, t115.len, gs_sp + 0);
     t116.hdr = (gs_rhdr *)&GS_GL->elements_sky_upper_g8; t116.stk = (&GS_GL->gs_gstk_elements_sky_upper_g8);
     int64_t t117 = n_g_2;
@@ -21254,7 +21640,7 @@ static int64_t elements_cuthill_nodes_g8(int64_t root_g, int64_t stamp_g, gs_rhd
             }
         }
         t23.data = (int64_t *)((next_g.base)); t23.len = (next_g.len);
-        sort_g_274(t23.data, t23.len, gs_sp + 1);
+        sort_g_280(t23.data, t23.len, gs_sp + 1);
         int64_t t24 = (next_g.len);
         int64_t t25 = t24;
         gs_memcpy(seq_g.stk->top, (next_g.base), (size_t)((t25) * 8));
@@ -21273,7 +21659,7 @@ static int64_t elements_cuthill_nodes_g8(int64_t root_g, int64_t stamp_g, gs_rhd
     return t28;
 }
 
-static void sort_g_274(void *xs_g_data, int64_t xs_g_len, int64_t gs_sp) {
+static void sort_g_280(void *xs_g_data, int64_t xs_g_len, int64_t gs_sp) {
     sl_i64 xs_g; xs_g.data = xs_g_data; xs_g.len = xs_g_len;
     sl_i64 v_g;
     l144_i64 st_g;
@@ -21377,7 +21763,7 @@ static void sort_g_274(void *xs_g_data, int64_t xs_g_len, int64_t gs_sp) {
             limit_g = gs_sub_i64(limit_g, 1, gs_file14, 647);
             xs_g_2 = v_g_2;
             int64_t j_g_2;
-            int64_t t40 = sort_pivot_g_277(v_g_2.data, v_g_2.len, gs_sp + 0);
+            int64_t t40 = sort_pivot_g_283(v_g_2.data, v_g_2.len, gs_sp + 0);
             j_g_2 = t40;
             {
                 int64_t *t42 = xs_g_2.data;
@@ -21884,7 +22270,7 @@ static int64_t sort_run_g(void *v_g_data, int64_t v_g_len, int64_t gs_sp) {
     return t64;
 }
 
-static int64_t sort_pivot_g_277(void *v_g_data, int64_t v_g_len, int64_t gs_sp) {
+static int64_t sort_pivot_g_283(void *v_g_data, int64_t v_g_len, int64_t gs_sp) {
     sl_i64 v_g; v_g.data = v_g_data; v_g.len = v_g_len;
     sl_i64 v_g_2;
     sl_i64 v_g_3;
@@ -22903,7 +23289,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
             uint8_t *t15 = t141;
             int64_t t16 = 0;
             int64_t t17 = 32;
-            gs_memcpy(t141, (const uint8_t *)(((uint8_t *)gs_str77)), (size_t)t17);
+            gs_memcpy(t141, (const uint8_t *)(((uint8_t *)gs_str78)), (size_t)t17);
             t141 += t17;
             t16 += t17;
             t19 = name_g_3;
@@ -22912,7 +23298,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
             t141 += t18;
             t16 += t18;
             int64_t t20 = 37;
-            gs_memcpy(t141, (const uint8_t *)(((uint8_t *)gs_str78)), (size_t)t20);
+            gs_memcpy(t141, (const uint8_t *)(((uint8_t *)gs_str79)), (size_t)t20);
             t141 += t20;
             t16 += t20;
             t14.len = t16;
@@ -22937,7 +23323,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
     GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file21, 279);
     probe_g.base = GS(gs_sp + 0)->top; probe_g.len = 0;
     probe_g.len = 0;
-    t30.data = ((uint8_t *)gs_str79); t30.len = 18;
+    t30.data = ((uint8_t *)gs_str80); t30.len = 18;
     t31 = t30;
     t32.hdr = (gs_rhdr *)&probe_g; t32.stk = GS(gs_sp + 0);
     t33 = t32;
@@ -22951,7 +23337,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         uint8_t *t36 = t139;
         int64_t t37 = 0;
         int64_t t38 = 16;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str80)), (size_t)t38);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str81)), (size_t)t38);
         t139 += t38;
         t37 += t38;
         int64_t t39 = gs_fmt_i64(t139, (int64_t)((int64_t)gs_f2iwrap(need_g)));
@@ -22968,9 +23354,9 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t139 = t35.base;
         gs_exit(0);
     }
-    t43.data = ((uint8_t *)gs_str81); t43.len = 24;
+    t43.data = ((uint8_t *)gs_str82); t43.len = 24;
     t44 = t43;
-    t45.data = ((uint8_t *)gs_str82); t45.len = 4;
+    t45.data = ((uint8_t *)gs_str83); t45.len = 4;
     t46 = t45;
     uint8_t t47 = gs_os_write_file(t44, t46);
     double have_g;
@@ -22988,7 +23374,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
             } else {
                 GS_GL->solvers_budget_g7 = 0.0;
             }
-            t52.data = ((uint8_t *)gs_str83); t52.len = 19;
+            t52.data = ((uint8_t *)gs_str84); t52.len = 19;
             t53 = t52;
             t54.hdr = (gs_rhdr *)&s_g; t54.stk = GS(gs_sp + 1);
             t55 = t54;
@@ -23001,7 +23387,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
                 int64_t v_g;
                 uint8_t good_g;
                 t57.data = (uint8_t *)((s_g.base)); t57.len = (s_g.len);
-                int64_t t58 = parse_int_g_307(t57.data, t57.len, 10, &good_g);
+                int64_t t58 = parse_int_g_313(t57.data, t57.len, 10, &good_g);
                 v_g = t58;
                 if (good_g) {
                     GS_GL->solvers_budget_g7 = ((double)((double)((double)(v_g))) * (double)(1.0));
@@ -23038,7 +23424,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         uint8_t *t73 = t139;
         int64_t t74 = 0;
         int64_t t75 = 32;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str77)), (size_t)t75);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str78)), (size_t)t75);
         t139 += t75;
         t74 += t75;
         t77 = name_g_4;
@@ -23047,7 +23433,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t139 += t76;
         t74 += t76;
         int64_t t78 = 37;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str78)), (size_t)t78);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str79)), (size_t)t78);
         t139 += t78;
         t74 += t78;
         t72.len = t74;
@@ -23067,7 +23453,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         uint8_t *t84 = t139;
         int64_t t85 = 0;
         int64_t t86 = 45;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str84)), (size_t)t86);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str85)), (size_t)t86);
         t139 += t86;
         t85 += t86;
         int64_t t88 = solvers_case_threads_g7(gs_sp + 2);
@@ -23075,7 +23461,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t139 += t87;
         t85 += t87;
         int64_t t89 = 20;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str85)), (size_t)t89);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str86)), (size_t)t89);
         t139 += t89;
         t85 += t89;
         int64_t t91;
@@ -23091,7 +23477,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t139 += t90;
         t85 += t90;
         int64_t t95 = 8;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str86)), (size_t)t95);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str87)), (size_t)t95);
         t139 += t95;
         t85 += t95;
         int64_t t97;
@@ -23107,7 +23493,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t139 += t96;
         t85 += t96;
         int64_t t101 = 12;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str87)), (size_t)t101);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str88)), (size_t)t101);
         t139 += t101;
         t85 += t101;
         t83.len = t85;
@@ -23145,7 +23531,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         uint8_t *t107 = t139;
         int64_t t108 = 0;
         int64_t t109 = 24;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str88)), (size_t)t109);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str89)), (size_t)t109);
         t139 += t109;
         t108 += t109;
         source_g.len = t108;
@@ -23156,7 +23542,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t139 += t112;
         t111 += t112;
         int64_t t113 = 40;
-        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str89)), (size_t)t113);
+        gs_memcpy(t139, (const uint8_t *)(((uint8_t *)gs_str90)), (size_t)t113);
         t139 += t113;
         t111 += t113;
         source_g.len = t111;
@@ -23165,7 +23551,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
     uint8_t *t115 = t140;
     int64_t t116 = 0;
     int64_t t117 = 33;
-    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str90)), (size_t)t117);
+    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str91)), (size_t)t117);
     t140 += t117;
     t116 += t117;
     int64_t t119;
@@ -23181,7 +23567,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
     t140 += t118;
     t116 += t118;
     int64_t t123 = 19;
-    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str91)), (size_t)t123);
+    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str92)), (size_t)t123);
     t140 += t123;
     t116 += t123;
     int64_t t125;
@@ -23197,7 +23583,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
     t140 += t124;
     t116 += t124;
     int64_t t129 = 20;
-    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str92)), (size_t)t129);
+    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str93)), (size_t)t129);
     t140 += t129;
     t116 += t129;
     int64_t t131 = (source_g.len);
@@ -23206,11 +23592,11 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
     t140 += t130;
     t116 += t130;
     int64_t t132 = 3;
-    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str93)), (size_t)t132);
+    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str94)), (size_t)t132);
     t140 += t132;
     t116 += t132;
     int64_t t133 = 42;
-    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str94)), (size_t)t133);
+    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str95)), (size_t)t133);
     t140 += t133;
     t116 += t133;
     t135 = fix_g;
@@ -23219,7 +23605,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
     t140 += t134;
     t116 += t134;
     int64_t t136 = 2;
-    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str95)), (size_t)t136);
+    gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str96)), (size_t)t136);
     t140 += t136;
     t116 += t136;
     t114.len = t116;
@@ -23245,7 +23631,7 @@ static double solvers_resident_bytes_g7(int64_t gs_sp) {
     gs_rref t6;
     sl_u8 t10;
     double t0;
-    t1.data = ((uint8_t *)gs_str96); t1.len = 6;
+    t1.data = ((uint8_t *)gs_str97); t1.len = 6;
     key_g = t1;
     {
         s_g.base = GS(gs_sp + 0)->top; s_g.len = 0;
@@ -23432,7 +23818,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
             L46:;
         }
         xs_g_2 = field_g;
-        t58.data = ((uint8_t *)gs_str97); t58.len = 3;
+        t58.data = ((uint8_t *)gs_str98); t58.len = 3;
         p_g_2 = t58;
         {
             if (!((uint8_t)((int64_t)((int64_t)((p_g_2.len))) <= (int64_t)((xs_g_2.len))))) goto L57;
@@ -23459,7 +23845,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
         L57:;
         int64_t v_g;
         uint8_t good_g;
-        int64_t t70 = parse_int_g_303(field_g.data, field_g.len, 10, &good_g);
+        int64_t t70 = parse_int_g_309(field_g.data, field_g.len, 10, &good_g);
         v_g = t70;
         double t71;
         if (good_g) {
@@ -23480,7 +23866,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
     return t73;
 }
 
-static GS_INLINE int64_t parse_int_g_303(void *s_g_data, int64_t s_g_len, int64_t base_g, uint8_t *gs_r1) {
+static GS_INLINE int64_t parse_int_g_309(void *s_g_data, int64_t s_g_len, int64_t base_g, uint8_t *gs_r1) {
     sl_u8 s_g; s_g.data = s_g_data; s_g.len = s_g_len;
     int64_t i_g = 0;
     uint8_t neg_g = 0;
@@ -23605,7 +23991,7 @@ static int64_t solvers_case_threads_g7(int64_t gs_sp) {
         L0:;
         s_g.base = GS(gs_sp + 0)->top; s_g.len = 0;
         s_g.len = 0;
-        t1.data = ((uint8_t *)gs_str98); t1.len = 13;
+        t1.data = ((uint8_t *)gs_str99); t1.len = 13;
         t2 = t1;
         t3.hdr = (gs_rhdr *)&s_g; t3.stk = GS(gs_sp + 0);
         t4 = t3;
@@ -23614,7 +24000,7 @@ static int64_t solvers_case_threads_g7(int64_t gs_sp) {
             int64_t n_g;
             uint8_t good_g;
             t6.data = (uint8_t *)((s_g.base)); t6.len = (s_g.len);
-            int64_t t7 = parse_int_g_307(t6.data, t6.len, 10, &good_g);
+            int64_t t7 = parse_int_g_313(t6.data, t6.len, 10, &good_g);
             n_g = t7;
             if (!(good_g)) goto L8;
             if (!((uint8_t)((int64_t)((int64_t)(n_g)) >= (int64_t)(1)))) goto L8;
@@ -23633,7 +24019,7 @@ static int64_t solvers_case_threads_g7(int64_t gs_sp) {
     return t10;
 }
 
-static int64_t parse_int_g_307(void *s_g_data, int64_t s_g_len, int64_t base_g, uint8_t *gs_r1) {
+static int64_t parse_int_g_313(void *s_g_data, int64_t s_g_len, int64_t base_g, uint8_t *gs_r1) {
     sl_u8 s_g; s_g.data = s_g_data; s_g.len = s_g_len;
     int64_t i_g = 0;
     uint8_t neg_g = 0;
@@ -23747,7 +24133,7 @@ static double solvers_path_bytes_g7(solvers_MemoryPath_g7 p_g, int64_t entries_g
     if ((uint8_t)((int64_t)((int64_t)(threads_g)) >= (int64_t)(1))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str99); t2.len = 66;
+        t2.data = ((uint8_t *)gs_str100); t2.len = 66;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file21, 249);
     }
@@ -23819,7 +24205,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     sl_u8 t131;
     s_g.base = GS(gs_sp + 0)->top; s_g.len = 0;
     s_g.len = 0;
-    t0.data = ((uint8_t *)gs_str100); t0.len = 13;
+    t0.data = ((uint8_t *)gs_str101); t0.len = 13;
     t1 = t0;
     t2.hdr = (gs_rhdr *)&s_g; t2.stk = GS(gs_sp + 0);
     t3 = t2;
@@ -23833,7 +24219,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     double t6 = 1024.0;
     t7.data = (uint8_t *)((s_g.base)); t7.len = (s_g.len);
     t8 = t7;
-    t9.data = ((uint8_t *)gs_str101); t9.len = 13;
+    t9.data = ((uint8_t *)gs_str102); t9.len = 13;
     double t10 = solvers_proc_kb_g7(t8.data, t8.len, t9.data, t9.len, gs_sp + 1);
     double free_g = ((double)(t6) * (double)(t10));
     if (!((uint8_t)((double)((double)(free_g)) > (double)(0.0)))) {
@@ -23845,7 +24231,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     uint8_t *t139 = GS(gs_sp + 0)->top;
     t139 = (uint8_t *)((s_g.base));
     s_g.len = 0;
-    t14.data = ((uint8_t *)gs_str102); t14.len = 17;
+    t14.data = ((uint8_t *)gs_str103); t14.len = 17;
     t15 = t14;
     t16.hdr = (gs_rhdr *)&s_g; t16.stk = GS(gs_sp + 0);
     t17 = t16;
@@ -23855,7 +24241,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     if (!(t18)) goto L13;
     t19.data = (uint8_t *)((s_g.base)); t19.len = (s_g.len);
     xs_g = t19;
-    t20.data = ((uint8_t *)gs_str103); t20.len = 4;
+    t20.data = ((uint8_t *)gs_str104); t20.len = 4;
     p_g = t20;
     {
         if (!((uint8_t)((int64_t)((int64_t)((p_g.len))) <= (int64_t)((xs_g.len))))) goto L22;
@@ -23895,7 +24281,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         uint8_t *t39 = t140;
         int64_t t40 = 0;
         int64_t t41 = 14;
-        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str104)), (size_t)t41);
+        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str105)), (size_t)t41);
         t140 += t41;
         t40 += t41;
         t43 = dir_g;
@@ -23904,7 +24290,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         t140 += t42;
         t40 += t42;
         int64_t t44 = 11;
-        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str105)), (size_t)t44);
+        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str106)), (size_t)t44);
         t140 += t44;
         t40 += t44;
         t38.len = t40;
@@ -23984,7 +24370,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
                 }
                 L65:;
             }
-            int64_t t76 = parse_int_g_307(t51.data, t51.len, 10, &good_g);
+            int64_t t76 = parse_int_g_313(t51.data, t51.len, 10, &good_g);
             v_g = t76;
             if (good_g) {
                 limit_g = ((double)((double)((double)(v_g))) * (double)(1.0));
@@ -24002,7 +24388,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         uint8_t *t78 = t140;
         int64_t t79 = 0;
         int64_t t80 = 14;
-        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str104)), (size_t)t80);
+        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str105)), (size_t)t80);
         t140 += t80;
         t79 += t80;
         t82 = dir_g;
@@ -24011,7 +24397,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         t140 += t81;
         t79 += t81;
         int64_t t83 = 15;
-        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str106)), (size_t)t83);
+        gs_memcpy(t140, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t83);
         t140 += t83;
         t79 += t83;
         t77.len = t79;
@@ -24091,7 +24477,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
                 }
                 L104:;
             }
-            int64_t t115 = parse_int_g_307(t90.data, t90.len, 10, &good_g_2);
+            int64_t t115 = parse_int_g_313(t90.data, t90.len, 10, &good_g_2);
             v_g_2 = t115;
             if (good_g_2) {
                 now_g = ((double)((double)((double)(v_g_2))) * (double)(1.0));
@@ -24132,7 +24518,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         L116:;
         int64_t up_g;
         xs_g_2 = dir_g;
-        t119.data = ((uint8_t *)gs_str107); t119.len = 1;
+        t119.data = ((uint8_t *)gs_str108); t119.len = 1;
         sub_g = t119;
         {
             if ((uint8_t)((int64_t)((int64_t)((sub_g.len))) == (int64_t)(0))) {
@@ -24272,7 +24658,7 @@ static a11_i64 elements_state_sizes_g8(int64_t gs_sp) {
     t1.e[10] = ((GS_GL->elements_assembled_source_g8.len));
     t0 = t1;
     return t0;
-    GS_UNREACHABLE(gs_file23, 277);
+    GS_UNREACHABLE(gs_file23, 348);
     t2 = (a11_i64){0};
     return t2;
 }
@@ -24429,7 +24815,7 @@ static uint8_t elements_increment_g8(double lam_g, uint8_t predicted_g, double s
             {
                 int64_t n_g_2 = ((GS_GL->elements_sol_g8.len));
                 if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_sky_start_g8.len)))) == (int64_t)(gs_add_i64((int64_t)(n_g_2), 1, gs_file20, 155))))) {
-                    t50.data = ((uint8_t *)gs_str108); t50.len = 41;
+                    t50.data = ((uint8_t *)gs_str109); t50.len = 41;
                     t51 = t50;
                     gs_abort_msg(t51.data, t51.len, gs_file20, 155);
                 }
@@ -24450,7 +24836,7 @@ static uint8_t elements_increment_g8(double lam_g, uint8_t predicted_g, double s
                 int64_t n_g_3 = n_g_2;
                 {
                     if (!((uint8_t)((int64_t)((int64_t)(n_g_3)) >= (int64_t)(0)))) {
-                        t54.data = ((uint8_t *)gs_str74); t54.len = 13;
+                        t54.data = ((uint8_t *)gs_str75); t54.len = 13;
                         t55 = t54;
                         gs_abort_msg(t55.data, t55.len, gs_file19, 37);
                     }
@@ -24844,7 +25230,7 @@ static uint8_t elements_increment_g8(double lam_g, uint8_t predicted_g, double s
                 t272.e[9] = ((GS_GL->elements_val_g8.len));
                 t272.e[10] = ((GS_GL->elements_assembled_source_g8.len));
                 if (!((memcmp(&t272, &sizes_g, 88) == 0))) {
-                    t273.data = ((uint8_t *)gs_str109); t273.len = 58;
+                    t273.data = ((uint8_t *)gs_str110); t273.len = 58;
                     t274 = t273;
                     gs_abort_msg(t274.data, t274.len, gs_file20, 177);
                 }
@@ -24980,14 +25366,14 @@ static void elements_solid_assemble_g8(int64_t gs_sp) {
         if (t24 < 0 || t25 < t24 || t25 > t23) gs_abort(GS_E_SLICE, gs_file18, 258);
         f_g.data = t22 + t24; f_g.len = t25 - t24;
         {
-            int64_t m_g_2 = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 330);
-            if (!((uint8_t)((int64_t)((int64_t)((k_g.len))) == (int64_t)(gs_mul_i64((int64_t)(m_g_2), m_g_2, gs_file17, 331))))) goto L28;
+            int64_t m_g_2 = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 476);
+            if (!((uint8_t)((int64_t)((int64_t)((k_g.len))) == (int64_t)(gs_mul_i64((int64_t)(m_g_2), m_g_2, gs_file17, 477))))) goto L28;
             if ((uint8_t)((int64_t)((int64_t)((f_g.len))) == (int64_t)(m_g_2))) goto L27;
             L28:;
             {
-                t29.data = ((uint8_t *)gs_str110); t29.len = 58;
+                t29.data = ((uint8_t *)gs_str111); t29.len = 58;
                 t30 = t29;
-                gs_abort_msg(t30.data, t30.len, gs_file17, 331);
+                gs_abort_msg(t30.data, t30.len, gs_file17, 477);
             }
             L27:;
             int64_t t31 = GS_GL->elements_per_cell_g8;
@@ -24997,11 +25383,11 @@ static void elements_solid_assemble_g8(int64_t gs_sp) {
                 ni_g = t34;
                 int64_t t35 = GS_GL->elements_ncomp_g8;
                 for (int64_t p_g = 0; p_g < t35; p_g++) {
-                    int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), ni_g, gs_file17, 334)), p_g, gs_file17, 334);
-                    double *t39 = &((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t38), (GS_GL->elements_assembled_source_g8.len), gs_file17, 334)]));
-                    int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), i_g, gs_file17, 334)), p_g, gs_file17, 334);
+                    int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), ni_g, gs_file17, 480)), p_g, gs_file17, 480);
+                    double *t39 = &((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t38), (GS_GL->elements_assembled_source_g8.len), gs_file17, 480)]));
+                    int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), i_g, gs_file17, 480)), p_g, gs_file17, 480);
                     double *t41 = f_g.data;
-                    (*t39) = ((*t39) + (t41[GS_IDX((int64_t)(t40), f_g.len, gs_file17, 334)]));
+                    (*t39) = ((*t39) + (t41[GS_IDX((int64_t)(t40), f_g.len, gs_file17, 480)]));
                 }
                 int64_t t42 = GS_GL->elements_per_cell_g8;
                 for (int64_t j_g = 0; j_g < t42; j_g++) {
@@ -25011,49 +25397,49 @@ static void elements_solid_assemble_g8(int64_t gs_sp) {
                     int64_t t46 = GS_GL->elements_ncomp_g8;
                     for (int64_t p_g_2 = 0; p_g_2 < t46; p_g_2++) {
                         int64_t e_g;
-                        int64_t r_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), ni_g, gs_file17, 338)), p_g_2, gs_file17, 338);
-                        int64_t c_g_4 = gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), nj_g, gs_file17, 338);
+                        int64_t r_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), ni_g, gs_file17, 484)), p_g_2, gs_file17, 484);
+                        int64_t c_g_4 = gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), nj_g, gs_file17, 484);
                         {
                             if (!((uint8_t)((int64_t)((int64_t)(r_g)) >= (int64_t)(0)))) goto L51;
-                            if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L51;
+                            if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L51;
                             if (!((uint8_t)((int64_t)((int64_t)(c_g_4)) >= (int64_t)(0)))) goto L51;
-                            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g_4), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L50;
+                            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g_4), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L50;
                             L51:;
                             {
-                                t52.data = ((uint8_t *)gs_str111); t52.len = 37;
+                                t52.data = ((uint8_t *)gs_str112); t52.len = 37;
                                 t53 = t52;
-                                gs_abort_msg(t53.data, t53.len, gs_file17, 213);
+                                gs_abort_msg(t53.data, t53.len, gs_file17, 257);
                             }
                             L50:;
                             int64_t t54 = r_g;
-                            int64_t lo_g = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t54), (GS_GL->elements_row_start_g8.len), gs_file17, 214)]);
-                            int64_t t55 = gs_add_i64((int64_t)(r_g), 1, gs_file17, 215);
-                            int64_t hi_g = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t55), (GS_GL->elements_row_start_g8.len), gs_file17, 215)])), 1, gs_file17, 215);
+                            int64_t lo_g = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t54), (GS_GL->elements_row_start_g8.len), gs_file17, 258)]);
+                            int64_t t55 = gs_add_i64((int64_t)(r_g), 1, gs_file17, 259);
+                            int64_t hi_g = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t55), (GS_GL->elements_row_start_g8.len), gs_file17, 259)])), 1, gs_file17, 259);
                             for (;;) {
                                 if (!((uint8_t)((int64_t)((int64_t)(lo_g)) < (int64_t)(hi_g)))) goto L56;
-                                int64_t t58 = (int64_t)(gs_add_i64((int64_t)(lo_g), hi_g, gs_file17, 217));
-                                int64_t mid_g = gs_div_i64(t58, 2, gs_file17, 217);
+                                int64_t t58 = (int64_t)(gs_add_i64((int64_t)(lo_g), hi_g, gs_file17, 261));
+                                int64_t mid_g = gs_div_i64(t58, 2, gs_file17, 261);
                                 int64_t t59 = mid_g;
-                                if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t59), (GS_GL->elements_col_g8.len), gs_file17, 218)]))) < (int64_t)(c_g_4))) {
-                                    lo_g = gs_add_i64((int64_t)(mid_g), 1, gs_file17, 218);
+                                if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t59), (GS_GL->elements_col_g8.len), gs_file17, 262)]))) < (int64_t)(c_g_4))) {
+                                    lo_g = gs_add_i64((int64_t)(mid_g), 1, gs_file17, 262);
                                 } else {
                                     hi_g = mid_g;
                                 }
                             }
                             L56:;
                             int64_t t60 = lo_g;
-                            if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t60), (GS_GL->elements_col_g8.len), gs_file17, 220)]))) == (int64_t)(c_g_4)))) gs_abort(GS_E_ASSERT, gs_file17, 220);
+                            if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t60), (GS_GL->elements_col_g8.len), gs_file17, 264)]))) == (int64_t)(c_g_4)))) gs_abort(GS_E_ASSERT, gs_file17, 264);
                             e_g = lo_g;
                             goto L49;
                         }
                         L49:;
                         int64_t t61 = GS_GL->elements_ncomp_g8;
                         for (int64_t q_g = 0; q_g < t61; q_g++) {
-                            int64_t t64 = gs_add_i64((int64_t)(e_g), q_g, gs_file17, 339);
-                            double *t65 = &((((double *)((GS_GL->elements_val_g8.base)))[GS_IDX((int64_t)(t64), (GS_GL->elements_val_g8.len), gs_file17, 339)]));
-                            int64_t t66 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), i_g, gs_file17, 339)), p_g_2, gs_file17, 339), gs_file17, 339)), gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), j_g, gs_file17, 339), gs_file17, 339)), q_g, gs_file17, 339);
+                            int64_t t64 = gs_add_i64((int64_t)(e_g), q_g, gs_file17, 485);
+                            double *t65 = &((((double *)((GS_GL->elements_val_g8.base)))[GS_IDX((int64_t)(t64), (GS_GL->elements_val_g8.len), gs_file17, 485)]));
+                            int64_t t66 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), i_g, gs_file17, 485)), p_g_2, gs_file17, 485), gs_file17, 485)), gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), j_g, gs_file17, 485), gs_file17, 485)), q_g, gs_file17, 485);
                             double *t67 = k_g.data;
-                            (*t65) = ((*t65) + (t67[GS_IDX((int64_t)(t66), k_g.len, gs_file17, 339)]));
+                            (*t65) = ((*t65) + (t67[GS_IDX((int64_t)(t66), k_g.len, gs_file17, 485)]));
                         }
                     }
                 }
@@ -25088,44 +25474,42 @@ static void elements_solid_cell_g8(int64_t c_g, void *u_g_data, int64_t u_g_len,
     a9_f64 f_g;
     sl_f64 u_g_3;
     a9_f64 f_g_2;
-    sl_u8 t62;
-    sl_u8 t63;
     a9_f64 f_g_3;
-    a6_f64 t66;
+    a6_f64 t61;
     a6_f64 st_g;
     a3_f64 c_g_4;
     a9_f64 e_g;
-    a3_f64 t76;
-    a3_f64 t77;
+    a3_f64 t71;
+    a3_f64 t72;
     a3_f64 w1_g;
-    a9_f64 t80;
+    a9_f64 t75;
     a9_f64 w2_g;
     a3_f64 c_g_5;
     elements_Hd_g8 w_g_2;
     a3_elements_Hd_g8 c_g_6;
     a3_f64 c_g_7;
-    a3_elements_Hd_g8 t92;
-    elements_Hd_g8 t94;
-    elements_Hd_g8 t96;
-    elements_Hd_g8 t98;
+    a3_elements_Hd_g8 t87;
+    elements_Hd_g8 t89;
+    elements_Hd_g8 t91;
+    elements_Hd_g8 t93;
     a3_elements_Hd_g8 h_g;
-    elements_Hd_g8 t104;
+    elements_Hd_g8 t99;
     a9_f64 fk_g;
     a9_f64 p_g;
     a9_f64 a_g;
     a9_f64 b_g;
     a6_f64 v_g;
-    a9_f64 t125;
-    a9_f64 t127;
+    a9_f64 t120;
+    a9_f64 t122;
     a9_f64 c_g_8;
     a9_f64 f_g_4;
-    a180_f64 t164;
+    a180_f64 t159;
     a180_f64 b_g_2;
-    a180_f64 t167;
+    a180_f64 t162;
     a180_f64 db_g;
     a9_f64 sm_g;
     a6_f64 v_g_5;
-    a9_f64 t228;
+    a9_f64 t223;
     int64_t m_g = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file18, 215);
     {
         int64_t c_g_2 = c_g;
@@ -25217,211 +25601,196 @@ static void elements_solid_cell_g8(int64_t c_g, void *u_g_data, int64_t u_g_len,
         }
         L41:;
         int64_t t57 = c_g;
-        int64_t t58;
-        int64_t d_g = GS_GL->elements_dim_g8;
-        {
-            if (!((uint8_t)((int64_t)((int64_t)(d_g)) >= (int64_t)(1)))) goto L61;
-            if ((uint8_t)((int64_t)((int64_t)(d_g)) <= (int64_t)(3))) goto L60;
-            L61:;
-            {
-                t62.data = ((uint8_t *)gs_str57); t62.len = 23;
-                t63 = t62;
-                gs_abort_msg(t63.data, t63.len, gs_file3, 88);
-            }
-            L60:;
-            t58 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 89);
-            goto L59;
-        }
-        L59:;
-        int64_t t64 = gs_mul_i64(t57, t58, gs_file18, 227);
-        int64_t q_g = gs_add_i64(t64, qp_g, gs_file18, 227);
+        int64_t t58 = elements_quad_count_g8(GS_GL->elements_dim_g8);
+        int64_t t59 = gs_mul_i64(t57, t58, gs_file18, 227);
+        int64_t q_g = gs_add_i64(t59, qp_g, gs_file18, 227);
         f_g_3 = f_g;
         {
-            double t67 = 0.0;
-            for (int64_t t68 = 0; t68 < 6; t68++) {
-                t66.e[t68] = t67;
+            double t62 = 0.0;
+            for (int64_t t63 = 0; t63 < 6; t63++) {
+                t61.e[t63] = t62;
             }
-            st_g = t66;
-            int64_t t69 = 6;
-            for (int64_t k_g_3 = 0; k_g_3 < t69; k_g_3++) {
-                int64_t t72 = k_g_3;
-                double *t73 = &(st_g.e[GS_IDX((int64_t)(t72), 6, gs_file18, 119)]);
-                int64_t t74 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), q_g, gs_file18, 119)), k_g_3, gs_file18, 119);
-                (*t73) = (((double *)((GS_GL->elements_pt_state_g8.base)))[GS_IDX((int64_t)(t74), (GS_GL->elements_pt_state_g8.len), gs_file18, 119)]);
+            st_g = t61;
+            int64_t t64 = 6;
+            for (int64_t k_g_3 = 0; k_g_3 < t64; k_g_3++) {
+                int64_t t67 = k_g_3;
+                double *t68 = &(st_g.e[GS_IDX((int64_t)(t67), 6, gs_file18, 119)]);
+                int64_t t69 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), q_g, gs_file18, 119)), k_g_3, gs_file18, 119);
+                (*t68) = (((double *)((GS_GL->elements_pt_state_g8.base)))[GS_IDX((int64_t)(t69), (GS_GL->elements_pt_state_g8.len), gs_file18, 119)]);
             }
-            int64_t t75 = q_g;
-            double alpha_g = (((double *)((GS_GL->elements_pt_alpha_g8.base)))[GS_IDX((int64_t)(t75), (GS_GL->elements_pt_alpha_g8.len), gs_file18, 120)]);
+            int64_t t70 = q_g;
+            double alpha_g = (((double *)((GS_GL->elements_pt_alpha_g8.base)))[GS_IDX((int64_t)(t70), (GS_GL->elements_pt_alpha_g8.len), gs_file18, 120)]);
             {
-                t76 = elements_principal_c_g8(f_g_3, &e_g);
-                c_g_4 = t76;
-                double t78 = 0.0;
-                for (int64_t t79 = 0; t79 < 3; t79++) {
-                    t77.e[t79] = t78;
+                t71 = elements_principal_c_g8(f_g_3, &e_g);
+                c_g_4 = t71;
+                double t73 = 0.0;
+                for (int64_t t74 = 0; t74 < 3; t74++) {
+                    t72.e[t74] = t73;
                 }
-                w1_g = t77;
-                double t81 = 0.0;
-                for (int64_t t82 = 0; t82 < 9; t82++) {
-                    t80.e[t82] = t81;
+                w1_g = t72;
+                double t76 = 0.0;
+                for (int64_t t77 = 0; t77 < 9; t77++) {
+                    t75.e[t77] = t76;
                 }
-                w2_g = t80;
+                w2_g = t75;
                 c_g_5 = c_g_4;
                 int64_t n_g_3 = GS_GL->elements_dim_g8;
                 a3_f64 * w1_g_2 = &w1_g;
                 a9_f64 * w2_g_2 = &w2_g;
                 {
-                    int64_t t84 = n_g_3;
-                    for (int64_t i_g_3 = 0; i_g_3 < t84; i_g_3++) {
-                        int64_t t87 = i_g_3;
-                        int64_t t88 = n_g_3;
-                        for (int64_t j_g_2 = t87; j_g_2 < t88; j_g_2++) {
+                    int64_t t79 = n_g_3;
+                    for (int64_t i_g_3 = 0; i_g_3 < t79; i_g_3++) {
+                        int64_t t82 = i_g_3;
+                        int64_t t83 = n_g_3;
+                        for (int64_t j_g_2 = t82; j_g_2 < t83; j_g_2++) {
                             c_g_7 = c_g_5;
                             int64_t i_g_4 = i_g_3;
                             int64_t j_g_3 = j_g_2;
                             {
                                 double x_g = c_g_7.e[0];
                                 {
-                                    t94.f_g = x_g;
-                                    t94.a_g = 0.0;
-                                    t94.b_g = 0.0;
-                                    t94.ab_g = 0.0;
-                                    t92.e[0] = t94;
+                                    t89.f_g = x_g;
+                                    t89.a_g = 0.0;
+                                    t89.b_g = 0.0;
+                                    t89.ab_g = 0.0;
+                                    t87.e[0] = t89;
                                 }
                                 double x_g_2 = c_g_7.e[1];
                                 {
-                                    t96.f_g = x_g_2;
-                                    t96.a_g = 0.0;
-                                    t96.b_g = 0.0;
-                                    t96.ab_g = 0.0;
-                                    t92.e[1] = t96;
+                                    t91.f_g = x_g_2;
+                                    t91.a_g = 0.0;
+                                    t91.b_g = 0.0;
+                                    t91.ab_g = 0.0;
+                                    t87.e[1] = t91;
                                 }
                                 double x_g_3 = c_g_7.e[2];
                                 {
-                                    t98.f_g = x_g_3;
-                                    t98.a_g = 0.0;
-                                    t98.b_g = 0.0;
-                                    t98.ab_g = 0.0;
-                                    t92.e[2] = t98;
+                                    t93.f_g = x_g_3;
+                                    t93.a_g = 0.0;
+                                    t93.b_g = 0.0;
+                                    t93.ab_g = 0.0;
+                                    t87.e[2] = t93;
                                 }
-                                h_g = t92;
-                                int64_t t99 = i_g_4;
-                                double *t100 = &(h_g.e[GS_IDX((int64_t)(t99), 3, gs_file24, 251)].a_g);
-                                (*t100) = 1.0;
-                                int64_t t101 = j_g_3;
-                                double *t102 = &(h_g.e[GS_IDX((int64_t)(t101), 3, gs_file24, 252)].b_g);
-                                (*t102) = 1.0;
+                                h_g = t87;
+                                int64_t t94 = i_g_4;
+                                double *t95 = &(h_g.e[GS_IDX((int64_t)(t94), 3, gs_file24, 251)].a_g);
+                                (*t95) = 1.0;
+                                int64_t t96 = j_g_3;
+                                double *t97 = &(h_g.e[GS_IDX((int64_t)(t96), 3, gs_file24, 252)].b_g);
+                                (*t97) = 1.0;
                                 c_g_6 = h_g;
-                                goto L91;
+                                goto L86;
                             }
-                            L91:;
+                            L86:;
                             {
-                                t104.f_g = 0.0;
-                                t104.a_g = 0.0;
-                                t104.b_g = 0.0;
-                                t104.ab_g = 0.0;
-                                w_g_2 = t104;
-                                goto L103;
+                                t99.f_g = 0.0;
+                                t99.a_g = 0.0;
+                                t99.b_g = 0.0;
+                                t99.ab_g = 0.0;
+                                w_g_2 = t99;
+                                goto L98;
                             }
-                            L103:;
-                            int64_t t105 = i_g_3;
-                            double *t106 = &((*w1_g_2).e[GS_IDX((int64_t)(t105), 3, gs_file24, 263)]);
-                            (*t106) = w_g_2.a_g;
-                            int64_t t107 = j_g_2;
-                            double *t108 = &((*w1_g_2).e[GS_IDX((int64_t)(t107), 3, gs_file24, 264)]);
-                            (*t108) = w_g_2.b_g;
-                            int64_t t109 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file24, 265)), j_g_2, gs_file24, 265);
-                            double *t110 = &((*w2_g_2).e[GS_IDX((int64_t)(t109), 9, gs_file24, 265)]);
-                            (*t110) = w_g_2.ab_g;
-                            int64_t t111 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file24, 266)), i_g_3, gs_file24, 266);
-                            double *t112 = &((*w2_g_2).e[GS_IDX((int64_t)(t111), 9, gs_file24, 266)]);
-                            (*t112) = w_g_2.ab_g;
+                            L98:;
+                            int64_t t100 = i_g_3;
+                            double *t101 = &((*w1_g_2).e[GS_IDX((int64_t)(t100), 3, gs_file24, 263)]);
+                            (*t101) = w_g_2.a_g;
+                            int64_t t102 = j_g_2;
+                            double *t103 = &((*w1_g_2).e[GS_IDX((int64_t)(t102), 3, gs_file24, 264)]);
+                            (*t103) = w_g_2.b_g;
+                            int64_t t104 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file24, 265)), j_g_2, gs_file24, 265);
+                            double *t105 = &((*w2_g_2).e[GS_IDX((int64_t)(t104), 9, gs_file24, 265)]);
+                            (*t105) = w_g_2.ab_g;
+                            int64_t t106 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file24, 266)), i_g_3, gs_file24, 266);
+                            double *t107 = &((*w2_g_2).e[GS_IDX((int64_t)(t106), 9, gs_file24, 266)]);
+                            (*t107) = w_g_2.ab_g;
                         }
                     }
                 }
                 elements_energy_stress_g8(c_g_4, e_g, GS_GL->elements_dim_g8, w1_g, w2_g, &GS_GL->elements_pt_s_g8, &GS_GL->elements_pt_d_g8);
             }
-            int64_t t113 = 6;
-            for (int64_t k_g_4 = 0; k_g_4 < t113; k_g_4++) {
-                int64_t t116 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), q_g, gs_file18, 133)), k_g_4, gs_file18, 133);
-                double *t117 = &((((double *)((GS_GL->elements_trial_state_g8.base)))[GS_IDX((int64_t)(t116), (GS_GL->elements_trial_state_g8.len), gs_file18, 133)]));
-                int64_t t118 = k_g_4;
-                (*t117) = st_g.e[GS_IDX((int64_t)(t118), 6, gs_file18, 133)];
-                int64_t t119 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), q_g, gs_file18, 134)), k_g_4, gs_file18, 134);
-                double *t120 = &((((double *)((GS_GL->elements_pt_stress_g8.base)))[GS_IDX((int64_t)(t119), (GS_GL->elements_pt_stress_g8.len), gs_file18, 134)]));
-                int64_t t121 = k_g_4;
-                (*t120) = GS_GL->elements_pt_s_g8.e[GS_IDX((int64_t)(t121), 6, gs_file18, 134)];
+            int64_t t108 = 6;
+            for (int64_t k_g_4 = 0; k_g_4 < t108; k_g_4++) {
+                int64_t t111 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), q_g, gs_file18, 133)), k_g_4, gs_file18, 133);
+                double *t112 = &((((double *)((GS_GL->elements_trial_state_g8.base)))[GS_IDX((int64_t)(t111), (GS_GL->elements_trial_state_g8.len), gs_file18, 133)]));
+                int64_t t113 = k_g_4;
+                (*t112) = st_g.e[GS_IDX((int64_t)(t113), 6, gs_file18, 133)];
+                int64_t t114 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), q_g, gs_file18, 134)), k_g_4, gs_file18, 134);
+                double *t115 = &((((double *)((GS_GL->elements_pt_stress_g8.base)))[GS_IDX((int64_t)(t114), (GS_GL->elements_pt_stress_g8.len), gs_file18, 134)]));
+                int64_t t116 = k_g_4;
+                (*t115) = GS_GL->elements_pt_s_g8.e[GS_IDX((int64_t)(t116), 6, gs_file18, 134)];
             }
-            int64_t t122 = q_g;
-            double *t123 = &((((double *)((GS_GL->elements_trial_alpha_g8.base)))[GS_IDX((int64_t)(t122), (GS_GL->elements_trial_alpha_g8.len), gs_file18, 136)]));
-            (*t123) = alpha_g;
+            int64_t t117 = q_g;
+            double *t118 = &((((double *)((GS_GL->elements_trial_alpha_g8.base)))[GS_IDX((int64_t)(t117), (GS_GL->elements_trial_alpha_g8.len), gs_file18, 136)]));
+            (*t118) = alpha_g;
         }
         fk_g = f_g;
         a_g = fk_g;
         v_g = GS_GL->elements_pt_s_g8;
         {
-            t125.e[0] = v_g.e[0];
-            t125.e[1] = v_g.e[3];
-            t125.e[2] = v_g.e[5];
-            t125.e[3] = v_g.e[3];
-            t125.e[4] = v_g.e[1];
-            t125.e[5] = v_g.e[4];
-            t125.e[6] = v_g.e[5];
-            t125.e[7] = v_g.e[4];
-            t125.e[8] = v_g.e[2];
-            b_g = t125;
-            goto L124;
+            t120.e[0] = v_g.e[0];
+            t120.e[1] = v_g.e[3];
+            t120.e[2] = v_g.e[5];
+            t120.e[3] = v_g.e[3];
+            t120.e[4] = v_g.e[1];
+            t120.e[5] = v_g.e[4];
+            t120.e[6] = v_g.e[5];
+            t120.e[7] = v_g.e[4];
+            t120.e[8] = v_g.e[2];
+            b_g = t120;
+            goto L119;
         }
-        L124:;
+        L119:;
         {
-            double t128 = 0.0;
-            for (int64_t t129 = 0; t129 < 9; t129++) {
-                t127.e[t129] = t128;
+            double t123 = 0.0;
+            for (int64_t t124 = 0; t124 < 9; t124++) {
+                t122.e[t124] = t123;
             }
-            c_g_8 = t127;
-            int64_t t130 = 3;
-            for (int64_t i_g_5 = 0; i_g_5 < t130; i_g_5++) {
-                int64_t t133 = 3;
-                for (int64_t j_g_4 = 0; j_g_4 < t133; j_g_4++) {
-                    int64_t t136 = 3;
-                    for (int64_t k_g_5 = 0; k_g_5 < t136; k_g_5++) {
-                        int64_t t139 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file24, 36)), j_g_4, gs_file24, 36);
-                        double *t140 = &(c_g_8.e[GS_IDX((int64_t)(t139), 9, gs_file24, 36)]);
-                        int64_t t141 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file24, 36)), k_g_5, gs_file24, 36);
-                        int64_t t142 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), k_g_5, gs_file24, 36)), j_g_4, gs_file24, 36);
-                        (*t140) = ((*t140) + (((double)((double)(a_g.e[GS_IDX((int64_t)(t141), 9, gs_file24, 36)])) * (double)(b_g.e[GS_IDX((int64_t)(t142), 9, gs_file24, 36)]))));
+            c_g_8 = t122;
+            int64_t t125 = 3;
+            for (int64_t i_g_5 = 0; i_g_5 < t125; i_g_5++) {
+                int64_t t128 = 3;
+                for (int64_t j_g_4 = 0; j_g_4 < t128; j_g_4++) {
+                    int64_t t131 = 3;
+                    for (int64_t k_g_5 = 0; k_g_5 < t131; k_g_5++) {
+                        int64_t t134 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file24, 36)), j_g_4, gs_file24, 36);
+                        double *t135 = &(c_g_8.e[GS_IDX((int64_t)(t134), 9, gs_file24, 36)]);
+                        int64_t t136 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file24, 36)), k_g_5, gs_file24, 36);
+                        int64_t t137 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), k_g_5, gs_file24, 36)), j_g_4, gs_file24, 36);
+                        (*t135) = ((*t135) + (((double)((double)(a_g.e[GS_IDX((int64_t)(t136), 9, gs_file24, 36)])) * (double)(b_g.e[GS_IDX((int64_t)(t137), 9, gs_file24, 36)]))));
                     }
                 }
             }
             p_g = c_g_8;
-            goto L126;
+            goto L121;
         }
-        L126:;
+        L121:;
         double dv_g_2 = dv_g;
         {
-            int64_t t144 = GS_GL->elements_per_cell_g8;
-            for (int64_t l_g_3 = 0; l_g_3 < t144; l_g_3++) {
-                int64_t t147 = GS_GL->elements_ncomp_g8;
-                for (int64_t i_g_6 = 0; i_g_6 < t147; i_g_6++) {
+            int64_t t139 = GS_GL->elements_per_cell_g8;
+            for (int64_t l_g_3 = 0; l_g_3 < t139; l_g_3++) {
+                int64_t t142 = GS_GL->elements_ncomp_g8;
+                for (int64_t i_g_6 = 0; i_g_6 < t142; i_g_6++) {
                     double s_g_2 = 0.0;
-                    int64_t t150 = GS_GL->elements_dim_g8;
+                    int64_t t145 = GS_GL->elements_dim_g8;
                     int64_t k_g_6 = 0;
                     /* loop shape: sum terms in blocks of 8 */
-                    while (t150 - k_g_6 >= 8) {
-                        double t154[8];
-                        for (int64_t t153 = 0; t153 < 8; t153++, k_g_6++) {
-                            int64_t t155 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_6, gs_file18, 163)), k_g_6, gs_file18, 163);
-                            int64_t t156 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_3, gs_file18, 163)), k_g_6, gs_file18, 163);
-                            t154[t153] = ((double)((double)(p_g.e[GS_IDX((int64_t)(t155), 9, gs_file18, 163)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t156), 30, gs_file18, 163)]));
+                    while (t145 - k_g_6 >= 8) {
+                        double t149[8];
+                        for (int64_t t148 = 0; t148 < 8; t148++, k_g_6++) {
+                            int64_t t150 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_6, gs_file18, 163)), k_g_6, gs_file18, 163);
+                            int64_t t151 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_3, gs_file18, 163)), k_g_6, gs_file18, 163);
+                            t149[t148] = ((double)((double)(p_g.e[GS_IDX((int64_t)(t150), 9, gs_file18, 163)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t151), 30, gs_file18, 163)]));
                         }
-                        for (int64_t t157 = 0; t157 < 8; t157++) s_g_2 = s_g_2 + t154[t157];
+                        for (int64_t t152 = 0; t152 < 8; t152++) s_g_2 = s_g_2 + t149[t152];
                     }
-                    for (; k_g_6 < t150; k_g_6++) {
-                        int64_t t159 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_6, gs_file18, 163)), k_g_6, gs_file18, 163);
-                        int64_t t160 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_3, gs_file18, 163)), k_g_6, gs_file18, 163);
-                        s_g_2 = (s_g_2 + (((double)((double)(p_g.e[GS_IDX((int64_t)(t159), 9, gs_file18, 163)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t160), 30, gs_file18, 163)]))));
+                    for (; k_g_6 < t145; k_g_6++) {
+                        int64_t t154 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_6, gs_file18, 163)), k_g_6, gs_file18, 163);
+                        int64_t t155 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_3, gs_file18, 163)), k_g_6, gs_file18, 163);
+                        s_g_2 = (s_g_2 + (((double)((double)(p_g.e[GS_IDX((int64_t)(t154), 9, gs_file18, 163)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t155), 30, gs_file18, 163)]))));
                     }
-                    int64_t t161 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), l_g_3, gs_file18, 164)), i_g_6, gs_file18, 164);
-                    double *t162 = &(GS_GL->elements_fe_g8.e[GS_IDX((int64_t)(t161), 30, gs_file18, 164)]);
-                    (*t162) = ((*t162) + (((double)((double)(s_g_2)) * (double)(dv_g_2))));
+                    int64_t t156 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), l_g_3, gs_file18, 164)), i_g_6, gs_file18, 164);
+                    double *t157 = &(GS_GL->elements_fe_g8.e[GS_IDX((int64_t)(t156), 30, gs_file18, 164)]);
+                    (*t157) = ((*t157) + (((double)((double)(s_g_2)) * (double)(dv_g_2))));
                 }
             }
         }
@@ -25430,146 +25799,146 @@ static void elements_solid_cell_g8(int64_t c_g, void *u_g_data, int64_t u_g_len,
             double dv_g_3 = dv_g;
             {
                 int64_t m_g_3 = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file18, 172);
-                double t165 = 0.0;
-                for (int64_t t166 = 0; t166 < 180; t166++) {
-                    t164.e[t166] = t165;
+                double t160 = 0.0;
+                for (int64_t t161 = 0; t161 < 180; t161++) {
+                    t159.e[t161] = t160;
                 }
-                b_g_2 = t164;
-                double t168 = 0.0;
-                for (int64_t t169 = 0; t169 < 180; t169++) {
-                    t167.e[t169] = t168;
+                b_g_2 = t159;
+                double t163 = 0.0;
+                for (int64_t t164 = 0; t164 < 180; t164++) {
+                    t162.e[t164] = t163;
                 }
-                db_g = t167;
-                int64_t t170 = GS_GL->elements_per_cell_g8;
-                for (int64_t l_g_4 = 0; l_g_4 < t170; l_g_4++) {
-                    int64_t t173 = GS_GL->elements_ncomp_g8;
-                    for (int64_t i_g_7 = 0; i_g_7 < t173; i_g_7++) {
+                db_g = t162;
+                int64_t t165 = GS_GL->elements_per_cell_g8;
+                for (int64_t l_g_4 = 0; l_g_4 < t165; l_g_4++) {
+                    int64_t t168 = GS_GL->elements_ncomp_g8;
+                    for (int64_t i_g_7 = 0; i_g_7 < t168; i_g_7++) {
                         int64_t r_g_2 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), l_g_4, gs_file18, 177)), i_g_7, gs_file18, 177);
-                        int64_t t176 = 6;
-                        for (int64_t v_g_2 = 0; v_g_2 < t176; v_g_2++) {
-                            int64_t t179 = v_g_2;
-                            int64_t x_g_4 = GS_GL->elements_VOIGT_I_g8.e[GS_IDX((int64_t)(t179), 6, gs_file18, 179)];
-                            int64_t t180 = v_g_2;
-                            int64_t y_g = GS_GL->elements_VOIGT_J_g8.e[GS_IDX((int64_t)(t180), 6, gs_file18, 180)];
-                            int64_t t181 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_2, gs_file18, 181)), r_g_2, gs_file18, 181);
-                            double *t182 = &(b_g_2.e[GS_IDX((int64_t)(t181), 180, gs_file18, 181)]);
-                            int64_t t183 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_7, gs_file18, 181)), x_g_4, gs_file18, 181);
-                            int64_t t184 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_4, gs_file18, 181)), y_g, gs_file18, 181);
-                            double t185 = ((double)((double)(f_g_4.e[GS_IDX((int64_t)(t183), 9, gs_file18, 181)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t184), 30, gs_file18, 181)]));
-                            double t186;
+                        int64_t t171 = 6;
+                        for (int64_t v_g_2 = 0; v_g_2 < t171; v_g_2++) {
+                            int64_t t174 = v_g_2;
+                            int64_t x_g_4 = GS_GL->elements_VOIGT_I_g8.e[GS_IDX((int64_t)(t174), 6, gs_file18, 179)];
+                            int64_t t175 = v_g_2;
+                            int64_t y_g = GS_GL->elements_VOIGT_J_g8.e[GS_IDX((int64_t)(t175), 6, gs_file18, 180)];
+                            int64_t t176 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_2, gs_file18, 181)), r_g_2, gs_file18, 181);
+                            double *t177 = &(b_g_2.e[GS_IDX((int64_t)(t176), 180, gs_file18, 181)]);
+                            int64_t t178 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_7, gs_file18, 181)), x_g_4, gs_file18, 181);
+                            int64_t t179 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_4, gs_file18, 181)), y_g, gs_file18, 181);
+                            double t180 = ((double)((double)(f_g_4.e[GS_IDX((int64_t)(t178), 9, gs_file18, 181)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t179), 30, gs_file18, 181)]));
+                            double t181;
                             if ((uint8_t)((int64_t)((int64_t)(x_g_4)) == (int64_t)(y_g))) {
-                                t186 = 0.0;
+                                t181 = 0.0;
                             } else {
-                                int64_t t187 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_7, gs_file18, 181)), y_g, gs_file18, 181);
-                                int64_t t188 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_4, gs_file18, 181)), x_g_4, gs_file18, 181);
-                                t186 = ((double)((double)(f_g_4.e[GS_IDX((int64_t)(t187), 9, gs_file18, 181)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t188), 30, gs_file18, 181)]));
+                                int64_t t182 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_7, gs_file18, 181)), y_g, gs_file18, 181);
+                                int64_t t183 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_4, gs_file18, 181)), x_g_4, gs_file18, 181);
+                                t181 = ((double)((double)(f_g_4.e[GS_IDX((int64_t)(t182), 9, gs_file18, 181)])) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t183), 30, gs_file18, 181)]));
                             }
-                            (*t182) = ((double)(t185) + (double)(t186));
+                            (*t177) = ((double)(t180) + (double)(t181));
                         }
                     }
                 }
-                int64_t t189 = 6;
-                for (int64_t v_g_3 = 0; v_g_3 < t189; v_g_3++) {
-                    int64_t t192 = m_g_3;
-                    for (int64_t r_g_3 = 0; r_g_3 < t192; r_g_3++) {
+                int64_t t184 = 6;
+                for (int64_t v_g_3 = 0; v_g_3 < t184; v_g_3++) {
+                    int64_t t187 = m_g_3;
+                    for (int64_t r_g_3 = 0; r_g_3 < t187; r_g_3++) {
                         double s_g_3 = 0.0;
-                        int64_t t195 = 6;
+                        int64_t t190 = 6;
                         int64_t w_g_3 = 0;
                         /* loop shape: sum terms in blocks of 8 */
-                        while (t195 - w_g_3 >= 8) {
-                            double t199[8];
-                            for (int64_t t198 = 0; t198 < 8; t198++, w_g_3++) {
-                                int64_t t200 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), v_g_3, gs_file18, 188)), w_g_3, gs_file18, 188);
-                                int64_t t201 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), w_g_3, gs_file18, 188)), r_g_3, gs_file18, 188);
-                                t199[t198] = ((double)((double)(GS_GL->elements_pt_d_g8.e[GS_IDX((int64_t)(t200), 36, gs_file18, 188)])) * (double)(b_g_2.e[GS_IDX((int64_t)(t201), 180, gs_file18, 188)]));
+                        while (t190 - w_g_3 >= 8) {
+                            double t194[8];
+                            for (int64_t t193 = 0; t193 < 8; t193++, w_g_3++) {
+                                int64_t t195 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), v_g_3, gs_file18, 188)), w_g_3, gs_file18, 188);
+                                int64_t t196 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), w_g_3, gs_file18, 188)), r_g_3, gs_file18, 188);
+                                t194[t193] = ((double)((double)(GS_GL->elements_pt_d_g8.e[GS_IDX((int64_t)(t195), 36, gs_file18, 188)])) * (double)(b_g_2.e[GS_IDX((int64_t)(t196), 180, gs_file18, 188)]));
                             }
-                            for (int64_t t202 = 0; t202 < 8; t202++) s_g_3 = s_g_3 + t199[t202];
+                            for (int64_t t197 = 0; t197 < 8; t197++) s_g_3 = s_g_3 + t194[t197];
                         }
-                        for (; w_g_3 < t195; w_g_3++) {
-                            int64_t t204 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), v_g_3, gs_file18, 188)), w_g_3, gs_file18, 188);
-                            int64_t t205 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), w_g_3, gs_file18, 188)), r_g_3, gs_file18, 188);
-                            s_g_3 = (s_g_3 + (((double)((double)(GS_GL->elements_pt_d_g8.e[GS_IDX((int64_t)(t204), 36, gs_file18, 188)])) * (double)(b_g_2.e[GS_IDX((int64_t)(t205), 180, gs_file18, 188)]))));
+                        for (; w_g_3 < t190; w_g_3++) {
+                            int64_t t199 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), v_g_3, gs_file18, 188)), w_g_3, gs_file18, 188);
+                            int64_t t200 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), w_g_3, gs_file18, 188)), r_g_3, gs_file18, 188);
+                            s_g_3 = (s_g_3 + (((double)((double)(GS_GL->elements_pt_d_g8.e[GS_IDX((int64_t)(t199), 36, gs_file18, 188)])) * (double)(b_g_2.e[GS_IDX((int64_t)(t200), 180, gs_file18, 188)]))));
                         }
-                        int64_t t206 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_3, gs_file18, 189)), r_g_3, gs_file18, 189);
-                        double *t207 = &(db_g.e[GS_IDX((int64_t)(t206), 180, gs_file18, 189)]);
-                        (*t207) = s_g_3;
+                        int64_t t201 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_3, gs_file18, 189)), r_g_3, gs_file18, 189);
+                        double *t202 = &(db_g.e[GS_IDX((int64_t)(t201), 180, gs_file18, 189)]);
+                        (*t202) = s_g_3;
                     }
                 }
-                int64_t t208 = m_g_3;
-                for (int64_t r_g_4 = 0; r_g_4 < t208; r_g_4++) {
-                    int64_t t211 = m_g_3;
-                    for (int64_t k_g_7 = 0; k_g_7 < t211; k_g_7++) {
+                int64_t t203 = m_g_3;
+                for (int64_t r_g_4 = 0; r_g_4 < t203; r_g_4++) {
+                    int64_t t206 = m_g_3;
+                    for (int64_t k_g_7 = 0; k_g_7 < t206; k_g_7++) {
                         double s_g_4 = 0.0;
-                        int64_t t214 = 6;
+                        int64_t t209 = 6;
                         int64_t v_g_4 = 0;
                         /* loop shape: sum terms in blocks of 8 */
-                        while (t214 - v_g_4 >= 8) {
-                            double t218[8];
-                            for (int64_t t217 = 0; t217 < 8; t217++, v_g_4++) {
-                                int64_t t219 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), r_g_4, gs_file18, 195);
-                                int64_t t220 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), k_g_7, gs_file18, 195);
-                                t218[t217] = ((double)((double)(b_g_2.e[GS_IDX((int64_t)(t219), 180, gs_file18, 195)])) * (double)(db_g.e[GS_IDX((int64_t)(t220), 180, gs_file18, 195)]));
+                        while (t209 - v_g_4 >= 8) {
+                            double t213[8];
+                            for (int64_t t212 = 0; t212 < 8; t212++, v_g_4++) {
+                                int64_t t214 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), r_g_4, gs_file18, 195);
+                                int64_t t215 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), k_g_7, gs_file18, 195);
+                                t213[t212] = ((double)((double)(b_g_2.e[GS_IDX((int64_t)(t214), 180, gs_file18, 195)])) * (double)(db_g.e[GS_IDX((int64_t)(t215), 180, gs_file18, 195)]));
                             }
-                            for (int64_t t221 = 0; t221 < 8; t221++) s_g_4 = s_g_4 + t218[t221];
+                            for (int64_t t216 = 0; t216 < 8; t216++) s_g_4 = s_g_4 + t213[t216];
                         }
-                        for (; v_g_4 < t214; v_g_4++) {
-                            int64_t t223 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), r_g_4, gs_file18, 195);
-                            int64_t t224 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), k_g_7, gs_file18, 195);
-                            s_g_4 = (s_g_4 + (((double)((double)(b_g_2.e[GS_IDX((int64_t)(t223), 180, gs_file18, 195)])) * (double)(db_g.e[GS_IDX((int64_t)(t224), 180, gs_file18, 195)]))));
+                        for (; v_g_4 < t209; v_g_4++) {
+                            int64_t t218 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), r_g_4, gs_file18, 195);
+                            int64_t t219 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), v_g_4, gs_file18, 195)), k_g_7, gs_file18, 195);
+                            s_g_4 = (s_g_4 + (((double)((double)(b_g_2.e[GS_IDX((int64_t)(t218), 180, gs_file18, 195)])) * (double)(db_g.e[GS_IDX((int64_t)(t219), 180, gs_file18, 195)]))));
                         }
-                        int64_t t225 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), r_g_4, gs_file18, 196)), k_g_7, gs_file18, 196);
-                        double *t226 = &(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t225), 900, gs_file18, 196)]);
-                        (*t226) = ((*t226) + (((double)((double)(s_g_4)) * (double)(dv_g_3))));
+                        int64_t t220 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), r_g_4, gs_file18, 196)), k_g_7, gs_file18, 196);
+                        double *t221 = &(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t220), 900, gs_file18, 196)]);
+                        (*t221) = ((*t221) + (((double)((double)(s_g_4)) * (double)(dv_g_3))));
                     }
                 }
                 {
                     v_g_5 = GS_GL->elements_pt_s_g8;
                     {
-                        t228.e[0] = v_g_5.e[0];
-                        t228.e[1] = v_g_5.e[3];
-                        t228.e[2] = v_g_5.e[5];
-                        t228.e[3] = v_g_5.e[3];
-                        t228.e[4] = v_g_5.e[1];
-                        t228.e[5] = v_g_5.e[4];
-                        t228.e[6] = v_g_5.e[5];
-                        t228.e[7] = v_g_5.e[4];
-                        t228.e[8] = v_g_5.e[2];
-                        sm_g = t228;
-                        goto L227;
+                        t223.e[0] = v_g_5.e[0];
+                        t223.e[1] = v_g_5.e[3];
+                        t223.e[2] = v_g_5.e[5];
+                        t223.e[3] = v_g_5.e[3];
+                        t223.e[4] = v_g_5.e[1];
+                        t223.e[5] = v_g_5.e[4];
+                        t223.e[6] = v_g_5.e[5];
+                        t223.e[7] = v_g_5.e[4];
+                        t223.e[8] = v_g_5.e[2];
+                        sm_g = t223;
+                        goto L222;
                     }
-                    L227:;
-                    int64_t t229 = GS_GL->elements_per_cell_g8;
-                    for (int64_t a_g_2 = 0; a_g_2 < t229; a_g_2++) {
-                        int64_t t232 = GS_GL->elements_per_cell_g8;
-                        for (int64_t c_g_9 = 0; c_g_9 < t232; c_g_9++) {
+                    L222:;
+                    int64_t t224 = GS_GL->elements_per_cell_g8;
+                    for (int64_t a_g_2 = 0; a_g_2 < t224; a_g_2++) {
+                        int64_t t227 = GS_GL->elements_per_cell_g8;
+                        for (int64_t c_g_9 = 0; c_g_9 < t227; c_g_9++) {
                             double g_g = 0.0;
-                            int64_t t235 = GS_GL->elements_dim_g8;
-                            for (int64_t x_g_5 = 0; x_g_5 < t235; x_g_5++) {
-                                int64_t t238 = GS_GL->elements_dim_g8;
+                            int64_t t230 = GS_GL->elements_dim_g8;
+                            for (int64_t x_g_5 = 0; x_g_5 < t230; x_g_5++) {
+                                int64_t t233 = GS_GL->elements_dim_g8;
                                 int64_t y_g_2 = 0;
                                 /* loop shape: sum terms in blocks of 8 */
-                                while (t238 - y_g_2 >= 8) {
-                                    double t242[8];
-                                    for (int64_t t241 = 0; t241 < 8; t241++, y_g_2++) {
-                                        int64_t t243 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g_2, gs_file18, 205)), x_g_5, gs_file18, 205);
-                                        int64_t t244 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), x_g_5, gs_file18, 205)), y_g_2, gs_file18, 205);
-                                        int64_t t245 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), c_g_9, gs_file18, 205)), y_g_2, gs_file18, 205);
-                                        t242[t241] = ((double)((double)(((double)((double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t243), 30, gs_file18, 205)])) * (double)(sm_g.e[GS_IDX((int64_t)(t244), 9, gs_file18, 205)])))) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t245), 30, gs_file18, 205)]));
+                                while (t233 - y_g_2 >= 8) {
+                                    double t237[8];
+                                    for (int64_t t236 = 0; t236 < 8; t236++, y_g_2++) {
+                                        int64_t t238 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g_2, gs_file18, 205)), x_g_5, gs_file18, 205);
+                                        int64_t t239 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), x_g_5, gs_file18, 205)), y_g_2, gs_file18, 205);
+                                        int64_t t240 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), c_g_9, gs_file18, 205)), y_g_2, gs_file18, 205);
+                                        t237[t236] = ((double)((double)(((double)((double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t238), 30, gs_file18, 205)])) * (double)(sm_g.e[GS_IDX((int64_t)(t239), 9, gs_file18, 205)])))) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t240), 30, gs_file18, 205)]));
                                     }
-                                    for (int64_t t246 = 0; t246 < 8; t246++) g_g = g_g + t242[t246];
+                                    for (int64_t t241 = 0; t241 < 8; t241++) g_g = g_g + t237[t241];
                                 }
-                                for (; y_g_2 < t238; y_g_2++) {
-                                    int64_t t248 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g_2, gs_file18, 205)), x_g_5, gs_file18, 205);
-                                    int64_t t249 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), x_g_5, gs_file18, 205)), y_g_2, gs_file18, 205);
-                                    int64_t t250 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), c_g_9, gs_file18, 205)), y_g_2, gs_file18, 205);
-                                    g_g = (g_g + (((double)((double)(((double)((double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t248), 30, gs_file18, 205)])) * (double)(sm_g.e[GS_IDX((int64_t)(t249), 9, gs_file18, 205)])))) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t250), 30, gs_file18, 205)]))));
+                                for (; y_g_2 < t233; y_g_2++) {
+                                    int64_t t243 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g_2, gs_file18, 205)), x_g_5, gs_file18, 205);
+                                    int64_t t244 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), x_g_5, gs_file18, 205)), y_g_2, gs_file18, 205);
+                                    int64_t t245 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), c_g_9, gs_file18, 205)), y_g_2, gs_file18, 205);
+                                    g_g = (g_g + (((double)((double)(((double)((double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t243), 30, gs_file18, 205)])) * (double)(sm_g.e[GS_IDX((int64_t)(t244), 9, gs_file18, 205)])))) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t245), 30, gs_file18, 205)]))));
                                 }
                             }
-                            int64_t t251 = GS_GL->elements_ncomp_g8;
-                            for (int64_t i_g_8 = 0; i_g_8 < t251; i_g_8++) {
-                                int64_t t254 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), a_g_2, gs_file18, 207)), i_g_8, gs_file18, 207), gs_file18, 207)), gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), c_g_9, gs_file18, 207), gs_file18, 207)), i_g_8, gs_file18, 207);
-                                double *t255 = &(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t254), 900, gs_file18, 207)]);
-                                (*t255) = ((*t255) + (((double)((double)(g_g)) * (double)(dv_g_3))));
+                            int64_t t246 = GS_GL->elements_ncomp_g8;
+                            for (int64_t i_g_8 = 0; i_g_8 < t246; i_g_8++) {
+                                int64_t t249 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_3), gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), a_g_2, gs_file18, 207)), i_g_8, gs_file18, 207), gs_file18, 207)), gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), c_g_9, gs_file18, 207), gs_file18, 207)), i_g_8, gs_file18, 207);
+                                double *t250 = &(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t249), 900, gs_file18, 207)]);
+                                (*t250) = ((*t250) + (((double)((double)(g_g)) * (double)(dv_g_3))));
                             }
                         }
                     }
@@ -25582,7 +25951,7 @@ static void elements_solid_cell_g8(int64_t c_g, void *u_g_data, int64_t u_g_len,
 
 static void elements_cell_terms_g8(int64_t c_g, int64_t gs_sp) {
     elements_Law_g8 w_g;
-    int64_t m_g = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 285);
+    int64_t m_g = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 430);
     int64_t c_g_2 = c_g;
     {
         if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_cell_law_g8.len)))) > (int64_t)(0)))) {
@@ -25600,7 +25969,7 @@ static void elements_cell_terms_g8(int64_t c_g, int64_t gs_sp) {
     elements_cell_matrix_g8(c_g, gs_sp + 0);
     if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_born_g8.len)))) > (int64_t)(0)))) goto L3;
     int64_t t4 = c_g;
-    if (!((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_born_g8.base) + GS_IDX((int64_t)(t4), (GS_GL->elements_born_g8.len), gs_file17, 288) * 1))))) == (uint8_t)(0))))) goto L3;
+    if (!((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_born_g8.base) + GS_IDX((int64_t)(t4), (GS_GL->elements_born_g8.len), gs_file17, 434) * 1))))) == (uint8_t)(0))))) goto L3;
     {
         int64_t t5 = m_g;
         for (int64_t r_g = 0; r_g < t5; r_g++) {
@@ -25611,19 +25980,19 @@ static void elements_cell_terms_g8(int64_t c_g, int64_t gs_sp) {
             while (t8 - k_g >= 8) {
                 double t12[8];
                 for (int64_t t11 = 0; t11 < 8; t11++, k_g++) {
-                    int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), r_g, gs_file17, 291)), k_g, gs_file17, 291);
-                    int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), c_g, gs_file17, 291)), k_g, gs_file17, 291);
-                    t12[t11] = ((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t13), 900, gs_file17, 291)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t14), (GS_GL->elements_birth_u_g8.len), gs_file17, 291)])));
+                    int64_t t13 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), r_g, gs_file17, 437)), k_g, gs_file17, 437);
+                    int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), c_g, gs_file17, 437)), k_g, gs_file17, 437);
+                    t12[t11] = ((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t13), 900, gs_file17, 437)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t14), (GS_GL->elements_birth_u_g8.len), gs_file17, 437)])));
                 }
                 for (int64_t t15 = 0; t15 < 8; t15++) s_g = s_g + t12[t15];
             }
             for (; k_g < t8; k_g++) {
-                int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), r_g, gs_file17, 291)), k_g, gs_file17, 291);
-                int64_t t18 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), c_g, gs_file17, 291)), k_g, gs_file17, 291);
-                s_g = (s_g + (((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t17), 900, gs_file17, 291)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t18), (GS_GL->elements_birth_u_g8.len), gs_file17, 291)])))));
+                int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), r_g, gs_file17, 437)), k_g, gs_file17, 437);
+                int64_t t18 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g), c_g, gs_file17, 437)), k_g, gs_file17, 437);
+                s_g = (s_g + (((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t17), 900, gs_file17, 437)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t18), (GS_GL->elements_birth_u_g8.len), gs_file17, 437)])))));
             }
             int64_t t19 = r_g;
-            double *t20 = &(GS_GL->elements_fe_g8.e[GS_IDX((int64_t)(t19), 30, gs_file17, 292)]);
+            double *t20 = &(GS_GL->elements_fe_g8.e[GS_IDX((int64_t)(t19), 30, gs_file17, 438)]);
             (*t20) = ((*t20) + (s_g));
         }
     }
@@ -25642,10 +26011,10 @@ static void elements_cell_matrix_g8(int64_t c_g, int64_t gs_sp) {
     sl_u8 t49;
     a3_f64 xi_g_2;
     a3_f64 t60;
-    sl_u8 t89;
     sl_u8 t90;
+    sl_u8 t91;
     a3_f64 xi_g_3;
-    a3_f64 t101;
+    a3_f64 t102;
     if (!((uint8_t)((int64_t)((int64_t)(c_g)) >= (int64_t)(0)))) goto L1;
     int64_t t2 = c_g;
     int64_t t3;
@@ -25665,11 +26034,19 @@ static void elements_cell_matrix_g8(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(2))) goto L0;
     L1:;
     {
-        t6.data = ((uint8_t *)gs_str112); t6.len = 69;
+        t6.data = ((uint8_t *)gs_str113); t6.len = 69;
         t7 = t6;
         gs_abort_msg(t7.data, t7.len, gs_file25, 14);
     }
     L0:;
+    if (GS_GL->elements_hex_cells_g8) {
+        if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0))) {
+            elements_elastic_hex8_g8(c_g, gs_sp + 0);
+        } else {
+            elements_heat_hex8_g8(c_g, gs_sp + 0);
+        }
+        return;
+    }
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0)))) goto L8;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2)))) goto L8;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(1)))) goto L8;
@@ -25712,9 +26089,9 @@ static void elements_cell_matrix_g8(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L13;
             L14:;
             {
-                t17.data = ((uint8_t *)gs_str113); t17.len = 68;
+                t17.data = ((uint8_t *)gs_str114); t17.len = 68;
                 t18 = t17;
-                gs_abort_msg(t18.data, t18.len, gs_file25, 353);
+                gs_abort_msg(t18.data, t18.len, gs_file25, 425);
             }
             L13:;
             for (int64_t t19 = 0; t19 < (900); t19++) {
@@ -25737,13 +26114,13 @@ static void elements_cell_matrix_g8(int64_t c_g, int64_t gs_sp) {
                 double dv_g = ((double)(t32) * (double)(GS_GL->elements_thickness_g8));
                 int64_t t33 = 10;
                 for (int64_t i_g = 0; i_g < t33; i_g++) {
-                    int64_t t36 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 360);
+                    int64_t t36 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 432);
                     int64_t t37 = i_g;
                     GS_GL->elements_fe_g8.e[t36] = (GS_GL->elements_fe_g8.e[t36] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[0])) * (double)(GS_GL->elements_shp_g8.e[t37])))) * (double)(dv_g))));
-                    int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 361)), 1, gs_file25, 361);
+                    int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 433)), 1, gs_file25, 433);
                     int64_t t39 = i_g;
                     GS_GL->elements_fe_g8.e[t38] = (GS_GL->elements_fe_g8.e[t38] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[1])) * (double)(GS_GL->elements_shp_g8.e[t39])))) * (double)(dv_g))));
-                    int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 362)), 2, gs_file25, 362);
+                    int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 434)), 2, gs_file25, 434);
                     int64_t t41 = i_g;
                     GS_GL->elements_fe_g8.e[t40] = (GS_GL->elements_fe_g8.e[t40] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[2])) * (double)(GS_GL->elements_shp_g8.e[t41])))) * (double)(dv_g))));
                 }
@@ -25776,9 +26153,9 @@ static void elements_cell_matrix_g8(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(1))) goto L44;
             L45:;
             {
-                t48.data = ((uint8_t *)gs_str114); t48.len = 63;
+                t48.data = ((uint8_t *)gs_str115); t48.len = 63;
                 t49 = t48;
-                gs_abort_msg(t49.data, t49.len, gs_file25, 372);
+                gs_abort_msg(t49.data, t49.len, gs_file25, 444);
             }
             L44:;
             for (int64_t t50 = 0; t50 < (900); t50++) {
@@ -25799,125 +26176,131 @@ static void elements_cell_matrix_g8(int64_t c_g, int64_t gs_sp) {
                 double t62 = elements_cell_geometry_g8(c_g_3, xi_g_2, gs_sp + 0);
                 double t63 = ((double)(t61) * (double)(t62));
                 double dv_g_2 = ((double)(t63) * (double)(GS_GL->elements_thickness_g8));
-                int64_t t64 = 3;
-                for (int64_t i_g_2 = 0; i_g_2 < t64; i_g_2++) {
-                    int64_t t67 = i_g_2;
+                double kq_g;
+                double t64 = elements_conductivity_at_g8(c_g_3, gs_sp + 0);
+                kq_g = t64;
+                int64_t t65 = 3;
+                for (int64_t i_g_2 = 0; i_g_2 < t65; i_g_2++) {
                     int64_t t68 = i_g_2;
-                    GS_GL->elements_fe_g8.e[t67] = (GS_GL->elements_fe_g8.e[t67] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t68])))) * (double)(dv_g_2))));
+                    int64_t t69 = i_g_2;
+                    GS_GL->elements_fe_g8.e[t68] = (GS_GL->elements_fe_g8.e[t68] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t69])))) * (double)(dv_g_2))));
                 }
-                int64_t t69 = 0;
-                int64_t t70 = 3;
-                for (int64_t i_g_3 = t69; i_g_3 < t70; i_g_3++) {
-                    int64_t t73 = 0;
-                    int64_t t74 = 3;
-                    for (int64_t j_g = t73; j_g < t74; j_g++) {
+                int64_t t70 = 0;
+                int64_t t71 = 3;
+                for (int64_t i_g_3 = t70; i_g_3 < t71; i_g_3++) {
+                    int64_t t74 = 0;
+                    int64_t t75 = 3;
+                    for (int64_t j_g = t74; j_g < t75; j_g++) {
                         double dot_g = 0.0;
-                        int64_t t77 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 384);
-                        int64_t t78 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 384);
-                        dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t77])) * (double)(GS_GL->elements_grad_g8.e[t78]))));
-                        int64_t t79 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 385)), 1, gs_file25, 385);
-                        int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 385)), 1, gs_file25, 385);
-                        dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t79])) * (double)(GS_GL->elements_grad_g8.e[t80]))));
-                        int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 386)), j_g, gs_file25, 386);
-                        GS_GL->elements_ke_g8.e[t81] = (GS_GL->elements_ke_g8.e[t81] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g)))) * (double)(dv_g_2))));
+                        int64_t t78 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 457);
+                        int64_t t79 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 457);
+                        dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t78])) * (double)(GS_GL->elements_grad_g8.e[t79]))));
+                        int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 458)), 1, gs_file25, 458);
+                        int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 458)), 1, gs_file25, 458);
+                        dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t80])) * (double)(GS_GL->elements_grad_g8.e[t81]))));
+                        int64_t t82 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 459)), j_g, gs_file25, 459);
+                        GS_GL->elements_ke_g8.e[t82] = (GS_GL->elements_ke_g8.e[t82] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g)))) * (double)(dv_g_2))));
                     }
                 }
             }
         }
     }
     L42:;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L82;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2)))) goto L82;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(2)))) goto L82;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L83;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2)))) goto L83;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(2)))) goto L83;
     {
         elements_heat_tri6_g8(c_g, gs_sp + 0);
     }
-    L82:;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L83;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L83;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(1)))) goto L83;
+    L83:;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L84;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L84;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(1)))) goto L84;
     {
         int64_t c_g_4 = c_g;
         {
-            if (!((uint8_t)((int64_t)((int64_t)(c_g_4)) >= (int64_t)(0)))) goto L86;
-            int64_t t87 = c_g_4;
-            int64_t t88;
+            if (!((uint8_t)((int64_t)((int64_t)(c_g_4)) >= (int64_t)(0)))) goto L87;
+            int64_t t88 = c_g_4;
+            int64_t t89;
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) > (int64_t)(0))) {
-                t88 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
+                t89 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
             } else {
-                t88 = 0;
+                t89 = 0;
             }
-            if (!((uint8_t)((int64_t)(t87) < (int64_t)(t88)))) goto L86;
-            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L86;
-            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L86;
-            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) == (int64_t)(4)))) goto L86;
-            if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(1))) goto L85;
-            L86:;
+            if (!((uint8_t)((int64_t)(t88) < (int64_t)(t89)))) goto L87;
+            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L87;
+            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L87;
+            if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) == (int64_t)(4)))) goto L87;
+            if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(1))) goto L86;
+            L87:;
             {
-                t89.data = ((uint8_t *)gs_str115); t89.len = 63;
-                t90 = t89;
-                gs_abort_msg(t90.data, t90.len, gs_file25, 438);
+                t90.data = ((uint8_t *)gs_str116); t90.len = 63;
+                t91 = t90;
+                gs_abort_msg(t91.data, t91.len, gs_file25, 512);
             }
-            L85:;
-            for (int64_t t91 = 0; t91 < (900); t91++) {
-                double * v_g_5 = &GS_GL->elements_ke_g8.e[t91];
+            L86:;
+            for (int64_t t92 = 0; t92 < (900); t92++) {
+                double * v_g_5 = &GS_GL->elements_ke_g8.e[t92];
                 (*v_g_5) = 0.0;
             }
-            for (int64_t t94 = 0; t94 < (30); t94++) {
-                double * v_g_6 = &GS_GL->elements_fe_g8.e[t94];
+            for (int64_t t95 = 0; t95 < (30); t95++) {
+                double * v_g_6 = &GS_GL->elements_fe_g8.e[t95];
                 (*v_g_6) = 0.0;
             }
-            int64_t t97 = elements_quad_count_g8(3);
-            int64_t t98 = t97;
-            for (int64_t qp_g_3 = 0; qp_g_3 < t98; qp_g_3++) {
+            int64_t t98 = elements_quad_count_g8(3);
+            int64_t t99 = t98;
+            for (int64_t qp_g_3 = 0; qp_g_3 < t99; qp_g_3++) {
                 double w_g_3;
-                t101 = elements_quad_point_g8(3, qp_g_3, &w_g_3);
-                xi_g_3 = t101;
-                double t102 = w_g_3;
-                double t103 = elements_cell_geometry_g8(c_g_4, xi_g_3, gs_sp + 0);
-                double t104 = ((double)(t102) * (double)(t103));
-                double dv_g_3 = ((double)(t104) * (double)(GS_GL->elements_thickness_g8));
-                int64_t t105 = 4;
-                for (int64_t i_g_4 = 0; i_g_4 < t105; i_g_4++) {
-                    int64_t t108 = i_g_4;
-                    int64_t t109 = i_g_4;
-                    GS_GL->elements_fe_g8.e[t108] = (GS_GL->elements_fe_g8.e[t108] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t109])))) * (double)(dv_g_3))));
+                t102 = elements_quad_point_g8(3, qp_g_3, &w_g_3);
+                xi_g_3 = t102;
+                double t103 = w_g_3;
+                double t104 = elements_cell_geometry_g8(c_g_4, xi_g_3, gs_sp + 0);
+                double t105 = ((double)(t103) * (double)(t104));
+                double dv_g_3 = ((double)(t105) * (double)(GS_GL->elements_thickness_g8));
+                double kq_g_2;
+                double t106 = elements_conductivity_at_g8(c_g_4, gs_sp + 0);
+                kq_g_2 = t106;
+                int64_t t107 = 4;
+                for (int64_t i_g_4 = 0; i_g_4 < t107; i_g_4++) {
+                    int64_t t110 = i_g_4;
+                    int64_t t111 = i_g_4;
+                    GS_GL->elements_fe_g8.e[t110] = (GS_GL->elements_fe_g8.e[t110] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t111])))) * (double)(dv_g_3))));
                 }
-                int64_t t110 = 0;
-                int64_t t111 = 4;
-                for (int64_t i_g_5 = t110; i_g_5 < t111; i_g_5++) {
-                    int64_t t114 = 0;
-                    int64_t t115 = 4;
-                    for (int64_t j_g_2 = t114; j_g_2 < t115; j_g_2++) {
+                int64_t t112 = 0;
+                int64_t t113 = 4;
+                for (int64_t i_g_5 = t112; i_g_5 < t113; i_g_5++) {
+                    int64_t t116 = 0;
+                    int64_t t117 = 4;
+                    for (int64_t j_g_2 = t116; j_g_2 < t117; j_g_2++) {
                         double dot_g_2 = 0.0;
-                        int64_t t118 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 450);
-                        int64_t t119 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 450);
-                        dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t118])) * (double)(GS_GL->elements_grad_g8.e[t119]))));
-                        int64_t t120 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 451)), 1, gs_file25, 451);
-                        int64_t t121 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 451)), 1, gs_file25, 451);
+                        int64_t t120 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 525);
+                        int64_t t121 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 525);
                         dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t120])) * (double)(GS_GL->elements_grad_g8.e[t121]))));
-                        int64_t t122 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 452)), 2, gs_file25, 452);
-                        int64_t t123 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 452)), 2, gs_file25, 452);
+                        int64_t t122 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 526)), 1, gs_file25, 526);
+                        int64_t t123 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 526)), 1, gs_file25, 526);
                         dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t122])) * (double)(GS_GL->elements_grad_g8.e[t123]))));
-                        int64_t t124 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(4), i_g_5, gs_file25, 453)), j_g_2, gs_file25, 453);
-                        GS_GL->elements_ke_g8.e[t124] = (GS_GL->elements_ke_g8.e[t124] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_2)))) * (double)(dv_g_3))));
+                        int64_t t124 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 527)), 2, gs_file25, 527);
+                        int64_t t125 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 527)), 2, gs_file25, 527);
+                        dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t124])) * (double)(GS_GL->elements_grad_g8.e[t125]))));
+                        int64_t t126 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(4), i_g_5, gs_file25, 528)), j_g_2, gs_file25, 528);
+                        GS_GL->elements_ke_g8.e[t126] = (GS_GL->elements_ke_g8.e[t126] + (((double)((double)(((double)((double)(kq_g_2)) * (double)(dot_g_2)))) * (double)(dv_g_3))));
                     }
                 }
             }
         }
     }
-    L83:;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L125;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L125;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(2)))) goto L125;
+    L84:;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L127;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L127;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(2)))) goto L127;
     {
         elements_heat_tet10_g8(c_g, gs_sp + 0);
     }
-    L125:;
+    L127:;
     return;
 }
 
-static void elements_elastic_tri3_g8(int64_t c_g, int64_t gs_sp) {
+static GS_NOINLINE void elements_elastic_hex8_g8(int64_t c_g, int64_t gs_sp) {
     sl_u8 t4;
     sl_u8 t5;
     a3_f64 xi_g;
@@ -25932,14 +26315,14 @@ static void elements_elastic_tri3_g8(int64_t c_g, int64_t gs_sp) {
     }
     if (!((uint8_t)((int64_t)(t2) < (int64_t)(t3)))) goto L1;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0)))) goto L1;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2)))) goto L1;
-    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) == (int64_t)(3)))) goto L1;
-    if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L0;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) == (int64_t)(8)))) goto L1;
+    if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str116); t4.len = 66;
+        t4.data = ((uint8_t *)gs_str117); t4.len = 66;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file25, 26);
+        gs_abort_msg(t5.data, t5.len, gs_file25, 30);
     }
     L0:;
     for (int64_t t6 = 0; t6 < (900); t6++) {
@@ -25950,69 +26333,111 @@ static void elements_elastic_tri3_g8(int64_t c_g, int64_t gs_sp) {
         double * v_g_2 = &GS_GL->elements_fe_g8.e[t9];
         (*v_g_2) = 0.0;
     }
-    int64_t t12 = elements_quad_count_g8(2);
+    int64_t t12 = elements_quad_count_g8(3);
     int64_t t13 = t12;
     for (int64_t qp_g = 0; qp_g < t13; qp_g++) {
         double w_g;
-        t16 = elements_quad_point_g8(2, qp_g, &w_g);
+        t16 = elements_quad_point_g8(3, qp_g, &w_g);
         xi_g = t16;
         double t17 = w_g;
         double t18 = elements_cell_geometry_g8(c_g, xi_g, gs_sp + 0);
         double t19 = ((double)(t17) * (double)(t18));
         double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
-        int64_t t20 = 3;
+        int64_t t20 = 8;
         for (int64_t i_g = 0; i_g < t20; i_g++) {
-            int64_t t23 = gs_mul_i64((int64_t)(2), i_g, gs_file25, 33);
+            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 37);
             int64_t t24 = i_g;
             GS_GL->elements_fe_g8.e[t23] = (GS_GL->elements_fe_g8.e[t23] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[0])) * (double)(GS_GL->elements_shp_g8.e[t24])))) * (double)(dv_g))));
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g, gs_file25, 34)), 1, gs_file25, 34);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 38)), 1, gs_file25, 38);
             int64_t t26 = i_g;
             GS_GL->elements_fe_g8.e[t25] = (GS_GL->elements_fe_g8.e[t25] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[1])) * (double)(GS_GL->elements_shp_g8.e[t26])))) * (double)(dv_g))));
+            int64_t t27 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 39)), 2, gs_file25, 39);
+            int64_t t28 = i_g;
+            GS_GL->elements_fe_g8.e[t27] = (GS_GL->elements_fe_g8.e[t27] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[2])) * (double)(GS_GL->elements_shp_g8.e[t28])))) * (double)(dv_g))));
         }
-        int64_t t27 = 0;
-        int64_t t28 = 3;
-        for (int64_t i_g_2 = t27; i_g_2 < t28; i_g_2++) {
-            int64_t t31 = 0;
-            int64_t t32 = 3;
-            for (int64_t j_g = t31; j_g < t32; j_g++) {
+        int64_t t29 = 0;
+        int64_t t30 = 8;
+        for (int64_t i_g_2 = t29; i_g_2 < t30; i_g_2++) {
+            int64_t t33 = 0;
+            int64_t t34 = 8;
+            for (int64_t j_g = t33; j_g < t34; j_g++) {
                 double dot_g = 0.0;
-                int64_t t35 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 39);
-                int64_t t36 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 39);
-                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t35])) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 40)), 1, gs_file25, 40);
-                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 40)), 1, gs_file25, 40);
+                int64_t t37 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 44);
+                int64_t t38 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 44);
                 dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t37])) * (double)(GS_GL->elements_grad_g8.e[t38]))));
-                int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(12), i_g_2, gs_file25, 41)), gs_mul_i64((int64_t)(2), j_g, gs_file25, 41), gs_file25, 41);
-                int64_t t39 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 42);
-                int64_t t40 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 42);
-                int64_t t41 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 42);
-                int64_t t42 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 42);
-                double v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t39])))) * (double)(GS_GL->elements_grad_g8.e[t40])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t41])))) * (double)(GS_GL->elements_grad_g8.e[t42]))));
+                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 45)), 1, gs_file25, 45);
+                int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 45)), 1, gs_file25, 45);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t39])) * (double)(GS_GL->elements_grad_g8.e[t40]))));
+                int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 46)), 2, gs_file25, 46);
+                int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 46)), 2, gs_file25, 46);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t41])) * (double)(GS_GL->elements_grad_g8.e[t42]))));
+                int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(72), i_g_2, gs_file25, 47)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 47), gs_file25, 47);
+                int64_t t43 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 48);
+                int64_t t44 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 48);
+                int64_t t45 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 48);
+                int64_t t46 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 48);
+                double v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t43])))) * (double)(GS_GL->elements_grad_g8.e[t44])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t45])))) * (double)(GS_GL->elements_grad_g8.e[t46]))));
                 v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-                int64_t t43 = row_g;
-                GS_GL->elements_ke_g8.e[t43] = (GS_GL->elements_ke_g8.e[t43] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t44 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 45);
-                int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 45)), 1, gs_file25, 45);
-                int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 45)), 1, gs_file25, 45);
-                int64_t t47 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 45);
-                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t44])))) * (double)(GS_GL->elements_grad_g8.e[t45])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t46])))) * (double)(GS_GL->elements_grad_g8.e[t47]))));
-                int64_t t48 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 46);
-                GS_GL->elements_ke_g8.e[t48] = (GS_GL->elements_ke_g8.e[t48] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 47)), 1, gs_file25, 47);
-                int64_t t50 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 47);
-                int64_t t51 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 47);
-                int64_t t52 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 47)), 1, gs_file25, 47);
-                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t49])))) * (double)(GS_GL->elements_grad_g8.e[t50])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t51])))) * (double)(GS_GL->elements_grad_g8.e[t52]))));
-                int64_t t53 = gs_add_i64((int64_t)(row_g), 6, gs_file25, 48);
-                GS_GL->elements_ke_g8.e[t53] = (GS_GL->elements_ke_g8.e[t53] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 49)), 1, gs_file25, 49);
-                int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 49)), 1, gs_file25, 49);
-                int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 49)), 1, gs_file25, 49);
-                int64_t t57 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 49)), 1, gs_file25, 49);
-                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t54])))) * (double)(GS_GL->elements_grad_g8.e[t55])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t56])))) * (double)(GS_GL->elements_grad_g8.e[t57]))));
+                int64_t t47 = row_g;
+                GS_GL->elements_ke_g8.e[t47] = (GS_GL->elements_ke_g8.e[t47] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t48 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 51);
+                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 51)), 1, gs_file25, 51);
+                int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 51)), 1, gs_file25, 51);
+                int64_t t51 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 51);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t48])))) * (double)(GS_GL->elements_grad_g8.e[t49])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t50])))) * (double)(GS_GL->elements_grad_g8.e[t51]))));
+                int64_t t52 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 52);
+                GS_GL->elements_ke_g8.e[t52] = (GS_GL->elements_ke_g8.e[t52] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t53 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 53);
+                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 53)), 2, gs_file25, 53);
+                int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 53)), 2, gs_file25, 53);
+                int64_t t56 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 53);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t53])))) * (double)(GS_GL->elements_grad_g8.e[t54])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t55])))) * (double)(GS_GL->elements_grad_g8.e[t56]))));
+                int64_t t57 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 54);
+                GS_GL->elements_ke_g8.e[t57] = (GS_GL->elements_ke_g8.e[t57] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 55)), 1, gs_file25, 55);
+                int64_t t59 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 55);
+                int64_t t60 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 55);
+                int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 55)), 1, gs_file25, 55);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t58])))) * (double)(GS_GL->elements_grad_g8.e[t59])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t60])))) * (double)(GS_GL->elements_grad_g8.e[t61]))));
+                int64_t t62 = gs_add_i64((int64_t)(row_g), 24, gs_file25, 56);
+                GS_GL->elements_ke_g8.e[t62] = (GS_GL->elements_ke_g8.e[t62] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t63 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 57)), 1, gs_file25, 57);
+                int64_t t64 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 57)), 1, gs_file25, 57);
+                int64_t t65 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 57)), 1, gs_file25, 57);
+                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 57)), 1, gs_file25, 57);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t63])))) * (double)(GS_GL->elements_grad_g8.e[t64])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t65])))) * (double)(GS_GL->elements_grad_g8.e[t66]))));
                 v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-                int64_t t58 = gs_add_i64((int64_t)(row_g), 7, gs_file25, 51);
-                GS_GL->elements_ke_g8.e[t58] = (GS_GL->elements_ke_g8.e[t58] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t67 = gs_add_i64((int64_t)(row_g), 25, gs_file25, 59);
+                GS_GL->elements_ke_g8.e[t67] = (GS_GL->elements_ke_g8.e[t67] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t68 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 60)), 1, gs_file25, 60);
+                int64_t t69 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 60)), 2, gs_file25, 60);
+                int64_t t70 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 60)), 2, gs_file25, 60);
+                int64_t t71 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 60)), 1, gs_file25, 60);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t68])))) * (double)(GS_GL->elements_grad_g8.e[t69])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t70])))) * (double)(GS_GL->elements_grad_g8.e[t71]))));
+                int64_t t72 = gs_add_i64((int64_t)(row_g), 26, gs_file25, 61);
+                GS_GL->elements_ke_g8.e[t72] = (GS_GL->elements_ke_g8.e[t72] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t73 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 62)), 2, gs_file25, 62);
+                int64_t t74 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 62);
+                int64_t t75 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 62);
+                int64_t t76 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 62)), 2, gs_file25, 62);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t73])))) * (double)(GS_GL->elements_grad_g8.e[t74])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t75])))) * (double)(GS_GL->elements_grad_g8.e[t76]))));
+                int64_t t77 = gs_add_i64((int64_t)(row_g), 48, gs_file25, 63);
+                GS_GL->elements_ke_g8.e[t77] = (GS_GL->elements_ke_g8.e[t77] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t78 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 64)), 2, gs_file25, 64);
+                int64_t t79 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 64)), 1, gs_file25, 64);
+                int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 64)), 1, gs_file25, 64);
+                int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 64)), 2, gs_file25, 64);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t78])))) * (double)(GS_GL->elements_grad_g8.e[t79])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t80])))) * (double)(GS_GL->elements_grad_g8.e[t81]))));
+                int64_t t82 = gs_add_i64((int64_t)(row_g), 49, gs_file25, 65);
+                GS_GL->elements_ke_g8.e[t82] = (GS_GL->elements_ke_g8.e[t82] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t83 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 66)), 2, gs_file25, 66);
+                int64_t t84 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 66)), 2, gs_file25, 66);
+                int64_t t85 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 66)), 2, gs_file25, 66);
+                int64_t t86 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 66)), 2, gs_file25, 66);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t83])))) * (double)(GS_GL->elements_grad_g8.e[t84])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t85])))) * (double)(GS_GL->elements_grad_g8.e[t86]))));
+                v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
+                int64_t t87 = gs_add_i64((int64_t)(row_g), 50, gs_file25, 68);
+                GS_GL->elements_ke_g8.e[t87] = (GS_GL->elements_ke_g8.e[t87] + (((double)((double)(v_g_3)) * (double)(dv_g))));
             }
         }
     }
@@ -26036,15 +26461,15 @@ static double elements_cell_geometry_g8(int64_t c_g, a3_f64 xi_g, int64_t gs_sp)
     }
     if (!((uint8_t)((int64_t)(t2) < (int64_t)(t3)))) goto L1;
     if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) <= (int64_t)(10)))) goto L1;
-    if ((uint8_t)((int64_t)((int64_t)(gs_mul_i64((int64_t)(3), GS_GL->elements_per_cell_g8, gs_file17, 134))) <= (int64_t)(30))) goto L0;
+    if ((uint8_t)((int64_t)((int64_t)(gs_mul_i64((int64_t)(3), GS_GL->elements_per_cell_g8, gs_file17, 177))) <= (int64_t)(30))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str117); t4.len = 73;
+        t4.data = ((uint8_t *)gs_str118); t4.len = 73;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file17, 134);
+        gs_abort_msg(t5.data, t5.len, gs_file17, 177);
     }
     L0:;
-    elements_shape_g8_213(GS_GL->elements_dim_g8, GS_GL->elements_order_g8, xi_g, &GS_GL->elements_shp_g8, &GS_GL->elements_dref_g8);
+    elements_shape_g8_214(GS_GL->elements_dim_g8, GS_GL->elements_order_g8, xi_g, &GS_GL->elements_shp_g8, &GS_GL->elements_dref_g8);
     double t7 = 0.0;
     for (int64_t t8 = 0; t8 < 9; t8++) {
         t6.e[t8] = t7;
@@ -26074,7 +26499,8 @@ static double elements_cell_geometry_g8(int64_t c_g, a3_f64 xi_g, int64_t gs_sp)
         inv_g.e[7] = ((double)((double)(((double)((double)(((double)((double)(jac_g.e[1])) * (double)(jac_g.e[6])))) - (double)(((double)((double)(jac_g.e[0])) * (double)(jac_g.e[7])))))) / (double)(det_g));
         inv_g.e[8] = ((double)((double)(((double)((double)(((double)((double)(jac_g.e[0])) * (double)(jac_g.e[4])))) - (double)(((double)((double)(jac_g.e[1])) * (double)(jac_g.e[3])))))) / (double)(det_g));
     }
-    if (!((uint8_t)((double)((double)(det_g)) > (double)(0.0)))) gs_abort(GS_E_ASSERT, gs_file17, 155);
+    if (!((uint8_t)((double)((double)(det_g)) > (double)(0.0)))) gs_abort(GS_E_ASSERT, gs_file17, 198);
+    GS_GL->elements_jinv_g8 = inv_g;
     int64_t t13 = GS_GL->elements_per_cell_g8;
     for (int64_t l_g = 0; l_g < t13; l_g++) {
         int64_t t16 = 3;
@@ -26086,27 +26512,265 @@ static double elements_cell_geometry_g8(int64_t c_g, a3_f64 xi_g, int64_t gs_sp)
             while (t19 - r_g >= 8) {
                 double t23[8];
                 for (int64_t t22 = 0; t22 < 8; t22++, r_g++) {
-                    int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file17, 160)), r_g, gs_file17, 160);
-                    int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 160)), r_g, gs_file17, 160);
-                    t23[t22] = ((double)((double)(inv_g.e[GS_IDX((int64_t)(t24), 9, gs_file17, 160)])) * (double)(GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t25), 30, gs_file17, 160)]));
+                    int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file17, 204)), r_g, gs_file17, 204);
+                    int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 204)), r_g, gs_file17, 204);
+                    t23[t22] = ((double)((double)(inv_g.e[GS_IDX((int64_t)(t24), 9, gs_file17, 204)])) * (double)(GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t25), 30, gs_file17, 204)]));
                 }
                 for (int64_t t26 = 0; t26 < 8; t26++) g_g = g_g + t23[t26];
             }
             for (; r_g < t19; r_g++) {
-                int64_t t28 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file17, 160)), r_g, gs_file17, 160);
-                int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 160)), r_g, gs_file17, 160);
-                g_g = (g_g + (((double)((double)(inv_g.e[GS_IDX((int64_t)(t28), 9, gs_file17, 160)])) * (double)(GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t29), 30, gs_file17, 160)]))));
+                int64_t t28 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file17, 204)), r_g, gs_file17, 204);
+                int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 204)), r_g, gs_file17, 204);
+                g_g = (g_g + (((double)((double)(inv_g.e[GS_IDX((int64_t)(t28), 9, gs_file17, 204)])) * (double)(GS_GL->elements_dref_g8.e[GS_IDX((int64_t)(t29), 30, gs_file17, 204)]))));
             }
-            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 161)), t_g, gs_file17, 161);
+            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 205)), t_g, gs_file17, 205);
             GS_GL->elements_grad_g8.e[t30] = g_g;
         }
     }
     double t31;
     t31 = det_g;
     return t31;
-    GS_UNREACHABLE(gs_file17, 133);
+    GS_UNREACHABLE(gs_file17, 176);
     double t32 = {0};
     return t32;
+}
+
+static GS_NOINLINE void elements_heat_hex8_g8(int64_t c_g, int64_t gs_sp) {
+    sl_u8 t4;
+    sl_u8 t5;
+    a3_f64 xi_g;
+    a3_f64 t16;
+    if (!((uint8_t)((int64_t)((int64_t)(c_g)) >= (int64_t)(0)))) goto L1;
+    int64_t t2 = c_g;
+    int64_t t3;
+    if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) > (int64_t)(0))) {
+        t3 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
+    } else {
+        t3 = 0;
+    }
+    if (!((uint8_t)((int64_t)(t2) < (int64_t)(t3)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(1)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) == (int64_t)(8)))) goto L1;
+    if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(1))) goto L0;
+    L1:;
+    {
+        t4.data = ((uint8_t *)gs_str119); t4.len = 63;
+        t5 = t4;
+        gs_abort_msg(t5.data, t5.len, gs_file25, 75);
+    }
+    L0:;
+    for (int64_t t6 = 0; t6 < (900); t6++) {
+        double * v_g = &GS_GL->elements_ke_g8.e[t6];
+        (*v_g) = 0.0;
+    }
+    for (int64_t t9 = 0; t9 < (30); t9++) {
+        double * v_g_2 = &GS_GL->elements_fe_g8.e[t9];
+        (*v_g_2) = 0.0;
+    }
+    int64_t t12 = elements_quad_count_g8(3);
+    int64_t t13 = t12;
+    for (int64_t qp_g = 0; qp_g < t13; qp_g++) {
+        double w_g;
+        t16 = elements_quad_point_g8(3, qp_g, &w_g);
+        xi_g = t16;
+        double t17 = w_g;
+        double t18 = elements_cell_geometry_g8(c_g, xi_g, gs_sp + 0);
+        double t19 = ((double)(t17) * (double)(t18));
+        double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
+        double kq_g;
+        double t20 = elements_conductivity_at_g8(c_g, gs_sp + 0);
+        kq_g = t20;
+        int64_t t21 = 8;
+        for (int64_t i_g = 0; i_g < t21; i_g++) {
+            int64_t t24 = i_g;
+            int64_t t25 = i_g;
+            GS_GL->elements_fe_g8.e[t24] = (GS_GL->elements_fe_g8.e[t24] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t25])))) * (double)(dv_g))));
+        }
+        int64_t t26 = 0;
+        int64_t t27 = 8;
+        for (int64_t i_g_2 = t26; i_g_2 < t27; i_g_2++) {
+            int64_t t30 = 0;
+            int64_t t31 = 8;
+            for (int64_t j_g = t30; j_g < t31; j_g++) {
+                double dot_g = 0.0;
+                int64_t t34 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 88);
+                int64_t t35 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 88);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t34])) * (double)(GS_GL->elements_grad_g8.e[t35]))));
+                int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 89)), 1, gs_file25, 89);
+                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 89)), 1, gs_file25, 89);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t36])) * (double)(GS_GL->elements_grad_g8.e[t37]))));
+                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 90)), 2, gs_file25, 90);
+                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 90)), 2, gs_file25, 90);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t38])) * (double)(GS_GL->elements_grad_g8.e[t39]))));
+                int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(8), i_g_2, gs_file25, 91)), j_g, gs_file25, 91);
+                GS_GL->elements_ke_g8.e[t40] = (GS_GL->elements_ke_g8.e[t40] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g)))) * (double)(dv_g))));
+            }
+        }
+    }
+    return;
+}
+
+static double elements_conductivity_at_g8(int64_t c_g, int64_t gs_sp) {
+    if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_curve_k_g8.len)))) > (int64_t)(0)))) {
+        double t0;
+        t0 = 0.0;
+        return t0;
+    }
+    double t_g = 0.0;
+    int64_t t1 = GS_GL->elements_per_cell_g8;
+    for (int64_t l_g = 0; l_g < t1; l_g++) {
+        double t4 = t_g;
+        int64_t t5 = l_g;
+        double t6 = GS_GL->elements_shp_g8.e[GS_IDX((int64_t)(t5), 10, gs_file17, 141)];
+        uint8_t *t7 = (GS_GL->elements_sol_g8.base);
+        int64_t t8 = (GS_GL->elements_sol_g8.len);
+        int64_t t9 = elements_cell_node_g8(c_g, l_g, gs_sp + 0);
+        int64_t t10 = t9;
+        t_g = (t4 + (((double)(t6) * (double)((((double *)(t7))[GS_IDX((int64_t)(t10), t8, gs_file17, 141)])))));
+    }
+    double t11;
+    double t_g_2 = t_g;
+    {
+        int64_t n_g = ((GS_GL->elements_curve_k_g8.len));
+        double x_g = ((double)((double)(((double)((double)(t_g_2)) - (double)(0.0)))) / (double)(0.0));
+        int64_t i_g;
+        int64_t a_g;
+        double t13 = x_g;
+        double t14 = floor(t13);
+        int64_t a_g_2 = (int64_t)gs_f2iwrap(t14);
+        {
+            if ((uint8_t)((int64_t)((int64_t)(a_g_2)) < (int64_t)(0))) {
+                a_g = 0;
+                goto L15;
+            }
+            a_g = a_g_2;
+            goto L15;
+        }
+        L15:;
+        int64_t b_g = gs_sub_i64((int64_t)(n_g), 2, gs_file17, 132);
+        {
+            if ((uint8_t)((int64_t)((int64_t)(b_g)) < (int64_t)(a_g))) {
+                i_g = b_g;
+                goto L16;
+            }
+            i_g = a_g;
+            goto L16;
+        }
+        L16:;
+        int64_t t17 = i_g;
+        int64_t t18 = gs_add_i64((int64_t)(i_g), 1, gs_file17, 133);
+        int64_t t19 = i_g;
+        t11 = ((double)((double)((((double *)((GS_GL->elements_curve_k_g8.base)))[GS_IDX((int64_t)(t17), (GS_GL->elements_curve_k_g8.len), gs_file17, 133)]))) + (double)(((double)((double)(((double)((double)((((double *)((GS_GL->elements_curve_k_g8.base)))[GS_IDX((int64_t)(t18), (GS_GL->elements_curve_k_g8.len), gs_file17, 133)]))) - (double)((((double *)((GS_GL->elements_curve_k_g8.base)))[t19]))))) * (double)(((double)((double)(x_g)) - (double)((double)(i_g)))))));
+        goto L12;
+    }
+    L12:;
+    return t11;
+    GS_UNREACHABLE(gs_file17, 138);
+    double t20 = {0};
+    return t20;
+}
+
+static void elements_elastic_tri3_g8(int64_t c_g, int64_t gs_sp) {
+    sl_u8 t4;
+    sl_u8 t5;
+    a3_f64 xi_g;
+    a3_f64 t16;
+    if (!((uint8_t)((int64_t)((int64_t)(c_g)) >= (int64_t)(0)))) goto L1;
+    int64_t t2 = c_g;
+    int64_t t3;
+    if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) > (int64_t)(0))) {
+        t3 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_conn_g8.len))))) / (uint64_t)((int64_t)(GS_GL->elements_per_cell_g8)));
+    } else {
+        t3 = 0;
+    }
+    if (!((uint8_t)((int64_t)(t2) < (int64_t)(t3)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_physics_g8)) == (int64_t)(0)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_per_cell_g8)) == (int64_t)(3)))) goto L1;
+    if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L0;
+    L1:;
+    {
+        t4.data = ((uint8_t *)gs_str120); t4.len = 66;
+        t5 = t4;
+        gs_abort_msg(t5.data, t5.len, gs_file25, 98);
+    }
+    L0:;
+    for (int64_t t6 = 0; t6 < (900); t6++) {
+        double * v_g = &GS_GL->elements_ke_g8.e[t6];
+        (*v_g) = 0.0;
+    }
+    for (int64_t t9 = 0; t9 < (30); t9++) {
+        double * v_g_2 = &GS_GL->elements_fe_g8.e[t9];
+        (*v_g_2) = 0.0;
+    }
+    int64_t t12 = elements_quad_count_g8(2);
+    int64_t t13 = t12;
+    for (int64_t qp_g = 0; qp_g < t13; qp_g++) {
+        double w_g;
+        t16 = elements_quad_point_g8(2, qp_g, &w_g);
+        xi_g = t16;
+        double t17 = w_g;
+        double t18 = elements_cell_geometry_g8(c_g, xi_g, gs_sp + 0);
+        double t19 = ((double)(t17) * (double)(t18));
+        double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
+        int64_t t20 = 3;
+        for (int64_t i_g = 0; i_g < t20; i_g++) {
+            int64_t t23 = gs_mul_i64((int64_t)(2), i_g, gs_file25, 105);
+            int64_t t24 = i_g;
+            GS_GL->elements_fe_g8.e[t23] = (GS_GL->elements_fe_g8.e[t23] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[0])) * (double)(GS_GL->elements_shp_g8.e[t24])))) * (double)(dv_g))));
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g, gs_file25, 106)), 1, gs_file25, 106);
+            int64_t t26 = i_g;
+            GS_GL->elements_fe_g8.e[t25] = (GS_GL->elements_fe_g8.e[t25] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[1])) * (double)(GS_GL->elements_shp_g8.e[t26])))) * (double)(dv_g))));
+        }
+        int64_t t27 = 0;
+        int64_t t28 = 3;
+        for (int64_t i_g_2 = t27; i_g_2 < t28; i_g_2++) {
+            int64_t t31 = 0;
+            int64_t t32 = 3;
+            for (int64_t j_g = t31; j_g < t32; j_g++) {
+                double dot_g = 0.0;
+                int64_t t35 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 111);
+                int64_t t36 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 111);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t35])) * (double)(GS_GL->elements_grad_g8.e[t36]))));
+                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 112)), 1, gs_file25, 112);
+                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 112)), 1, gs_file25, 112);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t37])) * (double)(GS_GL->elements_grad_g8.e[t38]))));
+                int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(12), i_g_2, gs_file25, 113)), gs_mul_i64((int64_t)(2), j_g, gs_file25, 113), gs_file25, 113);
+                int64_t t39 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 114);
+                int64_t t40 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 114);
+                int64_t t41 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 114);
+                int64_t t42 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 114);
+                double v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t39])))) * (double)(GS_GL->elements_grad_g8.e[t40])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t41])))) * (double)(GS_GL->elements_grad_g8.e[t42]))));
+                v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
+                int64_t t43 = row_g;
+                GS_GL->elements_ke_g8.e[t43] = (GS_GL->elements_ke_g8.e[t43] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t44 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 117);
+                int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 117)), 1, gs_file25, 117);
+                int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 117)), 1, gs_file25, 117);
+                int64_t t47 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 117);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t44])))) * (double)(GS_GL->elements_grad_g8.e[t45])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t46])))) * (double)(GS_GL->elements_grad_g8.e[t47]))));
+                int64_t t48 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 118);
+                GS_GL->elements_ke_g8.e[t48] = (GS_GL->elements_ke_g8.e[t48] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 119)), 1, gs_file25, 119);
+                int64_t t50 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 119);
+                int64_t t51 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 119);
+                int64_t t52 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 119)), 1, gs_file25, 119);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t49])))) * (double)(GS_GL->elements_grad_g8.e[t50])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t51])))) * (double)(GS_GL->elements_grad_g8.e[t52]))));
+                int64_t t53 = gs_add_i64((int64_t)(row_g), 6, gs_file25, 120);
+                GS_GL->elements_ke_g8.e[t53] = (GS_GL->elements_ke_g8.e[t53] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 121)), 1, gs_file25, 121);
+                int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 121)), 1, gs_file25, 121);
+                int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 121)), 1, gs_file25, 121);
+                int64_t t57 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 121)), 1, gs_file25, 121);
+                v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t54])))) * (double)(GS_GL->elements_grad_g8.e[t55])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t56])))) * (double)(GS_GL->elements_grad_g8.e[t57]))));
+                v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
+                int64_t t58 = gs_add_i64((int64_t)(row_g), 7, gs_file25, 123);
+                GS_GL->elements_ke_g8.e[t58] = (GS_GL->elements_ke_g8.e[t58] + (((double)((double)(v_g_3)) * (double)(dv_g))));
+            }
+        }
+    }
+    return;
 }
 
 static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
@@ -26137,9 +26801,9 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str118); t4.len = 66;
+        t4.data = ((uint8_t *)gs_str121); t4.len = 66;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file25, 150);
+        gs_abort_msg(t5.data, t5.len, gs_file25, 222);
     }
     L0:;
     for (int64_t t6 = 0; t6 < (900); t6++) {
@@ -26162,10 +26826,10 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
         double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
         int64_t t20 = 6;
         for (int64_t i_g = 0; i_g < t20; i_g++) {
-            int64_t t23 = gs_mul_i64((int64_t)(2), i_g, gs_file25, 157);
+            int64_t t23 = gs_mul_i64((int64_t)(2), i_g, gs_file25, 229);
             int64_t t24 = i_g;
             GS_GL->elements_fe_g8.e[t23] = (GS_GL->elements_fe_g8.e[t23] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[0])) * (double)(GS_GL->elements_shp_g8.e[t24])))) * (double)(dv_g))));
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g, gs_file25, 158)), 1, gs_file25, 158);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), i_g, gs_file25, 230)), 1, gs_file25, 230);
             int64_t t26 = i_g;
             GS_GL->elements_fe_g8.e[t25] = (GS_GL->elements_fe_g8.e[t25] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[1])) * (double)(GS_GL->elements_shp_g8.e[t26])))) * (double)(dv_g))));
         }
@@ -26175,9 +26839,9 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L28;
             L29:;
             {
-                t30.data = ((uint8_t *)gs_str119); t30.len = 45;
+                t30.data = ((uint8_t *)gs_str122); t30.len = 45;
                 t31 = t30;
-                gs_abort_msg(t31.data, t31.len, gs_file25, 59);
+                gs_abort_msg(t31.data, t31.len, gs_file25, 131);
             }
             L28:;
             int64_t t32 = 0;
@@ -26187,42 +26851,42 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
                 int64_t t37 = 3;
                 for (int64_t j_g = t36; j_g < t37; j_g++) {
                     double dot_g = 0.0;
-                    int64_t t40 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 63);
-                    int64_t t41 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 63);
+                    int64_t t40 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 135);
+                    int64_t t41 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 135);
                     dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t40])) * (double)(GS_GL->elements_grad_g8.e[t41]))));
-                    int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 64)), 1, gs_file25, 64);
-                    int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 64)), 1, gs_file25, 64);
+                    int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 136)), 1, gs_file25, 136);
+                    int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 136)), 1, gs_file25, 136);
                     dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t42])) * (double)(GS_GL->elements_grad_g8.e[t43]))));
-                    int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_2, gs_file25, 65)), gs_mul_i64((int64_t)(2), j_g, gs_file25, 65), gs_file25, 65);
-                    int64_t t44 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 66);
-                    int64_t t45 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 66);
-                    int64_t t46 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 66);
-                    int64_t t47 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 66);
+                    int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_2, gs_file25, 137)), gs_mul_i64((int64_t)(2), j_g, gs_file25, 137), gs_file25, 137);
+                    int64_t t44 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 138);
+                    int64_t t45 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 138);
+                    int64_t t46 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 138);
+                    int64_t t47 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 138);
                     double v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t44])))) * (double)(GS_GL->elements_grad_g8.e[t45])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t46])))) * (double)(GS_GL->elements_grad_g8.e[t47]))));
                     v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
                     int64_t t48 = row_g;
                     GS_GL->elements_ke_g8.e[t48] = (GS_GL->elements_ke_g8.e[t48] + (((double)((double)(v_g_3)) * (double)(dv_g_2))));
-                    int64_t t49 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 69);
-                    int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 69)), 1, gs_file25, 69);
-                    int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 69)), 1, gs_file25, 69);
-                    int64_t t52 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 69);
+                    int64_t t49 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 141);
+                    int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 141)), 1, gs_file25, 141);
+                    int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 141)), 1, gs_file25, 141);
+                    int64_t t52 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 141);
                     v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t49])))) * (double)(GS_GL->elements_grad_g8.e[t50])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t51])))) * (double)(GS_GL->elements_grad_g8.e[t52]))));
-                    int64_t t53 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 70);
+                    int64_t t53 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 142);
                     GS_GL->elements_ke_g8.e[t53] = (GS_GL->elements_ke_g8.e[t53] + (((double)((double)(v_g_3)) * (double)(dv_g_2))));
-                    int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 71)), 1, gs_file25, 71);
-                    int64_t t55 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 71);
-                    int64_t t56 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 71);
-                    int64_t t57 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 71)), 1, gs_file25, 71);
+                    int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 143)), 1, gs_file25, 143);
+                    int64_t t55 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 143);
+                    int64_t t56 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 143);
+                    int64_t t57 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 143)), 1, gs_file25, 143);
                     v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t54])))) * (double)(GS_GL->elements_grad_g8.e[t55])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t56])))) * (double)(GS_GL->elements_grad_g8.e[t57]))));
-                    int64_t t58 = gs_add_i64((int64_t)(row_g), 12, gs_file25, 72);
+                    int64_t t58 = gs_add_i64((int64_t)(row_g), 12, gs_file25, 144);
                     GS_GL->elements_ke_g8.e[t58] = (GS_GL->elements_ke_g8.e[t58] + (((double)((double)(v_g_3)) * (double)(dv_g_2))));
-                    int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 73)), 1, gs_file25, 73);
-                    int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 73)), 1, gs_file25, 73);
-                    int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 73)), 1, gs_file25, 73);
-                    int64_t t62 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 73)), 1, gs_file25, 73);
+                    int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 145)), 1, gs_file25, 145);
+                    int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 145)), 1, gs_file25, 145);
+                    int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 145)), 1, gs_file25, 145);
+                    int64_t t62 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 145)), 1, gs_file25, 145);
                     v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t59])))) * (double)(GS_GL->elements_grad_g8.e[t60])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t61])))) * (double)(GS_GL->elements_grad_g8.e[t62]))));
                     v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-                    int64_t t63 = gs_add_i64((int64_t)(row_g), 13, gs_file25, 75);
+                    int64_t t63 = gs_add_i64((int64_t)(row_g), 13, gs_file25, 147);
                     GS_GL->elements_ke_g8.e[t63] = (GS_GL->elements_ke_g8.e[t63] + (((double)((double)(v_g_3)) * (double)(dv_g_2))));
                 }
             }
@@ -26233,9 +26897,9 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L65;
             L66:;
             {
-                t67.data = ((uint8_t *)gs_str120); t67.len = 45;
+                t67.data = ((uint8_t *)gs_str123); t67.len = 45;
                 t68 = t67;
-                gs_abort_msg(t68.data, t68.len, gs_file25, 82);
+                gs_abort_msg(t68.data, t68.len, gs_file25, 154);
             }
             L65:;
             int64_t t69 = 0;
@@ -26245,42 +26909,42 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
                 int64_t t74 = 6;
                 for (int64_t j_g_2 = t73; j_g_2 < t74; j_g_2++) {
                     double dot_g_2 = 0.0;
-                    int64_t t77 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 86);
-                    int64_t t78 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 86);
+                    int64_t t77 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 158);
+                    int64_t t78 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 158);
                     dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t77])) * (double)(GS_GL->elements_grad_g8.e[t78]))));
-                    int64_t t79 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 87)), 1, gs_file25, 87);
-                    int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 87)), 1, gs_file25, 87);
+                    int64_t t79 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 159)), 1, gs_file25, 159);
+                    int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 159)), 1, gs_file25, 159);
                     dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t79])) * (double)(GS_GL->elements_grad_g8.e[t80]))));
-                    int64_t row_g_2 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_3, gs_file25, 88)), gs_mul_i64((int64_t)(2), j_g_2, gs_file25, 88), gs_file25, 88);
-                    int64_t t81 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 89);
-                    int64_t t82 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 89);
-                    int64_t t83 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 89);
-                    int64_t t84 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 89);
+                    int64_t row_g_2 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_3, gs_file25, 160)), gs_mul_i64((int64_t)(2), j_g_2, gs_file25, 160), gs_file25, 160);
+                    int64_t t81 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 161);
+                    int64_t t82 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 161);
+                    int64_t t83 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 161);
+                    int64_t t84 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 161);
                     double v_g_4 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t81])))) * (double)(GS_GL->elements_grad_g8.e[t82])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t83])))) * (double)(GS_GL->elements_grad_g8.e[t84]))));
                     v_g_4 = (v_g_4 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g_2))));
                     int64_t t85 = row_g_2;
                     GS_GL->elements_ke_g8.e[t85] = (GS_GL->elements_ke_g8.e[t85] + (((double)((double)(v_g_4)) * (double)(dv_g_3))));
-                    int64_t t86 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 92);
-                    int64_t t87 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 92)), 1, gs_file25, 92);
-                    int64_t t88 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 92)), 1, gs_file25, 92);
-                    int64_t t89 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 92);
+                    int64_t t86 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 164);
+                    int64_t t87 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 164)), 1, gs_file25, 164);
+                    int64_t t88 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 164)), 1, gs_file25, 164);
+                    int64_t t89 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 164);
                     v_g_4 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t86])))) * (double)(GS_GL->elements_grad_g8.e[t87])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t88])))) * (double)(GS_GL->elements_grad_g8.e[t89]))));
-                    int64_t t90 = gs_add_i64((int64_t)(row_g_2), 1, gs_file25, 93);
+                    int64_t t90 = gs_add_i64((int64_t)(row_g_2), 1, gs_file25, 165);
                     GS_GL->elements_ke_g8.e[t90] = (GS_GL->elements_ke_g8.e[t90] + (((double)((double)(v_g_4)) * (double)(dv_g_3))));
-                    int64_t t91 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 94)), 1, gs_file25, 94);
-                    int64_t t92 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 94);
-                    int64_t t93 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 94);
-                    int64_t t94 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 94)), 1, gs_file25, 94);
+                    int64_t t91 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 166)), 1, gs_file25, 166);
+                    int64_t t92 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 166);
+                    int64_t t93 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 166);
+                    int64_t t94 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 166)), 1, gs_file25, 166);
                     v_g_4 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t91])))) * (double)(GS_GL->elements_grad_g8.e[t92])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t93])))) * (double)(GS_GL->elements_grad_g8.e[t94]))));
-                    int64_t t95 = gs_add_i64((int64_t)(row_g_2), 12, gs_file25, 95);
+                    int64_t t95 = gs_add_i64((int64_t)(row_g_2), 12, gs_file25, 167);
                     GS_GL->elements_ke_g8.e[t95] = (GS_GL->elements_ke_g8.e[t95] + (((double)((double)(v_g_4)) * (double)(dv_g_3))));
-                    int64_t t96 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 96)), 1, gs_file25, 96);
-                    int64_t t97 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 96)), 1, gs_file25, 96);
-                    int64_t t98 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 96)), 1, gs_file25, 96);
-                    int64_t t99 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 96)), 1, gs_file25, 96);
+                    int64_t t96 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 168)), 1, gs_file25, 168);
+                    int64_t t97 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 168)), 1, gs_file25, 168);
+                    int64_t t98 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 168)), 1, gs_file25, 168);
+                    int64_t t99 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 168)), 1, gs_file25, 168);
                     v_g_4 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t96])))) * (double)(GS_GL->elements_grad_g8.e[t97])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t98])))) * (double)(GS_GL->elements_grad_g8.e[t99]))));
                     v_g_4 = (v_g_4 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g_2))));
-                    int64_t t100 = gs_add_i64((int64_t)(row_g_2), 13, gs_file25, 98);
+                    int64_t t100 = gs_add_i64((int64_t)(row_g_2), 13, gs_file25, 170);
                     GS_GL->elements_ke_g8.e[t100] = (GS_GL->elements_ke_g8.e[t100] + (((double)((double)(v_g_4)) * (double)(dv_g_3))));
                 }
             }
@@ -26291,9 +26955,9 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L102;
             L103:;
             {
-                t104.data = ((uint8_t *)gs_str121); t104.len = 45;
+                t104.data = ((uint8_t *)gs_str124); t104.len = 45;
                 t105 = t104;
-                gs_abort_msg(t105.data, t105.len, gs_file25, 105);
+                gs_abort_msg(t105.data, t105.len, gs_file25, 177);
             }
             L102:;
             int64_t t106 = 3;
@@ -26303,42 +26967,42 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
                 int64_t t111 = 3;
                 for (int64_t j_g_3 = t110; j_g_3 < t111; j_g_3++) {
                     double dot_g_3 = 0.0;
-                    int64_t t114 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 109);
-                    int64_t t115 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 109);
+                    int64_t t114 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 181);
+                    int64_t t115 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 181);
                     dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t114])) * (double)(GS_GL->elements_grad_g8.e[t115]))));
-                    int64_t t116 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 110)), 1, gs_file25, 110);
-                    int64_t t117 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 110)), 1, gs_file25, 110);
+                    int64_t t116 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 182)), 1, gs_file25, 182);
+                    int64_t t117 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 182)), 1, gs_file25, 182);
                     dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t116])) * (double)(GS_GL->elements_grad_g8.e[t117]))));
-                    int64_t row_g_3 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_4, gs_file25, 111)), gs_mul_i64((int64_t)(2), j_g_3, gs_file25, 111), gs_file25, 111);
-                    int64_t t118 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 112);
-                    int64_t t119 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 112);
-                    int64_t t120 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 112);
-                    int64_t t121 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 112);
+                    int64_t row_g_3 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_4, gs_file25, 183)), gs_mul_i64((int64_t)(2), j_g_3, gs_file25, 183), gs_file25, 183);
+                    int64_t t118 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 184);
+                    int64_t t119 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 184);
+                    int64_t t120 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 184);
+                    int64_t t121 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 184);
                     double v_g_5 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t118])))) * (double)(GS_GL->elements_grad_g8.e[t119])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t120])))) * (double)(GS_GL->elements_grad_g8.e[t121]))));
                     v_g_5 = (v_g_5 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g_3))));
                     int64_t t122 = row_g_3;
                     GS_GL->elements_ke_g8.e[t122] = (GS_GL->elements_ke_g8.e[t122] + (((double)((double)(v_g_5)) * (double)(dv_g_4))));
-                    int64_t t123 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 115);
-                    int64_t t124 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 115)), 1, gs_file25, 115);
-                    int64_t t125 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 115)), 1, gs_file25, 115);
-                    int64_t t126 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 115);
+                    int64_t t123 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 187);
+                    int64_t t124 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 187)), 1, gs_file25, 187);
+                    int64_t t125 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 187)), 1, gs_file25, 187);
+                    int64_t t126 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 187);
                     v_g_5 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t123])))) * (double)(GS_GL->elements_grad_g8.e[t124])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t125])))) * (double)(GS_GL->elements_grad_g8.e[t126]))));
-                    int64_t t127 = gs_add_i64((int64_t)(row_g_3), 1, gs_file25, 116);
+                    int64_t t127 = gs_add_i64((int64_t)(row_g_3), 1, gs_file25, 188);
                     GS_GL->elements_ke_g8.e[t127] = (GS_GL->elements_ke_g8.e[t127] + (((double)((double)(v_g_5)) * (double)(dv_g_4))));
-                    int64_t t128 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 117)), 1, gs_file25, 117);
-                    int64_t t129 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 117);
-                    int64_t t130 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 117);
-                    int64_t t131 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 117)), 1, gs_file25, 117);
+                    int64_t t128 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 189)), 1, gs_file25, 189);
+                    int64_t t129 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 189);
+                    int64_t t130 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 189);
+                    int64_t t131 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 189)), 1, gs_file25, 189);
                     v_g_5 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t128])))) * (double)(GS_GL->elements_grad_g8.e[t129])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t130])))) * (double)(GS_GL->elements_grad_g8.e[t131]))));
-                    int64_t t132 = gs_add_i64((int64_t)(row_g_3), 12, gs_file25, 118);
+                    int64_t t132 = gs_add_i64((int64_t)(row_g_3), 12, gs_file25, 190);
                     GS_GL->elements_ke_g8.e[t132] = (GS_GL->elements_ke_g8.e[t132] + (((double)((double)(v_g_5)) * (double)(dv_g_4))));
-                    int64_t t133 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 119)), 1, gs_file25, 119);
-                    int64_t t134 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 119)), 1, gs_file25, 119);
-                    int64_t t135 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 119)), 1, gs_file25, 119);
-                    int64_t t136 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 119)), 1, gs_file25, 119);
+                    int64_t t133 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 191)), 1, gs_file25, 191);
+                    int64_t t134 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 191)), 1, gs_file25, 191);
+                    int64_t t135 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 191)), 1, gs_file25, 191);
+                    int64_t t136 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 191)), 1, gs_file25, 191);
                     v_g_5 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t133])))) * (double)(GS_GL->elements_grad_g8.e[t134])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t135])))) * (double)(GS_GL->elements_grad_g8.e[t136]))));
                     v_g_5 = (v_g_5 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g_3))));
-                    int64_t t137 = gs_add_i64((int64_t)(row_g_3), 13, gs_file25, 121);
+                    int64_t t137 = gs_add_i64((int64_t)(row_g_3), 13, gs_file25, 193);
                     GS_GL->elements_ke_g8.e[t137] = (GS_GL->elements_ke_g8.e[t137] + (((double)((double)(v_g_5)) * (double)(dv_g_4))));
                 }
             }
@@ -26349,9 +27013,9 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(2))) goto L139;
             L140:;
             {
-                t141.data = ((uint8_t *)gs_str122); t141.len = 45;
+                t141.data = ((uint8_t *)gs_str125); t141.len = 45;
                 t142 = t141;
-                gs_abort_msg(t142.data, t142.len, gs_file25, 128);
+                gs_abort_msg(t142.data, t142.len, gs_file25, 200);
             }
             L139:;
             int64_t t143 = 3;
@@ -26361,42 +27025,42 @@ static void elements_elastic_tri6_g8(int64_t c_g, int64_t gs_sp) {
                 int64_t t148 = 6;
                 for (int64_t j_g_4 = t147; j_g_4 < t148; j_g_4++) {
                     double dot_g_4 = 0.0;
-                    int64_t t151 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 132);
-                    int64_t t152 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 132);
+                    int64_t t151 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 204);
+                    int64_t t152 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 204);
                     dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t151])) * (double)(GS_GL->elements_grad_g8.e[t152]))));
-                    int64_t t153 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 133)), 1, gs_file25, 133);
-                    int64_t t154 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 133)), 1, gs_file25, 133);
+                    int64_t t153 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 205)), 1, gs_file25, 205);
+                    int64_t t154 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 205)), 1, gs_file25, 205);
                     dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t153])) * (double)(GS_GL->elements_grad_g8.e[t154]))));
-                    int64_t row_g_4 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_5, gs_file25, 134)), gs_mul_i64((int64_t)(2), j_g_4, gs_file25, 134), gs_file25, 134);
-                    int64_t t155 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 135);
-                    int64_t t156 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 135);
-                    int64_t t157 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 135);
-                    int64_t t158 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 135);
+                    int64_t row_g_4 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(24), i_g_5, gs_file25, 206)), gs_mul_i64((int64_t)(2), j_g_4, gs_file25, 206), gs_file25, 206);
+                    int64_t t155 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 207);
+                    int64_t t156 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 207);
+                    int64_t t157 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 207);
+                    int64_t t158 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 207);
                     double v_g_6 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t155])))) * (double)(GS_GL->elements_grad_g8.e[t156])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t157])))) * (double)(GS_GL->elements_grad_g8.e[t158]))));
                     v_g_6 = (v_g_6 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g_4))));
                     int64_t t159 = row_g_4;
                     GS_GL->elements_ke_g8.e[t159] = (GS_GL->elements_ke_g8.e[t159] + (((double)((double)(v_g_6)) * (double)(dv_g_5))));
-                    int64_t t160 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 138);
-                    int64_t t161 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 138)), 1, gs_file25, 138);
-                    int64_t t162 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 138)), 1, gs_file25, 138);
-                    int64_t t163 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 138);
+                    int64_t t160 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 210);
+                    int64_t t161 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 210)), 1, gs_file25, 210);
+                    int64_t t162 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 210)), 1, gs_file25, 210);
+                    int64_t t163 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 210);
                     v_g_6 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t160])))) * (double)(GS_GL->elements_grad_g8.e[t161])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t162])))) * (double)(GS_GL->elements_grad_g8.e[t163]))));
-                    int64_t t164 = gs_add_i64((int64_t)(row_g_4), 1, gs_file25, 139);
+                    int64_t t164 = gs_add_i64((int64_t)(row_g_4), 1, gs_file25, 211);
                     GS_GL->elements_ke_g8.e[t164] = (GS_GL->elements_ke_g8.e[t164] + (((double)((double)(v_g_6)) * (double)(dv_g_5))));
-                    int64_t t165 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 140)), 1, gs_file25, 140);
-                    int64_t t166 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 140);
-                    int64_t t167 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 140);
-                    int64_t t168 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 140)), 1, gs_file25, 140);
+                    int64_t t165 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 212)), 1, gs_file25, 212);
+                    int64_t t166 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 212);
+                    int64_t t167 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 212);
+                    int64_t t168 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 212)), 1, gs_file25, 212);
                     v_g_6 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t165])))) * (double)(GS_GL->elements_grad_g8.e[t166])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t167])))) * (double)(GS_GL->elements_grad_g8.e[t168]))));
-                    int64_t t169 = gs_add_i64((int64_t)(row_g_4), 12, gs_file25, 141);
+                    int64_t t169 = gs_add_i64((int64_t)(row_g_4), 12, gs_file25, 213);
                     GS_GL->elements_ke_g8.e[t169] = (GS_GL->elements_ke_g8.e[t169] + (((double)((double)(v_g_6)) * (double)(dv_g_5))));
-                    int64_t t170 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 142)), 1, gs_file25, 142);
-                    int64_t t171 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 142)), 1, gs_file25, 142);
-                    int64_t t172 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 142)), 1, gs_file25, 142);
-                    int64_t t173 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 142)), 1, gs_file25, 142);
+                    int64_t t170 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 214)), 1, gs_file25, 214);
+                    int64_t t171 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 214)), 1, gs_file25, 214);
+                    int64_t t172 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 214)), 1, gs_file25, 214);
+                    int64_t t173 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 214)), 1, gs_file25, 214);
                     v_g_6 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t170])))) * (double)(GS_GL->elements_grad_g8.e[t171])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t172])))) * (double)(GS_GL->elements_grad_g8.e[t173]))));
                     v_g_6 = (v_g_6 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g_4))));
-                    int64_t t174 = gs_add_i64((int64_t)(row_g_4), 13, gs_file25, 144);
+                    int64_t t174 = gs_add_i64((int64_t)(row_g_4), 13, gs_file25, 216);
                     GS_GL->elements_ke_g8.e[t174] = (GS_GL->elements_ke_g8.e[t174] + (((double)((double)(v_g_6)) * (double)(dv_g_5))));
                 }
             }
@@ -26425,9 +27089,9 @@ static void elements_elastic_tet4_g8(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str123); t4.len = 66;
+        t4.data = ((uint8_t *)gs_str126); t4.len = 66;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file25, 168);
+        gs_abort_msg(t5.data, t5.len, gs_file25, 240);
     }
     L0:;
     for (int64_t t6 = 0; t6 < (900); t6++) {
@@ -26450,13 +27114,13 @@ static void elements_elastic_tet4_g8(int64_t c_g, int64_t gs_sp) {
         double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
         int64_t t20 = 4;
         for (int64_t i_g = 0; i_g < t20; i_g++) {
-            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 175);
+            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 247);
             int64_t t24 = i_g;
             GS_GL->elements_fe_g8.e[t23] = (GS_GL->elements_fe_g8.e[t23] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[0])) * (double)(GS_GL->elements_shp_g8.e[t24])))) * (double)(dv_g))));
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 176)), 1, gs_file25, 176);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 248)), 1, gs_file25, 248);
             int64_t t26 = i_g;
             GS_GL->elements_fe_g8.e[t25] = (GS_GL->elements_fe_g8.e[t25] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[1])) * (double)(GS_GL->elements_shp_g8.e[t26])))) * (double)(dv_g))));
-            int64_t t27 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 177)), 2, gs_file25, 177);
+            int64_t t27 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 249)), 2, gs_file25, 249);
             int64_t t28 = i_g;
             GS_GL->elements_fe_g8.e[t27] = (GS_GL->elements_fe_g8.e[t27] + (((double)((double)(((double)((double)(GS_GL->elements_volume_force_g8.e[2])) * (double)(GS_GL->elements_shp_g8.e[t28])))) * (double)(dv_g))));
         }
@@ -26467,81 +27131,81 @@ static void elements_elastic_tet4_g8(int64_t c_g, int64_t gs_sp) {
             int64_t t34 = 4;
             for (int64_t j_g = t33; j_g < t34; j_g++) {
                 double dot_g = 0.0;
-                int64_t t37 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 182);
-                int64_t t38 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 182);
+                int64_t t37 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 254);
+                int64_t t38 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 254);
                 dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t37])) * (double)(GS_GL->elements_grad_g8.e[t38]))));
-                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 183)), 1, gs_file25, 183);
-                int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 183)), 1, gs_file25, 183);
+                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 255)), 1, gs_file25, 255);
+                int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 255)), 1, gs_file25, 255);
                 dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t39])) * (double)(GS_GL->elements_grad_g8.e[t40]))));
-                int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 184)), 2, gs_file25, 184);
-                int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 184)), 2, gs_file25, 184);
+                int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 256)), 2, gs_file25, 256);
+                int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 256)), 2, gs_file25, 256);
                 dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t41])) * (double)(GS_GL->elements_grad_g8.e[t42]))));
-                int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(36), i_g_2, gs_file25, 185)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 185), gs_file25, 185);
-                int64_t t43 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 186);
-                int64_t t44 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 186);
-                int64_t t45 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 186);
-                int64_t t46 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 186);
+                int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(36), i_g_2, gs_file25, 257)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 257), gs_file25, 257);
+                int64_t t43 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 258);
+                int64_t t44 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 258);
+                int64_t t45 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 258);
+                int64_t t46 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 258);
                 double v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t43])))) * (double)(GS_GL->elements_grad_g8.e[t44])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t45])))) * (double)(GS_GL->elements_grad_g8.e[t46]))));
                 v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
                 int64_t t47 = row_g;
                 GS_GL->elements_ke_g8.e[t47] = (GS_GL->elements_ke_g8.e[t47] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t48 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 189);
-                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 189)), 1, gs_file25, 189);
-                int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 189)), 1, gs_file25, 189);
-                int64_t t51 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 189);
+                int64_t t48 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 261);
+                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 261)), 1, gs_file25, 261);
+                int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 261)), 1, gs_file25, 261);
+                int64_t t51 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 261);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t48])))) * (double)(GS_GL->elements_grad_g8.e[t49])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t50])))) * (double)(GS_GL->elements_grad_g8.e[t51]))));
-                int64_t t52 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 190);
+                int64_t t52 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 262);
                 GS_GL->elements_ke_g8.e[t52] = (GS_GL->elements_ke_g8.e[t52] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t53 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 191);
-                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 191)), 2, gs_file25, 191);
-                int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 191)), 2, gs_file25, 191);
-                int64_t t56 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 191);
+                int64_t t53 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 263);
+                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 263)), 2, gs_file25, 263);
+                int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 263)), 2, gs_file25, 263);
+                int64_t t56 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 263);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t53])))) * (double)(GS_GL->elements_grad_g8.e[t54])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t55])))) * (double)(GS_GL->elements_grad_g8.e[t56]))));
-                int64_t t57 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 192);
+                int64_t t57 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 264);
                 GS_GL->elements_ke_g8.e[t57] = (GS_GL->elements_ke_g8.e[t57] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 193)), 1, gs_file25, 193);
-                int64_t t59 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 193);
-                int64_t t60 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 193);
-                int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 193)), 1, gs_file25, 193);
+                int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 265)), 1, gs_file25, 265);
+                int64_t t59 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 265);
+                int64_t t60 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 265);
+                int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 265)), 1, gs_file25, 265);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t58])))) * (double)(GS_GL->elements_grad_g8.e[t59])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t60])))) * (double)(GS_GL->elements_grad_g8.e[t61]))));
-                int64_t t62 = gs_add_i64((int64_t)(row_g), 12, gs_file25, 194);
+                int64_t t62 = gs_add_i64((int64_t)(row_g), 12, gs_file25, 266);
                 GS_GL->elements_ke_g8.e[t62] = (GS_GL->elements_ke_g8.e[t62] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t63 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 195)), 1, gs_file25, 195);
-                int64_t t64 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 195)), 1, gs_file25, 195);
-                int64_t t65 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 195)), 1, gs_file25, 195);
-                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 195)), 1, gs_file25, 195);
+                int64_t t63 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 267)), 1, gs_file25, 267);
+                int64_t t64 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 267)), 1, gs_file25, 267);
+                int64_t t65 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 267)), 1, gs_file25, 267);
+                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 267)), 1, gs_file25, 267);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t63])))) * (double)(GS_GL->elements_grad_g8.e[t64])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t65])))) * (double)(GS_GL->elements_grad_g8.e[t66]))));
                 v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-                int64_t t67 = gs_add_i64((int64_t)(row_g), 13, gs_file25, 197);
+                int64_t t67 = gs_add_i64((int64_t)(row_g), 13, gs_file25, 269);
                 GS_GL->elements_ke_g8.e[t67] = (GS_GL->elements_ke_g8.e[t67] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t68 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 198)), 1, gs_file25, 198);
-                int64_t t69 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 198)), 2, gs_file25, 198);
-                int64_t t70 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 198)), 2, gs_file25, 198);
-                int64_t t71 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 198)), 1, gs_file25, 198);
+                int64_t t68 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 270)), 1, gs_file25, 270);
+                int64_t t69 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 270)), 2, gs_file25, 270);
+                int64_t t70 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 270)), 2, gs_file25, 270);
+                int64_t t71 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 270)), 1, gs_file25, 270);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t68])))) * (double)(GS_GL->elements_grad_g8.e[t69])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t70])))) * (double)(GS_GL->elements_grad_g8.e[t71]))));
-                int64_t t72 = gs_add_i64((int64_t)(row_g), 14, gs_file25, 199);
+                int64_t t72 = gs_add_i64((int64_t)(row_g), 14, gs_file25, 271);
                 GS_GL->elements_ke_g8.e[t72] = (GS_GL->elements_ke_g8.e[t72] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t73 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 200)), 2, gs_file25, 200);
-                int64_t t74 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 200);
-                int64_t t75 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 200);
-                int64_t t76 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 200)), 2, gs_file25, 200);
+                int64_t t73 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 272)), 2, gs_file25, 272);
+                int64_t t74 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 272);
+                int64_t t75 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 272);
+                int64_t t76 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 272)), 2, gs_file25, 272);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t73])))) * (double)(GS_GL->elements_grad_g8.e[t74])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t75])))) * (double)(GS_GL->elements_grad_g8.e[t76]))));
-                int64_t t77 = gs_add_i64((int64_t)(row_g), 24, gs_file25, 201);
+                int64_t t77 = gs_add_i64((int64_t)(row_g), 24, gs_file25, 273);
                 GS_GL->elements_ke_g8.e[t77] = (GS_GL->elements_ke_g8.e[t77] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t78 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 202)), 2, gs_file25, 202);
-                int64_t t79 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 202)), 1, gs_file25, 202);
-                int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 202)), 1, gs_file25, 202);
-                int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 202)), 2, gs_file25, 202);
+                int64_t t78 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 274)), 2, gs_file25, 274);
+                int64_t t79 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 274)), 1, gs_file25, 274);
+                int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 274)), 1, gs_file25, 274);
+                int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 274)), 2, gs_file25, 274);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t78])))) * (double)(GS_GL->elements_grad_g8.e[t79])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t80])))) * (double)(GS_GL->elements_grad_g8.e[t81]))));
-                int64_t t82 = gs_add_i64((int64_t)(row_g), 25, gs_file25, 203);
+                int64_t t82 = gs_add_i64((int64_t)(row_g), 25, gs_file25, 275);
                 GS_GL->elements_ke_g8.e[t82] = (GS_GL->elements_ke_g8.e[t82] + (((double)((double)(v_g_3)) * (double)(dv_g))));
-                int64_t t83 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 204)), 2, gs_file25, 204);
-                int64_t t84 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 204)), 2, gs_file25, 204);
-                int64_t t85 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 204)), 2, gs_file25, 204);
-                int64_t t86 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 204)), 2, gs_file25, 204);
+                int64_t t83 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 276)), 2, gs_file25, 276);
+                int64_t t84 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 276)), 2, gs_file25, 276);
+                int64_t t85 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 276)), 2, gs_file25, 276);
+                int64_t t86 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 276)), 2, gs_file25, 276);
                 v_g_3 = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t83])))) * (double)(GS_GL->elements_grad_g8.e[t84])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t85])))) * (double)(GS_GL->elements_grad_g8.e[t86]))));
                 v_g_3 = (v_g_3 + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-                int64_t t87 = gs_add_i64((int64_t)(row_g), 26, gs_file25, 206);
+                int64_t t87 = gs_add_i64((int64_t)(row_g), 26, gs_file25, 278);
                 GS_GL->elements_ke_g8.e[t87] = (GS_GL->elements_ke_g8.e[t87] + (((double)((double)(v_g_3)) * (double)(dv_g))));
             }
         }
@@ -26556,9 +27220,9 @@ static void elements_elastic_tet10_0_0_g8(double dv_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str124); t2.len = 47;
+        t2.data = ((uint8_t *)gs_str127); t2.len = 47;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file25, 214);
+        gs_abort_msg(t3.data, t3.len, gs_file25, 286);
     }
     L0:;
     int64_t t4 = 0;
@@ -26568,81 +27232,81 @@ static void elements_elastic_tet10_0_0_g8(double dv_g, int64_t gs_sp) {
         int64_t t9 = 4;
         for (int64_t j_g = t8; j_g < t9; j_g++) {
             double dot_g = 0.0;
-            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 218);
-            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 218);
+            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 290);
+            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 290);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t12])) * (double)(GS_GL->elements_grad_g8.e[t13]))));
-            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 219)), 1, gs_file25, 219);
-            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 219)), 1, gs_file25, 219);
+            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 291)), 1, gs_file25, 291);
+            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 291)), 1, gs_file25, 291);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t14])) * (double)(GS_GL->elements_grad_g8.e[t15]))));
-            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 220)), 2, gs_file25, 220);
-            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 220)), 2, gs_file25, 220);
+            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 292)), 2, gs_file25, 292);
+            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 292)), 2, gs_file25, 292);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t16])) * (double)(GS_GL->elements_grad_g8.e[t17]))));
-            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 221)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 221), gs_file25, 221);
-            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 222);
-            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 222);
-            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 222);
-            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 222);
+            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 293)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 293), gs_file25, 293);
+            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 294);
+            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 294);
+            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 294);
+            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 294);
             double v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t18])))) * (double)(GS_GL->elements_grad_g8.e[t19])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t20])))) * (double)(GS_GL->elements_grad_g8.e[t21]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
             int64_t t22 = row_g;
             GS_GL->elements_ke_g8.e[t22] = (GS_GL->elements_ke_g8.e[t22] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 225);
-            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 225)), 1, gs_file25, 225);
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 225)), 1, gs_file25, 225);
-            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 225);
+            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 297);
+            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 297)), 1, gs_file25, 297);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 297)), 1, gs_file25, 297);
+            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 297);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t23])))) * (double)(GS_GL->elements_grad_g8.e[t24])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t25])))) * (double)(GS_GL->elements_grad_g8.e[t26]))));
-            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 226);
+            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 298);
             GS_GL->elements_ke_g8.e[t27] = (GS_GL->elements_ke_g8.e[t27] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 227);
-            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 227)), 2, gs_file25, 227);
-            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 227)), 2, gs_file25, 227);
-            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 227);
+            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 299);
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 299)), 2, gs_file25, 299);
+            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 299)), 2, gs_file25, 299);
+            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 299);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t28])))) * (double)(GS_GL->elements_grad_g8.e[t29])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t30])))) * (double)(GS_GL->elements_grad_g8.e[t31]))));
-            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 228);
+            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 300);
             GS_GL->elements_ke_g8.e[t32] = (GS_GL->elements_ke_g8.e[t32] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 229)), 1, gs_file25, 229);
-            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 229);
-            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 229);
-            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 229)), 1, gs_file25, 229);
+            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 301)), 1, gs_file25, 301);
+            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 301);
+            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 301);
+            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 301)), 1, gs_file25, 301);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t33])))) * (double)(GS_GL->elements_grad_g8.e[t34])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t35])))) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 230);
+            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 302);
             GS_GL->elements_ke_g8.e[t37] = (GS_GL->elements_ke_g8.e[t37] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 231)), 1, gs_file25, 231);
-            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 231)), 1, gs_file25, 231);
-            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 231)), 1, gs_file25, 231);
-            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 231)), 1, gs_file25, 231);
+            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 303)), 1, gs_file25, 303);
+            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 303)), 1, gs_file25, 303);
+            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 303)), 1, gs_file25, 303);
+            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 303)), 1, gs_file25, 303);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t38])))) * (double)(GS_GL->elements_grad_g8.e[t39])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t40])))) * (double)(GS_GL->elements_grad_g8.e[t41]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 233);
+            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 305);
             GS_GL->elements_ke_g8.e[t42] = (GS_GL->elements_ke_g8.e[t42] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 234)), 1, gs_file25, 234);
-            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 234)), 2, gs_file25, 234);
-            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 234)), 2, gs_file25, 234);
-            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 234)), 1, gs_file25, 234);
+            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 306)), 1, gs_file25, 306);
+            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 306)), 2, gs_file25, 306);
+            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 306)), 2, gs_file25, 306);
+            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 306)), 1, gs_file25, 306);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t43])))) * (double)(GS_GL->elements_grad_g8.e[t44])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t45])))) * (double)(GS_GL->elements_grad_g8.e[t46]))));
-            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 235);
+            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 307);
             GS_GL->elements_ke_g8.e[t47] = (GS_GL->elements_ke_g8.e[t47] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 236)), 2, gs_file25, 236);
-            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 236);
-            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 236);
-            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 236)), 2, gs_file25, 236);
+            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 308)), 2, gs_file25, 308);
+            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 308);
+            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 308);
+            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 308)), 2, gs_file25, 308);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t48])))) * (double)(GS_GL->elements_grad_g8.e[t49])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t50])))) * (double)(GS_GL->elements_grad_g8.e[t51]))));
-            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 237);
+            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 309);
             GS_GL->elements_ke_g8.e[t52] = (GS_GL->elements_ke_g8.e[t52] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 238)), 2, gs_file25, 238);
-            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 238)), 1, gs_file25, 238);
-            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 238)), 1, gs_file25, 238);
-            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 238)), 2, gs_file25, 238);
+            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 310)), 2, gs_file25, 310);
+            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 310)), 1, gs_file25, 310);
+            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 310)), 1, gs_file25, 310);
+            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 310)), 2, gs_file25, 310);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t53])))) * (double)(GS_GL->elements_grad_g8.e[t54])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t55])))) * (double)(GS_GL->elements_grad_g8.e[t56]))));
-            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 239);
+            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 311);
             GS_GL->elements_ke_g8.e[t57] = (GS_GL->elements_ke_g8.e[t57] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 240)), 2, gs_file25, 240);
-            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 240)), 2, gs_file25, 240);
-            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 240)), 2, gs_file25, 240);
-            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 240)), 2, gs_file25, 240);
+            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 312)), 2, gs_file25, 312);
+            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 312)), 2, gs_file25, 312);
+            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 312)), 2, gs_file25, 312);
+            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 312)), 2, gs_file25, 312);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t58])))) * (double)(GS_GL->elements_grad_g8.e[t59])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t60])))) * (double)(GS_GL->elements_grad_g8.e[t61]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 242);
+            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 314);
             GS_GL->elements_ke_g8.e[t62] = (GS_GL->elements_ke_g8.e[t62] + (((double)((double)(v_g)) * (double)(dv_g))));
         }
     }
@@ -26656,9 +27320,9 @@ static void elements_elastic_tet10_0_1_g8(double dv_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str125); t2.len = 47;
+        t2.data = ((uint8_t *)gs_str128); t2.len = 47;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file25, 249);
+        gs_abort_msg(t3.data, t3.len, gs_file25, 321);
     }
     L0:;
     int64_t t4 = 0;
@@ -26668,81 +27332,81 @@ static void elements_elastic_tet10_0_1_g8(double dv_g, int64_t gs_sp) {
         int64_t t9 = 10;
         for (int64_t j_g = t8; j_g < t9; j_g++) {
             double dot_g = 0.0;
-            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 253);
-            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 253);
+            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 325);
+            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 325);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t12])) * (double)(GS_GL->elements_grad_g8.e[t13]))));
-            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 254)), 1, gs_file25, 254);
-            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 254)), 1, gs_file25, 254);
+            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 326)), 1, gs_file25, 326);
+            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 326)), 1, gs_file25, 326);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t14])) * (double)(GS_GL->elements_grad_g8.e[t15]))));
-            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 255)), 2, gs_file25, 255);
-            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 255)), 2, gs_file25, 255);
+            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 327)), 2, gs_file25, 327);
+            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 327)), 2, gs_file25, 327);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t16])) * (double)(GS_GL->elements_grad_g8.e[t17]))));
-            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 256)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 256), gs_file25, 256);
-            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 257);
-            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 257);
-            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 257);
-            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 257);
+            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 328)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 328), gs_file25, 328);
+            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 329);
+            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 329);
+            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 329);
+            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 329);
             double v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t18])))) * (double)(GS_GL->elements_grad_g8.e[t19])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t20])))) * (double)(GS_GL->elements_grad_g8.e[t21]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
             int64_t t22 = row_g;
             GS_GL->elements_ke_g8.e[t22] = (GS_GL->elements_ke_g8.e[t22] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 260);
-            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 260)), 1, gs_file25, 260);
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 260)), 1, gs_file25, 260);
-            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 260);
+            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 332);
+            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 332)), 1, gs_file25, 332);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 332)), 1, gs_file25, 332);
+            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 332);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t23])))) * (double)(GS_GL->elements_grad_g8.e[t24])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t25])))) * (double)(GS_GL->elements_grad_g8.e[t26]))));
-            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 261);
+            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 333);
             GS_GL->elements_ke_g8.e[t27] = (GS_GL->elements_ke_g8.e[t27] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 262);
-            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 262)), 2, gs_file25, 262);
-            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 262)), 2, gs_file25, 262);
-            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 262);
+            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 334);
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 334)), 2, gs_file25, 334);
+            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 334)), 2, gs_file25, 334);
+            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 334);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t28])))) * (double)(GS_GL->elements_grad_g8.e[t29])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t30])))) * (double)(GS_GL->elements_grad_g8.e[t31]))));
-            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 263);
+            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 335);
             GS_GL->elements_ke_g8.e[t32] = (GS_GL->elements_ke_g8.e[t32] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 264)), 1, gs_file25, 264);
-            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 264);
-            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 264);
-            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 264)), 1, gs_file25, 264);
+            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 336)), 1, gs_file25, 336);
+            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 336);
+            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 336);
+            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 336)), 1, gs_file25, 336);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t33])))) * (double)(GS_GL->elements_grad_g8.e[t34])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t35])))) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 265);
+            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 337);
             GS_GL->elements_ke_g8.e[t37] = (GS_GL->elements_ke_g8.e[t37] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 266)), 1, gs_file25, 266);
-            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 266)), 1, gs_file25, 266);
-            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 266)), 1, gs_file25, 266);
-            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 266)), 1, gs_file25, 266);
+            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 338)), 1, gs_file25, 338);
+            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 338)), 1, gs_file25, 338);
+            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 338)), 1, gs_file25, 338);
+            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 338)), 1, gs_file25, 338);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t38])))) * (double)(GS_GL->elements_grad_g8.e[t39])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t40])))) * (double)(GS_GL->elements_grad_g8.e[t41]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 268);
+            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 340);
             GS_GL->elements_ke_g8.e[t42] = (GS_GL->elements_ke_g8.e[t42] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 269)), 1, gs_file25, 269);
-            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 269)), 2, gs_file25, 269);
-            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 269)), 2, gs_file25, 269);
-            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 269)), 1, gs_file25, 269);
+            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 341)), 1, gs_file25, 341);
+            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 341)), 2, gs_file25, 341);
+            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 341)), 2, gs_file25, 341);
+            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 341)), 1, gs_file25, 341);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t43])))) * (double)(GS_GL->elements_grad_g8.e[t44])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t45])))) * (double)(GS_GL->elements_grad_g8.e[t46]))));
-            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 270);
+            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 342);
             GS_GL->elements_ke_g8.e[t47] = (GS_GL->elements_ke_g8.e[t47] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 271)), 2, gs_file25, 271);
-            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 271);
-            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 271);
-            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 271)), 2, gs_file25, 271);
+            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 343)), 2, gs_file25, 343);
+            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 343);
+            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 343);
+            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 343)), 2, gs_file25, 343);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t48])))) * (double)(GS_GL->elements_grad_g8.e[t49])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t50])))) * (double)(GS_GL->elements_grad_g8.e[t51]))));
-            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 272);
+            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 344);
             GS_GL->elements_ke_g8.e[t52] = (GS_GL->elements_ke_g8.e[t52] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 273)), 2, gs_file25, 273);
-            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 273)), 1, gs_file25, 273);
-            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 273)), 1, gs_file25, 273);
-            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 273)), 2, gs_file25, 273);
+            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 345)), 2, gs_file25, 345);
+            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 345)), 1, gs_file25, 345);
+            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 345)), 1, gs_file25, 345);
+            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 345)), 2, gs_file25, 345);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t53])))) * (double)(GS_GL->elements_grad_g8.e[t54])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t55])))) * (double)(GS_GL->elements_grad_g8.e[t56]))));
-            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 274);
+            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 346);
             GS_GL->elements_ke_g8.e[t57] = (GS_GL->elements_ke_g8.e[t57] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 275)), 2, gs_file25, 275);
-            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 275)), 2, gs_file25, 275);
-            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 275)), 2, gs_file25, 275);
-            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 275)), 2, gs_file25, 275);
+            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 347)), 2, gs_file25, 347);
+            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 347)), 2, gs_file25, 347);
+            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 347)), 2, gs_file25, 347);
+            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 347)), 2, gs_file25, 347);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t58])))) * (double)(GS_GL->elements_grad_g8.e[t59])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t60])))) * (double)(GS_GL->elements_grad_g8.e[t61]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 277);
+            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 349);
             GS_GL->elements_ke_g8.e[t62] = (GS_GL->elements_ke_g8.e[t62] + (((double)((double)(v_g)) * (double)(dv_g))));
         }
     }
@@ -26756,9 +27420,9 @@ static void elements_elastic_tet10_1_0_g8(double dv_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str126); t2.len = 47;
+        t2.data = ((uint8_t *)gs_str129); t2.len = 47;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file25, 284);
+        gs_abort_msg(t3.data, t3.len, gs_file25, 356);
     }
     L0:;
     int64_t t4 = 4;
@@ -26768,81 +27432,81 @@ static void elements_elastic_tet10_1_0_g8(double dv_g, int64_t gs_sp) {
         int64_t t9 = 4;
         for (int64_t j_g = t8; j_g < t9; j_g++) {
             double dot_g = 0.0;
-            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 288);
-            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 288);
+            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 360);
+            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 360);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t12])) * (double)(GS_GL->elements_grad_g8.e[t13]))));
-            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 289)), 1, gs_file25, 289);
-            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 289)), 1, gs_file25, 289);
+            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 361)), 1, gs_file25, 361);
+            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 361)), 1, gs_file25, 361);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t14])) * (double)(GS_GL->elements_grad_g8.e[t15]))));
-            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 290)), 2, gs_file25, 290);
-            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 290)), 2, gs_file25, 290);
+            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 362)), 2, gs_file25, 362);
+            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 362)), 2, gs_file25, 362);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t16])) * (double)(GS_GL->elements_grad_g8.e[t17]))));
-            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 291)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 291), gs_file25, 291);
-            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 292);
-            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 292);
-            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 292);
-            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 292);
+            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 363)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 363), gs_file25, 363);
+            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 364);
+            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 364);
+            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 364);
+            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 364);
             double v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t18])))) * (double)(GS_GL->elements_grad_g8.e[t19])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t20])))) * (double)(GS_GL->elements_grad_g8.e[t21]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
             int64_t t22 = row_g;
             GS_GL->elements_ke_g8.e[t22] = (GS_GL->elements_ke_g8.e[t22] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 295);
-            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 295)), 1, gs_file25, 295);
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 295)), 1, gs_file25, 295);
-            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 295);
+            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 367);
+            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 367)), 1, gs_file25, 367);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 367)), 1, gs_file25, 367);
+            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 367);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t23])))) * (double)(GS_GL->elements_grad_g8.e[t24])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t25])))) * (double)(GS_GL->elements_grad_g8.e[t26]))));
-            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 296);
+            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 368);
             GS_GL->elements_ke_g8.e[t27] = (GS_GL->elements_ke_g8.e[t27] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 297);
-            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 297)), 2, gs_file25, 297);
-            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 297)), 2, gs_file25, 297);
-            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 297);
+            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 369);
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 369)), 2, gs_file25, 369);
+            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 369)), 2, gs_file25, 369);
+            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 369);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t28])))) * (double)(GS_GL->elements_grad_g8.e[t29])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t30])))) * (double)(GS_GL->elements_grad_g8.e[t31]))));
-            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 298);
+            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 370);
             GS_GL->elements_ke_g8.e[t32] = (GS_GL->elements_ke_g8.e[t32] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 299)), 1, gs_file25, 299);
-            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 299);
-            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 299);
-            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 299)), 1, gs_file25, 299);
+            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 371)), 1, gs_file25, 371);
+            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 371);
+            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 371);
+            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 371)), 1, gs_file25, 371);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t33])))) * (double)(GS_GL->elements_grad_g8.e[t34])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t35])))) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 300);
+            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 372);
             GS_GL->elements_ke_g8.e[t37] = (GS_GL->elements_ke_g8.e[t37] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 301)), 1, gs_file25, 301);
-            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 301)), 1, gs_file25, 301);
-            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 301)), 1, gs_file25, 301);
-            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 301)), 1, gs_file25, 301);
+            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 373)), 1, gs_file25, 373);
+            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 373)), 1, gs_file25, 373);
+            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 373)), 1, gs_file25, 373);
+            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 373)), 1, gs_file25, 373);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t38])))) * (double)(GS_GL->elements_grad_g8.e[t39])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t40])))) * (double)(GS_GL->elements_grad_g8.e[t41]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 303);
+            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 375);
             GS_GL->elements_ke_g8.e[t42] = (GS_GL->elements_ke_g8.e[t42] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 304)), 1, gs_file25, 304);
-            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 304)), 2, gs_file25, 304);
-            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 304)), 2, gs_file25, 304);
-            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 304)), 1, gs_file25, 304);
+            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 376)), 1, gs_file25, 376);
+            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 376)), 2, gs_file25, 376);
+            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 376)), 2, gs_file25, 376);
+            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 376)), 1, gs_file25, 376);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t43])))) * (double)(GS_GL->elements_grad_g8.e[t44])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t45])))) * (double)(GS_GL->elements_grad_g8.e[t46]))));
-            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 305);
+            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 377);
             GS_GL->elements_ke_g8.e[t47] = (GS_GL->elements_ke_g8.e[t47] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 306)), 2, gs_file25, 306);
-            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 306);
-            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 306);
-            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 306)), 2, gs_file25, 306);
+            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 378)), 2, gs_file25, 378);
+            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 378);
+            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 378);
+            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 378)), 2, gs_file25, 378);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t48])))) * (double)(GS_GL->elements_grad_g8.e[t49])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t50])))) * (double)(GS_GL->elements_grad_g8.e[t51]))));
-            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 307);
+            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 379);
             GS_GL->elements_ke_g8.e[t52] = (GS_GL->elements_ke_g8.e[t52] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 308)), 2, gs_file25, 308);
-            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 308)), 1, gs_file25, 308);
-            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 308)), 1, gs_file25, 308);
-            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 308)), 2, gs_file25, 308);
+            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 380)), 2, gs_file25, 380);
+            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 380)), 1, gs_file25, 380);
+            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 380)), 1, gs_file25, 380);
+            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 380)), 2, gs_file25, 380);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t53])))) * (double)(GS_GL->elements_grad_g8.e[t54])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t55])))) * (double)(GS_GL->elements_grad_g8.e[t56]))));
-            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 309);
+            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 381);
             GS_GL->elements_ke_g8.e[t57] = (GS_GL->elements_ke_g8.e[t57] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 310)), 2, gs_file25, 310);
-            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 310)), 2, gs_file25, 310);
-            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 310)), 2, gs_file25, 310);
-            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 310)), 2, gs_file25, 310);
+            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 382)), 2, gs_file25, 382);
+            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 382)), 2, gs_file25, 382);
+            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 382)), 2, gs_file25, 382);
+            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 382)), 2, gs_file25, 382);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t58])))) * (double)(GS_GL->elements_grad_g8.e[t59])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t60])))) * (double)(GS_GL->elements_grad_g8.e[t61]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 312);
+            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 384);
             GS_GL->elements_ke_g8.e[t62] = (GS_GL->elements_ke_g8.e[t62] + (((double)((double)(v_g)) * (double)(dv_g))));
         }
     }
@@ -26856,9 +27520,9 @@ static void elements_elastic_tet10_1_1_g8(double dv_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str127); t2.len = 47;
+        t2.data = ((uint8_t *)gs_str130); t2.len = 47;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file25, 319);
+        gs_abort_msg(t3.data, t3.len, gs_file25, 391);
     }
     L0:;
     int64_t t4 = 4;
@@ -26868,81 +27532,81 @@ static void elements_elastic_tet10_1_1_g8(double dv_g, int64_t gs_sp) {
         int64_t t9 = 10;
         for (int64_t j_g = t8; j_g < t9; j_g++) {
             double dot_g = 0.0;
-            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 323);
-            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 323);
+            int64_t t12 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 395);
+            int64_t t13 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 395);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t12])) * (double)(GS_GL->elements_grad_g8.e[t13]))));
-            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 324)), 1, gs_file25, 324);
-            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 324)), 1, gs_file25, 324);
+            int64_t t14 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 396)), 1, gs_file25, 396);
+            int64_t t15 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 396)), 1, gs_file25, 396);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t14])) * (double)(GS_GL->elements_grad_g8.e[t15]))));
-            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 325)), 2, gs_file25, 325);
-            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 325)), 2, gs_file25, 325);
+            int64_t t16 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 397)), 2, gs_file25, 397);
+            int64_t t17 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 397)), 2, gs_file25, 397);
             dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t16])) * (double)(GS_GL->elements_grad_g8.e[t17]))));
-            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 326)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 326), gs_file25, 326);
-            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 327);
-            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 327);
-            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 327);
-            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 327);
+            int64_t row_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(90), i_g, gs_file25, 398)), gs_mul_i64((int64_t)(3), j_g, gs_file25, 398), gs_file25, 398);
+            int64_t t18 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 399);
+            int64_t t19 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 399);
+            int64_t t20 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 399);
+            int64_t t21 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 399);
             double v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t18])))) * (double)(GS_GL->elements_grad_g8.e[t19])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t20])))) * (double)(GS_GL->elements_grad_g8.e[t21]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
             int64_t t22 = row_g;
             GS_GL->elements_ke_g8.e[t22] = (GS_GL->elements_ke_g8.e[t22] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 330);
-            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 330)), 1, gs_file25, 330);
-            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 330)), 1, gs_file25, 330);
-            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 330);
+            int64_t t23 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 402);
+            int64_t t24 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 402)), 1, gs_file25, 402);
+            int64_t t25 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 402)), 1, gs_file25, 402);
+            int64_t t26 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 402);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t23])))) * (double)(GS_GL->elements_grad_g8.e[t24])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t25])))) * (double)(GS_GL->elements_grad_g8.e[t26]))));
-            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 331);
+            int64_t t27 = gs_add_i64((int64_t)(row_g), 1, gs_file25, 403);
             GS_GL->elements_ke_g8.e[t27] = (GS_GL->elements_ke_g8.e[t27] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 332);
-            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 332)), 2, gs_file25, 332);
-            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 332)), 2, gs_file25, 332);
-            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 332);
+            int64_t t28 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 404);
+            int64_t t29 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 404)), 2, gs_file25, 404);
+            int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 404)), 2, gs_file25, 404);
+            int64_t t31 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 404);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t28])))) * (double)(GS_GL->elements_grad_g8.e[t29])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t30])))) * (double)(GS_GL->elements_grad_g8.e[t31]))));
-            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 333);
+            int64_t t32 = gs_add_i64((int64_t)(row_g), 2, gs_file25, 405);
             GS_GL->elements_ke_g8.e[t32] = (GS_GL->elements_ke_g8.e[t32] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 334)), 1, gs_file25, 334);
-            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 334);
-            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 334);
-            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 334)), 1, gs_file25, 334);
+            int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 406)), 1, gs_file25, 406);
+            int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 406);
+            int64_t t35 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 406);
+            int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 406)), 1, gs_file25, 406);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t33])))) * (double)(GS_GL->elements_grad_g8.e[t34])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t35])))) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 335);
+            int64_t t37 = gs_add_i64((int64_t)(row_g), 30, gs_file25, 407);
             GS_GL->elements_ke_g8.e[t37] = (GS_GL->elements_ke_g8.e[t37] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 336)), 1, gs_file25, 336);
-            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 336)), 1, gs_file25, 336);
-            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 336)), 1, gs_file25, 336);
-            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 336)), 1, gs_file25, 336);
+            int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 408)), 1, gs_file25, 408);
+            int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 408)), 1, gs_file25, 408);
+            int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 408)), 1, gs_file25, 408);
+            int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 408)), 1, gs_file25, 408);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t38])))) * (double)(GS_GL->elements_grad_g8.e[t39])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t40])))) * (double)(GS_GL->elements_grad_g8.e[t41]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 338);
+            int64_t t42 = gs_add_i64((int64_t)(row_g), 31, gs_file25, 410);
             GS_GL->elements_ke_g8.e[t42] = (GS_GL->elements_ke_g8.e[t42] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 339)), 1, gs_file25, 339);
-            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 339)), 2, gs_file25, 339);
-            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 339)), 2, gs_file25, 339);
-            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 339)), 1, gs_file25, 339);
+            int64_t t43 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 411)), 1, gs_file25, 411);
+            int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 411)), 2, gs_file25, 411);
+            int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 411)), 2, gs_file25, 411);
+            int64_t t46 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 411)), 1, gs_file25, 411);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t43])))) * (double)(GS_GL->elements_grad_g8.e[t44])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t45])))) * (double)(GS_GL->elements_grad_g8.e[t46]))));
-            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 340);
+            int64_t t47 = gs_add_i64((int64_t)(row_g), 32, gs_file25, 412);
             GS_GL->elements_ke_g8.e[t47] = (GS_GL->elements_ke_g8.e[t47] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 341)), 2, gs_file25, 341);
-            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 341);
-            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 341);
-            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 341)), 2, gs_file25, 341);
+            int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 413)), 2, gs_file25, 413);
+            int64_t t49 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 413);
+            int64_t t50 = gs_mul_i64((int64_t)(3), i_g, gs_file25, 413);
+            int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 413)), 2, gs_file25, 413);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t48])))) * (double)(GS_GL->elements_grad_g8.e[t49])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t50])))) * (double)(GS_GL->elements_grad_g8.e[t51]))));
-            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 342);
+            int64_t t52 = gs_add_i64((int64_t)(row_g), 60, gs_file25, 414);
             GS_GL->elements_ke_g8.e[t52] = (GS_GL->elements_ke_g8.e[t52] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 343)), 2, gs_file25, 343);
-            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 343)), 1, gs_file25, 343);
-            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 343)), 1, gs_file25, 343);
-            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 343)), 2, gs_file25, 343);
+            int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 415)), 2, gs_file25, 415);
+            int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 415)), 1, gs_file25, 415);
+            int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 415)), 1, gs_file25, 415);
+            int64_t t56 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 415)), 2, gs_file25, 415);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t53])))) * (double)(GS_GL->elements_grad_g8.e[t54])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t55])))) * (double)(GS_GL->elements_grad_g8.e[t56]))));
-            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 344);
+            int64_t t57 = gs_add_i64((int64_t)(row_g), 61, gs_file25, 416);
             GS_GL->elements_ke_g8.e[t57] = (GS_GL->elements_ke_g8.e[t57] + (((double)((double)(v_g)) * (double)(dv_g))));
-            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 345)), 2, gs_file25, 345);
-            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 345)), 2, gs_file25, 345);
-            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 345)), 2, gs_file25, 345);
-            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 345)), 2, gs_file25, 345);
+            int64_t t58 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 417)), 2, gs_file25, 417);
+            int64_t t59 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 417)), 2, gs_file25, 417);
+            int64_t t60 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file25, 417)), 2, gs_file25, 417);
+            int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 417)), 2, gs_file25, 417);
             v_g = ((double)((double)(((double)((double)(((double)((double)(GS_GL->elements_lame_g8)) * (double)(GS_GL->elements_grad_g8.e[t58])))) * (double)(GS_GL->elements_grad_g8.e[t59])))) + (double)(((double)((double)(((double)((double)(GS_GL->elements_shear_g8)) * (double)(GS_GL->elements_grad_g8.e[t60])))) * (double)(GS_GL->elements_grad_g8.e[t61]))));
             v_g = (v_g + (((double)((double)(GS_GL->elements_shear_g8)) * (double)(dot_g))));
-            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 347);
+            int64_t t62 = gs_add_i64((int64_t)(row_g), 62, gs_file25, 419);
             GS_GL->elements_ke_g8.e[t62] = (GS_GL->elements_ke_g8.e[t62] + (((double)((double)(v_g)) * (double)(dv_g))));
         }
     }
@@ -26969,9 +27633,9 @@ static void elements_heat_tri6_g8(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(1))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str128); t4.len = 63;
+        t4.data = ((uint8_t *)gs_str131); t4.len = 63;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file25, 393);
+        gs_abort_msg(t5.data, t5.len, gs_file25, 466);
     }
     L0:;
     for (int64_t t6 = 0; t6 < (900); t6++) {
@@ -26992,78 +27656,81 @@ static void elements_heat_tri6_g8(int64_t c_g, int64_t gs_sp) {
         double t18 = elements_cell_geometry_g8(c_g, xi_g, gs_sp + 0);
         double t19 = ((double)(t17) * (double)(t18));
         double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
-        int64_t t20 = 6;
-        for (int64_t i_g = 0; i_g < t20; i_g++) {
-            int64_t t23 = i_g;
+        double kq_g;
+        double t20 = elements_conductivity_at_g8(c_g, gs_sp + 0);
+        kq_g = t20;
+        int64_t t21 = 6;
+        for (int64_t i_g = 0; i_g < t21; i_g++) {
             int64_t t24 = i_g;
-            GS_GL->elements_fe_g8.e[t23] = (GS_GL->elements_fe_g8.e[t23] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t24])))) * (double)(dv_g))));
+            int64_t t25 = i_g;
+            GS_GL->elements_fe_g8.e[t24] = (GS_GL->elements_fe_g8.e[t24] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t25])))) * (double)(dv_g))));
         }
-        int64_t t25 = 0;
-        int64_t t26 = 3;
-        for (int64_t i_g_2 = t25; i_g_2 < t26; i_g_2++) {
-            int64_t t29 = 0;
-            int64_t t30 = 3;
-            for (int64_t j_g = t29; j_g < t30; j_g++) {
+        int64_t t26 = 0;
+        int64_t t27 = 3;
+        for (int64_t i_g_2 = t26; i_g_2 < t27; i_g_2++) {
+            int64_t t30 = 0;
+            int64_t t31 = 3;
+            for (int64_t j_g = t30; j_g < t31; j_g++) {
                 double dot_g = 0.0;
-                int64_t t33 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 405);
-                int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 405);
-                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t33])) * (double)(GS_GL->elements_grad_g8.e[t34]))));
-                int64_t t35 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 406)), 1, gs_file25, 406);
-                int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 406)), 1, gs_file25, 406);
-                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t35])) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_2, gs_file25, 407)), j_g, gs_file25, 407);
-                GS_GL->elements_ke_g8.e[t37] = (GS_GL->elements_ke_g8.e[t37] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g)))) * (double)(dv_g))));
+                int64_t t34 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 479);
+                int64_t t35 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 479);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t34])) * (double)(GS_GL->elements_grad_g8.e[t35]))));
+                int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 480)), 1, gs_file25, 480);
+                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 480)), 1, gs_file25, 480);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t36])) * (double)(GS_GL->elements_grad_g8.e[t37]))));
+                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_2, gs_file25, 481)), j_g, gs_file25, 481);
+                GS_GL->elements_ke_g8.e[t38] = (GS_GL->elements_ke_g8.e[t38] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g)))) * (double)(dv_g))));
             }
         }
-        int64_t t38 = 0;
-        int64_t t39 = 3;
-        for (int64_t i_g_3 = t38; i_g_3 < t39; i_g_3++) {
-            int64_t t42 = 3;
-            int64_t t43 = 6;
-            for (int64_t j_g_2 = t42; j_g_2 < t43; j_g_2++) {
+        int64_t t39 = 0;
+        int64_t t40 = 3;
+        for (int64_t i_g_3 = t39; i_g_3 < t40; i_g_3++) {
+            int64_t t43 = 3;
+            int64_t t44 = 6;
+            for (int64_t j_g_2 = t43; j_g_2 < t44; j_g_2++) {
                 double dot_g_2 = 0.0;
-                int64_t t46 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 413);
-                int64_t t47 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 413);
-                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t46])) * (double)(GS_GL->elements_grad_g8.e[t47]))));
-                int64_t t48 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 414)), 1, gs_file25, 414);
-                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 414)), 1, gs_file25, 414);
-                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t48])) * (double)(GS_GL->elements_grad_g8.e[t49]))));
-                int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_3, gs_file25, 415)), j_g_2, gs_file25, 415);
-                GS_GL->elements_ke_g8.e[t50] = (GS_GL->elements_ke_g8.e[t50] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_2)))) * (double)(dv_g))));
+                int64_t t47 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 487);
+                int64_t t48 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 487);
+                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t47])) * (double)(GS_GL->elements_grad_g8.e[t48]))));
+                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 488)), 1, gs_file25, 488);
+                int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 488)), 1, gs_file25, 488);
+                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t49])) * (double)(GS_GL->elements_grad_g8.e[t50]))));
+                int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_3, gs_file25, 489)), j_g_2, gs_file25, 489);
+                GS_GL->elements_ke_g8.e[t51] = (GS_GL->elements_ke_g8.e[t51] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g_2)))) * (double)(dv_g))));
             }
         }
-        int64_t t51 = 3;
-        int64_t t52 = 6;
-        for (int64_t i_g_4 = t51; i_g_4 < t52; i_g_4++) {
-            int64_t t55 = 0;
-            int64_t t56 = 3;
-            for (int64_t j_g_3 = t55; j_g_3 < t56; j_g_3++) {
+        int64_t t52 = 3;
+        int64_t t53 = 6;
+        for (int64_t i_g_4 = t52; i_g_4 < t53; i_g_4++) {
+            int64_t t56 = 0;
+            int64_t t57 = 3;
+            for (int64_t j_g_3 = t56; j_g_3 < t57; j_g_3++) {
                 double dot_g_3 = 0.0;
-                int64_t t59 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 421);
-                int64_t t60 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 421);
-                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t59])) * (double)(GS_GL->elements_grad_g8.e[t60]))));
-                int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 422)), 1, gs_file25, 422);
-                int64_t t62 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 422)), 1, gs_file25, 422);
-                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t61])) * (double)(GS_GL->elements_grad_g8.e[t62]))));
-                int64_t t63 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_4, gs_file25, 423)), j_g_3, gs_file25, 423);
-                GS_GL->elements_ke_g8.e[t63] = (GS_GL->elements_ke_g8.e[t63] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_3)))) * (double)(dv_g))));
+                int64_t t60 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 495);
+                int64_t t61 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 495);
+                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t60])) * (double)(GS_GL->elements_grad_g8.e[t61]))));
+                int64_t t62 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 496)), 1, gs_file25, 496);
+                int64_t t63 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 496)), 1, gs_file25, 496);
+                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t62])) * (double)(GS_GL->elements_grad_g8.e[t63]))));
+                int64_t t64 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_4, gs_file25, 497)), j_g_3, gs_file25, 497);
+                GS_GL->elements_ke_g8.e[t64] = (GS_GL->elements_ke_g8.e[t64] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g_3)))) * (double)(dv_g))));
             }
         }
-        int64_t t64 = 3;
-        int64_t t65 = 6;
-        for (int64_t i_g_5 = t64; i_g_5 < t65; i_g_5++) {
-            int64_t t68 = 3;
-            int64_t t69 = 6;
-            for (int64_t j_g_4 = t68; j_g_4 < t69; j_g_4++) {
+        int64_t t65 = 3;
+        int64_t t66 = 6;
+        for (int64_t i_g_5 = t65; i_g_5 < t66; i_g_5++) {
+            int64_t t69 = 3;
+            int64_t t70 = 6;
+            for (int64_t j_g_4 = t69; j_g_4 < t70; j_g_4++) {
                 double dot_g_4 = 0.0;
-                int64_t t72 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 429);
-                int64_t t73 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 429);
-                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t72])) * (double)(GS_GL->elements_grad_g8.e[t73]))));
-                int64_t t74 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 430)), 1, gs_file25, 430);
-                int64_t t75 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 430)), 1, gs_file25, 430);
-                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t74])) * (double)(GS_GL->elements_grad_g8.e[t75]))));
-                int64_t t76 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_5, gs_file25, 431)), j_g_4, gs_file25, 431);
-                GS_GL->elements_ke_g8.e[t76] = (GS_GL->elements_ke_g8.e[t76] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_4)))) * (double)(dv_g))));
+                int64_t t73 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 503);
+                int64_t t74 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 503);
+                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t73])) * (double)(GS_GL->elements_grad_g8.e[t74]))));
+                int64_t t75 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 504)), 1, gs_file25, 504);
+                int64_t t76 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 504)), 1, gs_file25, 504);
+                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t75])) * (double)(GS_GL->elements_grad_g8.e[t76]))));
+                int64_t t77 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), i_g_5, gs_file25, 505)), j_g_4, gs_file25, 505);
+                GS_GL->elements_ke_g8.e[t77] = (GS_GL->elements_ke_g8.e[t77] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g_4)))) * (double)(dv_g))));
             }
         }
     }
@@ -27090,9 +27757,9 @@ static void elements_heat_tet10_g8(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_ncomp_g8)) == (int64_t)(1))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str129); t4.len = 65;
+        t4.data = ((uint8_t *)gs_str132); t4.len = 65;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file25, 460);
+        gs_abort_msg(t5.data, t5.len, gs_file25, 535);
     }
     L0:;
     for (int64_t t6 = 0; t6 < (900); t6++) {
@@ -27113,90 +27780,93 @@ static void elements_heat_tet10_g8(int64_t c_g, int64_t gs_sp) {
         double t18 = elements_cell_geometry_g8(c_g, xi_g, gs_sp + 0);
         double t19 = ((double)(t17) * (double)(t18));
         double dv_g = ((double)(t19) * (double)(GS_GL->elements_thickness_g8));
-        int64_t t20 = 10;
-        for (int64_t i_g = 0; i_g < t20; i_g++) {
-            int64_t t23 = i_g;
+        double kq_g;
+        double t20 = elements_conductivity_at_g8(c_g, gs_sp + 0);
+        kq_g = t20;
+        int64_t t21 = 10;
+        for (int64_t i_g = 0; i_g < t21; i_g++) {
             int64_t t24 = i_g;
-            GS_GL->elements_fe_g8.e[t23] = (GS_GL->elements_fe_g8.e[t23] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t24])))) * (double)(dv_g))));
+            int64_t t25 = i_g;
+            GS_GL->elements_fe_g8.e[t24] = (GS_GL->elements_fe_g8.e[t24] + (((double)((double)(((double)((double)(0.0)) * (double)(GS_GL->elements_shp_g8.e[t25])))) * (double)(dv_g))));
         }
-        int64_t t25 = 0;
-        int64_t t26 = 4;
-        for (int64_t i_g_2 = t25; i_g_2 < t26; i_g_2++) {
-            int64_t t29 = 0;
-            int64_t t30 = 4;
-            for (int64_t j_g = t29; j_g < t30; j_g++) {
+        int64_t t26 = 0;
+        int64_t t27 = 4;
+        for (int64_t i_g_2 = t26; i_g_2 < t27; i_g_2++) {
+            int64_t t30 = 0;
+            int64_t t31 = 4;
+            for (int64_t j_g = t30; j_g < t31; j_g++) {
                 double dot_g = 0.0;
-                int64_t t33 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 472);
-                int64_t t34 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 472);
-                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t33])) * (double)(GS_GL->elements_grad_g8.e[t34]))));
-                int64_t t35 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 473)), 1, gs_file25, 473);
-                int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 473)), 1, gs_file25, 473);
-                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t35])) * (double)(GS_GL->elements_grad_g8.e[t36]))));
-                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 474)), 2, gs_file25, 474);
-                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 474)), 2, gs_file25, 474);
-                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t37])) * (double)(GS_GL->elements_grad_g8.e[t38]))));
-                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_2, gs_file25, 475)), j_g, gs_file25, 475);
-                GS_GL->elements_ke_g8.e[t39] = (GS_GL->elements_ke_g8.e[t39] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g)))) * (double)(dv_g))));
+                int64_t t34 = gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 548);
+                int64_t t35 = gs_mul_i64((int64_t)(3), j_g, gs_file25, 548);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t34])) * (double)(GS_GL->elements_grad_g8.e[t35]))));
+                int64_t t36 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 549)), 1, gs_file25, 549);
+                int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 549)), 1, gs_file25, 549);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t36])) * (double)(GS_GL->elements_grad_g8.e[t37]))));
+                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_2, gs_file25, 550)), 2, gs_file25, 550);
+                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file25, 550)), 2, gs_file25, 550);
+                dot_g = (dot_g + (((double)((double)(GS_GL->elements_grad_g8.e[t38])) * (double)(GS_GL->elements_grad_g8.e[t39]))));
+                int64_t t40 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_2, gs_file25, 551)), j_g, gs_file25, 551);
+                GS_GL->elements_ke_g8.e[t40] = (GS_GL->elements_ke_g8.e[t40] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g)))) * (double)(dv_g))));
             }
         }
-        int64_t t40 = 0;
-        int64_t t41 = 4;
-        for (int64_t i_g_3 = t40; i_g_3 < t41; i_g_3++) {
-            int64_t t44 = 4;
-            int64_t t45 = 10;
-            for (int64_t j_g_2 = t44; j_g_2 < t45; j_g_2++) {
+        int64_t t41 = 0;
+        int64_t t42 = 4;
+        for (int64_t i_g_3 = t41; i_g_3 < t42; i_g_3++) {
+            int64_t t45 = 4;
+            int64_t t46 = 10;
+            for (int64_t j_g_2 = t45; j_g_2 < t46; j_g_2++) {
                 double dot_g_2 = 0.0;
-                int64_t t48 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 481);
-                int64_t t49 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 481);
-                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t48])) * (double)(GS_GL->elements_grad_g8.e[t49]))));
-                int64_t t50 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 482)), 1, gs_file25, 482);
-                int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 482)), 1, gs_file25, 482);
-                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t50])) * (double)(GS_GL->elements_grad_g8.e[t51]))));
-                int64_t t52 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 483)), 2, gs_file25, 483);
-                int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 483)), 2, gs_file25, 483);
-                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t52])) * (double)(GS_GL->elements_grad_g8.e[t53]))));
-                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_3, gs_file25, 484)), j_g_2, gs_file25, 484);
-                GS_GL->elements_ke_g8.e[t54] = (GS_GL->elements_ke_g8.e[t54] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_2)))) * (double)(dv_g))));
+                int64_t t49 = gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 557);
+                int64_t t50 = gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 557);
+                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t49])) * (double)(GS_GL->elements_grad_g8.e[t50]))));
+                int64_t t51 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 558)), 1, gs_file25, 558);
+                int64_t t52 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 558)), 1, gs_file25, 558);
+                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t51])) * (double)(GS_GL->elements_grad_g8.e[t52]))));
+                int64_t t53 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_3, gs_file25, 559)), 2, gs_file25, 559);
+                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_2, gs_file25, 559)), 2, gs_file25, 559);
+                dot_g_2 = (dot_g_2 + (((double)((double)(GS_GL->elements_grad_g8.e[t53])) * (double)(GS_GL->elements_grad_g8.e[t54]))));
+                int64_t t55 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_3, gs_file25, 560)), j_g_2, gs_file25, 560);
+                GS_GL->elements_ke_g8.e[t55] = (GS_GL->elements_ke_g8.e[t55] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g_2)))) * (double)(dv_g))));
             }
         }
-        int64_t t55 = 4;
-        int64_t t56 = 10;
-        for (int64_t i_g_4 = t55; i_g_4 < t56; i_g_4++) {
-            int64_t t59 = 0;
-            int64_t t60 = 4;
-            for (int64_t j_g_3 = t59; j_g_3 < t60; j_g_3++) {
+        int64_t t56 = 4;
+        int64_t t57 = 10;
+        for (int64_t i_g_4 = t56; i_g_4 < t57; i_g_4++) {
+            int64_t t60 = 0;
+            int64_t t61 = 4;
+            for (int64_t j_g_3 = t60; j_g_3 < t61; j_g_3++) {
                 double dot_g_3 = 0.0;
-                int64_t t63 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 490);
-                int64_t t64 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 490);
-                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t63])) * (double)(GS_GL->elements_grad_g8.e[t64]))));
-                int64_t t65 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 491)), 1, gs_file25, 491);
-                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 491)), 1, gs_file25, 491);
-                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t65])) * (double)(GS_GL->elements_grad_g8.e[t66]))));
-                int64_t t67 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 492)), 2, gs_file25, 492);
-                int64_t t68 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 492)), 2, gs_file25, 492);
-                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t67])) * (double)(GS_GL->elements_grad_g8.e[t68]))));
-                int64_t t69 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_4, gs_file25, 493)), j_g_3, gs_file25, 493);
-                GS_GL->elements_ke_g8.e[t69] = (GS_GL->elements_ke_g8.e[t69] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_3)))) * (double)(dv_g))));
+                int64_t t64 = gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 566);
+                int64_t t65 = gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 566);
+                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t64])) * (double)(GS_GL->elements_grad_g8.e[t65]))));
+                int64_t t66 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 567)), 1, gs_file25, 567);
+                int64_t t67 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 567)), 1, gs_file25, 567);
+                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t66])) * (double)(GS_GL->elements_grad_g8.e[t67]))));
+                int64_t t68 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_4, gs_file25, 568)), 2, gs_file25, 568);
+                int64_t t69 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_3, gs_file25, 568)), 2, gs_file25, 568);
+                dot_g_3 = (dot_g_3 + (((double)((double)(GS_GL->elements_grad_g8.e[t68])) * (double)(GS_GL->elements_grad_g8.e[t69]))));
+                int64_t t70 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_4, gs_file25, 569)), j_g_3, gs_file25, 569);
+                GS_GL->elements_ke_g8.e[t70] = (GS_GL->elements_ke_g8.e[t70] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g_3)))) * (double)(dv_g))));
             }
         }
-        int64_t t70 = 4;
-        int64_t t71 = 10;
-        for (int64_t i_g_5 = t70; i_g_5 < t71; i_g_5++) {
-            int64_t t74 = 4;
-            int64_t t75 = 10;
-            for (int64_t j_g_4 = t74; j_g_4 < t75; j_g_4++) {
+        int64_t t71 = 4;
+        int64_t t72 = 10;
+        for (int64_t i_g_5 = t71; i_g_5 < t72; i_g_5++) {
+            int64_t t75 = 4;
+            int64_t t76 = 10;
+            for (int64_t j_g_4 = t75; j_g_4 < t76; j_g_4++) {
                 double dot_g_4 = 0.0;
-                int64_t t78 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 499);
-                int64_t t79 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 499);
-                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t78])) * (double)(GS_GL->elements_grad_g8.e[t79]))));
-                int64_t t80 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 500)), 1, gs_file25, 500);
-                int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 500)), 1, gs_file25, 500);
-                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t80])) * (double)(GS_GL->elements_grad_g8.e[t81]))));
-                int64_t t82 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 501)), 2, gs_file25, 501);
-                int64_t t83 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 501)), 2, gs_file25, 501);
-                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t82])) * (double)(GS_GL->elements_grad_g8.e[t83]))));
-                int64_t t84 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_5, gs_file25, 502)), j_g_4, gs_file25, 502);
-                GS_GL->elements_ke_g8.e[t84] = (GS_GL->elements_ke_g8.e[t84] + (((double)((double)(((double)((double)(0.0)) * (double)(dot_g_4)))) * (double)(dv_g))));
+                int64_t t79 = gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 575);
+                int64_t t80 = gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 575);
+                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t79])) * (double)(GS_GL->elements_grad_g8.e[t80]))));
+                int64_t t81 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 576)), 1, gs_file25, 576);
+                int64_t t82 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 576)), 1, gs_file25, 576);
+                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t81])) * (double)(GS_GL->elements_grad_g8.e[t82]))));
+                int64_t t83 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g_5, gs_file25, 577)), 2, gs_file25, 577);
+                int64_t t84 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g_4, gs_file25, 577)), 2, gs_file25, 577);
+                dot_g_4 = (dot_g_4 + (((double)((double)(GS_GL->elements_grad_g8.e[t83])) * (double)(GS_GL->elements_grad_g8.e[t84]))));
+                int64_t t85 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(10), i_g_5, gs_file25, 578)), j_g_4, gs_file25, 578);
+                GS_GL->elements_ke_g8.e[t85] = (GS_GL->elements_ke_g8.e[t85] + (((double)((double)(((double)((double)(kq_g)) * (double)(dot_g_4)))) * (double)(dv_g))));
             }
         }
     }
@@ -27792,7 +28462,7 @@ static void elements_rigid_terms_g8(void *u_g_data, int64_t u_g_len, void *out_g
     int64_t m_g = gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), ((GS_GL->elements_rigid_nodes_g8.len)), gs_file2, 456);
     if ((uint8_t)((double)((double)(GS_GL->elements_rigid_k_g8)) == (double)(0.0))) {
         if (!(tangent_g)) {
-            t0.data = ((uint8_t *)gs_str130); t0.len = 59;
+            t0.data = ((uint8_t *)gs_str133); t0.len = 59;
             t1 = t0;
             gs_abort_msg(t1.data, t1.len, gs_file2, 458);
         }
@@ -27811,34 +28481,34 @@ static void elements_rigid_terms_g8(void *u_g_data, int64_t u_g_len, void *out_g
                 int64_t c_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file2, 460)), t_g, gs_file2, 460);
                 {
                     if (!((uint8_t)((int64_t)((int64_t)(r_g)) >= (int64_t)(0)))) goto L16;
-                    if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L16;
+                    if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L16;
                     if (!((uint8_t)((int64_t)((int64_t)(c_g)) >= (int64_t)(0)))) goto L16;
-                    if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L15;
+                    if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L15;
                     L16:;
                     {
-                        t17.data = ((uint8_t *)gs_str111); t17.len = 37;
+                        t17.data = ((uint8_t *)gs_str112); t17.len = 37;
                         t18 = t17;
-                        gs_abort_msg(t18.data, t18.len, gs_file17, 213);
+                        gs_abort_msg(t18.data, t18.len, gs_file17, 257);
                     }
                     L15:;
                     int64_t t19 = r_g;
-                    int64_t lo_g = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t19), (GS_GL->elements_row_start_g8.len), gs_file17, 214)]);
-                    int64_t t20 = gs_add_i64((int64_t)(r_g), 1, gs_file17, 215);
-                    int64_t hi_g = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t20), (GS_GL->elements_row_start_g8.len), gs_file17, 215)])), 1, gs_file17, 215);
+                    int64_t lo_g = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t19), (GS_GL->elements_row_start_g8.len), gs_file17, 258)]);
+                    int64_t t20 = gs_add_i64((int64_t)(r_g), 1, gs_file17, 259);
+                    int64_t hi_g = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t20), (GS_GL->elements_row_start_g8.len), gs_file17, 259)])), 1, gs_file17, 259);
                     for (;;) {
                         if (!((uint8_t)((int64_t)((int64_t)(lo_g)) < (int64_t)(hi_g)))) goto L21;
-                        int64_t t23 = (int64_t)(gs_add_i64((int64_t)(lo_g), hi_g, gs_file17, 217));
-                        int64_t mid_g = gs_div_i64(t23, 2, gs_file17, 217);
+                        int64_t t23 = (int64_t)(gs_add_i64((int64_t)(lo_g), hi_g, gs_file17, 261));
+                        int64_t mid_g = gs_div_i64(t23, 2, gs_file17, 261);
                         int64_t t24 = mid_g;
-                        if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t24), (GS_GL->elements_col_g8.len), gs_file17, 218)]))) < (int64_t)(c_g))) {
-                            lo_g = gs_add_i64((int64_t)(mid_g), 1, gs_file17, 218);
+                        if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t24), (GS_GL->elements_col_g8.len), gs_file17, 262)]))) < (int64_t)(c_g))) {
+                            lo_g = gs_add_i64((int64_t)(mid_g), 1, gs_file17, 262);
                         } else {
                             hi_g = mid_g;
                         }
                     }
                     L21:;
                     int64_t t25 = lo_g;
-                    if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t25), (GS_GL->elements_col_g8.len), gs_file17, 220)]))) == (int64_t)(c_g)))) gs_abort(GS_E_ASSERT, gs_file17, 220);
+                    if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t25), (GS_GL->elements_col_g8.len), gs_file17, 264)]))) == (int64_t)(c_g)))) gs_abort(GS_E_ASSERT, gs_file17, 264);
                     t13 = lo_g;
                     goto L14;
                 }
@@ -27928,34 +28598,34 @@ static void elements_rigid_terms_g8(void *u_g_data, int64_t u_g_len, void *out_g
             int64_t c_g_2 = dk_g;
             {
                 if (!((uint8_t)((int64_t)((int64_t)(r_g_2)) >= (int64_t)(0)))) goto L81;
-                if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L81;
+                if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L81;
                 if (!((uint8_t)((int64_t)((int64_t)(c_g_2)) >= (int64_t)(0)))) goto L81;
-                if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g_2), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L80;
+                if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g_2), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L80;
                 L81:;
                 {
-                    t82.data = ((uint8_t *)gs_str111); t82.len = 37;
+                    t82.data = ((uint8_t *)gs_str112); t82.len = 37;
                     t83 = t82;
-                    gs_abort_msg(t83.data, t83.len, gs_file17, 213);
+                    gs_abort_msg(t83.data, t83.len, gs_file17, 257);
                 }
                 L80:;
                 int64_t t84 = r_g_2;
                 int64_t lo_g_2 = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[t84]);
-                int64_t t85 = gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 215);
-                int64_t hi_g_2 = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[t85])), 1, gs_file17, 215);
+                int64_t t85 = gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 259);
+                int64_t hi_g_2 = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[t85])), 1, gs_file17, 259);
                 for (;;) {
                     if (!((uint8_t)((int64_t)((int64_t)(lo_g_2)) < (int64_t)(hi_g_2)))) goto L86;
-                    int64_t t88 = (int64_t)(gs_add_i64((int64_t)(lo_g_2), hi_g_2, gs_file17, 217));
-                    int64_t mid_g_2 = gs_div_i64(t88, 2, gs_file17, 217);
+                    int64_t t88 = (int64_t)(gs_add_i64((int64_t)(lo_g_2), hi_g_2, gs_file17, 261));
+                    int64_t mid_g_2 = gs_div_i64(t88, 2, gs_file17, 261);
                     int64_t t89 = mid_g_2;
-                    if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t89), (GS_GL->elements_col_g8.len), gs_file17, 218)]))) < (int64_t)(c_g_2))) {
-                        lo_g_2 = gs_add_i64((int64_t)(mid_g_2), 1, gs_file17, 218);
+                    if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t89), (GS_GL->elements_col_g8.len), gs_file17, 262)]))) < (int64_t)(c_g_2))) {
+                        lo_g_2 = gs_add_i64((int64_t)(mid_g_2), 1, gs_file17, 262);
                     } else {
                         hi_g_2 = mid_g_2;
                     }
                 }
                 L86:;
                 int64_t t90 = lo_g_2;
-                if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t90), (GS_GL->elements_col_g8.len), gs_file17, 220)]))) == (int64_t)(c_g_2)))) gs_abort(GS_E_ASSERT, gs_file17, 220);
+                if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t90), (GS_GL->elements_col_g8.len), gs_file17, 264)]))) == (int64_t)(c_g_2)))) gs_abort(GS_E_ASSERT, gs_file17, 264);
                 t78 = lo_g_2;
                 goto L79;
             }
@@ -28065,34 +28735,34 @@ static void elements_contact_terms_g8(void *u_g_data, int64_t u_g_len, void *out
                     int64_t c_g = gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), nj_g, gs_file2, 306);
                     {
                         if (!((uint8_t)((int64_t)((int64_t)(r_g_2)) >= (int64_t)(0)))) goto L51;
-                        if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L51;
+                        if (!((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len)))))) goto L51;
                         if (!((uint8_t)((int64_t)((int64_t)(c_g)) >= (int64_t)(0)))) goto L51;
-                        if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g), 1, gs_file17, 213))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L50;
+                        if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(c_g), 1, gs_file17, 257))) < (int64_t)(((GS_GL->elements_row_start_g8.len))))) goto L50;
                         L51:;
                         {
-                            t52.data = ((uint8_t *)gs_str111); t52.len = 37;
+                            t52.data = ((uint8_t *)gs_str112); t52.len = 37;
                             t53 = t52;
-                            gs_abort_msg(t53.data, t53.len, gs_file17, 213);
+                            gs_abort_msg(t53.data, t53.len, gs_file17, 257);
                         }
                         L50:;
                         int64_t t54 = r_g_2;
-                        int64_t lo_g = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t54), (GS_GL->elements_row_start_g8.len), gs_file17, 214)]);
-                        int64_t t55 = gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 215);
-                        int64_t hi_g = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t55), (GS_GL->elements_row_start_g8.len), gs_file17, 215)])), 1, gs_file17, 215);
+                        int64_t lo_g = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t54), (GS_GL->elements_row_start_g8.len), gs_file17, 258)]);
+                        int64_t t55 = gs_add_i64((int64_t)(r_g_2), 1, gs_file17, 259);
+                        int64_t hi_g = gs_sub_i64((int64_t)((((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t55), (GS_GL->elements_row_start_g8.len), gs_file17, 259)])), 1, gs_file17, 259);
                         for (;;) {
                             if (!((uint8_t)((int64_t)((int64_t)(lo_g)) < (int64_t)(hi_g)))) goto L56;
-                            int64_t t58 = (int64_t)(gs_add_i64((int64_t)(lo_g), hi_g, gs_file17, 217));
-                            int64_t mid_g = gs_div_i64(t58, 2, gs_file17, 217);
+                            int64_t t58 = (int64_t)(gs_add_i64((int64_t)(lo_g), hi_g, gs_file17, 261));
+                            int64_t mid_g = gs_div_i64(t58, 2, gs_file17, 261);
                             int64_t t59 = mid_g;
-                            if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t59), (GS_GL->elements_col_g8.len), gs_file17, 218)]))) < (int64_t)(c_g))) {
-                                lo_g = gs_add_i64((int64_t)(mid_g), 1, gs_file17, 218);
+                            if ((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t59), (GS_GL->elements_col_g8.len), gs_file17, 262)]))) < (int64_t)(c_g))) {
+                                lo_g = gs_add_i64((int64_t)(mid_g), 1, gs_file17, 262);
                             } else {
                                 hi_g = mid_g;
                             }
                         }
                         L56:;
                         int64_t t60 = lo_g;
-                        if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t60), (GS_GL->elements_col_g8.len), gs_file17, 220)]))) == (int64_t)(c_g)))) gs_abort(GS_E_ASSERT, gs_file17, 220);
+                        if (!((uint8_t)((int64_t)((int64_t)((((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t60), (GS_GL->elements_col_g8.len), gs_file17, 264)]))) == (int64_t)(c_g)))) gs_abort(GS_E_ASSERT, gs_file17, 264);
                         e_g = lo_g;
                         goto L49;
                     }
@@ -28426,7 +29096,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         if ((uint8_t)((int64_t)((int64_t)((col_g.len))) == (int64_t)((val_g.len)))) goto L5;
         L6:;
         {
-            t9.data = ((uint8_t *)gs_str131); t9.len = 40;
+            t9.data = ((uint8_t *)gs_str134); t9.len = 40;
             t10 = t9;
             gs_abort_msg(t10.data, t10.len, gs_file22, 127);
         }
@@ -28526,7 +29196,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_col_g8.len)))) == (int64_t)(((GS_GL->elements_val_g8.len))))) goto L47;
         L48:;
         {
-            t49.data = ((uint8_t *)gs_str132); t49.len = 59;
+            t49.data = ((uint8_t *)gs_str135); t49.len = 59;
             t50 = t49;
             gs_abort_msg(t50.data, t50.len, gs_file23, 28);
         }
@@ -28541,14 +29211,14 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         y_g_2 = y_g;
         {
             if ((uint8_t)((int64_t)((int64_t)(((GS_GL->solvers_rows_ids_g7.len)))) == (int64_t)(0))) {
-                solvers_multiply_g7_386(row_start_g_2.data, row_start_g_2.len, col_g_2.data, col_g_2.len, val_g_2.data, val_g_2.len, x_g_2.data, x_g_2.len, y_g_2.data, y_g_2.len);
+                solvers_multiply_g7_399(row_start_g_2.data, row_start_g_2.len, col_g_2.data, col_g_2.len, val_g_2.data, val_g_2.len, x_g_2.data, x_g_2.len, y_g_2.data, y_g_2.len);
                 goto L54;
             }
             if (!((uint8_t)((int64_t)((int64_t)((x_g_2.len))) == (int64_t)((y_g_2.len))))) goto L56;
             if ((uint8_t)((int64_t)((int64_t)((row_start_g_2.len))) == (int64_t)(gs_add_i64((int64_t)((y_g_2.len)), 1, gs_file22, 148)))) goto L55;
             L56:;
             {
-                t57.data = ((uint8_t *)gs_str133); t57.len = 50;
+                t57.data = ((uint8_t *)gs_str136); t57.len = 50;
                 t58 = t57;
                 gs_abort_msg(t58.data, t58.len, gs_file22, 148);
             }
@@ -28619,15 +29289,15 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     int64_t t83 = n_g;
     for (int64_t d_g = 0; d_g < t83; d_g++) {
         int64_t t86 = d_g;
-        if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t86), (GS_GL->elements_fixed_g8.len), gs_file23, 144) * 1))))) == (uint8_t)(0)))) {
+        if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t86), (GS_GL->elements_fixed_g8.len), gs_file23, 154) * 1))))) == (uint8_t)(0)))) {
             goto L85;
         }
         int64_t t87 = d_g;
         int64_t t88 = d_g;
-        double f_g = ((double)((double)((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t87), (GS_GL->elements_load_g8.len), gs_file23, 145)]))) + (double)((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t88), (GS_GL->elements_assembled_source_g8.len), gs_file23, 145)])));
+        double f_g = ((double)((double)((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t87), (GS_GL->elements_load_g8.len), gs_file23, 155)]))) + (double)((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t88), (GS_GL->elements_assembled_source_g8.len), gs_file23, 155)])));
         f2_g = (f2_g + (((double)((double)(f_g)) * (double)(f_g))));
         int64_t t89 = d_g;
-        double *t90 = &((((double *)((r_g.base)))[GS_IDX((int64_t)(t89), (r_g.len), gs_file23, 147)]));
+        double *t90 = &((((double *)((r_g.base)))[GS_IDX((int64_t)(t89), (r_g.len), gs_file23, 157)]));
         int64_t t91 = d_g;
         (*t90) = ((double)((double)(f_g)) - (double)((((double *)((q_g.base)))[t91])));
         L85:;
@@ -28645,7 +29315,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         b_g_3 = t96;
         {
             if (!((uint8_t)((int64_t)((int64_t)((a_g_3.len))) == (int64_t)((b_g_3.len))))) {
-                t98.data = ((uint8_t *)gs_str134); t98.len = 19;
+                t98.data = ((uint8_t *)gs_str137); t98.len = 19;
                 t99 = t98;
                 gs_abort_msg(t99.data, t99.len, gs_file23, 33);
             }
@@ -28778,9 +29448,9 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     int64_t t152 = n_g;
     for (int64_t d_g_3 = 0; d_g_3 < t152; d_g_3++) {
         int64_t t155 = d_g_3;
-        double *t156 = &((((double *)((p_g.base)))[GS_IDX((int64_t)(t155), (p_g.len), gs_file23, 158)]));
+        double *t156 = &((((double *)((p_g.base)))[GS_IDX((int64_t)(t155), (p_g.len), gs_file23, 168)]));
         int64_t t157 = d_g_3;
-        (*t156) = (((double *)((z_g.base)))[GS_IDX((int64_t)(t157), (z_g.len), gs_file23, 158)]);
+        (*t156) = (((double *)((z_g.base)))[GS_IDX((int64_t)(t157), (z_g.len), gs_file23, 168)]);
     }
     double rz_g;
     t158.data = (double *)((r_g.base)); t158.len = (r_g.len);
@@ -28789,7 +29459,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     b_g_5 = t159;
     {
         if (!((uint8_t)((int64_t)((int64_t)((a_g_5.len))) == (int64_t)((b_g_5.len))))) {
-            t161.data = ((uint8_t *)gs_str134); t161.len = 19;
+            t161.data = ((uint8_t *)gs_str137); t161.len = 19;
             t162 = t161;
             gs_abort_msg(t162.data, t162.len, gs_file23, 33);
         }
@@ -28823,7 +29493,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     b_g_6 = t175;
     {
         if (!((uint8_t)((int64_t)((int64_t)((a_g_6.len))) == (int64_t)((b_g_6.len))))) {
-            t177.data = ((uint8_t *)gs_str134); t177.len = 19;
+            t177.data = ((uint8_t *)gs_str137); t177.len = 19;
             t178 = t177;
             gs_abort_msg(t178.data, t178.len, gs_file23, 33);
         }
@@ -28856,7 +29526,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     int64_t it_g = 0;
     for (;;) {
         if (converged_g_2) goto L191;
-        if (!((uint8_t)((int64_t)((int64_t)(it_g)) < (int64_t)(gs_mul_i64((int64_t)(10), n_g, gs_file23, 162))))) goto L191;
+        if (!((uint8_t)((int64_t)((int64_t)(it_g)) < (int64_t)(gs_mul_i64((int64_t)(10), n_g, gs_file23, 172))))) goto L191;
         t193.data = (double *)((p_g.base)); t193.len = (p_g.len);
         x_g_5 = t193;
         t194.data = (double *)((q_g.base)); t194.len = (q_g.len);
@@ -28867,7 +29537,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
             if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_col_g8.len)))) == (int64_t)(((GS_GL->elements_val_g8.len))))) goto L196;
             L197:;
             {
-                t198.data = ((uint8_t *)gs_str132); t198.len = 59;
+                t198.data = ((uint8_t *)gs_str135); t198.len = 59;
                 t199 = t198;
                 gs_abort_msg(t199.data, t199.len, gs_file23, 28);
             }
@@ -28882,14 +29552,14 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
             y_g_4 = y_g_3;
             {
                 if ((uint8_t)((int64_t)((int64_t)(((GS_GL->solvers_rows_ids_g7.len)))) == (int64_t)(0))) {
-                    solvers_multiply_g7_440(row_start_g_3.data, row_start_g_3.len, col_g_3.data, col_g_3.len, val_g_3.data, val_g_3.len, x_g_6.data, x_g_6.len, y_g_4.data, y_g_4.len);
+                    solvers_multiply_g7_453(row_start_g_3.data, row_start_g_3.len, col_g_3.data, col_g_3.len, val_g_3.data, val_g_3.len, x_g_6.data, x_g_6.len, y_g_4.data, y_g_4.len);
                     goto L203;
                 }
                 if (!((uint8_t)((int64_t)((int64_t)((x_g_6.len))) == (int64_t)((y_g_4.len))))) goto L205;
                 if ((uint8_t)((int64_t)((int64_t)((row_start_g_3.len))) == (int64_t)(gs_add_i64((int64_t)((y_g_4.len)), 1, gs_file22, 148)))) goto L204;
                 L205:;
                 {
-                    t206.data = ((uint8_t *)gs_str133); t206.len = 50;
+                    t206.data = ((uint8_t *)gs_str136); t206.len = 50;
                     t207 = t206;
                     gs_abort_msg(t207.data, t207.len, gs_file22, 148);
                 }
@@ -28959,7 +29629,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         int64_t t232 = n_g;
         for (int64_t d_g_4 = 0; d_g_4 < t232; d_g_4++) {
             int64_t t235 = d_g_4;
-            if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t235), (GS_GL->elements_fixed_g8.len), gs_file23, 164) * 1))))) == (uint8_t)(0)))) {
+            if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t235), (GS_GL->elements_fixed_g8.len), gs_file23, 174) * 1))))) == (uint8_t)(0)))) {
                 int64_t t236 = d_g_4;
                 double *t237 = &((((double *)((q_g.base)))[t236]));
                 (*t237) = 0.0;
@@ -28973,7 +29643,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         b_g_7 = t241;
         {
             if (!((uint8_t)((int64_t)((int64_t)((a_g_7.len))) == (int64_t)((b_g_7.len))))) {
-                t243.data = ((uint8_t *)gs_str134); t243.len = 19;
+                t243.data = ((uint8_t *)gs_str137); t243.len = 19;
                 t244 = t243;
                 gs_abort_msg(t244.data, t244.len, gs_file23, 33);
             }
@@ -29004,15 +29674,15 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         int64_t t255 = n_g;
         for (int64_t d_g_5 = 0; d_g_5 < t255; d_g_5++) {
             int64_t t258 = d_g_5;
-            double *t259 = &((((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t258), (GS_GL->elements_sol_g8.len), gs_file23, 167)]));
+            double *t259 = &((((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t258), (GS_GL->elements_sol_g8.len), gs_file23, 177)]));
             int64_t t260 = d_g_5;
             (*t259) = ((*t259) + (((double)((double)(alpha_g)) * (double)((((double *)((p_g.base)))[t260])))));
             int64_t t261 = d_g_5;
-            double *t262 = &((((double *)((r_g.base)))[GS_IDX((int64_t)(t261), (r_g.len), gs_file23, 168)]));
+            double *t262 = &((((double *)((r_g.base)))[GS_IDX((int64_t)(t261), (r_g.len), gs_file23, 178)]));
             int64_t t263 = d_g_5;
             (*t262) = ((*t262) - (((double)((double)(alpha_g)) * (double)((((double *)((q_g.base)))[t263])))));
         }
-        it_g = gs_add_i64(it_g, 1, gs_file23, 170);
+        it_g = gs_add_i64(it_g, 1, gs_file23, 180);
         double t264;
         t265.data = (double *)((r_g.base)); t265.len = (r_g.len);
         a_g_8 = t265;
@@ -29020,7 +29690,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         b_g_8 = t266;
         {
             if (!((uint8_t)((int64_t)((int64_t)((a_g_8.len))) == (int64_t)((b_g_8.len))))) {
-                t268.data = ((uint8_t *)gs_str134); t268.len = 19;
+                t268.data = ((uint8_t *)gs_str137); t268.len = 19;
                 t269 = t268;
                 gs_abort_msg(t269.data, t269.len, gs_file23, 33);
             }
@@ -29077,7 +29747,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
         b_g_9 = t293;
         {
             if (!((uint8_t)((int64_t)((int64_t)((a_g_9.len))) == (int64_t)((b_g_9.len))))) {
-                t295.data = ((uint8_t *)gs_str134); t295.len = 19;
+                t295.data = ((uint8_t *)gs_str137); t295.len = 19;
                 t296 = t295;
                 gs_abort_msg(t296.data, t296.len, gs_file23, 33);
             }
@@ -29112,7 +29782,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
             double *t311 = &((((double *)((p_g.base)))[t310]));
             int64_t t312 = d_g_7;
             int64_t t313 = d_g_7;
-            (*t311) = ((double)((double)((((double *)((z_g.base)))[GS_IDX((int64_t)(t312), (z_g.len), gs_file23, 179)]))) + (double)(((double)((double)(beta_g)) * (double)((((double *)((p_g.base)))[t313])))));
+            (*t311) = ((double)((double)((((double *)((z_g.base)))[GS_IDX((int64_t)(t312), (z_g.len), gs_file23, 189)]))) + (double)(((double)((double)(beta_g)) * (double)((((double *)((p_g.base)))[t313])))));
         }
     }
     L191:;
@@ -29169,9 +29839,9 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     }
     t335 = elements_state_sizes_g8(gs_sp + 4);
     if (!((memcmp(&t335, &sizes_g, 88) == 0))) {
-        t336.data = ((uint8_t *)gs_str135); t336.len = 58;
+        t336.data = ((uint8_t *)gs_str138); t336.len = 58;
         t337 = t336;
-        gs_abort_msg(t337.data, t337.len, gs_file23, 182);
+        gs_abort_msg(t337.data, t337.len, gs_file23, 192);
     }
     GS_GL->elements_last_iterations_g8 = it_g;
     int64_t t338 = gs_os_clock_ns();
@@ -29185,7 +29855,7 @@ static uint8_t elements_cg_solve_g8(double start_g, int64_t key_g, uint8_t warm_
     GS(gs_sp + 1)->top = z_g.base;
     GS(gs_sp + 0)->top = r_g.base;
     return t341;
-    GS_UNREACHABLE(gs_file23, 133);
+    GS_UNREACHABLE(gs_file23, 143);
     uint8_t t342 = {0};
     return t342;
 }
@@ -29195,7 +29865,7 @@ static void elements_zeros_g8(int64_t n_g, gs_stack *gs_dst0, int64_t *gs_rl0, i
     sl_u8 t1;
     gs_rhdr v_g;
     if (!((uint8_t)((int64_t)((int64_t)(n_g)) >= (int64_t)(0)))) {
-        t0.data = ((uint8_t *)gs_str74); t0.len = 13;
+        t0.data = ((uint8_t *)gs_str75); t0.len = 13;
         t1 = t0;
         gs_abort_msg(t1.data, t1.len, gs_file23, 40);
     }
@@ -29284,7 +29954,7 @@ static void solvers_rows_worker_g7(uint8_t *b_g, int64_t gs_sp) {
     int64_t n_g = gs_sub_i64((int64_t)(((int64_t)*(uint32_t *)((b_g + 8)))), 1, gs_file22, 110);
     {
         if (!((uint8_t)((int64_t)((int64_t)(n_g)) >= (int64_t)(0)))) {
-            t1.data = ((uint8_t *)gs_str74); t1.len = 13;
+            t1.data = ((uint8_t *)gs_str75); t1.len = 13;
             t2 = t1;
             gs_abort_msg(t2.data, t2.len, gs_file19, 37);
         }
@@ -29341,7 +30011,7 @@ static void solvers_rows_worker_g7(uint8_t *b_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t23[t22]), t24[0], gs_file19, 17))) == (int64_t)((col_g.len)))) goto L20;
             L21:;
             {
-                t25.data = ((uint8_t *)gs_str136); t25.len = 79;
+                t25.data = ((uint8_t *)gs_str139); t25.len = 79;
                 t26 = t25;
                 gs_abort_msg(t26.data, t26.len, gs_file19, 17);
             }
@@ -29440,7 +30110,7 @@ static void solvers_rows_worker_g7(uint8_t *b_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t79[t78]), t80[0], gs_file19, 17))) == (int64_t)((col_g_2.len)))) goto L76;
             L77:;
             {
-                t81.data = ((uint8_t *)gs_str136); t81.len = 79;
+                t81.data = ((uint8_t *)gs_str139); t81.len = 79;
                 t82 = t81;
                 gs_abort_msg(t82.data, t82.len, gs_file19, 17);
             }
@@ -29513,7 +30183,7 @@ static void solvers_rows_worker_g7(uint8_t *b_g, int64_t gs_sp) {
     return;
 }
 
-static GS_NOINLINE void solvers_multiply_g7_386(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *x_g_data, int64_t x_g_len, void *y_g_data, int64_t y_g_len) {
+static GS_NOINLINE void solvers_multiply_g7_399(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *x_g_data, int64_t x_g_len, void *y_g_data, int64_t y_g_len) {
     sl_i64 row_start_g; row_start_g.data = row_start_g_data; row_start_g.len = row_start_g_len;
     sl_i32 col_g; col_g.data = col_g_data; col_g.len = col_g_len;
     sl_f64 val_g; val_g.data = val_g_data; val_g.len = val_g_len;
@@ -29533,7 +30203,7 @@ static GS_NOINLINE void solvers_multiply_g7_386(void *row_start_g_data, int64_t 
     if ((uint8_t)((int64_t)((int64_t)((x_g.len))) == (int64_t)((y_g.len)))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str137); t2.len = 81;
+        t2.data = ((uint8_t *)gs_str140); t2.len = 81;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file19, 8);
     }
@@ -29552,7 +30222,7 @@ static GS_NOINLINE void solvers_multiply_g7_386(void *row_start_g_data, int64_t 
         if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t8[t7]), t9[0], gs_file19, 17))) == (int64_t)((col_g_2.len)))) goto L5;
         L6:;
         {
-            t10.data = ((uint8_t *)gs_str136); t10.len = 79;
+            t10.data = ((uint8_t *)gs_str139); t10.len = 79;
             t11 = t10;
             gs_abort_msg(t11.data, t11.len, gs_file19, 17);
         }
@@ -29627,9 +30297,9 @@ static double elements_warm_scale_g8(void *r_g_data, int64_t r_g_len, void *z_g_
     int64_t t0 = n_g;
     for (int64_t d_g = 0; d_g < t0; d_g++) {
         int64_t t3 = d_g;
-        if ((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t3), (GS_GL->elements_fixed_g8.len), gs_file23, 106) * 1))))) == (uint8_t)(0))) {
+        if ((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t3), (GS_GL->elements_fixed_g8.len), gs_file23, 116) * 1))))) == (uint8_t)(0))) {
             int64_t t4 = d_g;
-            double *t5 = &((((double *)((w_g.base)))[GS_IDX((int64_t)(t4), (w_g.len), gs_file23, 106)]));
+            double *t5 = &((((double *)((w_g.base)))[GS_IDX((int64_t)(t4), (w_g.len), gs_file23, 116)]));
             int64_t t6 = d_g;
             (*t5) = (((double *)((GS_GL->elements_sol_g8.base)))[t6]);
         }
@@ -29643,7 +30313,7 @@ static double elements_warm_scale_g8(void *r_g_data, int64_t r_g_len, void *z_g_
         if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_col_g8.len)))) == (int64_t)(((GS_GL->elements_val_g8.len))))) goto L9;
         L10:;
         {
-            t11.data = ((uint8_t *)gs_str132); t11.len = 59;
+            t11.data = ((uint8_t *)gs_str135); t11.len = 59;
             t12 = t11;
             gs_abort_msg(t12.data, t12.len, gs_file23, 28);
         }
@@ -29658,14 +30328,14 @@ static double elements_warm_scale_g8(void *r_g_data, int64_t r_g_len, void *z_g_
         y_g_2 = y_g;
         {
             if ((uint8_t)((int64_t)((int64_t)(((GS_GL->solvers_rows_ids_g7.len)))) == (int64_t)(0))) {
-                solvers_multiply_g7_392(row_start_g.data, row_start_g.len, col_g.data, col_g.len, val_g.data, val_g.len, x_g_2.data, x_g_2.len, y_g_2.data, y_g_2.len);
+                solvers_multiply_g7_405(row_start_g.data, row_start_g.len, col_g.data, col_g.len, val_g.data, val_g.len, x_g_2.data, x_g_2.len, y_g_2.data, y_g_2.len);
                 goto L16;
             }
             if (!((uint8_t)((int64_t)((int64_t)((x_g_2.len))) == (int64_t)((y_g_2.len))))) goto L18;
             if ((uint8_t)((int64_t)((int64_t)((row_start_g.len))) == (int64_t)(gs_add_i64((int64_t)((y_g_2.len)), 1, gs_file22, 148)))) goto L17;
             L18:;
             {
-                t19.data = ((uint8_t *)gs_str133); t19.len = 50;
+                t19.data = ((uint8_t *)gs_str136); t19.len = 50;
                 t20 = t19;
                 gs_abort_msg(t20.data, t20.len, gs_file22, 148);
             }
@@ -29738,13 +30408,13 @@ static double elements_warm_scale_g8(void *r_g_data, int64_t r_g_len, void *z_g_
     int64_t t45 = n_g;
     for (int64_t d_g_2 = 0; d_g_2 < t45; d_g_2++) {
         int64_t t48 = d_g_2;
-        if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t48), (GS_GL->elements_fixed_g8.len), gs_file23, 112) * 1))))) == (uint8_t)(0)))) {
+        if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t48), (GS_GL->elements_fixed_g8.len), gs_file23, 122) * 1))))) == (uint8_t)(0)))) {
             goto L47;
         }
         int64_t t49 = d_g_2;
         int64_t t50 = d_g_2;
         double *t51 = r_g.data;
-        wr_g = (wr_g + (((double)((double)((((double *)((w_g.base)))[GS_IDX((int64_t)(t49), (w_g.len), gs_file23, 113)]))) * (double)(t51[GS_IDX((int64_t)(t50), r_g.len, gs_file23, 113)]))));
+        wr_g = (wr_g + (((double)((double)((((double *)((w_g.base)))[GS_IDX((int64_t)(t49), (w_g.len), gs_file23, 123)]))) * (double)(t51[GS_IDX((int64_t)(t50), r_g.len, gs_file23, 123)]))));
         int64_t t52 = d_g_2;
         int64_t t53 = d_g_2;
         double *t54 = z_g.data;
@@ -29769,16 +30439,16 @@ static double elements_warm_scale_g8(void *r_g_data, int64_t r_g_len, void *z_g_
     int64_t t63 = n_g;
     for (int64_t d_g_3 = 0; d_g_3 < t63; d_g_3++) {
         int64_t t66 = d_g_3;
-        if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t66), (GS_GL->elements_fixed_g8.len), gs_file23, 119) * 1))))) == (uint8_t)(0)))) {
+        if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t66), (GS_GL->elements_fixed_g8.len), gs_file23, 129) * 1))))) == (uint8_t)(0)))) {
             goto L65;
         }
         int64_t t67 = d_g_3;
         double *t68 = &((((double *)((GS_GL->elements_sol_g8.base)))[t67]));
         int64_t t69 = d_g_3;
-        (*t68) = ((double)((double)(alpha_g)) * (double)((((double *)((w_g.base)))[GS_IDX((int64_t)(t69), (w_g.len), gs_file23, 120)])));
+        (*t68) = ((double)((double)(alpha_g)) * (double)((((double *)((w_g.base)))[GS_IDX((int64_t)(t69), (w_g.len), gs_file23, 130)])));
         int64_t t70 = d_g_3;
         double *t71 = r_g.data;
-        double *t72 = &(t71[GS_IDX((int64_t)(t70), r_g.len, gs_file23, 121)]);
+        double *t72 = &(t71[GS_IDX((int64_t)(t70), r_g.len, gs_file23, 131)]);
         int64_t t73 = d_g_3;
         double *t74 = z_g.data;
         (*t72) = ((*t72) - (((double)((double)(((double)((double)(alpha_g)) - (double)(1.0)))) * (double)(t74[t73]))));
@@ -29788,12 +30458,12 @@ static double elements_warm_scale_g8(void *r_g_data, int64_t r_g_len, void *z_g_
     t75 = cold_g;
     GS(gs_sp + 0)->top = w_g.base;
     return t75;
-    GS_UNREACHABLE(gs_file23, 103);
+    GS_UNREACHABLE(gs_file23, 113);
     double t76 = {0};
     return t76;
 }
 
-static GS_NOINLINE void solvers_multiply_g7_392(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *x_g_data, int64_t x_g_len, void *y_g_data, int64_t y_g_len) {
+static GS_NOINLINE void solvers_multiply_g7_405(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *x_g_data, int64_t x_g_len, void *y_g_data, int64_t y_g_len) {
     sl_i64 row_start_g; row_start_g.data = row_start_g_data; row_start_g.len = row_start_g_len;
     sl_i32 col_g; col_g.data = col_g_data; col_g.len = col_g_len;
     sl_f64 val_g; val_g.data = val_g_data; val_g.len = val_g_len;
@@ -29813,7 +30483,7 @@ static GS_NOINLINE void solvers_multiply_g7_392(void *row_start_g_data, int64_t 
     if ((uint8_t)((int64_t)((int64_t)((x_g.len))) == (int64_t)((y_g.len)))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str137); t2.len = 81;
+        t2.data = ((uint8_t *)gs_str140); t2.len = 81;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file19, 8);
     }
@@ -29832,7 +30502,7 @@ static GS_NOINLINE void solvers_multiply_g7_392(void *row_start_g_data, int64_t 
         if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t8[t7]), t9[0], gs_file19, 17))) == (int64_t)((col_g_2.len)))) goto L5;
         L6:;
         {
-            t10.data = ((uint8_t *)gs_str136); t10.len = 79;
+            t10.data = ((uint8_t *)gs_str139); t10.len = 79;
             t11 = t10;
             gs_abort_msg(t11.data, t11.len, gs_file19, 17);
         }
@@ -30092,7 +30762,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         {
             dir_g.base = GS(gs_sp + 1)->top; dir_g.len = 0;
             dir_g.len = 0;
-            t27.data = ((uint8_t *)gs_str138); t27.len = 10;
+            t27.data = ((uint8_t *)gs_str141); t27.len = 10;
             t28 = t27;
             t29.hdr = (gs_rhdr *)&dir_g; t29.stk = GS(gs_sp + 1);
             t30 = t29;
@@ -30119,7 +30789,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         sig_g.base = GS(gs_sp + 2)->top; sig_g.len = 0;
         uint8_t ok_g;
         int64_t t33 = key_g_2;
-        t34.data = ((uint8_t *)gs_str139); t34.len = 7;
+        t34.data = ((uint8_t *)gs_str142); t34.len = 7;
         t35.base = GS(gs_sp + 3)->top; t35.len = 0;
         solvers_warm_path_g7(t33, t34.data, t34.len, GS(gs_sp + 3), &t35.len, gs_sp + 4);
         t36.data = (uint8_t *)((t35.base)); t36.len = (t35.len);
@@ -30147,7 +30817,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         n_g.base = GS(gs_sp + 3)->top; n_g.len = 0;
         uint8_t ok_n_g;
         int64_t t41 = key_g_2;
-        t42.data = ((uint8_t *)gs_str140); t42.len = 5;
+        t42.data = ((uint8_t *)gs_str143); t42.len = 5;
         t43.base = GS(gs_sp + 4)->top; t43.len = 0;
         solvers_warm_path_g7(t41, t42.data, t42.len, GS(gs_sp + 4), &t43.len, gs_sp + 5);
         t44.data = (uint8_t *)((t43.base)); t44.len = (t43.len);
@@ -30157,7 +30827,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         rs_g.base = GS(gs_sp + 4)->top; rs_g.len = 0;
         uint8_t ok_rs_g;
         int64_t t46 = key_g_2;
-        t47.data = ((uint8_t *)gs_str141); t47.len = 6;
+        t47.data = ((uint8_t *)gs_str144); t47.len = 6;
         t48.base = GS(gs_sp + 5)->top; t48.len = 0;
         solvers_warm_path_g7(t46, t47.data, t47.len, GS(gs_sp + 5), &t48.len, gs_sp + 6);
         t49.data = (uint8_t *)((t48.base)); t49.len = (t48.len);
@@ -30167,7 +30837,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         cl_g.base = GS(gs_sp + 5)->top; cl_g.len = 0;
         uint8_t ok_col_g;
         int64_t t51 = key_g_2;
-        t52.data = ((uint8_t *)gs_str142); t52.len = 7;
+        t52.data = ((uint8_t *)gs_str145); t52.len = 7;
         t53.base = GS(gs_sp + 6)->top; t53.len = 0;
         solvers_warm_path_g7(t51, t52.data, t52.len, GS(gs_sp + 6), &t53.len, gs_sp + 7);
         t54.data = (uint8_t *)((t53.base)); t54.len = (t53.len);
@@ -30177,7 +30847,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         vl_g.base = GS(gs_sp + 6)->top; vl_g.len = 0;
         uint8_t ok_val_g;
         int64_t t56 = key_g_2;
-        t57.data = ((uint8_t *)gs_str143); t57.len = 7;
+        t57.data = ((uint8_t *)gs_str146); t57.len = 7;
         t58.base = GS(gs_sp + 7)->top; t58.len = 0;
         solvers_warm_path_g7(t56, t57.data, t57.len, GS(gs_sp + 7), &t58.len, gs_sp + 8);
         t59.data = (uint8_t *)((t58.base)); t59.len = (t58.len);
@@ -30187,7 +30857,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         prs_g.base = GS(gs_sp + 7)->top; prs_g.len = 0;
         uint8_t ok_prs_g;
         int64_t t61 = key_g_2;
-        t62.data = ((uint8_t *)gs_str144); t62.len = 7;
+        t62.data = ((uint8_t *)gs_str147); t62.len = 7;
         t63.base = GS(gs_sp + 8)->top; t63.len = 0;
         solvers_warm_path_g7(t61, t62.data, t62.len, GS(gs_sp + 8), &t63.len, gs_sp + 9);
         t64.data = (uint8_t *)((t63.base)); t64.len = (t63.len);
@@ -30197,7 +30867,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         pcol_g.base = GS(gs_sp + 8)->top; pcol_g.len = 0;
         uint8_t ok_pcol_g;
         int64_t t66 = key_g_2;
-        t67.data = ((uint8_t *)gs_str145); t67.len = 8;
+        t67.data = ((uint8_t *)gs_str148); t67.len = 8;
         t68.base = GS(gs_sp + 9)->top; t68.len = 0;
         solvers_warm_path_g7(t66, t67.data, t67.len, GS(gs_sp + 9), &t68.len, gs_sp + 10);
         t69.data = (uint8_t *)((t68.base)); t69.len = (t68.len);
@@ -30207,7 +30877,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         pval_g.base = GS(gs_sp + 9)->top; pval_g.len = 0;
         uint8_t ok_pval_g;
         int64_t t71 = key_g_2;
-        t72.data = ((uint8_t *)gs_str146); t72.len = 8;
+        t72.data = ((uint8_t *)gs_str149); t72.len = 8;
         t73.base = GS(gs_sp + 10)->top; t73.len = 0;
         solvers_warm_path_g7(t71, t72.data, t72.len, GS(gs_sp + 10), &t73.len, gs_sp + 11);
         t74.data = (uint8_t *)((t73.base)); t74.len = (t73.len);
@@ -30217,7 +30887,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
         chol_g.base = GS(gs_sp + 10)->top; chol_g.len = 0;
         uint8_t ok_chol_g;
         int64_t t76 = key_g_2;
-        t77.data = ((uint8_t *)gs_str147); t77.len = 8;
+        t77.data = ((uint8_t *)gs_str150); t77.len = 8;
         t78.base = GS(gs_sp + 11)->top; t78.len = 0;
         solvers_warm_path_g7(t76, t77.data, t77.len, GS(gs_sp + 11), &t78.len, gs_sp + 12);
         t79.data = (uint8_t *)((t78.base)); t79.len = (t78.len);
@@ -30351,7 +31021,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             {
                 dir_g_2.base = GS(gs_sp + 2)->top; dir_g_2.len = 0;
                 dir_g_2.len = 0;
-                t109.data = ((uint8_t *)gs_str138); t109.len = 10;
+                t109.data = ((uint8_t *)gs_str141); t109.len = 10;
                 t110 = t109;
                 t111.hdr = (gs_rhdr *)&dir_g_2; t111.stk = GS(gs_sp + 2);
                 t112 = t111;
@@ -30374,7 +31044,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
                 goto L106;
             }
             if (!((uint8_t)((int64_t)((int64_t)(GS_GL->solvers_amg_levels_g7)) > (int64_t)(0)))) {
-                t115.data = ((uint8_t *)gs_str148); t115.len = 19;
+                t115.data = ((uint8_t *)gs_str151); t115.len = 19;
                 t116 = t115;
                 gs_abort_msg(t116.data, t116.len, gs_file26, 117);
             }
@@ -30397,7 +31067,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             }
             int64_t e_at_g = (((int64_t *)((GS_GL->solvers_amg_e_at_g7.base)))[1]);
             int64_t t121 = key_g_3;
-            t122.data = ((uint8_t *)gs_str140); t122.len = 5;
+            t122.data = ((uint8_t *)gs_str143); t122.len = 5;
             t123.base = GS(gs_sp + 4)->top; t123.len = 0;
             solvers_warm_path_g7(t121, t122.data, t122.len, GS(gs_sp + 4), &t123.len, gs_sp + 5);
             t124.data = (uint8_t *)((t123.base)); t124.len = (t123.len);
@@ -30427,7 +31097,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t136.base;
             GS(gs_sp + 4)->top = t123.base;
             int64_t t142 = key_g_3;
-            t143.data = ((uint8_t *)gs_str141); t143.len = 6;
+            t143.data = ((uint8_t *)gs_str144); t143.len = 6;
             t144.base = GS(gs_sp + 4)->top; t144.len = 0;
             solvers_warm_path_g7(t142, t143.data, t143.len, GS(gs_sp + 4), &t144.len, gs_sp + 5);
             t145.data = (uint8_t *)((t144.base)); t145.len = (t144.len);
@@ -30458,7 +31128,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t157.base;
             GS(gs_sp + 4)->top = t144.base;
             int64_t t163 = key_g_3;
-            t164.data = ((uint8_t *)gs_str142); t164.len = 7;
+            t164.data = ((uint8_t *)gs_str145); t164.len = 7;
             t165.base = GS(gs_sp + 4)->top; t165.len = 0;
             solvers_warm_path_g7(t163, t164.data, t164.len, GS(gs_sp + 4), &t165.len, gs_sp + 5);
             t166.data = (uint8_t *)((t165.base)); t166.len = (t165.len);
@@ -30489,7 +31159,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t178.base;
             GS(gs_sp + 4)->top = t165.base;
             int64_t t184 = key_g_3;
-            t185.data = ((uint8_t *)gs_str143); t185.len = 7;
+            t185.data = ((uint8_t *)gs_str146); t185.len = 7;
             t186.base = GS(gs_sp + 4)->top; t186.len = 0;
             solvers_warm_path_g7(t184, t185.data, t185.len, GS(gs_sp + 4), &t186.len, gs_sp + 5);
             t187.data = (uint8_t *)((t186.base)); t187.len = (t186.len);
@@ -30520,7 +31190,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t199.base;
             GS(gs_sp + 4)->top = t186.base;
             int64_t t205 = key_g_3;
-            t206.data = ((uint8_t *)gs_str144); t206.len = 7;
+            t206.data = ((uint8_t *)gs_str147); t206.len = 7;
             t207.base = GS(gs_sp + 4)->top; t207.len = 0;
             solvers_warm_path_g7(t205, t206.data, t206.len, GS(gs_sp + 4), &t207.len, gs_sp + 5);
             t208.data = (uint8_t *)((t207.base)); t208.len = (t207.len);
@@ -30550,7 +31220,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t220.base;
             GS(gs_sp + 4)->top = t207.base;
             int64_t t226 = key_g_3;
-            t227.data = ((uint8_t *)gs_str145); t227.len = 8;
+            t227.data = ((uint8_t *)gs_str148); t227.len = 8;
             t228.base = GS(gs_sp + 4)->top; t228.len = 0;
             solvers_warm_path_g7(t226, t227.data, t227.len, GS(gs_sp + 4), &t228.len, gs_sp + 5);
             t229.data = (uint8_t *)((t228.base)); t229.len = (t228.len);
@@ -30580,7 +31250,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t241.base;
             GS(gs_sp + 4)->top = t228.base;
             int64_t t247 = key_g_3;
-            t248.data = ((uint8_t *)gs_str146); t248.len = 8;
+            t248.data = ((uint8_t *)gs_str149); t248.len = 8;
             t249.base = GS(gs_sp + 4)->top; t249.len = 0;
             solvers_warm_path_g7(t247, t248.data, t248.len, GS(gs_sp + 4), &t249.len, gs_sp + 5);
             t250.data = (uint8_t *)((t249.base)); t250.len = (t249.len);
@@ -30610,7 +31280,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t262.base;
             GS(gs_sp + 4)->top = t249.base;
             int64_t t268 = key_g_3;
-            t269.data = ((uint8_t *)gs_str147); t269.len = 8;
+            t269.data = ((uint8_t *)gs_str150); t269.len = 8;
             t270.base = GS(gs_sp + 4)->top; t270.len = 0;
             solvers_warm_path_g7(t268, t269.data, t269.len, GS(gs_sp + 4), &t270.len, gs_sp + 5);
             t271.data = (uint8_t *)((t270.base)); t271.len = (t270.len);
@@ -30640,7 +31310,7 @@ static uint8_t elements_setup_preconditioner_g8(int64_t key_g, int64_t gs_sp) {
             t311 = t283.base;
             GS(gs_sp + 4)->top = t270.base;
             int64_t t289 = key_g_3;
-            t290.data = ((uint8_t *)gs_str139); t290.len = 7;
+            t290.data = ((uint8_t *)gs_str142); t290.len = 7;
             t291.base = GS(gs_sp + 4)->top; t291.len = 0;
             solvers_warm_path_g7(t289, t290.data, t290.len, GS(gs_sp + 4), &t291.len, gs_sp + 5);
             t292.data = (uint8_t *)((t291.base)); t292.len = (t291.len);
@@ -30698,7 +31368,7 @@ static void solvers_warm_path_g7(int64_t key_g, void *part_g_data, int64_t part_
     {
         dir_g.base = GS(gs_sp + 0)->top; dir_g.len = 0;
         dir_g.len = 0;
-        t5.data = ((uint8_t *)gs_str138); t5.len = 10;
+        t5.data = ((uint8_t *)gs_str141); t5.len = 10;
         t6 = t5;
         t7.hdr = (gs_rhdr *)&dir_g; t7.stk = GS(gs_sp + 0);
         t8 = t7;
@@ -30721,14 +31391,14 @@ static void solvers_warm_path_g7(int64_t key_g, void *part_g_data, int64_t part_
     t16 += t2;
     t1 += t2;
     int64_t t11 = 1;
-    gs_memcpy(t16, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t11);
+    gs_memcpy(t16, (const uint8_t *)(((uint8_t *)gs_str108)), (size_t)t11);
     t16 += t11;
     t1 += t11;
     int64_t t12 = gs_fmt_i64(t16, (int64_t)(key_g));
     t16 += t12;
     t1 += t12;
     int64_t t13 = 1;
-    gs_memcpy(t16, (const uint8_t *)(((uint8_t *)gs_str149)), (size_t)t13);
+    gs_memcpy(t16, (const uint8_t *)(((uint8_t *)gs_str152)), (size_t)t13);
     t16 += t13;
     t1 += t13;
     t15 = part_g;
@@ -31231,7 +31901,7 @@ static uint8_t solvers_amg_restore_g7(void *row_start_g_data, int64_t row_start_
             if ((uint8_t)((int64_t)((int64_t)(t99[GS_IDX((int64_t)(t98), rs_g_2.len, gs_file27, 77)])) == (int64_t)((col_g_2.len)))) goto L96;
             L97:;
             {
-                t100.data = ((uint8_t *)gs_str150); t100.len = 48;
+                t100.data = ((uint8_t *)gs_str153); t100.len = 48;
                 t101 = t100;
                 gs_abort_msg(t101.data, t101.len, gs_file27, 77);
             }
@@ -31611,7 +32281,7 @@ static void solvers_push_level_g7(int64_t n_g, void *rs_g_data, int64_t rs_g_len
     if ((uint8_t)((int64_t)((int64_t)(t3[GS_IDX((int64_t)(t2), rs_g.len, gs_file27, 77)])) == (int64_t)((col_g.len)))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str150); t4.len = 48;
+        t4.data = ((uint8_t *)gs_str153); t4.len = 48;
         t5 = t4;
         gs_abort_msg(t5.data, t5.len, gs_file27, 77);
     }
@@ -31775,7 +32445,7 @@ static int64_t solvers_near_null_space_g7(int64_t kind_g, void *coords_g_data, i
     if ((uint8_t)((int64_t)((int64_t)(dim_g)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str151); t2.len = 72;
+        t2.data = ((uint8_t *)gs_str154); t2.len = 72;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file28, 61);
     }
@@ -31850,7 +32520,7 @@ static int64_t solvers_near_null_space_g7(int64_t kind_g, void *coords_g_data, i
         if ((uint8_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)((coords_g_2.len)))) % (uint64_t)((int64_t)(3))))) == (int64_t)(0))) goto L31;
         L32:;
         {
-            t33.data = ((uint8_t *)gs_str152); t33.len = 38;
+            t33.data = ((uint8_t *)gs_str155); t33.len = 38;
             t34 = t33;
             gs_abort_msg(t34.data, t34.len, gs_file28, 30);
         }
@@ -32245,7 +32915,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
     if ((uint8_t)((int64_t)((int64_t)((modes_g.len))) == (int64_t)(gs_mul_i64((int64_t)(nb_g), gs_sub_i64((int64_t)((row_start_g.len)), 1, gs_file27, 334), gs_file27, 334)))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str153); t2.len = 79;
+        t2.data = ((uint8_t *)gs_str156); t2.len = 79;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file27, 334);
     }
@@ -32441,7 +33111,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
                         b_g = a_g;
                         {
                             if (!((uint8_t)((int64_t)((int64_t)((a_g_2.len))) == (int64_t)((b_g.len))))) {
-                                t50.data = ((uint8_t *)gs_str154); t50.len = 26;
+                                t50.data = ((uint8_t *)gs_str157); t50.len = 26;
                                 t51 = t50;
                                 gs_abort_msg(t51.data, t51.len, gs_file19, 27);
                             }
@@ -32534,7 +33204,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
                         if ((uint8_t)((int64_t)((int64_t)((x_g_2.len))) == (int64_t)((y_g_2.len)))) goto L92;
                         L93:;
                         {
-                            t94.data = ((uint8_t *)gs_str137); t94.len = 81;
+                            t94.data = ((uint8_t *)gs_str140); t94.len = 81;
                             t95 = t94;
                             gs_abort_msg(t95.data, t95.len, gs_file19, 8);
                         }
@@ -32553,7 +33223,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
                             if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t100[t99]), t101[0], gs_file19, 17))) == (int64_t)((col_g_3.len)))) goto L97;
                             L98:;
                             {
-                                t102.data = ((uint8_t *)gs_str136); t102.len = 79;
+                                t102.data = ((uint8_t *)gs_str139); t102.len = 79;
                                 t103 = t102;
                                 gs_abort_msg(t103.data, t103.len, gs_file19, 17);
                             }
@@ -32614,7 +33284,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
                     b_g_2 = t143;
                     {
                         if (!((uint8_t)((int64_t)((int64_t)((a_g_3.len))) == (int64_t)((b_g_2.len))))) {
-                            t145.data = ((uint8_t *)gs_str154); t145.len = 26;
+                            t145.data = ((uint8_t *)gs_str157); t145.len = 26;
                             t146 = t145;
                             gs_abort_msg(t146.data, t146.len, gs_file19, 27);
                         }
@@ -32659,7 +33329,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
                     b_g_4 = a_g_5;
                     {
                         if (!((uint8_t)((int64_t)((int64_t)((a_g_6.len))) == (int64_t)((b_g_4.len))))) {
-                            t167.data = ((uint8_t *)gs_str154); t167.len = 26;
+                            t167.data = ((uint8_t *)gs_str157); t167.len = 26;
                             t168 = t167;
                             gs_abort_msg(t168.data, t168.len, gs_file19, 27);
                         }
@@ -32759,7 +33429,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
                 if ((uint8_t)((int64_t)((int64_t)(nb_g_2)) >= (int64_t)(0))) goto L205;
                 L206:;
                 {
-                    t207.data = ((uint8_t *)gs_str155); t207.len = 22;
+                    t207.data = ((uint8_t *)gs_str158); t207.len = 22;
                     t208 = t207;
                     gs_abort_msg(t208.data, t208.len, gs_file27, 218);
                 }
@@ -32953,7 +33623,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
             if ((uint8_t)((int64_t)((int64_t)(nb_g_3)) >= (int64_t)(0))) goto L331;
             L332:;
             {
-                t333.data = ((uint8_t *)gs_str155); t333.len = 22;
+                t333.data = ((uint8_t *)gs_str158); t333.len = 22;
                 t334 = t333;
                 gs_abort_msg(t334.data, t334.len, gs_file27, 218);
             }
@@ -33053,7 +33723,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
             if ((uint8_t)((int64_t)((int64_t)((col_g_4.len))) == (int64_t)((val_g_4.len)))) goto L389;
             L390:;
             {
-                t391.data = ((uint8_t *)gs_str156); t391.len = 23;
+                t391.data = ((uint8_t *)gs_str159); t391.len = 23;
                 t392 = t391;
                 gs_abort_msg(t392.data, t392.len, gs_file27, 246);
             }
@@ -33164,7 +33834,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
             if ((uint8_t)((int64_t)((int64_t)(nb_g_4)) >= (int64_t)(0))) goto L459;
             L460:;
             {
-                t461.data = ((uint8_t *)gs_str155); t461.len = 22;
+                t461.data = ((uint8_t *)gs_str158); t461.len = 22;
                 t462 = t461;
                 gs_abort_msg(t462.data, t462.len, gs_file27, 218);
             }
@@ -33299,7 +33969,7 @@ static uint8_t solvers_amg_setup_modes_g7(void *row_start_g_data, int64_t row_st
             if ((uint8_t)((int64_t)((int64_t)(t532[t531])) == (int64_t)((col_g_5.len)))) goto L529;
             L530:;
             {
-                t533.data = ((uint8_t *)gs_str150); t533.len = 48;
+                t533.data = ((uint8_t *)gs_str153); t533.len = 48;
                 t534 = t533;
                 gs_abort_msg(t534.data, t534.len, gs_file27, 77);
             }
@@ -34408,7 +35078,7 @@ static void solvers_amg_apply_g7(void *r_g_data, int64_t r_g_len, void *z_g_data
     if ((uint8_t)((int64_t)((int64_t)((z_g.len))) == (int64_t)((r_g.len)))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str157); t2.len = 59;
+        t2.data = ((uint8_t *)gs_str160); t2.len = 59;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file27, 506);
     }
@@ -34491,7 +35161,7 @@ static void solvers_amg_apply_g7(void *r_g_data, int64_t r_g_len, void *z_g_data
             if ((uint8_t)((int64_t)((int64_t)((x_g.len))) == (int64_t)((y_g.len)))) goto L50;
             L51:;
             {
-                t52.data = ((uint8_t *)gs_str137); t52.len = 81;
+                t52.data = ((uint8_t *)gs_str140); t52.len = 81;
                 t53 = t52;
                 gs_abort_msg(t53.data, t53.len, gs_file19, 8);
             }
@@ -34510,7 +35180,7 @@ static void solvers_amg_apply_g7(void *r_g_data, int64_t r_g_len, void *z_g_data
                 if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t58[t57]), t59[0], gs_file19, 17))) == (int64_t)((col_g_2.len)))) goto L55;
                 L56:;
                 {
-                    t60.data = ((uint8_t *)gs_str136); t60.len = 79;
+                    t60.data = ((uint8_t *)gs_str139); t60.len = 79;
                     t61 = t60;
                     gs_abort_msg(t61.data, t61.len, gs_file19, 17);
                 }
@@ -34828,7 +35498,7 @@ static void solvers_sweep_g7(int64_t l_g, uint8_t forward_g, int64_t gs_sp) {
     return;
 }
 
-static GS_NOINLINE void solvers_multiply_g7_440(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *x_g_data, int64_t x_g_len, void *y_g_data, int64_t y_g_len) {
+static GS_NOINLINE void solvers_multiply_g7_453(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *x_g_data, int64_t x_g_len, void *y_g_data, int64_t y_g_len) {
     sl_i64 row_start_g; row_start_g.data = row_start_g_data; row_start_g.len = row_start_g_len;
     sl_i32 col_g; col_g.data = col_g_data; col_g.len = col_g_len;
     sl_f64 val_g; val_g.data = val_g_data; val_g.len = val_g_len;
@@ -34848,7 +35518,7 @@ static GS_NOINLINE void solvers_multiply_g7_440(void *row_start_g_data, int64_t 
     if ((uint8_t)((int64_t)((int64_t)((x_g.len))) == (int64_t)((y_g.len)))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str137); t2.len = 81;
+        t2.data = ((uint8_t *)gs_str140); t2.len = 81;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file19, 8);
     }
@@ -34867,7 +35537,7 @@ static GS_NOINLINE void solvers_multiply_g7_440(void *row_start_g_data, int64_t 
         if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)(t8[t7]), t9[0], gs_file19, 17))) == (int64_t)((col_g_2.len)))) goto L5;
         L6:;
         {
-            t10.data = ((uint8_t *)gs_str136); t10.len = 79;
+            t10.data = ((uint8_t *)gs_str139); t10.len = 79;
             t11 = t10;
             gs_abort_msg(t11.data, t11.len, gs_file19, 17);
         }
@@ -34926,7 +35596,7 @@ static void nonlinear_g(void *step_g_data, int64_t step_g_len, uint8_t done_g, i
     uint8_t *t20 = (&GS_GL->gs_gstk_solves_g)->top;
     GS_GL->converged_g = done_g;
     int64_t t0 = 2;
-    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str158)), (size_t)t0);
+    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str161)), (size_t)t0);
     t20 += t0;
     GS_GL->solves_g.len += t0;
     t2 = step_g;
@@ -34935,7 +35605,7 @@ static void nonlinear_g(void *step_g_data, int64_t step_g_len, uint8_t done_g, i
     t20 += t1;
     GS_GL->solves_g.len += t1;
     int64_t t3 = 1;
-    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str159)), (size_t)t3);
+    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str162)), (size_t)t3);
     t20 += t3;
     GS_GL->solves_g.len += t3;
     int64_t t5;
@@ -34948,7 +35618,7 @@ static void nonlinear_g(void *step_g_data, int64_t step_g_len, uint8_t done_g, i
     t20 += t4;
     GS_GL->solves_g.len += t4;
     int64_t t6 = 1;
-    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str159)), (size_t)t6);
+    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str162)), (size_t)t6);
     t20 += t6;
     GS_GL->solves_g.len += t6;
     int64_t t8 = elements_dof_total_g8(gs_sp + 0);
@@ -34956,28 +35626,28 @@ static void nonlinear_g(void *step_g_data, int64_t step_g_len, uint8_t done_g, i
     t20 += t7;
     GS_GL->solves_g.len += t7;
     int64_t t9 = 1;
-    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str159)), (size_t)t9);
+    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str162)), (size_t)t9);
     t20 += t9;
     GS_GL->solves_g.len += t9;
     int64_t t10 = gs_fmt_i64(t20, (int64_t)(GS_GL->elements_last_iterations_g8));
     t20 += t10;
     GS_GL->solves_g.len += t10;
     int64_t t11 = 1;
-    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str159)), (size_t)t11);
+    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str162)), (size_t)t11);
     t20 += t11;
     GS_GL->solves_g.len += t11;
     int64_t t12 = gs_fmt_f64(t20, (double)(GS_GL->elements_last_seconds_g8));
     t20 += t12;
     GS_GL->solves_g.len += t12;
     int64_t t13 = 1;
-    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str159)), (size_t)t13);
+    gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str162)), (size_t)t13);
     t20 += t13;
     GS_GL->solves_g.len += t13;
     if (GS_GL->converged_g) {
-        t16.data = ((uint8_t *)gs_str160); t16.len = 3;
+        t16.data = ((uint8_t *)gs_str163); t16.len = 3;
         t15 = t16;
     } else {
-        t17.data = ((uint8_t *)gs_str161); t17.len = 2;
+        t17.data = ((uint8_t *)gs_str164); t17.len = 2;
         t15 = t17;
     }
     t18 = t15;
@@ -34989,7 +35659,7 @@ static void nonlinear_g(void *step_g_data, int64_t step_g_len, uint8_t done_g, i
     gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t19);
     t20 += t19;
     GS_GL->solves_g.len += t19;
-    GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file29, 182);
+    GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file29, 201);
     if ((uint8_t)(!GS_GL->converged_g)) {
         GS_GL->failed_g = 1;
     }
@@ -35093,7 +35763,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
         int64_t t2 = ((GS_GL->elements_sol_g8.len));
         int64_t t3 = elements_dof_total_g8(gs_sp + 0);
         if (!((uint8_t)((int64_t)(t2) == (int64_t)(t3)))) {
-            t4.data = ((uint8_t *)gs_str162); t4.len = 34;
+            t4.data = ((uint8_t *)gs_str165); t4.len = 34;
             t5 = t4;
             gs_abort_msg(t5.data, t5.len, gs_file30, 40);
         }
@@ -35128,7 +35798,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
         t168 += t10;
         t9 += t10;
         int64_t t12 = 12;
-        gs_memcpy(t168, (const uint8_t *)(((uint8_t *)gs_str163)), (size_t)t12);
+        gs_memcpy(t168, (const uint8_t *)(((uint8_t *)gs_str166)), (size_t)t12);
         t168 += t12;
         t9 += t12;
         t7.len = t9;
@@ -35147,7 +35817,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
             t169 += t19;
             t18 += t19;
             int64_t t21 = 1;
-            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t21);
+            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str108)), (size_t)t21);
             t169 += t21;
             t18 += t21;
             t23 = name_g;
@@ -35158,7 +35828,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
             t16.len = t18;
             t24.data = (uint8_t *)((t16.base)); t24.len = (t16.len);
             t25 = t24;
-            if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 301);
+            if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 322);
             t26 = a_g;
             const uint8_t *t27 = (const uint8_t *)(t26.data);
             int64_t t28 = (t26.len) * 8;
@@ -35196,7 +35866,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
             t169 += t42;
             t41 += t42;
             int64_t t44 = 10;
-            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str164)), (size_t)t44);
+            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str167)), (size_t)t44);
             t169 += t44;
             t41 += t44;
             t39.len = t41;
@@ -35216,7 +35886,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t171 += t51;
                 t50 += t51;
                 int64_t t53 = 1;
-                gs_memcpy(t171, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t53);
+                gs_memcpy(t171, (const uint8_t *)(((uint8_t *)gs_str108)), (size_t)t53);
                 t171 += t53;
                 t50 += t53;
                 t55 = name_g_2;
@@ -35227,7 +35897,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t48.len = t50;
                 t56.data = (uint8_t *)((t48.base)); t56.len = (t48.len);
                 t57 = t56;
-                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 301);
+                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 322);
                 t58 = a_g_2;
                 const uint8_t *t59 = (const uint8_t *)(t58.data);
                 int64_t t60 = (t58.len) * 8;
@@ -35270,7 +35940,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
             t169 += t74;
             t73 += t74;
             int64_t t76 = 13;
-            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str165)), (size_t)t76);
+            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str168)), (size_t)t76);
             t169 += t76;
             t73 += t76;
             t71.len = t73;
@@ -35290,7 +35960,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t173 += t83;
                 t82 += t83;
                 int64_t t85 = 1;
-                gs_memcpy(t173, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t85);
+                gs_memcpy(t173, (const uint8_t *)(((uint8_t *)gs_str108)), (size_t)t85);
                 t173 += t85;
                 t82 += t85;
                 t87 = name_g_3;
@@ -35301,7 +35971,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t80.len = t82;
                 t88.data = (uint8_t *)((t80.base)); t88.len = (t80.len);
                 t89 = t88;
-                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 301);
+                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 322);
                 t90 = a_g_3;
                 const uint8_t *t91 = (const uint8_t *)(t90.data);
                 int64_t t92 = (t90.len) * 8;
@@ -35344,7 +36014,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
             t169 += t106;
             t105 += t106;
             int64_t t108 = 11;
-            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str166)), (size_t)t108);
+            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str169)), (size_t)t108);
             t169 += t108;
             t105 += t108;
             t103.len = t105;
@@ -35364,7 +36034,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t175 += t115;
                 t114 += t115;
                 int64_t t117 = 1;
-                gs_memcpy(t175, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t117);
+                gs_memcpy(t175, (const uint8_t *)(((uint8_t *)gs_str108)), (size_t)t117);
                 t175 += t117;
                 t114 += t117;
                 t119 = name_g_4;
@@ -35375,7 +36045,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t112.len = t114;
                 t120.data = (uint8_t *)((t112.base)); t120.len = (t112.len);
                 t121 = t120;
-                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 301);
+                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 322);
                 t122 = a_g_4;
                 const uint8_t *t123 = (const uint8_t *)(t122.data);
                 int64_t t124 = (t122.len) * 8;
@@ -35418,7 +36088,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
             t169 += t138;
             t137 += t138;
             int64_t t140 = 10;
-            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str167)), (size_t)t140);
+            gs_memcpy(t169, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t140);
             t169 += t140;
             t137 += t140;
             t135.len = t137;
@@ -35438,7 +36108,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t177 += t147;
                 t146 += t147;
                 int64_t t149 = 1;
-                gs_memcpy(t177, (const uint8_t *)(((uint8_t *)gs_str107)), (size_t)t149);
+                gs_memcpy(t177, (const uint8_t *)(((uint8_t *)gs_str108)), (size_t)t149);
                 t177 += t149;
                 t146 += t149;
                 t151 = name_g_5;
@@ -35449,7 +36119,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
                 t144.len = t146;
                 t152.data = (uint8_t *)((t144.base)); t152.len = (t144.len);
                 t153 = t152;
-                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 301);
+                if (!gs_is_le()) gs_abort(GS_E_ENDIAN, gs_file16, 322);
                 t154 = a_g_5;
                 const uint8_t *t155 = (const uint8_t *)(t154.data);
                 int64_t t156 = (t154.len) * 8;
@@ -35497,7 +36167,7 @@ static uint8_t elements_write_state_g8(void *dir_g_data, int64_t dir_g_len, void
     }
     L1:;
     return t0;
-    GS_UNREACHABLE(gs_file7, 128);
+    GS_UNREACHABLE(gs_file7, 136);
     uint8_t t165 = {0};
     return t165;
 }
@@ -35544,9 +36214,9 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
     {
         uint8_t t7 = elements_dofs_sized_g8(gs_sp + 0);
         if (!(t7)) {
-            t8.data = ((uint8_t *)gs_str168); t8.len = 38;
+            t8.data = ((uint8_t *)gs_str171); t8.len = 38;
             t9 = t8;
-            gs_abort_msg(t9.data, t9.len, gs_file17, 698);
+            gs_abort_msg(t9.data, t9.len, gs_file17, 936);
         }
         double sum_g = 0.0;
         int64_t t10 = (GS_GL->elements_load_g8.len);
@@ -35635,7 +36305,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
         int64_t t38 = ((GS_GL->elements_sol_g8.len));
         for (int64_t d_g = 0; d_g < t38; d_g++) {
             int64_t t41 = d_g;
-            if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t41), (GS_GL->elements_fixed_g8.len), gs_file17, 705) * 1))))) == (uint8_t)(1)))) {
+            if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t41), (GS_GL->elements_fixed_g8.len), gs_file17, 943) * 1))))) == (uint8_t)(1)))) {
                 goto L40;
             }
             double ku_g;
@@ -35647,7 +36317,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
             double t44;
             int64_t t45 = d_g;
             int64_t t46 = d_g;
-            double x_g_5 = ((double)((double)(((double)((double)(ku_g)) - (double)((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t45), (GS_GL->elements_load_g8.len), gs_file17, 708)]))))) - (double)((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t46), (GS_GL->elements_assembled_source_g8.len), gs_file17, 708)])));
+            double x_g_5 = ((double)((double)(((double)((double)(ku_g)) - (double)((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t45), (GS_GL->elements_load_g8.len), gs_file17, 946)]))))) - (double)((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t46), (GS_GL->elements_assembled_source_g8.len), gs_file17, 946)])));
             {
                 if ((uint8_t)((double)((double)(x_g_5)) < (double)(0.0))) {
                     t44 = (-x_g_5);
@@ -35675,7 +36345,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
     }
     L6:;
     double limit_g = ((double)(t4) * (double)(t5));
-    t49.data = ((uint8_t *)gs_str169); t49.len = 11;
+    t49.data = ((uint8_t *)gs_str172); t49.len = 11;
     id_g = t49;
     uint8_t pass_g = (uint8_t)((double)((double)(r_g)) <= (double)(limit_g));
     t50.base = GS(gs_sp + 0)->top; t50.len = 0;
@@ -35689,7 +36359,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
         t86 += t54;
         t53 += t54;
         int64_t t55 = 1;
-        gs_memcpy(t86, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t55);
+        gs_memcpy(t86, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t55);
         t86 += t55;
         t53 += t55;
         t57 = unit_g_2;
@@ -35713,7 +36383,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
         t87 += t63;
         t62 += t63;
         int64_t t64 = 1;
-        gs_memcpy(t87, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t64);
+        gs_memcpy(t87, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t64);
         t87 += t64;
         t62 += t64;
         t66 = unit_g_3;
@@ -35729,18 +36399,18 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
     {
         uint8_t *t88 = (&GS_GL->gs_gstk_checks_g)->top;
         int64_t t69 = 7;
-        gs_memcpy(t88, ((uint8_t *)gs_str171), (size_t)((t69) * 1));
+        gs_memcpy(t88, ((uint8_t *)gs_str174), (size_t)((t69) * 1));
         t88 += (t69) * 1;
         GS_GL->checks_g.len += t69;
         t70.hdr = (gs_rhdr *)&GS_GL->checks_g; t70.stk = (&GS_GL->gs_gstk_checks_g);
         (&GS_GL->gs_gstk_checks_g)->top = t88;
-        toon_g_470(t70.hdr, t70.stk, id_g.data, id_g.len);
+        toon_g_483(t70.hdr, t70.stk, id_g.data, id_g.len);
         t88 = (&GS_GL->gs_gstk_checks_g)->top;
         if (pass_g) {
-            t72.data = ((uint8_t *)gs_str172); t72.len = 6;
+            t72.data = ((uint8_t *)gs_str175); t72.len = 6;
             t71 = t72;
         } else {
-            t73.data = ((uint8_t *)gs_str173); t73.len = 6;
+            t73.data = ((uint8_t *)gs_str176); t73.len = 6;
             t71 = t73;
         }
         t74 = t71;
@@ -35750,7 +36420,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
         GS_GL->checks_g.len += t75;
         t76.hdr = (gs_rhdr *)&GS_GL->checks_g; t76.stk = (&GS_GL->gs_gstk_checks_g);
         (&GS_GL->gs_gstk_checks_g)->top = t88;
-        toon_g_471(t76.hdr, t76.stk, value_g.data, value_g.len);
+        toon_g_484(t76.hdr, t76.stk, value_g.data, value_g.len);
         t88 = (&GS_GL->gs_gstk_checks_g)->top;
         uint8_t t77 = 44;
         uint8_t *t78 = (uint8_t *)t88;
@@ -35759,7 +36429,7 @@ static void equilibrium_g(void *unit_g_data, int64_t unit_g_len, int64_t gs_sp) 
         GS_GL->checks_g.len++;
         t79.hdr = (gs_rhdr *)&GS_GL->checks_g; t79.stk = (&GS_GL->gs_gstk_checks_g);
         (&GS_GL->gs_gstk_checks_g)->top = t88;
-        toon_g_471(t79.hdr, t79.stk, limit_g_2.data, limit_g_2.len);
+        toon_g_484(t79.hdr, t79.stk, limit_g_2.data, limit_g_2.len);
         t88 = (&GS_GL->gs_gstk_checks_g)->top;
         uint8_t t80 = 10;
         uint8_t *t81 = (uint8_t *)t88;
@@ -35790,9 +36460,9 @@ static GS_INLINE double elements_total_reaction_g8(double *gs_r1, double *gs_r2,
         if (t3) goto L1;
         L2:;
         {
-            t4.data = ((uint8_t *)gs_str174); t4.len = 50;
+            t4.data = ((uint8_t *)gs_str177); t4.len = 50;
             t5 = t4;
-            gs_abort_msg(t5.data, t5.len, gs_file17, 680);
+            gs_abort_msg(t5.data, t5.len, gs_file17, 918);
         }
         L1:;
         t6.e[0] = 0.0;
@@ -35806,7 +36476,7 @@ static GS_INLINE double elements_total_reaction_g8(double *gs_r1, double *gs_r2,
         int64_t t7 = ((GS_GL->elements_sol_g8.len));
         for (int64_t d_g = 0; d_g < t7; d_g++) {
             int64_t t10 = d_g;
-            if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t10), (GS_GL->elements_fixed_g8.len), gs_file17, 684) * 1))))) == (uint8_t)(1)))) {
+            if ((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_fixed_g8.base) + GS_IDX((int64_t)(t10), (GS_GL->elements_fixed_g8.len), gs_file17, 922) * 1))))) == (uint8_t)(1)))) {
                 goto L9;
             }
             double ku_g;
@@ -35816,10 +36486,10 @@ static GS_INLINE double elements_total_reaction_g8(double *gs_r1, double *gs_r2,
             int64_t t12 = (int64_t)(d_g);
             int64_t t13 = GS_GL->elements_ncomp_g8;
             int64_t t14;
-            int64_t t15 = gs_mod_i64(t14, t12, t13, gs_file17, 686);
+            int64_t t15 = gs_mod_i64(t14, t12, t13, gs_file17, 924);
             int64_t t16 = d_g;
             int64_t t17 = d_g;
-            sum_g.e[t15] = (sum_g.e[t15] + (((double)((double)(((double)((double)(ku_g)) - (double)((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t16), (GS_GL->elements_load_g8.len), gs_file17, 686)]))))) - (double)((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t17), (GS_GL->elements_assembled_source_g8.len), gs_file17, 686)])))));
+            sum_g.e[t15] = (sum_g.e[t15] + (((double)((double)(((double)((double)(ku_g)) - (double)((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t16), (GS_GL->elements_load_g8.len), gs_file17, 924)]))))) - (double)((((double *)((GS_GL->elements_assembled_source_g8.base)))[GS_IDX((int64_t)(t17), (GS_GL->elements_assembled_source_g8.len), gs_file17, 924)])))));
             L9:;
         }
         r_g = sum_g;
@@ -35835,7 +36505,7 @@ static GS_INLINE double elements_total_reaction_g8(double *gs_r1, double *gs_r2,
     t20 = r_g.e[2];
     *gs_r2 = t20;
     return t18;
-    GS_UNREACHABLE(gs_file7, 574);
+    GS_UNREACHABLE(gs_file7, 605);
     double t21 = {0};
     return t21;
 }
@@ -35844,7 +36514,7 @@ static GS_INLINE double elements_row_force_g8(int64_t d_g, double *gs_r1, int64_
     if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_internal_g8.len)))) == (int64_t)(((GS_GL->elements_sol_g8.len))))) {
         double t0;
         int64_t t1 = d_g;
-        t0 = (((double *)((GS_GL->elements_internal_g8.base)))[GS_IDX((int64_t)(t1), (GS_GL->elements_internal_g8.len), gs_file17, 629)]);
+        t0 = (((double *)((GS_GL->elements_internal_g8.base)))[GS_IDX((int64_t)(t1), (GS_GL->elements_internal_g8.len), gs_file17, 865)]);
         double t2;
         int64_t t3 = d_g;
         double x_g = (((double *)((GS_GL->elements_internal_g8.base)))[t3]);
@@ -35863,20 +36533,20 @@ static GS_INLINE double elements_row_force_g8(int64_t d_g, double *gs_r1, int64_
     double ku_g = 0.0;
     double terms_g = 0.0;
     int64_t t5 = d_g;
-    int64_t t6 = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t5), (GS_GL->elements_row_start_g8.len), gs_file17, 632)]);
-    int64_t t7 = gs_add_i64((int64_t)(d_g), 1, gs_file17, 632);
-    int64_t t8 = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t7), (GS_GL->elements_row_start_g8.len), gs_file17, 632)]);
+    int64_t t6 = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t5), (GS_GL->elements_row_start_g8.len), gs_file17, 868)]);
+    int64_t t7 = gs_add_i64((int64_t)(d_g), 1, gs_file17, 868);
+    int64_t t8 = (((int64_t *)((GS_GL->elements_row_start_g8.base)))[GS_IDX((int64_t)(t7), (GS_GL->elements_row_start_g8.len), gs_file17, 868)]);
     for (int64_t e_g = t6; e_g < t8; e_g++) {
         int64_t t11 = e_g;
         int64_t t12 = e_g;
-        int32_t t13 = (((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t12), (GS_GL->elements_col_g8.len), gs_file17, 633)]);
-        ku_g = (ku_g + (((double)((double)((((double *)((GS_GL->elements_val_g8.base)))[GS_IDX((int64_t)(t11), (GS_GL->elements_val_g8.len), gs_file17, 633)]))) * (double)((((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t13), (GS_GL->elements_sol_g8.len), gs_file17, 633)])))));
+        int32_t t13 = (((int32_t *)((GS_GL->elements_col_g8.base)))[GS_IDX((int64_t)(t12), (GS_GL->elements_col_g8.len), gs_file17, 869)]);
+        ku_g = (ku_g + (((double)((double)((((double *)((GS_GL->elements_val_g8.base)))[GS_IDX((int64_t)(t11), (GS_GL->elements_val_g8.len), gs_file17, 869)]))) * (double)((((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t13), (GS_GL->elements_sol_g8.len), gs_file17, 869)])))));
         double t14 = terms_g;
         double t15;
         int64_t t16 = e_g;
         int64_t t17 = e_g;
         int32_t t18 = (((int32_t *)((GS_GL->elements_col_g8.base)))[t17]);
-        double x_g_2 = ((double)((double)((((double *)((GS_GL->elements_val_g8.base)))[t16]))) * (double)((((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t18), (GS_GL->elements_sol_g8.len), gs_file17, 634)])));
+        double x_g_2 = ((double)((double)((((double *)((GS_GL->elements_val_g8.base)))[t16]))) * (double)((((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t18), (GS_GL->elements_sol_g8.len), gs_file17, 870)])));
         {
             if ((uint8_t)((double)((double)(x_g_2)) < (double)(0.0))) {
                 t15 = (-x_g_2);
@@ -35894,7 +36564,7 @@ static GS_INLINE double elements_row_force_g8(int64_t d_g, double *gs_r1, int64_
     t21 = terms_g;
     *gs_r1 = t21;
     return t20;
-    GS_UNREACHABLE(gs_file17, 628);
+    GS_UNREACHABLE(gs_file17, 864);
     double t22 = {0};
     return t22;
 }
@@ -35912,9 +36582,9 @@ static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, i
         if (t3) goto L1;
         L2:;
         {
-            t4.data = ((uint8_t *)gs_str175); t4.len = 48;
+            t4.data = ((uint8_t *)gs_str178); t4.len = 48;
             t5 = t4;
-            gs_abort_msg(t5.data, t5.len, gs_file17, 715);
+            gs_abort_msg(t5.data, t5.len, gs_file17, 953);
         }
         L1:;
         t6.e[0] = 0.0;
@@ -35928,7 +36598,7 @@ static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, i
             int64_t t11 = (int64_t)(d_g);
             int64_t t12 = GS_GL->elements_ncomp_g8;
             int64_t t13;
-            int64_t t14 = gs_mod_i64(t13, t11, t12, gs_file17, 717);
+            int64_t t14 = gs_mod_i64(t13, t11, t12, gs_file17, 955);
             sum_g.e[t14] = (sum_g.e[t14] + (v_g));
         }
         int64_t t15 = (GS_GL->elements_assembled_source_g8.len);
@@ -35938,7 +36608,7 @@ static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, i
             int64_t t19 = (int64_t)(d_g_2);
             int64_t t20 = GS_GL->elements_ncomp_g8;
             int64_t t21;
-            int64_t t22 = gs_mod_i64(t21, t19, t20, gs_file17, 718);
+            int64_t t22 = gs_mod_i64(t21, t19, t20, gs_file17, 956);
             sum_g.e[t22] = (sum_g.e[t22] + (v_g_2));
         }
         double t23 = sum_g.e[0];
@@ -35957,7 +36627,7 @@ static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, i
     t27 = f_g.e[2];
     *gs_r2 = t27;
     return t25;
-    GS_UNREACHABLE(gs_file7, 580);
+    GS_UNREACHABLE(gs_file7, 611);
     double t28 = {0};
     return t28;
 }
@@ -35965,20 +36635,11 @@ static GS_INLINE double elements_applied_load_g8(double *gs_r1, double *gs_r2, i
 static double elements_film_heat_g8(int64_t gs_sp) {
     a10_f64 t0;
     a10_f64 fn_shape_g;
-    sl_u8 t12;
-    sl_u8 t13;
-    a30_f64 t19;
+    a30_f64 t14;
     a30_f64 fn_dref_g;
     a3_f64 xi_g;
-    a3_f64 t22;
-    a3_f64 xi_g_2;
-    sl_u8 t25;
-    sl_u8 t26;
-    a4_f64 t27;
-    a4_f64 bc_g;
-    sl_u8 t63;
-    sl_u8 t64;
-    a6_f64 t87;
+    a3_f64 t17;
+    a6_f64 t18;
     a6_f64 tan_g;
     double t1 = 0.0;
     for (int64_t t2 = 0; t2 < 10; t2++) {
@@ -35991,229 +36652,99 @@ static double elements_film_heat_g8(int64_t gs_sp) {
     for (int64_t i_g = 0; i_g < (t3); i_g++) {
         int64_t c_g = (*(int64_t *)((t4) + i_g * 8));
         int64_t t7 = i_g;
-        int64_t f_g = (((int64_t *)((GS_GL->elements_film_facet_g8.base)))[GS_IDX((int64_t)(t7), (GS_GL->elements_film_facet_g8.len), gs_file17, 586)]);
-        int64_t t8;
-        int64_t d_g = gs_sub_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file17, 587);
-        {
-            if (!((uint8_t)((int64_t)((int64_t)(d_g)) >= (int64_t)(1)))) goto L11;
-            if ((uint8_t)((int64_t)((int64_t)(d_g)) <= (int64_t)(3))) goto L10;
-            L11:;
-            {
-                t12.data = ((uint8_t *)gs_str57); t12.len = 23;
-                t13 = t12;
-                gs_abort_msg(t13.data, t13.len, gs_file3, 88);
-            }
-            L10:;
-            t8 = gs_add_i64((int64_t)(d_g), 1, gs_file3, 89);
-            goto L9;
-        }
-        L9:;
-        int64_t t14 = t8;
-        for (int64_t qp_g = 0; qp_g < t14; qp_g++) {
-            double t17;
+        int64_t f_g = (((int64_t *)((GS_GL->elements_film_facet_g8.base)))[GS_IDX((int64_t)(t7), (GS_GL->elements_film_facet_g8.len), gs_file17, 822)]);
+        int64_t t8 = elements_quad_count_g8(gs_sub_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file17, 823));
+        int64_t t9 = t8;
+        for (int64_t qp_g = 0; qp_g < t9; qp_g++) {
+            double t12;
             int64_t c_g_2 = c_g;
             int64_t f_g_2 = f_g;
             int64_t qp_g_2 = qp_g;
             a10_f64 * fn_shape_g_2 = &fn_shape_g;
             {
-                int64_t fd_g = gs_sub_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file17, 508);
-                double t20 = 0.0;
-                for (int64_t t21 = 0; t21 < 30; t21++) {
-                    t19.e[t21] = t20;
+                int64_t fd_g = gs_sub_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file17, 654);
+                double t15 = 0.0;
+                for (int64_t t16 = 0; t16 < 30; t16++) {
+                    t14.e[t16] = t15;
                 }
-                fn_dref_g = t19;
+                fn_dref_g = t14;
                 double w_g;
-                t22 = elements_quad_point_g8(fd_g, qp_g_2, &w_g);
-                xi_g = t22;
-                int64_t d_g_2 = fd_g;
-                int64_t order_g = GS_GL->elements_order_g8;
-                xi_g_2 = xi_g;
-                a10_f64 * n_g = fn_shape_g_2;
-                a30_f64 * dn_g = &fn_dref_g;
-                {
-                    int64_t t24 = elements_node_count_of_g8(d_g_2, order_g);
-                    if (!((uint8_t)((int64_t)((int64_t)(t24)) <= (int64_t)(10)))) {
-                        t25.data = ((uint8_t *)gs_str59); t25.len = 45;
-                        t26 = t25;
-                        gs_abort_msg(t26.data, t26.len, gs_file3, 52);
-                    }
-                    t27.e[0] = 1.0;
-                    t27.e[1] = 0.0;
-                    t27.e[2] = 0.0;
-                    t27.e[3] = 0.0;
-                    bc_g = t27;
-                    int64_t t28 = d_g_2;
+                t17 = elements_quad_point_g8(fd_g, qp_g_2, &w_g);
+                xi_g = t17;
+                elements_shape_g8_250(fd_g, GS_GL->elements_order_g8, xi_g, fn_shape_g_2, &fn_dref_g);
+                double t19 = 0.0;
+                for (int64_t t20 = 0; t20 < 6; t20++) {
+                    t18.e[t20] = t19;
+                }
+                tan_g = t18;
+                int64_t t21 = elements_node_count_of_g8(fd_g, GS_GL->elements_order_g8);
+                int64_t t22 = t21;
+                for (int64_t l_g = 0; l_g < t22; l_g++) {
+                    int64_t n_g;
+                    int64_t t25 = c_g_2;
+                    int64_t t26 = elements_facet_node_g8(GS_GL->elements_dim_g8, f_g_2, l_g);
+                    int64_t t27 = elements_cell_node_g8(t25, t26, gs_sp + 0);
+                    n_g = t27;
+                    int64_t t28 = fd_g;
                     for (int64_t r_g = 0; r_g < t28; r_g++) {
-                        int64_t t31 = gs_add_i64((int64_t)(r_g), 1, gs_file3, 55);
-                        double *t32 = &(bc_g.e[GS_IDX((int64_t)(t31), 4, gs_file3, 55)]);
-                        int64_t t33 = r_g;
-                        (*t32) = xi_g_2.e[t33];
-                        int64_t t34 = r_g;
-                        bc_g.e[0] = (bc_g.e[0] - (xi_g_2.e[t34]));
-                    }
-                    int64_t t35 = gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 58);
-                    for (int64_t l_g = 0; l_g < t35; l_g++) {
-                        uint8_t t38 = (uint8_t)((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(1)));
-                        int64_t t39 = l_g;
-                        (void)GS_IDX((int64_t)(t39), 10, gs_file3, (t38) ? 60 : 63);
-                        if (t38) {
-                            int64_t t40 = l_g;
-                            int64_t t41 = l_g;
-                            (*n_g).e[t40] = bc_g.e[GS_IDX((int64_t)(t41), 4, gs_file3, 60)];
-                            int64_t t42 = d_g_2;
-                            for (int64_t r_g_2 = 0; r_g_2 < t42; r_g_2++) {
-                                int64_t t45 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 61)), r_g_2, gs_file3, 61);
-                                double *t46 = &((*dn_g).e[GS_IDX((int64_t)(t45), 30, gs_file3, 61)]);
-                                double t47 = elements_bary_grad_g8(l_g, r_g_2);
-                                (*t46) = t47;
-                            }
-                        } else {
-                            int64_t t48 = l_g;
-                            int64_t t49 = l_g;
-                            int64_t t50 = l_g;
-                            (*n_g).e[t48] = ((double)((double)(bc_g.e[GS_IDX((int64_t)(t49), 4, gs_file3, 63)])) * (double)(((double)((double)(((double)((double)(2.0)) * (double)(bc_g.e[t50])))) - (double)(1.0))));
-                            int64_t t51 = d_g_2;
-                            for (int64_t r_g_3 = 0; r_g_3 < t51; r_g_3++) {
-                                int64_t t54 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file3, 64)), r_g_3, gs_file3, 64);
-                                double *t55 = &((*dn_g).e[GS_IDX((int64_t)(t54), 30, gs_file3, 64)]);
-                                int64_t t56 = l_g;
-                                double t57 = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[t56])))) - (double)(1.0));
-                                double t58 = elements_bary_grad_g8(l_g, r_g_3);
-                                (*t55) = ((double)(t57) * (double)(t58));
-                            }
-                        }
-                    }
-                    if (!((uint8_t)((int64_t)((int64_t)(order_g)) == (int64_t)(2)))) {
-                        goto L23;
-                    }
-                    int64_t t59;
-                    int64_t d_g_3 = d_g_2;
-                    {
-                        if (!((uint8_t)((int64_t)((int64_t)(d_g_3)) >= (int64_t)(1)))) goto L62;
-                        if ((uint8_t)((int64_t)((int64_t)(d_g_3)) <= (int64_t)(3))) goto L61;
-                        L62:;
-                        {
-                            t63.data = ((uint8_t *)gs_str50); t63.len = 23;
-                            t64 = t63;
-                            gs_abort_msg(t64.data, t64.len, gs_file3, 21);
-                        }
-                        L61:;
-                        if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(1))) {
-                            t59 = 1;
-                            goto L60;
-                        }
-                        if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(2))) {
-                            t59 = 3;
-                            goto L60;
-                        }
-                        t59 = 6;
-                        goto L60;
-                    }
-                    L60:;
-                    int64_t t65 = t59;
-                    for (int64_t e_g = 0; e_g < t65; e_g++) {
-                        int64_t a_g;
-                        int64_t t68 = elements_edge_node_g8(d_g_2, e_g, 0);
-                        a_g = t68;
-                        int64_t b_g;
-                        int64_t t69 = elements_edge_node_g8(d_g_2, e_g, 1);
-                        b_g = t69;
-                        int64_t l_g_2 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(d_g_2), 1, gs_file3, 71)), e_g, gs_file3, 71);
-                        int64_t t70 = l_g_2;
-                        double *t71 = &((*n_g).e[GS_IDX((int64_t)(t70), 10, gs_file3, 72)]);
-                        int64_t t72 = a_g;
-                        int64_t t73 = b_g;
-                        (*t71) = ((double)((double)(((double)((double)(4.0)) * (double)(bc_g.e[GS_IDX((int64_t)(t72), 4, gs_file3, 72)])))) * (double)(bc_g.e[GS_IDX((int64_t)(t73), 4, gs_file3, 72)]));
-                        int64_t t74 = d_g_2;
-                        for (int64_t r_g_4 = 0; r_g_4 < t74; r_g_4++) {
-                            int64_t t77 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file3, 73)), r_g_4, gs_file3, 73);
-                            double *t78 = &((*dn_g).e[GS_IDX((int64_t)(t77), 30, gs_file3, 73)]);
-                            double t79 = 4.0;
-                            int64_t t80 = b_g;
-                            double t81 = bc_g.e[t80];
-                            double t82 = elements_bary_grad_g8(a_g, r_g_4);
-                            double t83 = ((double)(t81) * (double)(t82));
-                            int64_t t84 = a_g;
-                            double t85 = bc_g.e[t84];
-                            double t86 = elements_bary_grad_g8(b_g, r_g_4);
-                            (*t78) = ((double)(t79) * (double)(((double)(t83) + (double)(((double)(t85) * (double)(t86))))));
-                        }
-                    }
-                }
-                L23:;
-                double t88 = 0.0;
-                for (int64_t t89 = 0; t89 < 6; t89++) {
-                    t87.e[t89] = t88;
-                }
-                tan_g = t87;
-                int64_t t90 = elements_node_count_of_g8(fd_g, GS_GL->elements_order_g8);
-                int64_t t91 = t90;
-                for (int64_t l_g_3 = 0; l_g_3 < t91; l_g_3++) {
-                    int64_t n_g_2;
-                    int64_t t94 = c_g_2;
-                    int64_t t95 = elements_facet_node_g8(GS_GL->elements_dim_g8, f_g_2, l_g_3);
-                    int64_t t96 = elements_cell_node_g8(t94, t95, gs_sp + 0);
-                    n_g_2 = t96;
-                    int64_t t97 = fd_g;
-                    for (int64_t r_g_5 = 0; r_g_5 < t97; r_g_5++) {
-                        int64_t t100 = 3;
-                        for (int64_t t_g = 0; t_g < t100; t_g++) {
-                            int64_t t103 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g_5, gs_file17, 517)), t_g, gs_file17, 517);
-                            double *t104 = &(tan_g.e[GS_IDX((int64_t)(t103), 6, gs_file17, 517)]);
-                            double t105 = (*t104);
-                            int64_t t106 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_3, gs_file17, 517)), r_g_5, gs_file17, 517);
-                            double t107 = fn_dref_g.e[GS_IDX((int64_t)(t106), 30, gs_file17, 517)];
-                            double t108 = elements_node_x_g8(n_g_2, t_g, gs_sp + 0);
-                            (*t104) = (t105 + (((double)(t107) * (double)(t108))));
+                        int64_t t31 = 3;
+                        for (int64_t t_g = 0; t_g < t31; t_g++) {
+                            int64_t t34 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), r_g, gs_file17, 663)), t_g, gs_file17, 663);
+                            double *t35 = &(tan_g.e[GS_IDX((int64_t)(t34), 6, gs_file17, 663)]);
+                            double t36 = (*t35);
+                            int64_t t37 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file17, 663)), r_g, gs_file17, 663);
+                            double t38 = fn_dref_g.e[GS_IDX((int64_t)(t37), 30, gs_file17, 663)];
+                            double t39 = elements_node_x_g8(n_g, t_g, gs_sp + 0);
+                            (*t35) = (t36 + (((double)(t38) * (double)(t39))));
                         }
                     }
                 }
                 if ((uint8_t)((int64_t)((int64_t)(fd_g)) == (int64_t)(1))) {
-                    double t109 = w_g;
-                    double t110 = ((double)((double)(((double)((double)(tan_g.e[0])) * (double)(tan_g.e[0])))) + (double)(((double)((double)(tan_g.e[1])) * (double)(tan_g.e[1]))));
-                    double t111 = gs_sqrt(t110);
-                    double t112 = ((double)(t109) * (double)(t111));
-                    t17 = ((double)(t112) * (double)(GS_GL->elements_thickness_g8));
-                    goto L18;
+                    double t40 = w_g;
+                    double t41 = ((double)((double)(((double)((double)(tan_g.e[0])) * (double)(tan_g.e[0])))) + (double)(((double)((double)(tan_g.e[1])) * (double)(tan_g.e[1]))));
+                    double t42 = gs_sqrt(t41);
+                    double t43 = ((double)(t40) * (double)(t42));
+                    t12 = ((double)(t43) * (double)(GS_GL->elements_thickness_g8));
+                    goto L13;
                 }
                 double nx_g = ((double)((double)(((double)((double)(tan_g.e[1])) * (double)(tan_g.e[5])))) - (double)(((double)((double)(tan_g.e[2])) * (double)(tan_g.e[4]))));
                 double ny_g = ((double)((double)(((double)((double)(tan_g.e[2])) * (double)(tan_g.e[3])))) - (double)(((double)((double)(tan_g.e[0])) * (double)(tan_g.e[5]))));
                 double nz_g = ((double)((double)(((double)((double)(tan_g.e[0])) * (double)(tan_g.e[4])))) - (double)(((double)((double)(tan_g.e[1])) * (double)(tan_g.e[3]))));
-                double t113 = w_g;
-                double t114 = ((double)((double)(((double)((double)(((double)((double)(nx_g)) * (double)(nx_g)))) + (double)(((double)((double)(ny_g)) * (double)(ny_g)))))) + (double)(((double)((double)(nz_g)) * (double)(nz_g))));
-                double t115 = gs_sqrt(t114);
-                t17 = ((double)(t113) * (double)(t115));
-                goto L18;
+                double t44 = w_g;
+                double t45 = ((double)((double)(((double)((double)(((double)((double)(nx_g)) * (double)(nx_g)))) + (double)(((double)((double)(ny_g)) * (double)(ny_g)))))) + (double)(((double)((double)(nz_g)) * (double)(nz_g))));
+                double t46 = gs_sqrt(t45);
+                t12 = ((double)(t44) * (double)(t46));
+                goto L13;
             }
-            L18:;
-            int64_t t116 = i_g;
-            double wda_g = ((double)((double)(t17)) * (double)((((double *)((GS_GL->elements_film_h_g8.base)))[GS_IDX((int64_t)(t116), (GS_GL->elements_film_h_g8.len), gs_file17, 588)])));
-            int64_t t117 = elements_node_count_of_g8(gs_sub_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file17, 589), GS_GL->elements_order_g8);
-            int64_t t118 = t117;
-            for (int64_t a_g_2 = 0; a_g_2 < t118; a_g_2++) {
-                double t121 = heat_g;
-                int64_t t122 = a_g_2;
-                double t123 = fn_shape_g.e[GS_IDX((int64_t)(t122), 10, gs_file17, 589)];
-                uint8_t *t124 = (GS_GL->elements_sol_g8.base);
-                int64_t t125 = (GS_GL->elements_sol_g8.len);
-                int64_t t126 = c_g;
-                int64_t t127 = elements_facet_node_g8(GS_GL->elements_dim_g8, f_g, a_g_2);
-                int64_t t128 = elements_cell_node_g8(t126, t127, gs_sp + 0);
-                int64_t t129 = t128;
-                double t130 = ((double)(t123) * (double)((((double *)(t124))[GS_IDX((int64_t)(t129), t125, gs_file17, 589)])));
-                heat_g = (t121 + (((double)(t130) * (double)(wda_g))));
+            L13:;
+            int64_t t47 = i_g;
+            double wda_g = ((double)((double)(t12)) * (double)((((double *)((GS_GL->elements_film_h_g8.base)))[GS_IDX((int64_t)(t47), (GS_GL->elements_film_h_g8.len), gs_file17, 824)])));
+            int64_t t48 = elements_node_count_of_g8(gs_sub_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file17, 825), GS_GL->elements_order_g8);
+            int64_t t49 = t48;
+            for (int64_t a_g = 0; a_g < t49; a_g++) {
+                double t52 = heat_g;
+                int64_t t53 = a_g;
+                double t54 = fn_shape_g.e[GS_IDX((int64_t)(t53), 10, gs_file17, 825)];
+                uint8_t *t55 = (GS_GL->elements_sol_g8.base);
+                int64_t t56 = (GS_GL->elements_sol_g8.len);
+                int64_t t57 = c_g;
+                int64_t t58 = elements_facet_node_g8(GS_GL->elements_dim_g8, f_g, a_g);
+                int64_t t59 = elements_cell_node_g8(t57, t58, gs_sp + 0);
+                int64_t t60 = t59;
+                double t61 = ((double)(t54) * (double)((((double *)(t55))[GS_IDX((int64_t)(t60), t56, gs_file17, 825)])));
+                heat_g = (t52 + (((double)(t61) * (double)(wda_g))));
             }
         }
     }
-    double t131;
-    t131 = heat_g;
-    return t131;
-    GS_UNREACHABLE(gs_file17, 582);
-    double t132 = {0};
-    return t132;
+    double t62;
+    t62 = heat_g;
+    return t62;
+    GS_UNREACHABLE(gs_file17, 818);
+    double t63 = {0};
+    return t63;
 }
 
-static void toon_g_470(gs_rhdr *into_g_hdr, gs_stack *into_g_stk, void *s_g_data, int64_t s_g_len) {
+static void toon_g_483(gs_rhdr *into_g_hdr, gs_stack *into_g_stk, void *s_g_data, int64_t s_g_len) {
     gs_rref into_g; into_g.hdr = into_g_hdr; into_g.stk = into_g_stk;
     sl_u8 s_g; s_g.data = s_g_data; s_g.len = s_g_len;
     sl_u8 t7;
@@ -36274,7 +36805,7 @@ static void toon_g_470(gs_rhdr *into_g_hdr, gs_stack *into_g_stk, void *s_g_data
     return;
 }
 
-static void toon_g_471(gs_rhdr *into_g_hdr, gs_stack *into_g_stk, void *s_g_data, int64_t s_g_len) {
+static void toon_g_484(gs_rhdr *into_g_hdr, gs_stack *into_g_stk, void *s_g_data, int64_t s_g_len) {
     gs_rref into_g; into_g.hdr = into_g_hdr; into_g.stk = into_g_stk;
     sl_u8 s_g; s_g.data = s_g_data; s_g.len = s_g_len;
     sl_u8 t7;
@@ -36500,7 +37031,7 @@ static void step_normal_g(int64_t gs_sp) {
     uint8_t found_g_4;
     uint8_t t38 = elements_point_g8(0.0, 20.0, 0.0, gs_sp + 0);
     found_g_4 = t38;
-    t39.data = ((uint8_t *)gs_str176); t39.len = 1;
+    t39.data = ((uint8_t *)gs_str179); t39.len = 1;
     name_g_4 = t39;
     {
         if ((uint8_t)(!found_g_4)) {
@@ -36534,7 +37065,7 @@ static void step_normal_g(int64_t gs_sp) {
     uint8_t found_g_5;
     uint8_t t50 = elements_point_g8(0.0, 20.0, 0.0, gs_sp + 0);
     found_g_5 = t50;
-    t51.data = ((uint8_t *)gs_str176); t51.len = 1;
+    t51.data = ((uint8_t *)gs_str179); t51.len = 1;
     name_g_5 = t51;
     {
         if ((uint8_t)(!found_g_5)) {
@@ -36575,9 +37106,9 @@ static void step_normal_g(int64_t gs_sp) {
             if (t67) goto L65;
             L66:;
             {
-                t68.data = ((uint8_t *)gs_str177); t68.len = 52;
+                t68.data = ((uint8_t *)gs_str180); t68.len = 52;
                 t69 = t68;
-                gs_abort_msg(t69.data, t69.len, gs_file17, 529);
+                gs_abort_msg(t69.data, t69.len, gs_file17, 675);
             }
             L65:;
             int64_t t70 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
@@ -36588,22 +37119,22 @@ static void step_normal_g(int64_t gs_sp) {
                 }
                 int64_t t74 = GS_GL->elements_ncomp_g8;
                 for (int64_t p_g = 0; p_g < t74; p_g++) {
-                    int64_t t77 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 532)), p_g, gs_file17, 532);
-                    double *t78 = &((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t77), (GS_GL->elements_load_g8.len), gs_file17, 532)]));
+                    int64_t t77 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 678)), p_g, gs_file17, 678);
+                    double *t78 = &((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t77), (GS_GL->elements_load_g8.len), gs_file17, 678)]));
                     int64_t t79 = p_g;
-                    (*t78) = ((*t78) + (f_g.e[GS_IDX((int64_t)(t79), 3, gs_file17, 532)]));
+                    (*t78) = ((*t78) + (f_g.e[GS_IDX((int64_t)(t79), 3, gs_file17, 678)]));
                 }
                 L72:;
             }
         }
     }
-    t80.data = ((uint8_t *)gs_str178); t80.len = 6;
+    t80.data = ((uint8_t *)gs_str181); t80.len = 6;
     t81 = t80;
     uint8_t t82 = elements_solve_contact_g8(1, gs_sp + 0);
     nonlinear_g(t81.data, t81.len, t82, gs_sp + 0);
     t83.data = ((uint8_t *)gs_str14); t83.len = 31;
     dir_g = t83;
-    t84.data = ((uint8_t *)gs_str178); t84.len = 6;
+    t84.data = ((uint8_t *)gs_str181); t84.len = 6;
     step_g = t84;
     {
         if (!(GS_GL->converged_g)) goto L86;
@@ -36669,7 +37200,7 @@ static int64_t elements_set_rigid_g8(int64_t gs_sp) {
     if (t2) goto L0;
     L1:;
     {
-        t3.data = ((uint8_t *)gs_str179); t3.len = 30;
+        t3.data = ((uint8_t *)gs_str182); t3.len = 30;
         t4 = t3;
         gs_abort_msg(t4.data, t4.len, gs_file2, 358);
     }
@@ -36886,9 +37417,9 @@ static uint8_t elements_point_g8(double x_g, double y_g, double z_g, int64_t gs_
         if ((uint8_t)((int64_t)((int64_t)((int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3))))) > (int64_t)(0))) goto L2;
         L3:;
         {
-            t4.data = ((uint8_t *)gs_str180); t4.len = 39;
+            t4.data = ((uint8_t *)gs_str183); t4.len = 39;
             t5 = t4;
-            gs_abort_msg(t5.data, t5.len, gs_file7, 363);
+            gs_abort_msg(t5.data, t5.len, gs_file7, 374);
         }
         L2:;
         int64_t best_g = 0;
@@ -36923,7 +37454,7 @@ static uint8_t elements_point_g8(double x_g, double y_g, double z_g, int64_t gs_
         t20.node_g = best_g;
         t22 = t20;
         int64_t t23 = (int64_t)GS_GL->elements_region_g8.len;
-        if (t23 >= 16) gs_abort(GS_E_CAPACITY, gs_file7, 373);
+        if (t23 >= 16) gs_abort(GS_E_CAPACITY, gs_file7, 384);
         elements_Part_g8 *t24 = (elements_Part_g8 *)(GS_GL->elements_region_g8.e + t23);
         *(elements_Part_g8 *)t24 = t22;
         GS_GL->elements_region_g8.len = (uint8_t)(t23 + 1);
@@ -36932,7 +37463,7 @@ static uint8_t elements_point_g8(double x_g, double y_g, double z_g, int64_t gs_
     }
     L1:;
     return t0;
-    GS_UNREACHABLE(gs_file7, 353);
+    GS_UNREACHABLE(gs_file7, 364);
     uint8_t t25 = {0};
     return t25;
 }
@@ -37129,7 +37660,7 @@ static void step_slide_g(int64_t gs_sp) {
     uint8_t found_g_4;
     uint8_t t38 = elements_point_g8(0.0, 20.0, 0.0, gs_sp + 0);
     found_g_4 = t38;
-    t39.data = ((uint8_t *)gs_str176); t39.len = 1;
+    t39.data = ((uint8_t *)gs_str179); t39.len = 1;
     name_g_4 = t39;
     {
         if ((uint8_t)(!found_g_4)) {
@@ -37170,9 +37701,9 @@ static void step_slide_g(int64_t gs_sp) {
             if (t55) goto L53;
             L54:;
             {
-                t56.data = ((uint8_t *)gs_str177); t56.len = 52;
+                t56.data = ((uint8_t *)gs_str180); t56.len = 52;
                 t57 = t56;
-                gs_abort_msg(t57.data, t57.len, gs_file17, 529);
+                gs_abort_msg(t57.data, t57.len, gs_file17, 675);
             }
             L53:;
             int64_t t58 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
@@ -37183,10 +37714,10 @@ static void step_slide_g(int64_t gs_sp) {
                 }
                 int64_t t62 = GS_GL->elements_ncomp_g8;
                 for (int64_t p_g = 0; p_g < t62; p_g++) {
-                    int64_t t65 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 532)), p_g, gs_file17, 532);
-                    double *t66 = &((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t65), (GS_GL->elements_load_g8.len), gs_file17, 532)]));
+                    int64_t t65 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file17, 678)), p_g, gs_file17, 678);
+                    double *t66 = &((((double *)((GS_GL->elements_load_g8.base)))[GS_IDX((int64_t)(t65), (GS_GL->elements_load_g8.len), gs_file17, 678)]));
                     int64_t t67 = p_g;
-                    (*t66) = ((*t66) + (f_g.e[GS_IDX((int64_t)(t67), 3, gs_file17, 532)]));
+                    (*t66) = ((*t66) + (f_g.e[GS_IDX((int64_t)(t67), 3, gs_file17, 678)]));
                 }
                 L60:;
             }
@@ -37195,7 +37726,7 @@ static void step_slide_g(int64_t gs_sp) {
     uint8_t found_g_5;
     uint8_t t68 = elements_point_g8(0.0, 20.0, 0.0, gs_sp + 0);
     found_g_5 = t68;
-    t69.data = ((uint8_t *)gs_str176); t69.len = 1;
+    t69.data = ((uint8_t *)gs_str179); t69.len = 1;
     name_g_5 = t69;
     {
         if ((uint8_t)(!found_g_5)) {
@@ -37231,13 +37762,13 @@ static void step_slide_g(int64_t gs_sp) {
         t81.e[2] = 20249.999999999996;
         elements_add_rigid_moment_g8(t81, gs_sp + 0);
     }
-    t82.data = ((uint8_t *)gs_str181); t82.len = 5;
+    t82.data = ((uint8_t *)gs_str184); t82.len = 5;
     t83 = t82;
     uint8_t t84 = elements_solve_contact_g8(20, gs_sp + 0);
     nonlinear_g(t83.data, t83.len, t84, gs_sp + 0);
     t85.data = ((uint8_t *)gs_str14); t85.len = 31;
     dir_g = t85;
-    t86.data = ((uint8_t *)gs_str181); t86.len = 5;
+    t86.data = ((uint8_t *)gs_str184); t86.len = 5;
     step_g = t86;
     {
         if (!(GS_GL->converged_g)) goto L88;
@@ -37282,7 +37813,7 @@ static void step_slide_g(int64_t gs_sp) {
     }
     t102.data = ((uint8_t *)gs_str18); t102.len = 1;
     equilibrium_g(t102.data, t102.len, gs_sp + 0);
-    t103.data = ((uint8_t *)gs_str182); t103.len = 41;
+    t103.data = ((uint8_t *)gs_str185); t103.len = 41;
     path_g = t103;
     t104.data = ((uint8_t *)gs_str42); t104.len = 1;
     field_g = t104;
@@ -37305,9 +37836,9 @@ static void step_slide_g(int64_t gs_sp) {
                 if ((uint8_t)((int64_t)(t112) == (int64_t)(t113))) goto L110;
                 L111:;
                 {
-                    t114.data = ((uint8_t *)gs_str183); t114.len = 38;
+                    t114.data = ((uint8_t *)gs_str186); t114.len = 38;
                     t115 = t114;
-                    gs_abort_msg(t115.data, t115.len, gs_file4, 212);
+                    gs_abort_msg(t115.data, t115.len, gs_file4, 246);
                 }
                 L110:;
                 uint8_t *t163 = GS(gs_sp + 0)->top;
@@ -37324,7 +37855,7 @@ static void step_slide_g(int64_t gs_sp) {
                     comps_g = 3;
                 }
                 int64_t t117 = 32;
-                gs_memcpy(t163, (const uint8_t *)(((uint8_t *)gs_str184)), (size_t)t117);
+                gs_memcpy(t163, (const uint8_t *)(((uint8_t *)gs_str187)), (size_t)t117);
                 t163 += t117;
                 out_g.len += t117;
                 t119 = field_g_3;
@@ -37333,14 +37864,14 @@ static void step_slide_g(int64_t gs_sp) {
                 t163 += t118;
                 out_g.len += t118;
                 int64_t t120 = 22;
-                gs_memcpy(t163, (const uint8_t *)(((uint8_t *)gs_str185)), (size_t)t120);
+                gs_memcpy(t163, (const uint8_t *)(((uint8_t *)gs_str188)), (size_t)t120);
                 t163 += t120;
                 out_g.len += t120;
                 int64_t t121 = gs_fmt_i64(t163, (int64_t)(comps_g));
                 t163 += t121;
                 out_g.len += t121;
                 int64_t t122 = 18;
-                gs_memcpy(t163, (const uint8_t *)(((uint8_t *)gs_str186)), (size_t)t122);
+                gs_memcpy(t163, (const uint8_t *)(((uint8_t *)gs_str189)), (size_t)t122);
                 t163 += t122;
                 out_g.len += t122;
                 int64_t t123 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
@@ -37349,16 +37880,16 @@ static void step_slide_g(int64_t gs_sp) {
                     for (int64_t a_g = 0; a_g < t126; a_g++) {
                         double v_g;
                         if ((uint8_t)((int64_t)((int64_t)(a_g)) < (int64_t)(GS_GL->elements_ncomp_g8))) {
-                            int64_t t129 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g_2, gs_file4, 220)), a_g, gs_file4, 220);
-                            v_g = (((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t129), (GS_GL->elements_sol_g8.len), gs_file4, 220)]);
+                            int64_t t129 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g_2, gs_file4, 254)), a_g, gs_file4, 254);
+                            v_g = (((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t129), (GS_GL->elements_sol_g8.len), gs_file4, 254)]);
                         } else {
                             v_g = 0.0;
                         }
                         int64_t t130 = gs_fmt_f64(t163, (double)(v_g));
                         t163 += t130;
                         out_g.len += t130;
-                        if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(a_g), 1, gs_file4, 221))) < (int64_t)(comps_g))) {
-                            t133.data = ((uint8_t *)gs_str170); t133.len = 1;
+                        if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(a_g), 1, gs_file4, 255))) < (int64_t)(comps_g))) {
+                            t133.data = ((uint8_t *)gs_str173); t133.len = 1;
                             t132 = t133;
                         } else {
                             t134.data = ((uint8_t *)gs_str40); t134.len = 1;
@@ -37372,7 +37903,7 @@ static void step_slide_g(int64_t gs_sp) {
                     }
                 }
                 int64_t t136 = 13;
-                gs_memcpy(t163, ((uint8_t *)gs_str187), (size_t)((t136) * 1));
+                gs_memcpy(t163, ((uint8_t *)gs_str190), (size_t)((t136) * 1));
                 t163 += (t136) * 1;
                 out_g.len += t136;
                 t137 = GS_GL->elements_VTU_END_g8;
@@ -37405,7 +37936,7 @@ static void step_slide_g(int64_t gs_sp) {
             uint8_t *t144 = t164;
             int64_t t145 = 0;
             int64_t t146 = 25;
-            gs_memcpy(t164, (const uint8_t *)(((uint8_t *)gs_str188)), (size_t)t146);
+            gs_memcpy(t164, (const uint8_t *)(((uint8_t *)gs_str191)), (size_t)t146);
             t164 += t146;
             t145 += t146;
             t148 = path_g;
@@ -37430,7 +37961,7 @@ static void step_slide_g(int64_t gs_sp) {
         }
         L106:;
         int64_t t152 = 2;
-        gs_memcpy(t162, (const uint8_t *)(((uint8_t *)gs_str158)), (size_t)t152);
+        gs_memcpy(t162, (const uint8_t *)(((uint8_t *)gs_str161)), (size_t)t152);
         t162 += t152;
         GS_GL->results_g.len += t152;
         t154 = path_g;
@@ -37442,7 +37973,7 @@ static void step_slide_g(int64_t gs_sp) {
         gs_memcpy(t162, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t155);
         t162 += t155;
         GS_GL->results_g.len += t155;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file29, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file29, 175);
         (&GS_GL->gs_gstk_results_g)->top = t162;
     }
     L105:;
@@ -37477,7 +38008,7 @@ static void elements_add_rigid_moment_g8(a3_f64 mv_g, int64_t gs_sp) {
     if (t2) goto L0;
     L1:;
     {
-        t3.data = ((uint8_t *)gs_str189); t3.len = 38;
+        t3.data = ((uint8_t *)gs_str192); t3.len = 38;
         t4 = t3;
         gs_abort_msg(t4.data, t4.len, gs_file2, 413);
     }
@@ -37568,7 +38099,7 @@ static void elements_add_rigid_moment_g8(a3_f64 mv_g, int64_t gs_sp) {
             }
             L53:;
             if (!((uint8_t)((double)((double)(t52)) > (double)(0.0)))) {
-                t54.data = ((uint8_t *)gs_str190); t54.len = 44;
+                t54.data = ((uint8_t *)gs_str193); t54.len = 44;
                 t55 = t54;
                 gs_abort_msg(t55.data, t55.len, gs_file2, 441);
             }
@@ -37654,7 +38185,7 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
     if ((uint8_t)((int64_t)(t2) == (int64_t)(t3))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str191); t4.len = 46;
+        t4.data = ((uint8_t *)gs_str194); t4.len = 46;
         t5 = t4;
         gs_abort_msg(t5.data, t5.len, gs_file31, 810);
     }
@@ -37676,14 +38207,14 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
         int64_t t12 = 2;
         for (int64_t part_g = 0; part_g < t12; part_g++) {
             int64_t t15 = 32;
-            gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str184)), (size_t)t15);
+            gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str187)), (size_t)t15);
             t50 += t15;
             out_g.len += t15;
             if (curl_g) {
-                t18.data = ((uint8_t *)gs_str192); t18.len = 5;
+                t18.data = ((uint8_t *)gs_str195); t18.len = 5;
                 t17 = t18;
             } else {
-                t19.data = ((uint8_t *)gs_str72); t19.len = 0;
+                t19.data = ((uint8_t *)gs_str73); t19.len = 0;
                 t17 = t19;
             }
             t20 = t17;
@@ -37697,10 +38228,10 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
             t50 += t21;
             out_g.len += t21;
             if ((uint8_t)((int64_t)((int64_t)(part_g)) == (int64_t)(1))) {
-                t25.data = ((uint8_t *)gs_str193); t25.len = 5;
+                t25.data = ((uint8_t *)gs_str196); t25.len = 5;
                 t24 = t25;
             } else {
-                t26.data = ((uint8_t *)gs_str72); t26.len = 0;
+                t26.data = ((uint8_t *)gs_str73); t26.len = 0;
                 t24 = t26;
             }
             t27 = t24;
@@ -37709,7 +38240,7 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
             t50 += t23;
             out_g.len += t23;
             int64_t t28 = 41;
-            gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str194)), (size_t)t28);
+            gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str197)), (size_t)t28);
             t50 += t28;
             out_g.len += t28;
             int64_t t29 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
@@ -37719,7 +38250,7 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
                 t50 += t32;
                 out_g.len += t32;
                 int64_t t34 = 1;
-                gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t34);
+                gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t34);
                 t50 += t34;
                 out_g.len += t34;
                 int64_t t36 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), n_g, gs_file31, 818)), gs_mul_i64((int64_t)(3), part_g, gs_file31, 818), gs_file31, 818)), 1, gs_file31, 818);
@@ -37727,7 +38258,7 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
                 t50 += t35;
                 out_g.len += t35;
                 int64_t t37 = 1;
-                gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t37);
+                gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t37);
                 t50 += t37;
                 out_g.len += t37;
                 int64_t t39 = gs_add_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(6), n_g, gs_file31, 818)), gs_mul_i64((int64_t)(3), part_g, gs_file31, 818), gs_file31, 818)), 2, gs_file31, 818);
@@ -37740,7 +38271,7 @@ static GS_NOINLINE uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t
                 out_g.len += t40;
             }
             int64_t t41 = 13;
-            gs_memcpy(t50, ((uint8_t *)gs_str187), (size_t)((t41) * 1));
+            gs_memcpy(t50, ((uint8_t *)gs_str190), (size_t)((t41) * 1));
             t50 += (t41) * 1;
             out_g.len += t41;
         }
@@ -37783,7 +38314,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         cells_g = 0;
     }
     int64_t t0 = 114;
-    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str195)), (size_t)t0);
+    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str198)), (size_t)t0);
     t50 += t0;
     t51 += t0;
     int64_t t1 = 1;
@@ -37791,25 +38322,25 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
     t50 += t1;
     t51 += t1;
     int64_t t2 = 23;
-    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str196)), (size_t)t2);
+    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str199)), (size_t)t2);
     t50 += t2;
     t51 += t2;
     int64_t t3 = gs_fmt_i64(t50, (int64_t)(nodes_g));
     t50 += t3;
     t51 += t3;
     int64_t t4 = 17;
-    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str197)), (size_t)t4);
+    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str200)), (size_t)t4);
     t50 += t4;
     t51 += t4;
     int64_t t5 = gs_fmt_i64(t50, (int64_t)(cells_g));
     t50 += t5;
     t51 += t5;
     int64_t t6 = 3;
-    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str198)), (size_t)t6);
+    gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str201)), (size_t)t6);
     t50 += t6;
     t51 += t6;
     int64_t t7 = 74;
-    gs_memcpy(t50, ((uint8_t *)gs_str199), (size_t)((t7) * 1));
+    gs_memcpy(t50, ((uint8_t *)gs_str202), (size_t)((t7) * 1));
     t50 += (t7) * 1;
     t51 += t7;
     int64_t t8 = nodes_g;
@@ -37823,7 +38354,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         t50 += t11;
         t51 += t11;
         int64_t t13 = 1;
-        gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t13);
+        gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t13);
         t50 += t13;
         t51 += t13;
         out_g.stk->top = t50;
@@ -37835,7 +38366,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         t50 += t14;
         t51 += t14;
         int64_t t16 = 1;
-        gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t16);
+        gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t16);
         t50 += t16;
         t51 += t16;
         out_g.stk->top = t50;
@@ -37852,11 +38383,11 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         t51 += t19;
     }
     int64_t t20 = 31;
-    gs_memcpy(t50, ((uint8_t *)gs_str200), (size_t)((t20) * 1));
+    gs_memcpy(t50, ((uint8_t *)gs_str203), (size_t)((t20) * 1));
     t50 += (t20) * 1;
     t51 += t20;
     int64_t t21 = 60;
-    gs_memcpy(t50, ((uint8_t *)gs_str201), (size_t)((t21) * 1));
+    gs_memcpy(t50, ((uint8_t *)gs_str204), (size_t)((t21) * 1));
     t50 += (t21) * 1;
     t51 += t21;
     int64_t t22 = cells_g;
@@ -37871,8 +38402,8 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
             int64_t t28 = gs_fmt_i64(t50, (int64_t)(t29));
             t50 += t28;
             t51 += t28;
-            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file4, 199))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
-                t32.data = ((uint8_t *)gs_str170); t32.len = 1;
+            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file4, 233))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
+                t32.data = ((uint8_t *)gs_str173); t32.len = 1;
                 t31 = t32;
             } else {
                 t33.data = ((uint8_t *)gs_str40); t33.len = 1;
@@ -37886,12 +38417,12 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         }
     }
     int64_t t35 = 68;
-    gs_memcpy(t50, ((uint8_t *)gs_str202), (size_t)((t35) * 1));
+    gs_memcpy(t50, ((uint8_t *)gs_str205), (size_t)((t35) * 1));
     t50 += (t35) * 1;
     t51 += t35;
     int64_t t36 = cells_g;
     for (int64_t c_g_2 = 0; c_g_2 < t36; c_g_2++) {
-        int64_t t39 = gs_fmt_i64(t50, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file4, 202), gs_file4, 202)));
+        int64_t t39 = gs_fmt_i64(t50, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file4, 236), gs_file4, 236)));
         t50 += t39;
         t51 += t39;
         int64_t t40 = 1;
@@ -37900,7 +38431,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         t51 += t40;
     }
     int64_t t41 = 66;
-    gs_memcpy(t50, ((uint8_t *)gs_str203), (size_t)((t41) * 1));
+    gs_memcpy(t50, ((uint8_t *)gs_str206), (size_t)((t41) * 1));
     t50 += (t41) * 1;
     t51 += t41;
     int64_t t42 = cells_g;
@@ -37913,6 +38444,10 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
                 } else {
                     t46 = 22;
                 }
+                goto L47;
+            }
+            if (GS_GL->elements_hex_cells_g8) {
+                t46 = 12;
                 goto L47;
             }
             if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_order_g8)) == (int64_t)(1))) {
@@ -37932,7 +38467,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
         t51 += t48;
     }
     int64_t t49 = 34;
-    gs_memcpy(t50, ((uint8_t *)gs_str204), (size_t)((t49) * 1));
+    gs_memcpy(t50, ((uint8_t *)gs_str207), (size_t)((t49) * 1));
     t50 += (t49) * 1;
     t51 += t49;
     out_g.stk->top = t50;
@@ -38040,7 +38575,7 @@ static void elements_edge_nodal_g8(uint8_t curl_g, gs_stack *gs_dst0, int64_t *g
                         {
                             t38.data = ((uint8_t *)gs_str50); t38.len = 23;
                             t39 = t38;
-                            gs_abort_msg(t39.data, t39.len, gs_file3, 21);
+                            gs_abort_msg(t39.data, t39.len, gs_file3, 34);
                         }
                         L36:;
                         if ((uint8_t)((int64_t)((int64_t)(d_g)) == (int64_t)(1))) {
@@ -38074,7 +38609,7 @@ static void elements_edge_nodal_g8(uint8_t curl_g, gs_stack *gs_dst0, int64_t *g
                             {
                                 t51.data = ((uint8_t *)gs_str50); t51.len = 23;
                                 t52 = t51;
-                                gs_abort_msg(t52.data, t52.len, gs_file3, 21);
+                                gs_abort_msg(t52.data, t52.len, gs_file3, 34);
                             }
                             L49:;
                             if ((uint8_t)((int64_t)((int64_t)(d_g_2)) == (int64_t)(1))) {
@@ -38144,7 +38679,7 @@ static void elements_edge_nodal_g8(uint8_t curl_g, gs_stack *gs_dst0, int64_t *g
                     {
                         t84.data = ((uint8_t *)gs_str50); t84.len = 23;
                         t85 = t84;
-                        gs_abort_msg(t85.data, t85.len, gs_file3, 21);
+                        gs_abort_msg(t85.data, t85.len, gs_file3, 34);
                     }
                     L82:;
                     if ((uint8_t)((int64_t)((int64_t)(d_g_3)) == (int64_t)(1))) {
@@ -38232,17 +38767,19 @@ static void elements_edge_nodal_g8(uint8_t curl_g, gs_stack *gs_dst0, int64_t *g
 static a4_f64 elements_barycentric_g8(int64_t c_g, a3_f64 p_g, int64_t gs_sp) {
     sl_u8 t4;
     sl_u8 t5;
-    a9_f64 t6;
+    a4_f64 t6;
+    a4_f64 t7;
+    a9_f64 t8;
     a9_f64 e_g;
-    a3_f64 t9;
+    a3_f64 t11;
     a3_f64 b_g;
-    a3_f64 t30;
+    a3_f64 t32;
     a3_f64 xi_g;
     a9_f64 m_g;
-    a4_f64 t42;
+    a4_f64 t44;
     a4_f64 l_g;
-    a4_f64 t50;
-    a4_f64 t51;
+    a4_f64 t52;
+    a4_f64 t53;
     if (!((uint8_t)((int64_t)((int64_t)(c_g)) >= (int64_t)(0)))) goto L1;
     int64_t t2 = c_g;
     int64_t t3;
@@ -38256,88 +38793,216 @@ static a4_f64 elements_barycentric_g8(int64_t c_g, a3_f64 p_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(3))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str205); t4.len = 29;
+        t4.data = ((uint8_t *)gs_str208); t4.len = 29;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file4, 22);
+        gs_abort_msg(t5.data, t5.len, gs_file4, 54);
     }
     L0:;
-    double t7 = 0.0;
-    for (int64_t t8 = 0; t8 < 9; t8++) {
-        t6.e[t8] = t7;
+    if (GS_GL->elements_hex_cells_g8) {
+        t7 = elements_cube_coordinates_g8(c_g, p_g, gs_sp + 0);
+        t6 = t7;
+        return t6;
     }
-    e_g = t6;
-    double t10 = 0.0;
-    for (int64_t t11 = 0; t11 < 3; t11++) {
-        t9.e[t11] = t10;
+    double t9 = 0.0;
+    for (int64_t t10 = 0; t10 < 9; t10++) {
+        t8.e[t10] = t9;
     }
-    b_g = t9;
+    e_g = t8;
+    double t12 = 0.0;
+    for (int64_t t13 = 0; t13 < 3; t13++) {
+        t11.e[t13] = t12;
+    }
+    b_g = t11;
     int64_t v0_g;
-    int64_t t12 = elements_cell_node_g8(c_g, 0, gs_sp + 0);
-    v0_g = t12;
-    int64_t t13 = GS_GL->elements_dim_g8;
-    for (int64_t r_g = 0; r_g < t13; r_g++) {
+    int64_t t14 = elements_cell_node_g8(c_g, 0, gs_sp + 0);
+    v0_g = t14;
+    int64_t t15 = GS_GL->elements_dim_g8;
+    for (int64_t r_g = 0; r_g < t15; r_g++) {
         int64_t v_g;
-        int64_t t16 = elements_cell_node_g8(c_g, gs_add_i64((int64_t)(r_g), 1, gs_file4, 27), gs_sp + 0);
-        v_g = t16;
-        int64_t t17 = GS_GL->elements_dim_g8;
-        for (int64_t t_g = 0; t_g < t17; t_g++) {
-            int64_t t20 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file4, 28)), r_g, gs_file4, 28);
-            double *t21 = &(e_g.e[GS_IDX((int64_t)(t20), 9, gs_file4, 28)]);
-            double t22 = elements_node_x_g8(v_g, t_g, gs_sp + 0);
-            double t23 = t22;
-            double t24 = elements_node_x_g8(v0_g, t_g, gs_sp + 0);
-            (*t21) = ((double)(t23) - (double)(t24));
+        int64_t t18 = elements_cell_node_g8(c_g, gs_add_i64((int64_t)(r_g), 1, gs_file4, 60), gs_sp + 0);
+        v_g = t18;
+        int64_t t19 = GS_GL->elements_dim_g8;
+        for (int64_t t_g = 0; t_g < t19; t_g++) {
+            int64_t t22 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file4, 61)), r_g, gs_file4, 61);
+            double *t23 = &(e_g.e[GS_IDX((int64_t)(t22), 9, gs_file4, 61)]);
+            double t24 = elements_node_x_g8(v_g, t_g, gs_sp + 0);
+            double t25 = t24;
+            double t26 = elements_node_x_g8(v0_g, t_g, gs_sp + 0);
+            (*t23) = ((double)(t25) - (double)(t26));
         }
-        int64_t t25 = r_g;
-        double *t26 = &(b_g.e[GS_IDX((int64_t)(t25), 3, gs_file4, 29)]);
         int64_t t27 = r_g;
-        double t28 = p_g.e[t27];
-        double t29 = elements_node_x_g8(v0_g, r_g, gs_sp + 0);
-        (*t26) = ((double)(t28) - (double)(t29));
+        double *t28 = &(b_g.e[GS_IDX((int64_t)(t27), 3, gs_file4, 62)]);
+        int64_t t29 = r_g;
+        double t30 = p_g.e[t29];
+        double t31 = elements_node_x_g8(v0_g, r_g, gs_sp + 0);
+        (*t28) = ((double)(t30) - (double)(t31));
     }
-    double t31 = 0.0;
-    for (int64_t t32 = 0; t32 < 3; t32++) {
-        t30.e[t32] = t31;
+    double t33 = 0.0;
+    for (int64_t t34 = 0; t34 < 3; t34++) {
+        t32.e[t34] = t33;
     }
-    xi_g = t30;
+    xi_g = t32;
     if ((uint8_t)((int64_t)((int64_t)(GS_GL->elements_dim_g8)) == (int64_t)(2))) {
         double det_g = ((double)((double)(((double)((double)(e_g.e[0])) * (double)(e_g.e[4])))) - (double)(((double)((double)(e_g.e[1])) * (double)(e_g.e[3]))));
         xi_g.e[0] = ((double)((double)(((double)((double)(((double)((double)(b_g.e[0])) * (double)(e_g.e[4])))) - (double)(((double)((double)(e_g.e[1])) * (double)(b_g.e[1])))))) / (double)(det_g));
         xi_g.e[1] = ((double)((double)(((double)((double)(((double)((double)(e_g.e[0])) * (double)(b_g.e[1])))) - (double)(((double)((double)(b_g.e[0])) * (double)(e_g.e[3])))))) / (double)(det_g));
     } else {
         double det_g_2 = ((double)((double)(((double)((double)(((double)((double)(e_g.e[0])) * (double)(((double)((double)(((double)((double)(e_g.e[4])) * (double)(e_g.e[8])))) - (double)(((double)((double)(e_g.e[5])) * (double)(e_g.e[7])))))))) - (double)(((double)((double)(e_g.e[1])) * (double)(((double)((double)(((double)((double)(e_g.e[3])) * (double)(e_g.e[8])))) - (double)(((double)((double)(e_g.e[5])) * (double)(e_g.e[6])))))))))) + (double)(((double)((double)(e_g.e[2])) * (double)(((double)((double)(((double)((double)(e_g.e[3])) * (double)(e_g.e[7])))) - (double)(((double)((double)(e_g.e[4])) * (double)(e_g.e[6]))))))));
-        int64_t t33 = 3;
-        for (int64_t r_g_2 = 0; r_g_2 < t33; r_g_2++) {
+        int64_t t35 = 3;
+        for (int64_t r_g_2 = 0; r_g_2 < t35; r_g_2++) {
             m_g = e_g;
-            int64_t t36 = 3;
-            for (int64_t t_g_2 = 0; t_g_2 < t36; t_g_2++) {
-                int64_t t39 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g_2, gs_file4, 42)), r_g_2, gs_file4, 42);
-                int64_t t40 = t_g_2;
-                m_g.e[t39] = b_g.e[t40];
+            int64_t t38 = 3;
+            for (int64_t t_g_2 = 0; t_g_2 < t38; t_g_2++) {
+                int64_t t41 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g_2, gs_file4, 75)), r_g_2, gs_file4, 75);
+                int64_t t42 = t_g_2;
+                m_g.e[t41] = b_g.e[t42];
             }
-            int64_t t41 = r_g_2;
-            xi_g.e[t41] = ((double)((double)(((double)((double)(((double)((double)(((double)((double)(m_g.e[0])) * (double)(((double)((double)(((double)((double)(m_g.e[4])) * (double)(m_g.e[8])))) - (double)(((double)((double)(m_g.e[5])) * (double)(m_g.e[7])))))))) - (double)(((double)((double)(m_g.e[1])) * (double)(((double)((double)(((double)((double)(m_g.e[3])) * (double)(m_g.e[8])))) - (double)(((double)((double)(m_g.e[5])) * (double)(m_g.e[6])))))))))) + (double)(((double)((double)(m_g.e[2])) * (double)(((double)((double)(((double)((double)(m_g.e[3])) * (double)(m_g.e[7])))) - (double)(((double)((double)(m_g.e[4])) * (double)(m_g.e[6])))))))))) / (double)(det_g_2));
+            int64_t t43 = r_g_2;
+            xi_g.e[t43] = ((double)((double)(((double)((double)(((double)((double)(((double)((double)(m_g.e[0])) * (double)(((double)((double)(((double)((double)(m_g.e[4])) * (double)(m_g.e[8])))) - (double)(((double)((double)(m_g.e[5])) * (double)(m_g.e[7])))))))) - (double)(((double)((double)(m_g.e[1])) * (double)(((double)((double)(((double)((double)(m_g.e[3])) * (double)(m_g.e[8])))) - (double)(((double)((double)(m_g.e[5])) * (double)(m_g.e[6])))))))))) + (double)(((double)((double)(m_g.e[2])) * (double)(((double)((double)(((double)((double)(m_g.e[3])) * (double)(m_g.e[7])))) - (double)(((double)((double)(m_g.e[4])) * (double)(m_g.e[6])))))))))) / (double)(det_g_2));
         }
     }
-    t42.e[0] = 1.0;
-    t42.e[1] = 0.0;
-    t42.e[2] = 0.0;
-    t42.e[3] = 0.0;
-    l_g = t42;
-    int64_t t43 = GS_GL->elements_dim_g8;
-    for (int64_t r_g_3 = 0; r_g_3 < t43; r_g_3++) {
-        int64_t t46 = gs_add_i64((int64_t)(r_g_3), 1, gs_file4, 49);
-        double *t47 = &(l_g.e[GS_IDX((int64_t)(t46), 4, gs_file4, 49)]);
-        int64_t t48 = r_g_3;
-        (*t47) = xi_g.e[t48];
-        int64_t t49 = r_g_3;
-        l_g.e[0] = (l_g.e[0] - (xi_g.e[t49]));
+    t44.e[0] = 1.0;
+    t44.e[1] = 0.0;
+    t44.e[2] = 0.0;
+    t44.e[3] = 0.0;
+    l_g = t44;
+    int64_t t45 = GS_GL->elements_dim_g8;
+    for (int64_t r_g_3 = 0; r_g_3 < t45; r_g_3++) {
+        int64_t t48 = gs_add_i64((int64_t)(r_g_3), 1, gs_file4, 82);
+        double *t49 = &(l_g.e[GS_IDX((int64_t)(t48), 4, gs_file4, 82)]);
+        int64_t t50 = r_g_3;
+        (*t49) = xi_g.e[t50];
+        int64_t t51 = r_g_3;
+        l_g.e[0] = (l_g.e[0] - (xi_g.e[t51]));
     }
-    t50 = l_g;
-    return t50;
-    GS_UNREACHABLE(gs_file4, 21);
-    t51 = (a4_f64){0};
-    return t51;
+    t52 = l_g;
+    return t52;
+    GS_UNREACHABLE(gs_file4, 53);
+    t53 = (a4_f64){0};
+    return t53;
+}
+
+static GS_NOINLINE a4_f64 elements_cube_coordinates_g8(int64_t c_g, a3_f64 p_g, int64_t gs_sp) {
+    a3_f64 t0;
+    a3_f64 xi_g;
+    a10_f64 t3;
+    a10_f64 n_g;
+    a30_f64 t6;
+    a30_f64 dn_g;
+    a3_f64 t12;
+    a3_f64 r_g;
+    a9_f64 t15;
+    a9_f64 j_g;
+    a9_f64 m_g;
+    a4_f64 t52;
+    a4_f64 t53;
+    a4_f64 t56;
+    double t1 = 0.5;
+    for (int64_t t2 = 0; t2 < 3; t2++) {
+        t0.e[t2] = t1;
+    }
+    xi_g = t0;
+    double t4 = 0.0;
+    for (int64_t t5 = 0; t5 < 10; t5++) {
+        t3.e[t5] = t4;
+    }
+    n_g = t3;
+    double t7 = 0.0;
+    for (int64_t t8 = 0; t8 < 30; t8++) {
+        t6.e[t8] = t7;
+    }
+    dn_g = t6;
+    int64_t t9 = 8;
+    for (int64_t it_g = 0; it_g < t9; it_g++) {
+        elements_shape_g8_254(3, 1, xi_g, &n_g, &dn_g);
+        double t13 = 0.0;
+        for (int64_t t14 = 0; t14 < 3; t14++) {
+            t12.e[t14] = t13;
+        }
+        r_g = t12;
+        double t16 = 0.0;
+        for (int64_t t17 = 0; t17 < 9; t17++) {
+            t15.e[t17] = t16;
+        }
+        j_g = t15;
+        int64_t t18 = 8;
+        for (int64_t l_g = 0; l_g < t18; l_g++) {
+            int64_t v_g;
+            int64_t t21 = elements_cell_node_g8(c_g, l_g, gs_sp + 0);
+            v_g = t21;
+            int64_t t22 = 3;
+            for (int64_t t_g = 0; t_g < t22; t_g++) {
+                int64_t t25 = t_g;
+                double t26 = r_g.e[t25];
+                int64_t t27 = l_g;
+                double t28 = n_g.e[t27];
+                double t29 = elements_node_x_g8(v_g, t_g, gs_sp + 0);
+                r_g.e[t25] = (t26 + (((double)(t28) * (double)(t29))));
+                int64_t t30 = 3;
+                for (int64_t a_g = 0; a_g < t30; a_g++) {
+                    int64_t t33 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g, gs_file4, 36)), a_g, gs_file4, 36);
+                    double t34 = j_g.e[t33];
+                    int64_t t35 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g, gs_file4, 36)), a_g, gs_file4, 36);
+                    double t36 = dn_g.e[t35];
+                    double t37 = elements_node_x_g8(v_g, t_g, gs_sp + 0);
+                    j_g.e[t33] = (t34 + (((double)(t36) * (double)(t37))));
+                }
+            }
+        }
+        int64_t t38 = 3;
+        for (int64_t t_g_2 = 0; t_g_2 < t38; t_g_2++) {
+            int64_t t41 = t_g_2;
+            int64_t t42 = t_g_2;
+            r_g.e[t41] = (r_g.e[t41] - (p_g.e[t42]));
+        }
+        double det_g = ((double)((double)(((double)((double)(((double)((double)(j_g.e[0])) * (double)(((double)((double)(((double)((double)(j_g.e[4])) * (double)(j_g.e[8])))) - (double)(((double)((double)(j_g.e[5])) * (double)(j_g.e[7])))))))) - (double)(((double)((double)(j_g.e[1])) * (double)(((double)((double)(((double)((double)(j_g.e[3])) * (double)(j_g.e[8])))) - (double)(((double)((double)(j_g.e[5])) * (double)(j_g.e[6])))))))))) + (double)(((double)((double)(j_g.e[2])) * (double)(((double)((double)(((double)((double)(j_g.e[3])) * (double)(j_g.e[7])))) - (double)(((double)((double)(j_g.e[4])) * (double)(j_g.e[6]))))))));
+        if (!((uint8_t)((double)((double)(det_g)) > (double)(0.0)))) {
+            goto L10;
+        }
+        int64_t t43 = 3;
+        for (int64_t a_g_2 = 0; a_g_2 < t43; a_g_2++) {
+            m_g = j_g;
+            int64_t t46 = 3;
+            for (int64_t t_g_3 = 0; t_g_3 < t46; t_g_3++) {
+                int64_t t49 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), t_g_3, gs_file4, 45)), a_g_2, gs_file4, 45);
+                int64_t t50 = t_g_3;
+                m_g.e[t49] = r_g.e[t50];
+            }
+            int64_t t51 = a_g_2;
+            xi_g.e[t51] = (xi_g.e[t51] - (((double)((double)(((double)((double)(((double)((double)(((double)((double)(m_g.e[0])) * (double)(((double)((double)(((double)((double)(m_g.e[4])) * (double)(m_g.e[8])))) - (double)(((double)((double)(m_g.e[5])) * (double)(m_g.e[7])))))))) - (double)(((double)((double)(m_g.e[1])) * (double)(((double)((double)(((double)((double)(m_g.e[3])) * (double)(m_g.e[8])))) - (double)(((double)((double)(m_g.e[5])) * (double)(m_g.e[6])))))))))) + (double)(((double)((double)(m_g.e[2])) * (double)(((double)((double)(((double)((double)(m_g.e[3])) * (double)(m_g.e[7])))) - (double)(((double)((double)(m_g.e[4])) * (double)(m_g.e[6])))))))))) / (double)(det_g))));
+        }
+    }
+    L10:;
+    double a_g_3 = ((double)((double)(1.0)) - (double)(xi_g.e[0]));
+    double b_g;
+    double a_g_4 = ((double)((double)(1.0)) - (double)(xi_g.e[1]));
+    double b_g_2 = ((double)((double)(1.0)) - (double)(xi_g.e[2]));
+    {
+        if ((uint8_t)((double)((double)(b_g_2)) < (double)(a_g_4))) {
+            b_g = b_g_2;
+            goto L54;
+        }
+        b_g = a_g_4;
+        goto L54;
+    }
+    L54:;
+    {
+        if ((uint8_t)((double)((double)(b_g)) < (double)(a_g_3))) {
+            t53.e[0] = b_g;
+            goto L55;
+        }
+        t53.e[0] = a_g_3;
+        goto L55;
+    }
+    L55:;
+    t53.e[1] = xi_g.e[0];
+    t53.e[2] = xi_g.e[1];
+    t53.e[3] = xi_g.e[2];
+    t52 = t53;
+    return t52;
+    GS_UNREACHABLE(gs_file4, 24);
+    t56 = (a4_f64){0};
+    return t56;
 }
 
 static double elements_cell_field_g8(int64_t c_g, a3_f64 xi_g, int64_t what_g, int64_t comp_g, int64_t gs_sp) {
@@ -38356,9 +39021,9 @@ static double elements_cell_field_g8(int64_t c_g, a3_f64 xi_g, int64_t what_g, i
     if ((uint8_t)((int64_t)(t2) == (int64_t)(t3))) goto L0;
     L1:;
     {
-        t4.data = ((uint8_t *)gs_str206); t4.len = 61;
+        t4.data = ((uint8_t *)gs_str209); t4.len = 61;
         t5 = t4;
-        gs_abort_msg(t5.data, t5.len, gs_file4, 57);
+        gs_abort_msg(t5.data, t5.len, gs_file4, 90);
     }
     L0:;
     double t6 = elements_cell_geometry_g8(c_g, xi_g, gs_sp + 0);
@@ -38383,14 +39048,14 @@ static double elements_cell_field_g8(int64_t c_g, a3_f64 xi_g, int64_t what_g, i
             for (int64_t l_g = 0; l_g < t10; l_g++) {
                 double t13 = v_g;
                 int64_t t14 = l_g;
-                double t15 = GS_GL->elements_shp_g8.e[GS_IDX((int64_t)(t14), 10, gs_file4, 63)];
+                double t15 = GS_GL->elements_shp_g8.e[GS_IDX((int64_t)(t14), 10, gs_file4, 96)];
                 uint8_t *t16 = (GS_GL->elements_sol_g8.base);
                 int64_t t17 = (GS_GL->elements_sol_g8.len);
                 int64_t t18 = GS_GL->elements_ncomp_g8;
                 int64_t t19 = elements_cell_node_g8(c_g, l_g, gs_sp + 0);
-                int64_t t20 = gs_mul_i64(t18, t19, gs_file4, 63);
-                int64_t t21 = gs_add_i64(t20, comp_g, gs_file4, 63);
-                v_g = (t13 + (((double)(t15) * (double)((((double *)(t16))[GS_IDX((int64_t)(t21), t17, gs_file4, 63)])))));
+                int64_t t20 = gs_mul_i64(t18, t19, gs_file4, 96);
+                int64_t t21 = gs_add_i64(t20, comp_g, gs_file4, 96);
+                v_g = (t13 + (((double)(t15) * (double)((((double *)(t16))[GS_IDX((int64_t)(t21), t17, gs_file4, 96)])))));
             }
         }
         double t22;
@@ -38400,7 +39065,7 @@ static double elements_cell_field_g8(int64_t c_g, a3_f64 xi_g, int64_t what_g, i
     uint8_t t23 = (uint8_t)((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_born_g8.len)))) > (int64_t)(0)) != 0);
     if (t23) {
         int64_t t24 = c_g;
-        t23 = (uint8_t)((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_born_g8.base) + GS_IDX((int64_t)(t24), (GS_GL->elements_born_g8.len), gs_file4, 69) * 1))))) == (uint8_t)(0))) != 0);
+        t23 = (uint8_t)((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_born_g8.base) + GS_IDX((int64_t)(t24), (GS_GL->elements_born_g8.len), gs_file4, 102) * 1))))) == (uint8_t)(0))) != 0);
     }
     uint8_t b_g = t23;
     double t26 = 0.0;
@@ -38415,30 +39080,32 @@ static double elements_cell_field_g8(int64_t c_g, a3_f64 xi_g, int64_t what_g, i
         n_g = t31;
         int64_t t32 = GS_GL->elements_ncomp_g8;
         for (int64_t a_g = 0; a_g < t32; a_g++) {
-            int64_t t35 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file4, 74)), a_g, gs_file4, 74);
-            double t36 = (((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t35), (GS_GL->elements_sol_g8.len), gs_file4, 74)]);
+            int64_t t35 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file4, 107)), a_g, gs_file4, 107);
+            double t36 = (((double *)((GS_GL->elements_sol_g8.base)))[GS_IDX((int64_t)(t35), (GS_GL->elements_sol_g8.len), gs_file4, 107)]);
             double t37;
             if (b_g) {
-                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), c_g, gs_file4, 74)), l_g_2, gs_file4, 74)), GS_GL->elements_ncomp_g8, gs_file4, 74)), a_g, gs_file4, 74);
-                t37 = (((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t38), (GS_GL->elements_birth_u_g8.len), gs_file4, 74)]);
+                int64_t t38 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), c_g, gs_file4, 107)), l_g_2, gs_file4, 107)), GS_GL->elements_ncomp_g8, gs_file4, 107)), a_g, gs_file4, 107);
+                t37 = (((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t38), (GS_GL->elements_birth_u_g8.len), gs_file4, 107)]);
             } else {
                 t37 = 0.0;
             }
             double v_g_2 = ((double)(t36) - (double)(t37));
             int64_t t39 = GS_GL->elements_dim_g8;
             for (int64_t t_g = 0; t_g < t39; t_g++) {
-                int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g, gs_file4, 75)), t_g, gs_file4, 75);
-                double *t43 = &(du_g.e[GS_IDX((int64_t)(t42), 9, gs_file4, 75)]);
-                int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file4, 75)), t_g, gs_file4, 75);
-                (*t43) = ((*t43) + (((double)((double)(v_g_2)) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t44), 30, gs_file4, 75)]))));
+                int64_t t42 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), a_g, gs_file4, 108)), t_g, gs_file4, 108);
+                double *t43 = &(du_g.e[GS_IDX((int64_t)(t42), 9, gs_file4, 108)]);
+                int64_t t44 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), l_g_2, gs_file4, 108)), t_g, gs_file4, 108);
+                (*t43) = ((*t43) + (((double)((double)(v_g_2)) * (double)(GS_GL->elements_grad_g8.e[GS_IDX((int64_t)(t44), 30, gs_file4, 108)]))));
             }
         }
     }
     if ((uint8_t)((int64_t)((int64_t)(what_g)) == (int64_t)(2))) {
         double t45;
         if ((uint8_t)((int64_t)((int64_t)(comp_g)) < (int64_t)(GS_GL->elements_dim_g8))) {
-            int64_t t46 = comp_g;
-            t45 = ((double)((double)(-0.0)) * (double)(du_g.e[t46]));
+            double t46 = elements_conductivity_at_g8(c_g, gs_sp + 0);
+            double t47 = (-t46);
+            int64_t t48 = comp_g;
+            t45 = ((double)(t47) * (double)(du_g.e[t48]));
         } else {
             t45 = 0.0;
         }
@@ -38447,50 +39114,50 @@ static double elements_cell_field_g8(int64_t c_g, a3_f64 xi_g, int64_t what_g, i
     int64_t i_g = (int64_t)((uint64_t)((int64_t)((int64_t)(comp_g))) / (uint64_t)((int64_t)(3)));
     int64_t j_g = (int64_t)((uint64_t)((int64_t)((int64_t)(comp_g))) % (uint64_t)((int64_t)(3)));
     double tr_g = 0.0;
-    int64_t t47 = GS_GL->elements_dim_g8;
+    int64_t t49 = GS_GL->elements_dim_g8;
     int64_t a_g_2 = 0;
     /* loop shape: sum terms in blocks of 8 */
-    while (t47 - a_g_2 >= 8) {
-        double t51[8];
-        for (int64_t t50 = 0; t50 < 8; t50++, a_g_2++) {
-            int64_t t52 = gs_mul_i64((int64_t)(4), a_g_2, gs_file4, 82);
-            t51[t50] = du_g.e[GS_IDX((int64_t)(t52), 9, gs_file4, 82)];
+    while (t49 - a_g_2 >= 8) {
+        double t53[8];
+        for (int64_t t52 = 0; t52 < 8; t52++, a_g_2++) {
+            int64_t t54 = gs_mul_i64((int64_t)(4), a_g_2, gs_file4, 115);
+            t53[t52] = du_g.e[GS_IDX((int64_t)(t54), 9, gs_file4, 115)];
         }
-        for (int64_t t53 = 0; t53 < 8; t53++) tr_g = tr_g + t51[t53];
+        for (int64_t t55 = 0; t55 < 8; t55++) tr_g = tr_g + t53[t55];
     }
-    for (; a_g_2 < t47; a_g_2++) {
-        int64_t t55 = gs_mul_i64((int64_t)(4), a_g_2, gs_file4, 82);
-        tr_g = (tr_g + (du_g.e[GS_IDX((int64_t)(t55), 9, gs_file4, 82)]));
+    for (; a_g_2 < t49; a_g_2++) {
+        int64_t t57 = gs_mul_i64((int64_t)(4), a_g_2, gs_file4, 115);
+        tr_g = (tr_g + (du_g.e[GS_IDX((int64_t)(t57), 9, gs_file4, 115)]));
     }
-    if ((uint8_t)((int64_t)((int64_t)(i_g)) >= (int64_t)(GS_GL->elements_dim_g8))) goto L57;
-    if (!((uint8_t)((int64_t)((int64_t)(j_g)) >= (int64_t)(GS_GL->elements_dim_g8)))) goto L56;
-    L57:;
+    if ((uint8_t)((int64_t)((int64_t)(i_g)) >= (int64_t)(GS_GL->elements_dim_g8))) goto L59;
+    if (!((uint8_t)((int64_t)((int64_t)(j_g)) >= (int64_t)(GS_GL->elements_dim_g8)))) goto L58;
+    L59:;
     {
-        if (!((uint8_t)((int64_t)((int64_t)(i_g)) == (int64_t)(j_g)))) goto L58;
-        if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_plane_g8)) == (int64_t)(2)))) goto L58;
+        if (!((uint8_t)((int64_t)((int64_t)(i_g)) == (int64_t)(j_g)))) goto L60;
+        if (!((uint8_t)((int64_t)((int64_t)(GS_GL->elements_plane_g8)) == (int64_t)(2)))) goto L60;
         {
-            double t59;
-            t59 = ((double)((double)(GS_GL->elements_lame_3d_g8)) * (double)(tr_g));
-            return t59;
+            double t61;
+            t61 = ((double)((double)(GS_GL->elements_lame_3d_g8)) * (double)(tr_g));
+            return t61;
         }
-        L58:;
-        double t60;
-        t60 = 0.0;
-        return t60;
+        L60:;
+        double t62;
+        t62 = 0.0;
+        return t62;
     }
-    L56:;
-    int64_t t61 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file4, 87)), j_g, gs_file4, 87);
-    int64_t t62 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file4, 87)), i_g, gs_file4, 87);
-    double s_g = ((double)((double)(GS_GL->elements_shear_g8)) * (double)(((double)((double)(du_g.e[t61])) + (double)(du_g.e[t62]))));
+    L58:;
+    int64_t t63 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file4, 120)), j_g, gs_file4, 120);
+    int64_t t64 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), j_g, gs_file4, 120)), i_g, gs_file4, 120);
+    double s_g = ((double)((double)(GS_GL->elements_shear_g8)) * (double)(((double)((double)(du_g.e[t63])) + (double)(du_g.e[t64]))));
     if ((uint8_t)((int64_t)((int64_t)(i_g)) == (int64_t)(j_g))) {
         s_g = (s_g + (((double)((double)(GS_GL->elements_lame_g8)) * (double)(tr_g))));
     }
-    double t63;
-    t63 = s_g;
-    return t63;
-    GS_UNREACHABLE(gs_file4, 56);
-    double t64 = {0};
-    return t64;
+    double t65;
+    t65 = s_g;
+    return t65;
+    GS_UNREACHABLE(gs_file4, 89);
+    double t66 = {0};
+    return t66;
 }
 
 static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double want_g, double within_g, uint8_t relative_g, void *unit_g_data, int64_t unit_g_len, void *limit_g_data, int64_t limit_g_len, int64_t gs_sp) {
@@ -38531,7 +39198,7 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
     } else {
         tol_g = within_g;
     }
-    t3.data = ((uint8_t *)gs_str207); t3.len = 6;
+    t3.data = ((uint8_t *)gs_str210); t3.len = 6;
     id_g = t3;
     double t4;
     double x_g_2 = ((double)((double)(got_g)) - (double)(want_g));
@@ -38554,14 +39221,14 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
     t31 += t9;
     t8 += t9;
     int64_t t11 = 2;
-    gs_memcpy(t31, (const uint8_t *)(((uint8_t *)gs_str208)), (size_t)t11);
+    gs_memcpy(t31, (const uint8_t *)(((uint8_t *)gs_str211)), (size_t)t11);
     t31 += t11;
     t8 += t11;
     int64_t t12 = gs_fmt_f64(t31, (double)(got_g));
     t31 += t12;
     t8 += t12;
     int64_t t13 = 1;
-    gs_memcpy(t31, (const uint8_t *)(((uint8_t *)gs_str170)), (size_t)t13);
+    gs_memcpy(t31, (const uint8_t *)(((uint8_t *)gs_str173)), (size_t)t13);
     t31 += t13;
     t8 += t13;
     t15 = unit_g;
@@ -38576,18 +39243,18 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
     {
         uint8_t *t34 = (&GS_GL->gs_gstk_checks_g)->top;
         int64_t t18 = 7;
-        gs_memcpy(t34, ((uint8_t *)gs_str171), (size_t)((t18) * 1));
+        gs_memcpy(t34, ((uint8_t *)gs_str174), (size_t)((t18) * 1));
         t34 += (t18) * 1;
         GS_GL->checks_g.len += t18;
         t19.hdr = (gs_rhdr *)&GS_GL->checks_g; t19.stk = (&GS_GL->gs_gstk_checks_g);
         (&GS_GL->gs_gstk_checks_g)->top = t34;
-        toon_g_470(t19.hdr, t19.stk, id_g.data, id_g.len);
+        toon_g_483(t19.hdr, t19.stk, id_g.data, id_g.len);
         t34 = (&GS_GL->gs_gstk_checks_g)->top;
         if (pass_g) {
-            t21.data = ((uint8_t *)gs_str172); t21.len = 6;
+            t21.data = ((uint8_t *)gs_str175); t21.len = 6;
             t20 = t21;
         } else {
-            t22.data = ((uint8_t *)gs_str173); t22.len = 6;
+            t22.data = ((uint8_t *)gs_str176); t22.len = 6;
             t20 = t22;
         }
         t23 = t20;
@@ -38597,7 +39264,7 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
         GS_GL->checks_g.len += t24;
         t25.hdr = (gs_rhdr *)&GS_GL->checks_g; t25.stk = (&GS_GL->gs_gstk_checks_g);
         (&GS_GL->gs_gstk_checks_g)->top = t34;
-        toon_g_471(t25.hdr, t25.stk, value_g.data, value_g.len);
+        toon_g_484(t25.hdr, t25.stk, value_g.data, value_g.len);
         t34 = (&GS_GL->gs_gstk_checks_g)->top;
         uint8_t t26 = 44;
         uint8_t *t27 = (uint8_t *)t34;
@@ -38606,7 +39273,7 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
         GS_GL->checks_g.len++;
         t28.hdr = (gs_rhdr *)&GS_GL->checks_g; t28.stk = (&GS_GL->gs_gstk_checks_g);
         (&GS_GL->gs_gstk_checks_g)->top = t34;
-        toon_g_470(t28.hdr, t28.stk, limit_g_2.data, limit_g_2.len);
+        toon_g_483(t28.hdr, t28.stk, limit_g_2.data, limit_g_2.len);
         t34 = (&GS_GL->gs_gstk_checks_g)->top;
         uint8_t t29 = 10;
         uint8_t *t30 = (uint8_t *)t34;
@@ -38627,10 +39294,10 @@ static void expect_g(void *name_g_data, int64_t name_g_len, double got_g, double
 static GS_INLINE double elements_stress_at_g8(int64_t i_g, int64_t j_g, double x_g, double y_g, double z_g, uint8_t *gs_r1, int64_t gs_sp) {
     double t0;
     uint8_t t1;
-    double t2 = elements_field_at_g8(1, gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file7, 528)), j_g, gs_file7, 528), x_g, y_g, z_g, &t1, gs_sp + 0);
+    double t2 = elements_field_at_g8(1, gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), i_g, gs_file7, 559)), j_g, gs_file7, 559), x_g, y_g, z_g, &t1, gs_sp + 0);
     *gs_r1 = t1;
     return t2;
-    GS_UNREACHABLE(gs_file7, 527);
+    GS_UNREACHABLE(gs_file7, 558);
     double t3 = {0};
     return t3;
 }
@@ -38652,9 +39319,9 @@ static double elements_field_at_g8(int64_t what_g, int64_t comp_g, double x_g, d
     if ((uint8_t)((int64_t)((int64_t)(comp_g)) < (int64_t)(9))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str209); t2.len = 35;
+        t2.data = ((uint8_t *)gs_str212); t2.len = 35;
         t3 = t2;
-        gs_abort_msg(t3.data, t3.len, gs_file4, 96);
+        gs_abort_msg(t3.data, t3.len, gs_file4, 129);
     }
     L0:;
     int64_t t6;
@@ -38707,11 +39374,11 @@ static double elements_field_at_g8(int64_t what_g, int64_t comp_g, double x_g, d
         l_g = t17;
         double lowest_g = l_g.e[0];
         int64_t t18 = 1;
-        int64_t t19 = gs_add_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file4, 108);
+        int64_t t19 = gs_add_i64((int64_t)(GS_GL->elements_dim_g8), 1, gs_file4, 141);
         for (int64_t a_g = t18; a_g < t19; a_g++) {
             double a_g_2 = lowest_g;
             int64_t t22 = a_g;
-            double b_g = l_g.e[GS_IDX((int64_t)(t22), 4, gs_file4, 108)];
+            double b_g = l_g.e[GS_IDX((int64_t)(t22), 4, gs_file4, 141)];
             {
                 if ((uint8_t)((double)((double)(b_g)) < (double)(a_g_2))) {
                     lowest_g = b_g;
@@ -38733,7 +39400,7 @@ static double elements_field_at_g8(int64_t what_g, int64_t comp_g, double x_g, d
             t25.e[2] = l_g.e[3];
             double t26 = elements_cell_field_g8(c_g, t25, what_g, comp_g, gs_sp + 0);
             sum_g = (t24 + (t26));
-            count_g = gs_add_i64(count_g, 1, gs_file4, 115);
+            count_g = gs_add_i64(count_g, 1, gs_file4, 148);
         }
         L13:;
     }
@@ -38765,7 +39432,7 @@ static double elements_field_at_g8(int64_t what_g, int64_t comp_g, double x_g, d
     t35 = (uint8_t)((double)((double)(best_l_g)) >= (double)(-0.1));
     *gs_r1 = t35;
     return t32;
-    GS_UNREACHABLE(gs_file4, 95);
+    GS_UNREACHABLE(gs_file4, 128);
     double t36 = {0};
     return t36;
 }
@@ -38821,7 +39488,7 @@ static void runtime_cell_worker_g7(int64_t gs_sp) {
                 if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[GS_IDX((int64_t)(t12), (GS_GL->runtime_cell_start_g7.len), gs_file11, 221)])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t13]), gs_file11, 221))) == (int64_t)(GS_GL->runtime_CELL_NODES_g7.e[GS_IDX((int64_t)(t15), 10, gs_file11, 221)]))) goto L10;
                 L11:;
                 {
-                    t16.data = ((uint8_t *)gs_str210); t16.len = 46;
+                    t16.data = ((uint8_t *)gs_str213); t16.len = 46;
                     t17 = t16;
                     gs_abort_msg(t17.data, t17.len, gs_file11, 221);
                 }
@@ -38845,7 +39512,7 @@ static void runtime_cell_worker_g7(int64_t gs_sp) {
                         if ((uint8_t)((int64_t)((int64_t)((int64_t)((*(uint8_t *)(((GS_GL->runtime_cell_type_g7.base) + t24 * 1)))))) == (int64_t)(8))) goto L22;
                         L23:;
                         {
-                            t25.data = ((uint8_t *)gs_str211); t25.len = 26;
+                            t25.data = ((uint8_t *)gs_str214); t25.len = 26;
                             t26 = t25;
                             gs_abort_msg(t26.data, t26.len, gs_file32, 109);
                         }
@@ -38988,7 +39655,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
     if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[GS_IDX((int64_t)(t3), (GS_GL->runtime_cell_start_g7.len), gs_file33, 310)])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t4]), gs_file33, 310))) == (int64_t)(27))) goto L0;
     L1:;
     {
-        t5.data = ((uint8_t *)gs_str212); t5.len = 43;
+        t5.data = ((uint8_t *)gs_str215); t5.len = 43;
         t6 = t5;
         gs_abort_msg(t6.data, t6.len, gs_file33, 310);
     }
@@ -39005,7 +39672,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                     if ((uint8_t)((int64_t)((int64_t)(((GS_GL->runtime_quad_w_g7.len)))) == (int64_t)(0))) goto L10;
                     L11:;
                     {
-                        t12.data = ((uint8_t *)gs_str213); t12.len = 26;
+                        t12.data = ((uint8_t *)gs_str216); t12.len = 26;
                         t13 = t12;
                         gs_abort_msg(t13.data, t13.len, gs_file11, 251);
                     }
@@ -39110,7 +39777,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                         if ((uint8_t)((int64_t)((int64_t)(((GS_GL->runtime_shape_dn_g7.len)))) == (int64_t)(0))) goto L59;
                         L60:;
                         {
-                            t61.data = ((uint8_t *)gs_str214); t61.len = 27;
+                            t61.data = ((uint8_t *)gs_str217); t61.len = 27;
                             t62 = t61;
                             gs_abort_msg(t62.data, t62.len, gs_file34, 48);
                         }
@@ -39141,7 +39808,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                                     if ((uint8_t)((int64_t)((int64_t)(a_g_3)) < (int64_t)(3))) goto L76;
                                     L77:;
                                     {
-                                        t78.data = ((uint8_t *)gs_str215); t78.len = 23;
+                                        t78.data = ((uint8_t *)gs_str218); t78.len = 23;
                                         t79 = t78;
                                         gs_abort_msg(t79.data, t79.len, gs_file34, 41);
                                     }
@@ -39177,7 +39844,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                                     if ((uint8_t)((int64_t)((int64_t)(a_g_4)) < (int64_t)(3))) goto L90;
                                     L91:;
                                     {
-                                        t92.data = ((uint8_t *)gs_str215); t92.len = 23;
+                                        t92.data = ((uint8_t *)gs_str218); t92.len = 23;
                                         t93 = t92;
                                         gs_abort_msg(t93.data, t93.len, gs_file34, 41);
                                     }
@@ -39213,7 +39880,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                                     if ((uint8_t)((int64_t)((int64_t)(a_g_5)) < (int64_t)(3))) goto L104;
                                     L105:;
                                     {
-                                        t106.data = ((uint8_t *)gs_str215); t106.len = 23;
+                                        t106.data = ((uint8_t *)gs_str218); t106.len = 23;
                                         t107 = t106;
                                         gs_abort_msg(t107.data, t107.len, gs_file34, 41);
                                     }
@@ -39259,7 +39926,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                                 if ((uint8_t)((int64_t)((int64_t)(a_g_7)) < (int64_t)(3))) goto L120;
                                 L121:;
                                 {
-                                    t122.data = ((uint8_t *)gs_str215); t122.len = 23;
+                                    t122.data = ((uint8_t *)gs_str218); t122.len = 23;
                                     t123 = t122;
                                     gs_abort_msg(t123.data, t123.len, gs_file34, 41);
                                 }
@@ -39295,7 +39962,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                                 if ((uint8_t)((int64_t)((int64_t)(a_g_8)) < (int64_t)(3))) goto L134;
                                 L135:;
                                 {
-                                    t136.data = ((uint8_t *)gs_str215); t136.len = 23;
+                                    t136.data = ((uint8_t *)gs_str218); t136.len = 23;
                                     t137 = t136;
                                     gs_abort_msg(t137.data, t137.len, gs_file34, 41);
                                 }
@@ -39331,7 +39998,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
                                 if ((uint8_t)((int64_t)((int64_t)(a_g_9)) < (int64_t)(3))) goto L148;
                                 L149:;
                                 {
-                                    t150.data = ((uint8_t *)gs_str215); t150.len = 23;
+                                    t150.data = ((uint8_t *)gs_str218); t150.len = 23;
                                     t151 = t150;
                                     gs_abort_msg(t151.data, t151.len, gs_file34, 41);
                                 }
@@ -39390,7 +40057,7 @@ static GS_NOINLINE uint8_t runtime_hex27_stiffness_g7(int64_t c_g, gs_rhdr *ke_g
             if ((uint8_t)((int64_t)((int64_t)((dn_g.len))) == (int64_t)(gs_mul_i64((int64_t)(3), gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[GS_IDX((int64_t)(t163), (GS_GL->runtime_cell_start_g7.len), gs_file34, 111)])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t164]), gs_file34, 111), gs_file34, 111)))) goto L161;
             L162:;
             {
-                t165.data = ((uint8_t *)gs_str216); t165.len = 53;
+                t165.data = ((uint8_t *)gs_str219); t165.len = 53;
                 t166 = t165;
                 gs_abort_msg(t166.data, t166.len, gs_file34, 111);
             }
@@ -39500,7 +40167,7 @@ static double runtime_cell_lame_g7(int64_t c_g, double *gs_r1, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(((GS_GL->runtime_cell_poisson_g7.len)))) == (int64_t)(((GS_GL->runtime_cell_young_g7.len))))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str217); t2.len = 33;
+        t2.data = ((uint8_t *)gs_str220); t2.len = 33;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file34, 26);
     }
@@ -39527,7 +40194,7 @@ static double runtime_shape_1d_g7(int64_t a_g, double s_g) {
     if ((uint8_t)((int64_t)((int64_t)(a_g)) < (int64_t)(3))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str218); t2.len = 20;
+        t2.data = ((uint8_t *)gs_str221); t2.len = 20;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file34, 34);
     }
@@ -39583,7 +40250,7 @@ static void runtime_hex27_stiffness_0_0_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str219); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str222); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 12);
     }
@@ -39735,7 +40402,7 @@ static void runtime_hex27_stiffness_0_1_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str220); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str223); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 45);
     }
@@ -39887,7 +40554,7 @@ static void runtime_hex27_stiffness_0_2_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str221); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str224); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 78);
     }
@@ -40039,7 +40706,7 @@ static void runtime_hex27_stiffness_1_0_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str222); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str225); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 111);
     }
@@ -40191,7 +40858,7 @@ static void runtime_hex27_stiffness_1_1_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str223); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str226); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 144);
     }
@@ -40343,7 +41010,7 @@ static void runtime_hex27_stiffness_1_2_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str224); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str227); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 177);
     }
@@ -40495,7 +41162,7 @@ static void runtime_hex27_stiffness_2_0_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str225); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str228); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 210);
     }
@@ -40647,7 +41314,7 @@ static void runtime_hex27_stiffness_2_1_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str226); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str229); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 243);
     }
@@ -40799,7 +41466,7 @@ static void runtime_hex27_stiffness_2_2_g7(void *grad_g_data, int64_t grad_g_len
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(6561))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str227); t2.len = 56;
+        t2.data = ((uint8_t *)gs_str230); t2.len = 56;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 276);
     }
@@ -40956,7 +41623,7 @@ static GS_NOINLINE void runtime_hex8i_condense_g7(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[GS_IDX((int64_t)(t3), (GS_GL->runtime_cell_start_g7.len), gs_file32, 79)])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t4]), gs_file32, 79))) == (int64_t)(8))) goto L0;
     L1:;
     {
-        t5.data = ((uint8_t *)gs_str228); t5.len = 41;
+        t5.data = ((uint8_t *)gs_str231); t5.len = 41;
         t6 = t5;
         gs_abort_msg(t6.data, t6.len, gs_file32, 79);
     }
@@ -41098,7 +41765,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
     if ((uint8_t)((int64_t)((int64_t)(gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[GS_IDX((int64_t)(t3), (GS_GL->runtime_cell_start_g7.len), gs_file33, 480)])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t4]), gs_file33, 480))) == (int64_t)(8))) goto L0;
     L1:;
     {
-        t5.data = ((uint8_t *)gs_str229); t5.len = 37;
+        t5.data = ((uint8_t *)gs_str232); t5.len = 37;
         t6 = t5;
         gs_abort_msg(t6.data, t6.len, gs_file33, 480);
     }
@@ -41119,7 +41786,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
         if ((uint8_t)((int64_t)((int64_t)(((t225)))) == (int64_t)(0))) goto L8;
         L9:;
         {
-            t10.data = ((uint8_t *)gs_str230); t10.len = 26;
+            t10.data = ((uint8_t *)gs_str233); t10.len = 26;
             t11 = t10;
             gs_abort_msg(t11.data, t11.len, gs_file32, 45);
         }
@@ -41193,7 +41860,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(((t232)))) == (int64_t)(0))) goto L41;
             L42:;
             {
-                t43.data = ((uint8_t *)gs_str231); t43.len = 26;
+                t43.data = ((uint8_t *)gs_str234); t43.len = 26;
                 t44 = t43;
                 gs_abort_msg(t44.data, t44.len, gs_file32, 30);
             }
@@ -41249,7 +41916,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)((dn_g.len))) == (int64_t)(gs_mul_i64((int64_t)(3), gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[GS_IDX((int64_t)(t67), (GS_GL->runtime_cell_start_g7.len), gs_file34, 111)])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t68]), gs_file34, 111), gs_file34, 111)))) goto L65;
             L66:;
             {
-                t69.data = ((uint8_t *)gs_str216); t69.len = 53;
+                t69.data = ((uint8_t *)gs_str219); t69.len = 53;
                 t70 = t69;
                 gs_abort_msg(t70.data, t70.len, gs_file34, 111);
             }
@@ -41331,7 +41998,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
             if ((uint8_t)((int64_t)((int64_t)(((t228)))) == (int64_t)(33))) goto L118;
             L119:;
             {
-                t120.data = ((uint8_t *)gs_str232); t120.len = 50;
+                t120.data = ((uint8_t *)gs_str235); t120.len = 50;
                 t121 = t120;
                 gs_abort_msg(t121.data, t121.len, gs_file32, 60);
             }
@@ -41349,7 +42016,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
                 if ((uint8_t)((int64_t)((int64_t)(((t236)))) == (int64_t)(0))) goto L124;
                 L125:;
                 {
-                    t126.data = ((uint8_t *)gs_str231); t126.len = 26;
+                    t126.data = ((uint8_t *)gs_str234); t126.len = 26;
                     t127 = t126;
                     gs_abort_msg(t127.data, t127.len, gs_file32, 30);
                 }
@@ -41405,7 +42072,7 @@ static void runtime_hex8i_full_g7(int64_t c_g, int64_t gs_sp) {
                 if ((uint8_t)((int64_t)((int64_t)((dn_g_2.len))) == (int64_t)(gs_mul_i64((int64_t)(3), gs_sub_i64((int64_t)((((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t150])), (((int64_t *)((GS_GL->runtime_cell_start_g7.base)))[t151]), gs_file34, 111), gs_file34, 111)))) goto L148;
                 L149:;
                 {
-                    t152.data = ((uint8_t *)gs_str216); t152.len = 53;
+                    t152.data = ((uint8_t *)gs_str219); t152.len = 53;
                     t153 = t152;
                     gs_abort_msg(t153.data, t153.len, gs_file34, 111);
                 }
@@ -41527,7 +42194,7 @@ static void runtime_hex8i_full_0_0_g7(void *grad_g_data, int64_t grad_g_len, dou
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(1089))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str233); t2.len = 51;
+        t2.data = ((uint8_t *)gs_str236); t2.len = 51;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 347);
     }
@@ -41679,7 +42346,7 @@ static void runtime_hex8i_full_0_1_g7(void *grad_g_data, int64_t grad_g_len, dou
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(1089))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str234); t2.len = 51;
+        t2.data = ((uint8_t *)gs_str237); t2.len = 51;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 380);
     }
@@ -41831,7 +42498,7 @@ static void runtime_hex8i_full_1_0_g7(void *grad_g_data, int64_t grad_g_len, dou
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(1089))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str235); t2.len = 51;
+        t2.data = ((uint8_t *)gs_str238); t2.len = 51;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 413);
     }
@@ -41983,7 +42650,7 @@ static void runtime_hex8i_full_1_1_g7(void *grad_g_data, int64_t grad_g_len, dou
     if ((uint8_t)((int64_t)((int64_t)(((ke_g.hdr->len)))) == (int64_t)(1089))) goto L0;
     L1:;
     {
-        t2.data = ((uint8_t *)gs_str236); t2.len = 51;
+        t2.data = ((uint8_t *)gs_str239); t2.len = 51;
         t3 = t2;
         gs_abort_msg(t3.data, t3.len, gs_file33, 446);
     }
@@ -42136,7 +42803,7 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
     sl_f64 t45;
     sl_f64 t46;
     sl_f64 t54;
-    int64_t m_g = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 302);
+    int64_t m_g = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 448);
     data_g.base = GS(gs_sp + 0)->top; data_g.len = 0;
     data_g.len = 0;
     uint8_t *t56 = GS(gs_sp + 0)->top;
@@ -42166,7 +42833,7 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
             {
                 int64_t c_g_3 = c_g;
                 {
-                    int64_t m_g_2 = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 285);
+                    int64_t m_g_2 = gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), GS_GL->elements_ncomp_g8, gs_file17, 430);
                     int64_t c_g_4 = c_g_3;
                     {
                         if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_cell_law_g8.len)))) > (int64_t)(0)))) {
@@ -42184,7 +42851,7 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
                     elements_cell_matrix_g8(c_g_3, gs_sp + 1);
                     if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_born_g8.len)))) > (int64_t)(0)))) goto L16;
                     int64_t t17 = c_g_3;
-                    if (!((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_born_g8.base) + GS_IDX((int64_t)(t17), (GS_GL->elements_born_g8.len), gs_file17, 288) * 1))))) == (uint8_t)(0))))) goto L16;
+                    if (!((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->elements_born_g8.base) + GS_IDX((int64_t)(t17), (GS_GL->elements_born_g8.len), gs_file17, 434) * 1))))) == (uint8_t)(0))))) goto L16;
                     {
                         int64_t t18 = m_g_2;
                         for (int64_t r_g = 0; r_g < t18; r_g++) {
@@ -42195,19 +42862,19 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
                             while (t21 - k_g >= 8) {
                                 double t25[8];
                                 for (int64_t t24 = 0; t24 < 8; t24++, k_g++) {
-                                    int64_t t26 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), r_g, gs_file17, 291)), k_g, gs_file17, 291);
-                                    int64_t t27 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), c_g_3, gs_file17, 291)), k_g, gs_file17, 291);
-                                    t25[t24] = ((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t26), 900, gs_file17, 291)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t27), (GS_GL->elements_birth_u_g8.len), gs_file17, 291)])));
+                                    int64_t t26 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), r_g, gs_file17, 437)), k_g, gs_file17, 437);
+                                    int64_t t27 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), c_g_3, gs_file17, 437)), k_g, gs_file17, 437);
+                                    t25[t24] = ((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t26), 900, gs_file17, 437)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t27), (GS_GL->elements_birth_u_g8.len), gs_file17, 437)])));
                                 }
                                 for (int64_t t28 = 0; t28 < 8; t28++) s_g = s_g + t25[t28];
                             }
                             for (; k_g < t21; k_g++) {
-                                int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), r_g, gs_file17, 291)), k_g, gs_file17, 291);
-                                int64_t t31 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), c_g_3, gs_file17, 291)), k_g, gs_file17, 291);
-                                s_g = (s_g + (((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t30), 900, gs_file17, 291)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t31), (GS_GL->elements_birth_u_g8.len), gs_file17, 291)])))));
+                                int64_t t30 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), r_g, gs_file17, 437)), k_g, gs_file17, 437);
+                                int64_t t31 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(m_g_2), c_g_3, gs_file17, 437)), k_g, gs_file17, 437);
+                                s_g = (s_g + (((double)((double)(GS_GL->elements_ke_g8.e[GS_IDX((int64_t)(t30), 900, gs_file17, 437)])) * (double)((((double *)((GS_GL->elements_birth_u_g8.base)))[GS_IDX((int64_t)(t31), (GS_GL->elements_birth_u_g8.len), gs_file17, 437)])))));
                             }
                             int64_t t32 = r_g;
-                            double *t33 = &(GS_GL->elements_fe_g8.e[GS_IDX((int64_t)(t32), 30, gs_file17, 292)]);
+                            double *t33 = &(GS_GL->elements_fe_g8.e[GS_IDX((int64_t)(t32), 30, gs_file17, 438)]);
                             (*t33) = ((*t33) + (s_g));
                         }
                     }
@@ -42218,8 +42885,8 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
             double *t34 = GS_GL->elements_ke_g8.e;
             int64_t t35 = 900;
             int64_t t36 = 0;
-            int64_t t37 = gs_mul_i64((int64_t)(m_g), m_g, gs_file17, 310);
-            if (t36 < 0 || t37 < t36 || t37 > t35) gs_abort(GS_E_SLICE, gs_file17, 310);
+            int64_t t37 = gs_mul_i64((int64_t)(m_g), m_g, gs_file17, 456);
+            if (t36 < 0 || t37 < t36 || t37 > t35) gs_abort(GS_E_SLICE, gs_file17, 456);
             t38.data = t34 + t36; t38.len = t37 - t36;
             t39 = t38;
             int64_t t40 = t39.len;
@@ -42230,7 +42897,7 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
             int64_t t42 = 30;
             int64_t t43 = 0;
             int64_t t44 = m_g;
-            if (t43 < 0 || t44 < t43 || t44 > t42) gs_abort(GS_E_SLICE, gs_file17, 311);
+            if (t43 < 0 || t44 < t43 || t44 > t42) gs_abort(GS_E_SLICE, gs_file17, 457);
             t45.data = t41 + t43; t45.len = t44 - t43;
             t46 = t45;
             int64_t t47 = t46.len;
@@ -42265,30 +42932,30 @@ static void elements_cell_worker_g8(int64_t gs_sp) {
 }
 
 static void gs_init_globals(void) {
-    a2_i64 t0;
-    a6_i64 t1;
-    a12_i64 t2;
-    a24_i64 t3;
-    a3_i64 t4;
-    a3_i64 t5;
-    a6_sl_u8 t6;
-    sl_u8 t7;
-    sl_u8 t8;
+    a24_i64 t0;
+    a2_i64 t1;
+    a6_i64 t2;
+    a12_i64 t3;
+    a24_i64 t4;
+    a24_i64 t5;
+    a3_i64 t6;
+    a3_i64 t7;
+    a6_sl_u8 t8;
     sl_u8 t9;
     sl_u8 t10;
     sl_u8 t11;
     sl_u8 t12;
-    a6_sl_u8 t13;
+    sl_u8 t13;
     sl_u8 t14;
-    sl_u8 t15;
+    a6_sl_u8 t15;
     sl_u8 t16;
     sl_u8 t17;
     sl_u8 t18;
     sl_u8 t19;
-    a3_i64 t20;
-    a21_solvers_MemoryPath_g7 t21;
-    solvers_MemoryPath_g7 t22;
-    l32_u8 t23;
+    sl_u8 t20;
+    sl_u8 t21;
+    a3_i64 t22;
+    a21_solvers_MemoryPath_g7 t23;
     solvers_MemoryPath_g7 t24;
     l32_u8 t25;
     solvers_MemoryPath_g7 t26;
@@ -42329,13 +42996,13 @@ static void gs_init_globals(void) {
     l32_u8 t61;
     solvers_MemoryPath_g7 t62;
     l32_u8 t63;
-    l64_u8 t64;
-    l64_u8 t65;
-    a3_f64 t66;
-    a24_f64 t67;
-    a10_sl_u8 t68;
-    sl_u8 t69;
-    sl_u8 t70;
+    solvers_MemoryPath_g7 t64;
+    l32_u8 t65;
+    l64_u8 t66;
+    l64_u8 t67;
+    a3_f64 t68;
+    a24_f64 t69;
+    a10_sl_u8 t70;
     sl_u8 t71;
     sl_u8 t72;
     sl_u8 t73;
@@ -42344,70 +43011,73 @@ static void gs_init_globals(void) {
     sl_u8 t76;
     sl_u8 t77;
     sl_u8 t78;
-    a10_i64 t79;
-    a10_i64 t80;
-    a3_f64 t81;
-    a3_f64 t82;
-    a10_i64 t83;
-    a8_a3_i64 t84;
-    a3_i64 t85;
-    a3_i64 t86;
+    sl_u8 t79;
+    sl_u8 t80;
+    a10_i64 t81;
+    a10_i64 t82;
+    a3_f64 t83;
+    a3_f64 t84;
+    a10_i64 t85;
+    a8_a3_i64 t86;
     a3_i64 t87;
     a3_i64 t88;
     a3_i64 t89;
     a3_i64 t90;
     a3_i64 t91;
     a3_i64 t92;
-    a8_a3_f64 t93;
-    a3_f64 t94;
-    a3_f64 t95;
+    a3_i64 t93;
+    a3_i64 t94;
+    a8_a3_f64 t95;
     a3_f64 t96;
     a3_f64 t97;
     a3_f64 t98;
     a3_f64 t99;
     a3_f64 t100;
     a3_f64 t101;
-    a3_i64 t102;
+    a3_f64 t102;
     a3_f64 t103;
-    a3_f64 t104;
+    a3_i64 t104;
     a3_f64 t105;
     a3_f64 t106;
-    a3_i64 t107;
+    a3_f64 t107;
     a3_f64 t108;
-    a3_f64 t109;
-    a6_a3_i64 t110;
-    a3_i64 t111;
-    a3_i64 t112;
+    a3_i64 t109;
+    a3_f64 t110;
+    a3_f64 t111;
+    a6_a3_i64 t112;
     a3_i64 t113;
     a3_i64 t114;
     a3_i64 t115;
     a3_i64 t116;
-    a8_f64 t117;
-    a18_f64 t118;
-    a3_f64 t119;
-    a10_f64 t122;
-    a30_f64 t125;
-    a30_f64 t128;
-    a30_f64 t134;
-    l16_elements_Part_g8 t137;
-    l8_elements_Part_g8 t138;
-    a4_f64 t139;
-    a4_f64 t140;
-    a2_f64 t141;
-    a2_f64 t142;
-    a3_f64 t143;
-    a3_f64 t146;
-    a2_f64 t149;
-    sl_u8 t150;
+    a3_i64 t117;
+    a3_i64 t118;
+    a8_f64 t119;
+    a18_f64 t120;
+    a3_f64 t121;
+    a10_f64 t124;
+    a30_f64 t127;
+    a30_f64 t130;
+    a9_f64 t133;
+    a30_f64 t139;
+    l16_elements_Part_g8 t142;
+    l8_elements_Part_g8 t143;
+    a4_f64 t144;
+    a4_f64 t145;
+    a2_f64 t146;
+    a2_f64 t147;
+    a3_f64 t148;
     a3_f64 t151;
-    a3_f64 t152;
-    a3_i64 t153;
-    a6_i64 t154;
-    a6_i64 t155;
-    a9_f64 t156;
-    elements_J2_g8 t157;
-    a6_f64 t158;
-    a36_f64 t161;
+    a2_f64 t154;
+    sl_u8 t155;
+    a3_f64 t156;
+    a3_f64 t157;
+    a3_i64 t158;
+    a6_i64 t159;
+    a6_i64 t160;
+    a9_f64 t161;
+    elements_J2_g8 t162;
+    a6_f64 t163;
+    a36_f64 t166;
     gs_stack_init((&GS_GL->gs_gstk_argv_text_g));
     GS_GL->argv_text_g.base = (&GS_GL->gs_gstk_argv_text_g)->top;
     GS_GL->argv_text_g.len = 0;
@@ -42415,57 +43085,108 @@ static void gs_init_globals(void) {
     GS_GL->PI_g = 3.141592653589793;
     GS_GL->TAU_g = 6.283185307179586;
     GS_GL->elements_MAX_NODES_g8 = 10;
+    GS_GL->elements_hex_cells_g8 = 0;
     t0.e[0] = 0;
-    t0.e[1] = 1;
-    GS_GL->elements_LINE_EDGES_g8 = t0;
+    t0.e[1] = 0;
+    t0.e[2] = 0;
+    t0.e[3] = 1;
+    t0.e[4] = 0;
+    t0.e[5] = 0;
+    t0.e[6] = 1;
+    t0.e[7] = 1;
+    t0.e[8] = 0;
+    t0.e[9] = 0;
+    t0.e[10] = 1;
+    t0.e[11] = 0;
+    t0.e[12] = 0;
+    t0.e[13] = 0;
+    t0.e[14] = 1;
+    t0.e[15] = 1;
+    t0.e[16] = 0;
+    t0.e[17] = 1;
+    t0.e[18] = 1;
+    t0.e[19] = 1;
+    t0.e[20] = 1;
+    t0.e[21] = 0;
+    t0.e[22] = 1;
+    t0.e[23] = 1;
+    GS_GL->elements_HEX_CORNERS_g8 = t0;
     t1.e[0] = 0;
     t1.e[1] = 1;
-    t1.e[2] = 1;
-    t1.e[3] = 2;
-    t1.e[4] = 2;
-    t1.e[5] = 0;
-    GS_GL->elements_TRI_EDGES_g8 = t1;
+    GS_GL->elements_LINE_EDGES_g8 = t1;
     t2.e[0] = 0;
     t2.e[1] = 1;
     t2.e[2] = 1;
     t2.e[3] = 2;
-    t2.e[4] = 0;
-    t2.e[5] = 2;
-    t2.e[6] = 0;
-    t2.e[7] = 3;
-    t2.e[8] = 1;
-    t2.e[9] = 3;
-    t2.e[10] = 2;
-    t2.e[11] = 3;
-    GS_GL->elements_TET_EDGES_g8 = t2;
+    t2.e[4] = 2;
+    t2.e[5] = 0;
+    GS_GL->elements_TRI_EDGES_g8 = t2;
+    t3.e[0] = 0;
+    t3.e[1] = 1;
+    t3.e[2] = 1;
+    t3.e[3] = 2;
+    t3.e[4] = 0;
+    t3.e[5] = 2;
+    t3.e[6] = 0;
+    t3.e[7] = 3;
+    t3.e[8] = 1;
+    t3.e[9] = 3;
+    t3.e[10] = 2;
+    t3.e[11] = 3;
+    GS_GL->elements_TET_EDGES_g8 = t3;
     GS_GL->elements_TET_A_g8 = 0.1381966011250105;
     GS_GL->elements_TET_B_g8 = 0.5854101966249685;
     GS_GL->elements_LINE_G_g8 = 0.21132486540518713;
-    t3.e[0] = 0;
-    t3.e[1] = 1;
-    t3.e[2] = 2;
-    t3.e[3] = 4;
-    t3.e[4] = 5;
-    t3.e[5] = 6;
-    t3.e[6] = 0;
-    t3.e[7] = 1;
-    t3.e[8] = 3;
-    t3.e[9] = 4;
-    t3.e[10] = 8;
-    t3.e[11] = 7;
-    t3.e[12] = 1;
-    t3.e[13] = 2;
-    t3.e[14] = 3;
-    t3.e[15] = 5;
-    t3.e[16] = 9;
-    t3.e[17] = 8;
-    t3.e[18] = 0;
-    t3.e[19] = 2;
-    t3.e[20] = 3;
-    t3.e[21] = 6;
-    t3.e[22] = 9;
-    t3.e[23] = 7;
-    GS_GL->elements_TET_FACES_g8 = t3;
+    t4.e[0] = 0;
+    t4.e[1] = 1;
+    t4.e[2] = 2;
+    t4.e[3] = 4;
+    t4.e[4] = 5;
+    t4.e[5] = 6;
+    t4.e[6] = 0;
+    t4.e[7] = 1;
+    t4.e[8] = 3;
+    t4.e[9] = 4;
+    t4.e[10] = 8;
+    t4.e[11] = 7;
+    t4.e[12] = 1;
+    t4.e[13] = 2;
+    t4.e[14] = 3;
+    t4.e[15] = 5;
+    t4.e[16] = 9;
+    t4.e[17] = 8;
+    t4.e[18] = 0;
+    t4.e[19] = 2;
+    t4.e[20] = 3;
+    t4.e[21] = 6;
+    t4.e[22] = 9;
+    t4.e[23] = 7;
+    GS_GL->elements_TET_FACES_g8 = t4;
+    t5.e[0] = 0;
+    t5.e[1] = 3;
+    t5.e[2] = 7;
+    t5.e[3] = 4;
+    t5.e[4] = 1;
+    t5.e[5] = 2;
+    t5.e[6] = 6;
+    t5.e[7] = 5;
+    t5.e[8] = 0;
+    t5.e[9] = 1;
+    t5.e[10] = 5;
+    t5.e[11] = 4;
+    t5.e[12] = 3;
+    t5.e[13] = 2;
+    t5.e[14] = 6;
+    t5.e[15] = 7;
+    t5.e[16] = 0;
+    t5.e[17] = 1;
+    t5.e[18] = 2;
+    t5.e[19] = 3;
+    t5.e[20] = 4;
+    t5.e[21] = 5;
+    t5.e[22] = 6;
+    t5.e[23] = 7;
+    GS_GL->elements_HEX_FACES_g8 = t5;
     GS_GL->mesher_BOX_g6 = 0;
     GS_GL->mesher_CYLINDER_g6 = 1;
     GS_GL->mesher_RECT_g6 = 2;
@@ -42531,40 +43252,40 @@ static void gs_init_globals(void) {
     GS_GL->runtime_grad_g7.base = (&GS_GL->gs_gstk_runtime_grad_g7)->top;
     GS_GL->runtime_grad_g7.len = 0;
     GS_GL->runtime_grad_g7.len = 0;
-    t4.e[0] = 0;
-    t4.e[1] = 0;
-    t4.e[2] = 0;
-    GS_GL->runtime_cells_g7 = t4;
-    t5.e[0] = 0;
-    t5.e[1] = 0;
-    t5.e[2] = 0;
-    GS_GL->runtime_lattice_g7 = t5;
-    t7.data = ((uint8_t *)gs_str237); t7.len = 2;
-    t6.e[0] = t7;
-    t8.data = ((uint8_t *)gs_str238); t8.len = 2;
-    t6.e[1] = t8;
-    t9.data = ((uint8_t *)gs_str239); t9.len = 2;
-    t6.e[2] = t9;
-    t10.data = ((uint8_t *)gs_str240); t10.len = 2;
-    t6.e[3] = t10;
-    t11.data = ((uint8_t *)gs_str241); t11.len = 2;
-    t6.e[4] = t11;
-    t12.data = ((uint8_t *)gs_str242); t12.len = 2;
-    t6.e[5] = t12;
-    GS_GL->runtime_FACE_NAMES_g7 = t6;
-    t14.data = ((uint8_t *)gs_str243); t14.len = 2;
-    t13.e[0] = t14;
-    t15.data = ((uint8_t *)gs_str244); t15.len = 2;
-    t13.e[1] = t15;
-    t16.data = ((uint8_t *)gs_str245); t16.len = 2;
-    t13.e[2] = t16;
-    t17.data = ((uint8_t *)gs_str246); t17.len = 2;
-    t13.e[3] = t17;
-    t18.data = ((uint8_t *)gs_str241); t18.len = 2;
-    t13.e[4] = t18;
-    t19.data = ((uint8_t *)gs_str242); t19.len = 2;
-    t13.e[5] = t19;
-    GS_GL->runtime_ANNULUS_FACE_NAMES_g7 = t13;
+    t6.e[0] = 0;
+    t6.e[1] = 0;
+    t6.e[2] = 0;
+    GS_GL->runtime_cells_g7 = t6;
+    t7.e[0] = 0;
+    t7.e[1] = 0;
+    t7.e[2] = 0;
+    GS_GL->runtime_lattice_g7 = t7;
+    t9.data = ((uint8_t *)gs_str240); t9.len = 2;
+    t8.e[0] = t9;
+    t10.data = ((uint8_t *)gs_str241); t10.len = 2;
+    t8.e[1] = t10;
+    t11.data = ((uint8_t *)gs_str242); t11.len = 2;
+    t8.e[2] = t11;
+    t12.data = ((uint8_t *)gs_str243); t12.len = 2;
+    t8.e[3] = t12;
+    t13.data = ((uint8_t *)gs_str244); t13.len = 2;
+    t8.e[4] = t13;
+    t14.data = ((uint8_t *)gs_str245); t14.len = 2;
+    t8.e[5] = t14;
+    GS_GL->runtime_FACE_NAMES_g7 = t8;
+    t16.data = ((uint8_t *)gs_str246); t16.len = 2;
+    t15.e[0] = t16;
+    t17.data = ((uint8_t *)gs_str247); t17.len = 2;
+    t15.e[1] = t17;
+    t18.data = ((uint8_t *)gs_str248); t18.len = 2;
+    t15.e[2] = t18;
+    t19.data = ((uint8_t *)gs_str249); t19.len = 2;
+    t15.e[3] = t19;
+    t20.data = ((uint8_t *)gs_str244); t20.len = 2;
+    t15.e[4] = t20;
+    t21.data = ((uint8_t *)gs_str245); t21.len = 2;
+    t15.e[5] = t21;
+    GS_GL->runtime_ANNULUS_FACE_NAMES_g7 = t15;
     GS_GL->solvers_threads_g7 = 0;
     GS_GL->solvers_CELL_BLOCK_g7 = 16;
     gs_stack_init((&GS_GL->gs_gstk_solvers_rows_ids_g7));
@@ -42657,10 +43378,10 @@ static void gs_init_globals(void) {
     GS_GL->solvers_NESTED_WORK_g7 = 1000000000000.0;
     GS_GL->solvers_ND_PANEL_g7 = 48;
     GS_GL->solvers_ND_MAX_DEPTH_g7 = 64;
-    t20.e[0] = 0;
-    t20.e[1] = 0;
-    t20.e[2] = 0;
-    GS_GL->solvers_nd_lat_g7 = t20;
+    t22.e[0] = 0;
+    t22.e[1] = 0;
+    t22.e[2] = 0;
+    GS_GL->solvers_nd_lat_g7 = t22;
     GS_GL->solvers_nd_dpn_g7 = 0;
     gs_stack_init((&GS_GL->gs_gstk_solvers_nd_at_g7));
     GS_GL->solvers_nd_at_g7.base = (&GS_GL->gs_gstk_solvers_nd_at_g7)->top;
@@ -42716,197 +43437,197 @@ static void gs_init_globals(void) {
     GS_GL->solvers_nd_singular_g7 = -1;
     GS_GL->solvers_warm_solves_g7 = 0;
     GS_GL->solvers_LDLT_CHUNK_g7 = 4194304;
-    t21 = (a21_solvers_MemoryPath_g7){0};
-    t22 = (solvers_MemoryPath_g7){0};
-    t23 = (l32_u8){0};
-    t23.len = 13;
-    GS_MEMCPY(t23.e, ((uint8_t *)gs_str247), 13);
-    t22.name_g = t23;
-    t22.entry_bytes_g = 1.0;
-    t22.dof_bytes_g = 0.0;
-    t22.thread_bytes_g = 16.0;
-    t21.e[0] = t22;
+    t23 = (a21_solvers_MemoryPath_g7){0};
     t24 = (solvers_MemoryPath_g7){0};
     t25 = (l32_u8){0};
-    t25.len = 10;
-    GS_MEMCPY(t25.e, ((uint8_t *)gs_str248), 10);
+    t25.len = 13;
+    GS_MEMCPY(t25.e, ((uint8_t *)gs_str250), 13);
     t24.name_g = t25;
-    t24.entry_bytes_g = 64.0;
+    t24.entry_bytes_g = 1.0;
     t24.dof_bytes_g = 0.0;
-    t24.thread_bytes_g = 1.0;
-    t21.e[1] = t24;
+    t24.thread_bytes_g = 16.0;
+    t23.e[0] = t24;
     t26 = (solvers_MemoryPath_g7){0};
     t27 = (l32_u8){0};
-    t27.len = 18;
-    GS_MEMCPY(t27.e, ((uint8_t *)gs_str249), 18);
+    t27.len = 10;
+    GS_MEMCPY(t27.e, ((uint8_t *)gs_str251), 10);
     t26.name_g = t27;
-    t26.entry_bytes_g = 95.0;
+    t26.entry_bytes_g = 64.0;
     t26.dof_bytes_g = 0.0;
     t26.thread_bytes_g = 1.0;
-    t21.e[2] = t26;
+    t23.e[1] = t26;
     t28 = (solvers_MemoryPath_g7){0};
     t29 = (l32_u8){0};
-    t29.len = 14;
-    GS_MEMCPY(t29.e, ((uint8_t *)gs_str250), 14);
+    t29.len = 18;
+    GS_MEMCPY(t29.e, ((uint8_t *)gs_str252), 18);
     t28.name_g = t29;
-    t28.entry_bytes_g = 18.0;
+    t28.entry_bytes_g = 95.0;
     t28.dof_bytes_g = 0.0;
     t28.thread_bytes_g = 1.0;
-    t21.e[3] = t28;
+    t23.e[2] = t28;
     t30 = (solvers_MemoryPath_g7){0};
     t31 = (l32_u8){0};
     t31.len = 14;
-    GS_MEMCPY(t31.e, ((uint8_t *)gs_str251), 14);
+    GS_MEMCPY(t31.e, ((uint8_t *)gs_str253), 14);
     t30.name_g = t31;
-    t30.entry_bytes_g = 32.0;
-    t30.dof_bytes_g = 1600.0;
-    t30.thread_bytes_g = 16.0;
-    t21.e[4] = t30;
+    t30.entry_bytes_g = 18.0;
+    t30.dof_bytes_g = 0.0;
+    t30.thread_bytes_g = 1.0;
+    t23.e[3] = t30;
     t32 = (solvers_MemoryPath_g7){0};
     t33 = (l32_u8){0};
-    t33.len = 22;
-    GS_MEMCPY(t33.e, ((uint8_t *)gs_str252), 22);
+    t33.len = 14;
+    GS_MEMCPY(t33.e, ((uint8_t *)gs_str254), 14);
     t32.name_g = t33;
-    t32.entry_bytes_g = 86.0;
-    t32.dof_bytes_g = 0.0;
+    t32.entry_bytes_g = 32.0;
+    t32.dof_bytes_g = 1600.0;
     t32.thread_bytes_g = 16.0;
-    t21.e[5] = t32;
+    t23.e[4] = t32;
     t34 = (solvers_MemoryPath_g7){0};
     t35 = (l32_u8){0};
-    t35.len = 24;
-    GS_MEMCPY(t35.e, ((uint8_t *)gs_str253), 24);
+    t35.len = 22;
+    GS_MEMCPY(t35.e, ((uint8_t *)gs_str255), 22);
     t34.name_g = t35;
-    t34.entry_bytes_g = 73.0;
+    t34.entry_bytes_g = 86.0;
     t34.dof_bytes_g = 0.0;
-    t34.thread_bytes_g = 1.0;
-    t21.e[6] = t34;
+    t34.thread_bytes_g = 16.0;
+    t23.e[5] = t34;
     t36 = (solvers_MemoryPath_g7){0};
     t37 = (l32_u8){0};
-    t37.len = 27;
-    GS_MEMCPY(t37.e, ((uint8_t *)gs_str254), 27);
+    t37.len = 24;
+    GS_MEMCPY(t37.e, ((uint8_t *)gs_str256), 24);
     t36.name_g = t37;
-    t36.entry_bytes_g = 40.0;
+    t36.entry_bytes_g = 73.0;
     t36.dof_bytes_g = 0.0;
     t36.thread_bytes_g = 1.0;
-    t21.e[7] = t36;
+    t23.e[6] = t36;
     t38 = (solvers_MemoryPath_g7){0};
     t39 = (l32_u8){0};
-    t39.len = 26;
-    GS_MEMCPY(t39.e, ((uint8_t *)gs_str255), 26);
+    t39.len = 27;
+    GS_MEMCPY(t39.e, ((uint8_t *)gs_str257), 27);
     t38.name_g = t39;
-    t38.entry_bytes_g = 9.0;
+    t38.entry_bytes_g = 40.0;
     t38.dof_bytes_g = 0.0;
-    t38.thread_bytes_g = 12.0;
-    t21.e[8] = t38;
+    t38.thread_bytes_g = 1.0;
+    t23.e[7] = t38;
     t40 = (solvers_MemoryPath_g7){0};
     t41 = (l32_u8){0};
-    t41.len = 21;
-    GS_MEMCPY(t41.e, ((uint8_t *)gs_str71), 21);
+    t41.len = 26;
+    GS_MEMCPY(t41.e, ((uint8_t *)gs_str258), 26);
     t40.name_g = t41;
-    t40.entry_bytes_g = 32.0;
-    t40.dof_bytes_g = 1600.0;
-    t40.thread_bytes_g = 16.0;
-    t21.e[9] = t40;
+    t40.entry_bytes_g = 9.0;
+    t40.dof_bytes_g = 0.0;
+    t40.thread_bytes_g = 12.0;
+    t23.e[8] = t40;
     t42 = (solvers_MemoryPath_g7){0};
     t43 = (l32_u8){0};
-    t43.len = 12;
-    GS_MEMCPY(t43.e, ((uint8_t *)gs_str256), 12);
+    t43.len = 21;
+    GS_MEMCPY(t43.e, ((uint8_t *)gs_str72), 21);
     t42.name_g = t43;
-    t42.entry_bytes_g = 9.0;
-    t42.dof_bytes_g = 0.0;
-    t42.thread_bytes_g = 0.0;
-    t21.e[10] = t42;
+    t42.entry_bytes_g = 32.0;
+    t42.dof_bytes_g = 1600.0;
+    t42.thread_bytes_g = 16.0;
+    t23.e[9] = t42;
     t44 = (solvers_MemoryPath_g7){0};
     t45 = (l32_u8){0};
-    t45.len = 18;
-    GS_MEMCPY(t45.e, ((uint8_t *)gs_str257), 18);
+    t45.len = 12;
+    GS_MEMCPY(t45.e, ((uint8_t *)gs_str259), 12);
     t44.name_g = t45;
     t44.entry_bytes_g = 9.0;
     t44.dof_bytes_g = 0.0;
     t44.thread_bytes_g = 0.0;
-    t21.e[11] = t44;
+    t23.e[10] = t44;
     t46 = (solvers_MemoryPath_g7){0};
     t47 = (l32_u8){0};
-    t47.len = 27;
-    GS_MEMCPY(t47.e, ((uint8_t *)gs_str76), 27);
+    t47.len = 18;
+    GS_MEMCPY(t47.e, ((uint8_t *)gs_str260), 18);
     t46.name_g = t47;
-    t46.entry_bytes_g = 16.0;
+    t46.entry_bytes_g = 9.0;
     t46.dof_bytes_g = 0.0;
     t46.thread_bytes_g = 0.0;
-    t21.e[12] = t46;
+    t23.e[11] = t46;
     t48 = (solvers_MemoryPath_g7){0};
     t49 = (l32_u8){0};
-    t49.len = 23;
-    GS_MEMCPY(t49.e, ((uint8_t *)gs_str258), 23);
+    t49.len = 27;
+    GS_MEMCPY(t49.e, ((uint8_t *)gs_str77), 27);
     t48.name_g = t49;
-    t48.entry_bytes_g = 18.0;
+    t48.entry_bytes_g = 16.0;
     t48.dof_bytes_g = 0.0;
-    t48.thread_bytes_g = 16.0;
-    t21.e[13] = t48;
+    t48.thread_bytes_g = 0.0;
+    t23.e[12] = t48;
     t50 = (solvers_MemoryPath_g7){0};
     t51 = (l32_u8){0};
-    t51.len = 22;
-    GS_MEMCPY(t51.e, ((uint8_t *)gs_str259), 22);
+    t51.len = 23;
+    GS_MEMCPY(t51.e, ((uint8_t *)gs_str261), 23);
     t50.name_g = t51;
-    t50.entry_bytes_g = 25.0;
+    t50.entry_bytes_g = 18.0;
     t50.dof_bytes_g = 0.0;
     t50.thread_bytes_g = 16.0;
-    t21.e[14] = t50;
+    t23.e[13] = t50;
     t52 = (solvers_MemoryPath_g7){0};
     t53 = (l32_u8){0};
-    t53.len = 15;
-    GS_MEMCPY(t53.e, ((uint8_t *)gs_str260), 15);
+    t53.len = 22;
+    GS_MEMCPY(t53.e, ((uint8_t *)gs_str262), 22);
     t52.name_g = t53;
-    t52.entry_bytes_g = 0.0;
+    t52.entry_bytes_g = 25.0;
     t52.dof_bytes_g = 0.0;
-    t52.thread_bytes_g = 0.0;
-    t21.e[15] = t52;
+    t52.thread_bytes_g = 16.0;
+    t23.e[14] = t52;
     t54 = (solvers_MemoryPath_g7){0};
     t55 = (l32_u8){0};
-    t55.len = 11;
-    GS_MEMCPY(t55.e, ((uint8_t *)gs_str261), 11);
+    t55.len = 15;
+    GS_MEMCPY(t55.e, ((uint8_t *)gs_str263), 15);
     t54.name_g = t55;
     t54.entry_bytes_g = 0.0;
     t54.dof_bytes_g = 0.0;
     t54.thread_bytes_g = 0.0;
-    t21.e[16] = t54;
+    t23.e[15] = t54;
     t56 = (solvers_MemoryPath_g7){0};
     t57 = (l32_u8){0};
-    t57.len = 19;
-    GS_MEMCPY(t57.e, ((uint8_t *)gs_str262), 19);
+    t57.len = 11;
+    GS_MEMCPY(t57.e, ((uint8_t *)gs_str264), 11);
     t56.name_g = t57;
-    t56.entry_bytes_g = 16.0;
+    t56.entry_bytes_g = 0.0;
     t56.dof_bytes_g = 0.0;
     t56.thread_bytes_g = 0.0;
-    t21.e[17] = t56;
+    t23.e[16] = t56;
     t58 = (solvers_MemoryPath_g7){0};
     t59 = (l32_u8){0};
-    t59.len = 16;
-    GS_MEMCPY(t59.e, ((uint8_t *)gs_str263), 16);
+    t59.len = 19;
+    GS_MEMCPY(t59.e, ((uint8_t *)gs_str265), 19);
     t58.name_g = t59;
     t58.entry_bytes_g = 16.0;
     t58.dof_bytes_g = 0.0;
     t58.thread_bytes_g = 0.0;
-    t21.e[18] = t58;
+    t23.e[17] = t58;
     t60 = (solvers_MemoryPath_g7){0};
     t61 = (l32_u8){0};
-    t61.len = 15;
-    GS_MEMCPY(t61.e, ((uint8_t *)gs_str264), 15);
+    t61.len = 16;
+    GS_MEMCPY(t61.e, ((uint8_t *)gs_str266), 16);
     t60.name_g = t61;
-    t60.entry_bytes_g = 32.0;
+    t60.entry_bytes_g = 16.0;
     t60.dof_bytes_g = 0.0;
     t60.thread_bytes_g = 0.0;
-    t21.e[19] = t60;
+    t23.e[18] = t60;
     t62 = (solvers_MemoryPath_g7){0};
     t63 = (l32_u8){0};
-    t63.len = 16;
-    GS_MEMCPY(t63.e, ((uint8_t *)gs_str265), 16);
+    t63.len = 15;
+    GS_MEMCPY(t63.e, ((uint8_t *)gs_str267), 15);
     t62.name_g = t63;
-    t62.entry_bytes_g = 8.0;
+    t62.entry_bytes_g = 32.0;
     t62.dof_bytes_g = 0.0;
     t62.thread_bytes_g = 0.0;
-    t21.e[20] = t62;
-    GS_GL->solvers_MEMORY_PATHS_g7 = t21;
+    t23.e[19] = t62;
+    t64 = (solvers_MemoryPath_g7){0};
+    t65 = (l32_u8){0};
+    t65.len = 16;
+    GS_MEMCPY(t65.e, ((uint8_t *)gs_str268), 16);
+    t64.name_g = t65;
+    t64.entry_bytes_g = 8.0;
+    t64.dof_bytes_g = 0.0;
+    t64.thread_bytes_g = 0.0;
+    t23.e[20] = t64;
+    GS_GL->solvers_MEMORY_PATHS_g7 = t23;
     GS_GL->solvers_THREAD_BYTES_g7 = 1500000.0;
     GS_GL->solvers_BUDGET_SHARE_g7 = 0.9;
     GS_GL->solvers_budget_g7 = -1.0;
@@ -42942,14 +43663,14 @@ static void gs_init_globals(void) {
     GS_GL->runtime_last_iterations_g7 = 0;
     GS_GL->runtime_last_seconds_g7 = 0.0;
     GS_GL->runtime_CG_TOLERANCE_g7 = 1e-10;
-    t64 = (l64_u8){0};
-    t64.len = 2;
-    GS_MEMCPY(t64.e, ((uint8_t *)gs_str266), 2);
-    GS_GL->runtime_solver_name_g7 = t64;
-    t65 = (l64_u8){0};
-    t65.len = 6;
-    GS_MEMCPY(t65.e, ((uint8_t *)gs_str267), 6);
-    GS_GL->runtime_preconditioner_name_g7 = t65;
+    t66 = (l64_u8){0};
+    t66.len = 2;
+    GS_MEMCPY(t66.e, ((uint8_t *)gs_str269), 2);
+    GS_GL->runtime_solver_name_g7 = t66;
+    t67 = (l64_u8){0};
+    t67.len = 6;
+    GS_MEMCPY(t67.e, ((uint8_t *)gs_str270), 6);
+    GS_GL->runtime_preconditioner_name_g7 = t67;
     gs_stack_init((&GS_GL->gs_gstk_runtime_face_w_g7));
     GS_GL->runtime_face_w_g7.base = (&GS_GL->gs_gstk_runtime_face_w_g7)->top;
     GS_GL->runtime_face_w_g7.len = 0;
@@ -42970,35 +43691,35 @@ static void gs_init_globals(void) {
     GS_GL->runtime_point_dn_g7.base = (&GS_GL->gs_gstk_runtime_point_dn_g7)->top;
     GS_GL->runtime_point_dn_g7.len = 0;
     GS_GL->runtime_point_dn_g7.len = 0;
-    t66.e[0] = 0.0;
-    t66.e[1] = 0.0;
-    t66.e[2] = 0.0;
-    GS_GL->runtime_point_xi_g7 = t66;
-    t67.e[0] = -1.0;
-    t67.e[1] = -1.0;
-    t67.e[2] = -1.0;
-    t67.e[3] = 1.0;
-    t67.e[4] = -1.0;
-    t67.e[5] = -1.0;
-    t67.e[6] = 1.0;
-    t67.e[7] = 1.0;
-    t67.e[8] = -1.0;
-    t67.e[9] = -1.0;
-    t67.e[10] = 1.0;
-    t67.e[11] = -1.0;
-    t67.e[12] = -1.0;
-    t67.e[13] = -1.0;
-    t67.e[14] = 1.0;
-    t67.e[15] = 1.0;
-    t67.e[16] = -1.0;
-    t67.e[17] = 1.0;
-    t67.e[18] = 1.0;
-    t67.e[19] = 1.0;
-    t67.e[20] = 1.0;
-    t67.e[21] = -1.0;
-    t67.e[22] = 1.0;
-    t67.e[23] = 1.0;
-    GS_GL->runtime_HEX8_CORNERS_g7 = t67;
+    t68.e[0] = 0.0;
+    t68.e[1] = 0.0;
+    t68.e[2] = 0.0;
+    GS_GL->runtime_point_xi_g7 = t68;
+    t69.e[0] = -1.0;
+    t69.e[1] = -1.0;
+    t69.e[2] = -1.0;
+    t69.e[3] = 1.0;
+    t69.e[4] = -1.0;
+    t69.e[5] = -1.0;
+    t69.e[6] = 1.0;
+    t69.e[7] = 1.0;
+    t69.e[8] = -1.0;
+    t69.e[9] = -1.0;
+    t69.e[10] = 1.0;
+    t69.e[11] = -1.0;
+    t69.e[12] = -1.0;
+    t69.e[13] = -1.0;
+    t69.e[14] = 1.0;
+    t69.e[15] = 1.0;
+    t69.e[16] = -1.0;
+    t69.e[17] = 1.0;
+    t69.e[18] = 1.0;
+    t69.e[19] = 1.0;
+    t69.e[20] = 1.0;
+    t69.e[21] = -1.0;
+    t69.e[22] = 1.0;
+    t69.e[23] = 1.0;
+    GS_GL->runtime_HEX8_CORNERS_g7 = t69;
     GS_GL->runtime_GAUSS2_X_g7 = 0.5773502691896258;
     GS_GL->runtime_NODE_DOFS_g7 = 24;
     GS_GL->runtime_MODE_DOFS_g7 = 9;
@@ -43033,49 +43754,49 @@ static void gs_init_globals(void) {
     GS_GL->runtime_BEAM2_g7 = 7;
     GS_GL->runtime_HEX8I_g7 = 8;
     GS_GL->runtime_QUAD4_g7 = 9;
-    t69.data = ((uint8_t *)gs_str268); t69.len = 4;
-    t68.e[0] = t69;
-    t70.data = ((uint8_t *)gs_str269); t70.len = 4;
-    t68.e[1] = t70;
-    t71.data = ((uint8_t *)gs_str270); t71.len = 4;
-    t68.e[2] = t71;
-    t72.data = ((uint8_t *)gs_str271); t72.len = 5;
-    t68.e[3] = t72;
-    t73.data = ((uint8_t *)gs_str272); t73.len = 4;
-    t68.e[4] = t73;
-    t74.data = ((uint8_t *)gs_str273); t74.len = 5;
-    t68.e[5] = t74;
-    t75.data = ((uint8_t *)gs_str274); t75.len = 11;
-    t68.e[6] = t75;
-    t76.data = ((uint8_t *)gs_str275); t76.len = 5;
-    t68.e[7] = t76;
-    t77.data = ((uint8_t *)gs_str276); t77.len = 5;
-    t68.e[8] = t77;
-    t78.data = ((uint8_t *)gs_str277); t78.len = 5;
-    t68.e[9] = t78;
-    GS_GL->runtime_CELL_NAMES_g7 = t68;
-    t79.e[0] = 3;
-    t79.e[1] = 6;
-    t79.e[2] = 4;
-    t79.e[3] = 10;
-    t79.e[4] = 8;
-    t79.e[5] = 27;
-    t79.e[6] = 4;
-    t79.e[7] = 2;
-    t79.e[8] = 8;
-    t79.e[9] = 4;
-    GS_GL->runtime_CELL_NODES_g7 = t79;
-    t80.e[0] = 2;
-    t80.e[1] = 2;
-    t80.e[2] = 3;
-    t80.e[3] = 3;
-    t80.e[4] = 3;
-    t80.e[5] = 3;
-    t80.e[6] = 2;
-    t80.e[7] = 1;
-    t80.e[8] = 3;
-    t80.e[9] = 2;
-    GS_GL->runtime_CELL_DIMS_g7 = t80;
+    t71.data = ((uint8_t *)gs_str271); t71.len = 4;
+    t70.e[0] = t71;
+    t72.data = ((uint8_t *)gs_str272); t72.len = 4;
+    t70.e[1] = t72;
+    t73.data = ((uint8_t *)gs_str273); t73.len = 4;
+    t70.e[2] = t73;
+    t74.data = ((uint8_t *)gs_str274); t74.len = 5;
+    t70.e[3] = t74;
+    t75.data = ((uint8_t *)gs_str275); t75.len = 4;
+    t70.e[4] = t75;
+    t76.data = ((uint8_t *)gs_str276); t76.len = 5;
+    t70.e[5] = t76;
+    t77.data = ((uint8_t *)gs_str277); t77.len = 11;
+    t70.e[6] = t77;
+    t78.data = ((uint8_t *)gs_str278); t78.len = 5;
+    t70.e[7] = t78;
+    t79.data = ((uint8_t *)gs_str279); t79.len = 5;
+    t70.e[8] = t79;
+    t80.data = ((uint8_t *)gs_str280); t80.len = 5;
+    t70.e[9] = t80;
+    GS_GL->runtime_CELL_NAMES_g7 = t70;
+    t81.e[0] = 3;
+    t81.e[1] = 6;
+    t81.e[2] = 4;
+    t81.e[3] = 10;
+    t81.e[4] = 8;
+    t81.e[5] = 27;
+    t81.e[6] = 4;
+    t81.e[7] = 2;
+    t81.e[8] = 8;
+    t81.e[9] = 4;
+    GS_GL->runtime_CELL_NODES_g7 = t81;
+    t82.e[0] = 2;
+    t82.e[1] = 2;
+    t82.e[2] = 3;
+    t82.e[3] = 3;
+    t82.e[4] = 3;
+    t82.e[5] = 3;
+    t82.e[6] = 2;
+    t82.e[7] = 1;
+    t82.e[8] = 3;
+    t82.e[9] = 2;
+    GS_GL->runtime_CELL_DIMS_g7 = t82;
     gs_stack_init((&GS_GL->gs_gstk_runtime_coords_g7));
     GS_GL->runtime_coords_g7.base = (&GS_GL->gs_gstk_runtime_coords_g7)->top;
     GS_GL->runtime_coords_g7.len = 0;
@@ -43122,95 +43843,95 @@ static void gs_init_globals(void) {
     GS_GL->runtime_set_items_g7.len = 0;
     GS_GL->runtime_set_items_g7.len = 0;
     GS_GL->runtime_FACE_STRIDE_g7 = 6;
-    t81.e[0] = -0.7745966692414834;
-    t81.e[1] = 0.0;
-    t81.e[2] = 0.7745966692414834;
-    GS_GL->runtime_GAUSS3_X_g7 = t81;
-    t82.e[0] = 0.5555555555555556;
-    t82.e[1] = 0.8888888888888888;
-    t82.e[2] = 0.5555555555555556;
-    GS_GL->runtime_GAUSS3_W_g7 = t82;
-    t83.e[0] = 5;
-    t83.e[1] = 22;
-    t83.e[2] = 10;
-    t83.e[3] = 24;
-    t83.e[4] = 12;
-    t83.e[5] = 12;
-    t83.e[6] = 9;
-    t83.e[7] = 3;
-    t83.e[8] = 12;
-    t83.e[9] = 9;
-    GS_GL->runtime_VTK_TYPES_g7 = t83;
+    t83.e[0] = -0.7745966692414834;
+    t83.e[1] = 0.0;
+    t83.e[2] = 0.7745966692414834;
+    GS_GL->runtime_GAUSS3_X_g7 = t83;
+    t84.e[0] = 0.5555555555555556;
+    t84.e[1] = 0.8888888888888888;
+    t84.e[2] = 0.5555555555555556;
+    GS_GL->runtime_GAUSS3_W_g7 = t84;
+    t85.e[0] = 5;
+    t85.e[1] = 22;
+    t85.e[2] = 10;
+    t85.e[3] = 24;
+    t85.e[4] = 12;
+    t85.e[5] = 12;
+    t85.e[6] = 9;
+    t85.e[7] = 3;
+    t85.e[8] = 12;
+    t85.e[9] = 9;
+    GS_GL->runtime_VTK_TYPES_g7 = t85;
     GS_GL->runtime_X_g7 = 0;
     GS_GL->runtime_Y_g7 = 1;
     GS_GL->runtime_Z_g7 = 2;
     GS_GL->mesher_mesh_dim_g6 = 0;
-    t85.e[0] = 1;
-    t85.e[1] = 3;
-    t85.e[2] = 4;
-    t84.e[0] = t85;
-    t86.e[0] = 2;
-    t86.e[1] = 0;
-    t86.e[2] = 5;
-    t84.e[1] = t86;
-    t87.e[0] = 3;
-    t87.e[1] = 1;
-    t87.e[2] = 6;
-    t84.e[2] = t87;
-    t88.e[0] = 0;
-    t88.e[1] = 2;
-    t88.e[2] = 7;
-    t84.e[3] = t88;
-    t89.e[0] = 7;
-    t89.e[1] = 5;
-    t89.e[2] = 0;
-    t84.e[4] = t89;
-    t90.e[0] = 4;
-    t90.e[1] = 6;
-    t90.e[2] = 1;
-    t84.e[5] = t90;
-    t91.e[0] = 5;
-    t91.e[1] = 7;
-    t91.e[2] = 2;
-    t84.e[6] = t91;
-    t92.e[0] = 6;
-    t92.e[1] = 4;
-    t92.e[2] = 3;
-    t84.e[7] = t92;
-    GS_GL->mesher_HEX_CORNERS_g6 = t84;
-    t94.e[0] = 0.0;
-    t94.e[1] = 0.0;
-    t94.e[2] = 0.0;
-    t93.e[0] = t94;
-    t95.e[0] = 1.0;
-    t95.e[1] = 0.0;
-    t95.e[2] = 0.0;
-    t93.e[1] = t95;
-    t96.e[0] = 1.0;
-    t96.e[1] = 1.0;
+    t87.e[0] = 1;
+    t87.e[1] = 3;
+    t87.e[2] = 4;
+    t86.e[0] = t87;
+    t88.e[0] = 2;
+    t88.e[1] = 0;
+    t88.e[2] = 5;
+    t86.e[1] = t88;
+    t89.e[0] = 3;
+    t89.e[1] = 1;
+    t89.e[2] = 6;
+    t86.e[2] = t89;
+    t90.e[0] = 0;
+    t90.e[1] = 2;
+    t90.e[2] = 7;
+    t86.e[3] = t90;
+    t91.e[0] = 7;
+    t91.e[1] = 5;
+    t91.e[2] = 0;
+    t86.e[4] = t91;
+    t92.e[0] = 4;
+    t92.e[1] = 6;
+    t92.e[2] = 1;
+    t86.e[5] = t92;
+    t93.e[0] = 5;
+    t93.e[1] = 7;
+    t93.e[2] = 2;
+    t86.e[6] = t93;
+    t94.e[0] = 6;
+    t94.e[1] = 4;
+    t94.e[2] = 3;
+    t86.e[7] = t94;
+    GS_GL->mesher_HEX_CORNERS_g6 = t86;
+    t96.e[0] = 0.0;
+    t96.e[1] = 0.0;
     t96.e[2] = 0.0;
-    t93.e[2] = t96;
-    t97.e[0] = 0.0;
-    t97.e[1] = 1.0;
+    t95.e[0] = t96;
+    t97.e[0] = 1.0;
+    t97.e[1] = 0.0;
     t97.e[2] = 0.0;
-    t93.e[3] = t97;
-    t98.e[0] = 0.0;
-    t98.e[1] = 0.0;
-    t98.e[2] = 1.0;
-    t93.e[4] = t98;
-    t99.e[0] = 1.0;
-    t99.e[1] = 0.0;
-    t99.e[2] = 1.0;
-    t93.e[5] = t99;
-    t100.e[0] = 1.0;
-    t100.e[1] = 1.0;
+    t95.e[1] = t97;
+    t98.e[0] = 1.0;
+    t98.e[1] = 1.0;
+    t98.e[2] = 0.0;
+    t95.e[2] = t98;
+    t99.e[0] = 0.0;
+    t99.e[1] = 1.0;
+    t99.e[2] = 0.0;
+    t95.e[3] = t99;
+    t100.e[0] = 0.0;
+    t100.e[1] = 0.0;
     t100.e[2] = 1.0;
-    t93.e[6] = t100;
-    t101.e[0] = 0.0;
-    t101.e[1] = 1.0;
+    t95.e[4] = t100;
+    t101.e[0] = 1.0;
+    t101.e[1] = 0.0;
     t101.e[2] = 1.0;
-    t93.e[7] = t101;
-    GS_GL->mesher_HEX_UNIT_g6 = t93;
+    t95.e[5] = t101;
+    t102.e[0] = 1.0;
+    t102.e[1] = 1.0;
+    t102.e[2] = 1.0;
+    t95.e[6] = t102;
+    t103.e[0] = 0.0;
+    t103.e[1] = 1.0;
+    t103.e[2] = 1.0;
+    t95.e[7] = t103;
+    GS_GL->mesher_HEX_UNIT_g6 = t95;
     GS_GL->mesher_GRADE_g6 = 0.4;
     GS_GL->mesher_SLACK_g6 = 1.5;
     GS_GL->mesher_MAX_ROUNDS_g6 = 60;
@@ -43289,18 +44010,18 @@ static void gs_init_globals(void) {
     GS_GL->mesher_grade_g6 = 1.3;
     GS_GL->mesher_ALPHA_LONG_g6 = 0.24999;
     GS_GL->mesher_ALPHA_SHORT_g6 = 0.41189;
-    t102.e[0] = 0;
-    t102.e[1] = 0;
-    t102.e[2] = 0;
-    GS_GL->mesher_lattice_cubes_g6 = t102;
-    t103.e[0] = 0.0;
-    t103.e[1] = 0.0;
-    t103.e[2] = 0.0;
-    GS_GL->mesher_lattice_origin_g6 = t103;
-    t104.e[0] = 0.0;
-    t104.e[1] = 0.0;
-    t104.e[2] = 0.0;
-    GS_GL->mesher_lattice_step_g6 = t104;
+    t104.e[0] = 0;
+    t104.e[1] = 0;
+    t104.e[2] = 0;
+    GS_GL->mesher_lattice_cubes_g6 = t104;
+    t105.e[0] = 0.0;
+    t105.e[1] = 0.0;
+    t105.e[2] = 0.0;
+    GS_GL->mesher_lattice_origin_g6 = t105;
+    t106.e[0] = 0.0;
+    t106.e[1] = 0.0;
+    t106.e[2] = 0.0;
+    GS_GL->mesher_lattice_step_g6 = t106;
     gs_stack_init((&GS_GL->gs_gstk_mesher_lx_g6));
     GS_GL->mesher_lx_g6.base = (&GS_GL->gs_gstk_mesher_lx_g6)->top;
     GS_GL->mesher_lx_g6.len = 0;
@@ -43360,14 +44081,14 @@ static void gs_init_globals(void) {
     GS_GL->elements_conn_g8.base = (&GS_GL->gs_gstk_elements_conn_g8)->top;
     GS_GL->elements_conn_g8.len = 0;
     GS_GL->elements_conn_g8.len = 0;
-    t105.e[0] = 0.0;
-    t105.e[1] = 0.0;
-    t105.e[2] = 0.0;
-    GS_GL->elements_bbox_lo_g8 = t105;
-    t106.e[0] = 0.0;
-    t106.e[1] = 0.0;
-    t106.e[2] = 0.0;
-    GS_GL->elements_bbox_hi_g8 = t106;
+    t107.e[0] = 0.0;
+    t107.e[1] = 0.0;
+    t107.e[2] = 0.0;
+    GS_GL->elements_bbox_lo_g8 = t107;
+    t108.e[0] = 0.0;
+    t108.e[1] = 0.0;
+    t108.e[2] = 0.0;
+    GS_GL->elements_bbox_hi_g8 = t108;
     gs_stack_init((&GS_GL->gs_gstk_elements_cell_body_g8));
     GS_GL->elements_cell_body_g8.base = (&GS_GL->gs_gstk_elements_cell_body_g8)->top;
     GS_GL->elements_cell_body_g8.len = 0;
@@ -43380,52 +44101,52 @@ static void gs_init_globals(void) {
     GS_GL->elements_body_shapes_g8.base = (&GS_GL->gs_gstk_elements_body_shapes_g8)->top;
     GS_GL->elements_body_shapes_g8.len = 0;
     GS_GL->elements_body_shapes_g8.len = 0;
-    t107.e[0] = 1;
-    t107.e[1] = 1;
-    t107.e[2] = 1;
-    GS_GL->elements_lat_g8 = t107;
+    t109.e[0] = 1;
+    t109.e[1] = 1;
+    t109.e[2] = 1;
+    GS_GL->elements_lat_g8 = t109;
     GS_GL->elements_on_lattice_g8 = 0;
     GS_GL->elements_MAP_BOX_g8 = 0;
     GS_GL->elements_MAP_HOLE_g8 = 1;
     GS_GL->elements_map_kind_g8 = 0;
-    t108.e[0] = 0.0;
-    t108.e[1] = 0.0;
-    t108.e[2] = 0.0;
-    GS_GL->elements_map_lo_g8 = t108;
-    t109.e[0] = 0.0;
-    t109.e[1] = 0.0;
-    t109.e[2] = 0.0;
-    GS_GL->elements_map_hi_g8 = t109;
+    t110.e[0] = 0.0;
+    t110.e[1] = 0.0;
+    t110.e[2] = 0.0;
+    GS_GL->elements_map_lo_g8 = t110;
+    t111.e[0] = 0.0;
+    t111.e[1] = 0.0;
+    t111.e[2] = 0.0;
+    GS_GL->elements_map_hi_g8 = t111;
     GS_GL->elements_hole_r_g8 = 0.0;
     gs_stack_init((&GS_GL->gs_gstk_elements_radial_g8));
     GS_GL->elements_radial_g8.base = (&GS_GL->gs_gstk_elements_radial_g8)->top;
     GS_GL->elements_radial_g8.len = 0;
     GS_GL->elements_radial_g8.len = 0;
-    t111.e[0] = 0;
-    t111.e[1] = 1;
-    t111.e[2] = 2;
-    t110.e[0] = t111;
-    t112.e[0] = 0;
-    t112.e[1] = 2;
-    t112.e[2] = 1;
-    t110.e[1] = t112;
-    t113.e[0] = 1;
-    t113.e[1] = 0;
+    t113.e[0] = 0;
+    t113.e[1] = 1;
     t113.e[2] = 2;
-    t110.e[2] = t113;
-    t114.e[0] = 1;
+    t112.e[0] = t113;
+    t114.e[0] = 0;
     t114.e[1] = 2;
-    t114.e[2] = 0;
-    t110.e[3] = t114;
-    t115.e[0] = 2;
+    t114.e[2] = 1;
+    t112.e[1] = t114;
+    t115.e[0] = 1;
     t115.e[1] = 0;
-    t115.e[2] = 1;
-    t110.e[4] = t115;
-    t116.e[0] = 2;
-    t116.e[1] = 1;
+    t115.e[2] = 2;
+    t112.e[2] = t115;
+    t116.e[0] = 1;
+    t116.e[1] = 2;
     t116.e[2] = 0;
-    t110.e[5] = t116;
-    GS_GL->elements_KUHN_g8 = t110;
+    t112.e[3] = t116;
+    t117.e[0] = 2;
+    t117.e[1] = 0;
+    t117.e[2] = 1;
+    t112.e[4] = t117;
+    t118.e[0] = 2;
+    t118.e[1] = 1;
+    t118.e[2] = 0;
+    t112.e[5] = t118;
+    GS_GL->elements_KUHN_g8 = t112;
     GS_GL->elements_GRADE_g8 = 1.25;
     GS_GL->elements_CT_SLOTS_g8 = 12;
     GS_GL->elements_RIGID_SCALE_g8 = 1000.0;
@@ -43488,34 +44209,34 @@ static void gs_init_globals(void) {
     GS_GL->elements_rigid_q_g8.len = 0;
     GS_GL->elements_rigid_modes_g8 = 0;
     GS_GL->elements_rigid_k_g8 = 0.0;
-    t117.e[0] = 0.0694318442029737;
-    t117.e[1] = 0.1739274225687269;
-    t117.e[2] = 0.3300094782075719;
-    t117.e[3] = 0.3260725774312731;
-    t117.e[4] = 0.6699905217924281;
-    t117.e[5] = 0.3260725774312731;
-    t117.e[6] = 0.9305681557970263;
-    t117.e[7] = 0.1739274225687269;
-    GS_GL->elements_CT_LINE_g8 = t117;
-    t118.e[0] = 0.445948490915965;
-    t118.e[1] = 0.445948490915965;
-    t118.e[2] = 0.111690794839005;
-    t118.e[3] = 0.445948490915965;
-    t118.e[4] = 0.10810301816807;
-    t118.e[5] = 0.111690794839005;
-    t118.e[6] = 0.10810301816807;
-    t118.e[7] = 0.445948490915965;
-    t118.e[8] = 0.111690794839005;
-    t118.e[9] = 0.091576213509771;
-    t118.e[10] = 0.091576213509771;
-    t118.e[11] = 0.054975871827661;
-    t118.e[12] = 0.091576213509771;
-    t118.e[13] = 0.816847572980459;
-    t118.e[14] = 0.054975871827661;
-    t118.e[15] = 0.816847572980459;
-    t118.e[16] = 0.091576213509771;
-    t118.e[17] = 0.054975871827661;
-    GS_GL->elements_CT_TRI_g8 = t118;
+    t119.e[0] = 0.0694318442029737;
+    t119.e[1] = 0.1739274225687269;
+    t119.e[2] = 0.3300094782075719;
+    t119.e[3] = 0.3260725774312731;
+    t119.e[4] = 0.6699905217924281;
+    t119.e[5] = 0.3260725774312731;
+    t119.e[6] = 0.9305681557970263;
+    t119.e[7] = 0.1739274225687269;
+    GS_GL->elements_CT_LINE_g8 = t119;
+    t120.e[0] = 0.445948490915965;
+    t120.e[1] = 0.445948490915965;
+    t120.e[2] = 0.111690794839005;
+    t120.e[3] = 0.445948490915965;
+    t120.e[4] = 0.10810301816807;
+    t120.e[5] = 0.111690794839005;
+    t120.e[6] = 0.10810301816807;
+    t120.e[7] = 0.445948490915965;
+    t120.e[8] = 0.111690794839005;
+    t120.e[9] = 0.091576213509771;
+    t120.e[10] = 0.091576213509771;
+    t120.e[11] = 0.054975871827661;
+    t120.e[12] = 0.091576213509771;
+    t120.e[13] = 0.816847572980459;
+    t120.e[14] = 0.054975871827661;
+    t120.e[15] = 0.816847572980459;
+    t120.e[16] = 0.091576213509771;
+    t120.e[17] = 0.054975871827661;
+    GS_GL->elements_CT_TRI_g8 = t120;
     gs_stack_init((&GS_GL->gs_gstk_elements_laws_g8));
     GS_GL->elements_laws_g8.base = (&GS_GL->gs_gstk_elements_laws_g8)->top;
     GS_GL->elements_laws_g8.len = 0;
@@ -43557,11 +44278,21 @@ static void gs_init_globals(void) {
     GS_GL->elements_shear_g8 = 0.0;
     GS_GL->elements_conductivity_g8 = 0.0;
     GS_GL->elements_source_g8 = 0.0;
-    double t120 = 0.0;
-    for (int64_t t121 = 0; t121 < 3; t121++) {
-        t119.e[t121] = t120;
+    double t122 = 0.0;
+    for (int64_t t123 = 0; t123 < 3; t123++) {
+        t121.e[t123] = t122;
     }
-    GS_GL->elements_volume_force_g8 = t119;
+    GS_GL->elements_volume_force_g8 = t121;
+    GS_GL->elements_curve_lo_g8 = 0.0;
+    GS_GL->elements_curve_step_g8 = 0.0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_curve_k_g8));
+    GS_GL->elements_curve_k_g8.base = (&GS_GL->gs_gstk_elements_curve_k_g8)->top;
+    GS_GL->elements_curve_k_g8.len = 0;
+    GS_GL->elements_curve_k_g8.len = 0;
+    GS_GL->elements_initial_value_g8 = 0.0;
+    GS_GL->elements_state_valid_g8 = 0;
+    GS_GL->elements_keep_factor_g8 = 0;
+    GS_GL->elements_factor_ready_g8 = 0;
     gs_stack_init((&GS_GL->gs_gstk_elements_fixed_g8));
     GS_GL->elements_fixed_g8.base = (&GS_GL->gs_gstk_elements_fixed_g8)->top;
     GS_GL->elements_fixed_g8.len = 0;
@@ -43591,39 +44322,44 @@ static void gs_init_globals(void) {
     GS_GL->elements_val_g8.len = 0;
     GS_GL->elements_val_g8.len = 0;
     GS_GL->elements_other_dofs_g8 = 0;
-    for (int64_t t123 = 0; t123 < 10; t123++) {
-        double t124;
-        GS_MEMZERO(&t124, sizeof(t124));
-        t122.e[t123] = t124;
+    for (int64_t t125 = 0; t125 < 10; t125++) {
+        double t126;
+        GS_MEMZERO(&t126, sizeof(t126));
+        t124.e[t125] = t126;
     }
-    GS_GL->elements_shp_g8 = t122;
-    for (int64_t t126 = 0; t126 < 30; t126++) {
-        double t127;
-        GS_MEMZERO(&t127, sizeof(t127));
-        t125.e[t126] = t127;
+    GS_GL->elements_shp_g8 = t124;
+    for (int64_t t128 = 0; t128 < 30; t128++) {
+        double t129;
+        GS_MEMZERO(&t129, sizeof(t129));
+        t127.e[t128] = t129;
     }
-    GS_GL->elements_dref_g8 = t125;
-    for (int64_t t129 = 0; t129 < 30; t129++) {
-        double t130;
-        GS_MEMZERO(&t130, sizeof(t130));
-        t128.e[t129] = t130;
+    GS_GL->elements_dref_g8 = t127;
+    for (int64_t t131 = 0; t131 < 30; t131++) {
+        double t132;
+        GS_MEMZERO(&t132, sizeof(t132));
+        t130.e[t131] = t132;
     }
-    GS_GL->elements_grad_g8 = t128;
-    a900_f64 *t131 = (a900_f64 *)GS(0 + 0)->top;
+    GS_GL->elements_grad_g8 = t130;
+    double t134 = 0.0;
+    for (int64_t t135 = 0; t135 < 9; t135++) {
+        t133.e[t135] = t134;
+    }
+    GS_GL->elements_jinv_g8 = t133;
+    a900_f64 *t136 = (a900_f64 *)GS(0 + 0)->top;
     GS(0 + 0)->top += sizeof(a900_f64);
-    for (int64_t t132 = 0; t132 < 900; t132++) {
-        double t133;
-        GS_MEMZERO(&t133, sizeof(t133));
-        (*t131).e[t132] = t133;
+    for (int64_t t137 = 0; t137 < 900; t137++) {
+        double t138;
+        GS_MEMZERO(&t138, sizeof(t138));
+        (*t136).e[t137] = t138;
     }
-    GS_GL->elements_ke_g8 = (*t131);
-    GS(0 + 0)->top = (uint8_t *)t131;
-    for (int64_t t135 = 0; t135 < 30; t135++) {
-        double t136;
-        GS_MEMZERO(&t136, sizeof(t136));
-        t134.e[t135] = t136;
+    GS_GL->elements_ke_g8 = (*t136);
+    GS(0 + 0)->top = (uint8_t *)t136;
+    for (int64_t t140 = 0; t140 < 30; t140++) {
+        double t141;
+        GS_MEMZERO(&t141, sizeof(t141));
+        t139.e[t140] = t141;
     }
-    GS_GL->elements_fe_g8 = t134;
+    GS_GL->elements_fe_g8 = t139;
     gs_stack_init((&GS_GL->gs_gstk_elements_assembled_source_g8));
     GS_GL->elements_assembled_source_g8.base = (&GS_GL->gs_gstk_elements_assembled_source_g8)->top;
     GS_GL->elements_assembled_source_g8.len = 0;
@@ -43634,12 +44370,15 @@ static void gs_init_globals(void) {
     GS_GL->elements_direct_path_g8.len = 0;
     GS_GL->elements_direct_path_g8.len = 0;
     GS_GL->elements_direct_vectors_g8 = 0;
-    t137 = (l16_elements_Part_g8){0};
-    t137.len = 0;
-    GS_GL->elements_region_g8 = t137;
-    t138 = (l8_elements_Part_g8){0};
-    t138.len = 0;
-    GS_GL->elements_region_out_g8 = t138;
+    GS_GL->elements_incompatible_modes_g8 = 0;
+    GS_GL->elements_MODES_g8 = 9;
+    GS_GL->elements_NODE_DOFS_g8 = 24;
+    t142 = (l16_elements_Part_g8){0};
+    t142.len = 0;
+    GS_GL->elements_region_g8 = t142;
+    t143 = (l8_elements_Part_g8){0};
+    t143.len = 0;
+    GS_GL->elements_region_out_g8 = t143;
     GS_GL->elements_region_body_g8 = -1;
     gs_stack_init((&GS_GL->gs_gstk_elements_film_cell_g8));
     GS_GL->elements_film_cell_g8.base = (&GS_GL->gs_gstk_elements_film_cell_g8)->top;
@@ -43653,6 +44392,22 @@ static void gs_init_globals(void) {
     GS_GL->elements_film_h_g8.base = (&GS_GL->gs_gstk_elements_film_h_g8)->top;
     GS_GL->elements_film_h_g8.len = 0;
     GS_GL->elements_film_h_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_amb_cell_g8));
+    GS_GL->elements_amb_cell_g8.base = (&GS_GL->gs_gstk_elements_amb_cell_g8)->top;
+    GS_GL->elements_amb_cell_g8.len = 0;
+    GS_GL->elements_amb_cell_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_amb_facet_g8));
+    GS_GL->elements_amb_facet_g8.base = (&GS_GL->gs_gstk_elements_amb_facet_g8)->top;
+    GS_GL->elements_amb_facet_g8.len = 0;
+    GS_GL->elements_amb_facet_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_amb_c_g8));
+    GS_GL->elements_amb_c_g8.base = (&GS_GL->gs_gstk_elements_amb_c_g8)->top;
+    GS_GL->elements_amb_c_g8.len = 0;
+    GS_GL->elements_amb_c_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_amb_t_g8));
+    GS_GL->elements_amb_t_g8.base = (&GS_GL->gs_gstk_elements_amb_t_g8)->top;
+    GS_GL->elements_amb_t_g8.len = 0;
+    GS_GL->elements_amb_t_g8.len = 0;
     gs_stack_init((&GS_GL->gs_gstk_elements_internal_g8));
     GS_GL->elements_internal_g8.base = (&GS_GL->gs_gstk_elements_internal_g8)->top;
     GS_GL->elements_internal_g8.len = 0;
@@ -43683,6 +44438,9 @@ static void gs_init_globals(void) {
     GS_GL->elements_last_seconds_g8 = 0.0;
     GS_GL->elements_CG_TOLERANCE_g8 = 1e-12;
     GS_GL->elements_cg_tolerance_g8 = 1e-12;
+    GS_GL->elements_NL_STEPS_g8 = 200;
+    GS_GL->elements_nl_tolerance_g8 = 1e-10;
+    GS_GL->elements_nl_steps_g8 = 0;
     GS_GL->elements_MASS_g8 = 0;
     GS_GL->elements_GEOMETRIC_g8 = 1;
     GS_GL->elements_EIGEN_TOLERANCE_g8 = 1e-08;
@@ -43701,16 +44459,16 @@ static void gs_init_globals(void) {
     GS_GL->elements_modes_g8.base = (&GS_GL->gs_gstk_elements_modes_g8)->top;
     GS_GL->elements_modes_g8.len = 0;
     GS_GL->elements_modes_g8.len = 0;
-    t139.e[0] = 0.0694318442029737;
-    t139.e[1] = 0.33000947820757187;
-    t139.e[2] = 0.6699905217924281;
-    t139.e[3] = 0.9305681557970263;
-    GS_GL->elements_GAUSS_X_g8 = t139;
-    t140.e[0] = 0.17392742256872692;
-    t140.e[1] = 0.3260725774312731;
-    t140.e[2] = 0.3260725774312731;
-    t140.e[3] = 0.17392742256872692;
-    GS_GL->elements_GAUSS_W_g8 = t140;
+    t144.e[0] = 0.0694318442029737;
+    t144.e[1] = 0.33000947820757187;
+    t144.e[2] = 0.6699905217924281;
+    t144.e[3] = 0.9305681557970263;
+    GS_GL->elements_GAUSS_X_g8 = t144;
+    t145.e[0] = 0.17392742256872692;
+    t145.e[1] = 0.3260725774312731;
+    t145.e[2] = 0.3260725774312731;
+    t145.e[3] = 0.17392742256872692;
+    GS_GL->elements_GAUSS_W_g8 = t145;
     gs_stack_init((&GS_GL->gs_gstk_elements_basis_g8));
     GS_GL->elements_basis_g8.base = (&GS_GL->gs_gstk_elements_basis_g8)->top;
     GS_GL->elements_basis_g8.len = 0;
@@ -43729,24 +44487,24 @@ static void gs_init_globals(void) {
     GS_GL->elements_WAVE_KRYLOV_g8 = 50000000;
     GS_GL->elements_WAVE_ITERATIONS_g8 = 20000;
     GS_GL->elements_PML_REFLECTION_g8 = 1e-06;
-    t141.e[0] = 0.0;
-    t141.e[1] = 0.0;
-    GS_GL->elements_wave_c_g8 = t141;
-    t142.e[0] = 0.0;
-    t142.e[1] = 0.0;
-    GS_GL->elements_wave_s_g8 = t142;
+    t146.e[0] = 0.0;
+    t146.e[1] = 0.0;
+    GS_GL->elements_wave_c_g8 = t146;
+    t147.e[0] = 0.0;
+    t147.e[1] = 0.0;
+    GS_GL->elements_wave_s_g8 = t147;
     GS_GL->elements_wave_damping_g8 = 0.0;
     GS_GL->elements_pml_shape_g8 = -1;
-    double t144 = 0.0;
-    for (int64_t t145 = 0; t145 < 3; t145++) {
-        t143.e[t145] = t144;
+    double t149 = 0.0;
+    for (int64_t t150 = 0; t150 < 3; t150++) {
+        t148.e[t150] = t149;
     }
-    GS_GL->elements_pml_lo_g8 = t143;
-    double t147 = 0.0;
-    for (int64_t t148 = 0; t148 < 3; t148++) {
-        t146.e[t148] = t147;
+    GS_GL->elements_pml_lo_g8 = t148;
+    double t152 = 0.0;
+    for (int64_t t153 = 0; t153 < 3; t153++) {
+        t151.e[t153] = t152;
     }
-    GS_GL->elements_pml_hi_g8 = t146;
+    GS_GL->elements_pml_hi_g8 = t151;
     GS_GL->elements_pml_h_g8 = 0.0;
     gs_stack_init((&GS_GL->gs_gstk_elements_tie_g8));
     GS_GL->elements_tie_g8.base = (&GS_GL->gs_gstk_elements_tie_g8)->top;
@@ -43811,9 +44569,9 @@ static void gs_init_globals(void) {
     GS_GL->elements_grad_val_g8.base = (&GS_GL->gs_gstk_elements_grad_val_g8)->top;
     GS_GL->elements_grad_val_g8.len = 0;
     GS_GL->elements_grad_val_g8.len = 0;
-    t149.e[0] = 1.0;
-    t149.e[1] = 0.0;
-    GS_GL->elements_grad_phase_g8 = t149;
+    t154.e[0] = 1.0;
+    t154.e[1] = 0.0;
+    GS_GL->elements_grad_phase_g8 = t154;
     gs_stack_init((&GS_GL->gs_gstk_elements_grad_t_g8));
     GS_GL->elements_grad_t_g8.base = (&GS_GL->gs_gstk_elements_grad_t_g8)->top;
     GS_GL->elements_grad_t_g8.len = 0;
@@ -43849,8 +44607,8 @@ static void gs_init_globals(void) {
     GS_GL->elements_FIELD_VALUE_g8 = 0;
     GS_GL->elements_FIELD_STRESS_g8 = 1;
     GS_GL->elements_FIELD_FLUX_g8 = 2;
-    t150.data = ((uint8_t *)gs_str278); t150.len = 53;
-    GS_GL->elements_VTU_END_g8 = t150;
+    t155.data = ((uint8_t *)gs_str281); t155.len = 53;
+    GS_GL->elements_VTU_END_g8 = t155;
     GS_GL->elements_MAX_BUCKETS_g8 = 2000000;
     GS_GL->elements_INSIDE_g8 = 1e-06;
     GS_GL->elements_src_dim_g8 = 0;
@@ -43871,18 +44629,18 @@ static void gs_init_globals(void) {
     GS_GL->elements_src_sol_g8.base = (&GS_GL->gs_gstk_elements_src_sol_g8)->top;
     GS_GL->elements_src_sol_g8.len = 0;
     GS_GL->elements_src_sol_g8.len = 0;
-    t151.e[0] = 0.0;
-    t151.e[1] = 0.0;
-    t151.e[2] = 0.0;
-    GS_GL->elements_src_lo_g8 = t151;
-    t152.e[0] = 1.0;
-    t152.e[1] = 1.0;
-    t152.e[2] = 1.0;
-    GS_GL->elements_src_step_g8 = t152;
-    t153.e[0] = 1;
-    t153.e[1] = 1;
-    t153.e[2] = 1;
-    GS_GL->elements_src_cells_g8 = t153;
+    t156.e[0] = 0.0;
+    t156.e[1] = 0.0;
+    t156.e[2] = 0.0;
+    GS_GL->elements_src_lo_g8 = t156;
+    t157.e[0] = 1.0;
+    t157.e[1] = 1.0;
+    t157.e[2] = 1.0;
+    GS_GL->elements_src_step_g8 = t157;
+    t158.e[0] = 1;
+    t158.e[1] = 1;
+    t158.e[2] = 1;
+    GS_GL->elements_src_cells_g8 = t158;
     gs_stack_init((&GS_GL->gs_gstk_elements_bucket_start_g8));
     GS_GL->elements_bucket_start_g8.base = (&GS_GL->gs_gstk_elements_bucket_start_g8)->top;
     GS_GL->elements_bucket_start_g8.len = 0;
@@ -43936,30 +44694,30 @@ static void gs_init_globals(void) {
     GS_GL->elements_on_pressure_g8.base = (&GS_GL->gs_gstk_elements_on_pressure_g8)->top;
     GS_GL->elements_on_pressure_g8.len = 0;
     GS_GL->elements_on_pressure_g8.len = 0;
-    t154.e[0] = 0;
-    t154.e[1] = 1;
-    t154.e[2] = 2;
-    t154.e[3] = 0;
-    t154.e[4] = 1;
-    t154.e[5] = 0;
-    GS_GL->elements_VOIGT_I_g8 = t154;
-    t155.e[0] = 0;
-    t155.e[1] = 1;
-    t155.e[2] = 2;
-    t155.e[3] = 1;
-    t155.e[4] = 2;
-    t155.e[5] = 2;
-    GS_GL->elements_VOIGT_J_g8 = t155;
-    t156.e[0] = 1.0;
-    t156.e[1] = 0.0;
-    t156.e[2] = 0.0;
-    t156.e[3] = 0.0;
-    t156.e[4] = 1.0;
-    t156.e[5] = 0.0;
-    t156.e[6] = 0.0;
-    t156.e[7] = 0.0;
-    t156.e[8] = 1.0;
-    GS_GL->elements_EYE_g8 = t156;
+    t159.e[0] = 0;
+    t159.e[1] = 1;
+    t159.e[2] = 2;
+    t159.e[3] = 0;
+    t159.e[4] = 1;
+    t159.e[5] = 0;
+    GS_GL->elements_VOIGT_I_g8 = t159;
+    t160.e[0] = 0;
+    t160.e[1] = 1;
+    t160.e[2] = 2;
+    t160.e[3] = 1;
+    t160.e[4] = 2;
+    t160.e[5] = 2;
+    GS_GL->elements_VOIGT_J_g8 = t160;
+    t161.e[0] = 1.0;
+    t161.e[1] = 0.0;
+    t161.e[2] = 0.0;
+    t161.e[3] = 0.0;
+    t161.e[4] = 1.0;
+    t161.e[5] = 0.0;
+    t161.e[6] = 0.0;
+    t161.e[7] = 0.0;
+    t161.e[8] = 1.0;
+    GS_GL->elements_EYE_g8 = t161;
     GS_GL->elements_JACOBI_SWEEPS_g8 = 50;
     GS_GL->elements_DIRECT_WORK_g8 = 500000000.0;
     gs_stack_init((&GS_GL->gs_gstk_elements_sky_position_g8));
@@ -43989,11 +44747,11 @@ static void gs_init_globals(void) {
     GS_GL->elements_NEWTON_MAX_g8 = 30;
     GS_GL->elements_NEWTON_TOL_g8 = 1e-09;
     GS_GL->elements_solid_law_g8 = 0;
-    t157.lame_g = 0.0;
-    t157.shear_g = 0.0;
-    t157.yield0_g = 0.0;
-    t157.hard_g = 0.0;
-    GS_GL->elements_j2_g8 = t157;
+    t162.lame_g = 0.0;
+    t162.shear_g = 0.0;
+    t162.yield0_g = 0.0;
+    t162.hard_g = 0.0;
+    GS_GL->elements_j2_g8 = t162;
     gs_stack_init((&GS_GL->gs_gstk_elements_pt_state_g8));
     GS_GL->elements_pt_state_g8.base = (&GS_GL->gs_gstk_elements_pt_state_g8)->top;
     GS_GL->elements_pt_state_g8.len = 0;
@@ -44048,16 +44806,37 @@ static void gs_init_globals(void) {
     GS_GL->elements_nl_dx_g8.len = 0;
     GS_GL->elements_newton_steps_g8 = 0;
     GS_GL->elements_newton_direct_g8 = 0;
-    double t159 = 0.0;
-    for (int64_t t160 = 0; t160 < 6; t160++) {
-        t158.e[t160] = t159;
+    double t164 = 0.0;
+    for (int64_t t165 = 0; t165 < 6; t165++) {
+        t163.e[t165] = t164;
     }
-    GS_GL->elements_pt_s_g8 = t158;
-    double t162 = 0.0;
-    for (int64_t t163 = 0; t163 < 36; t163++) {
-        t161.e[t163] = t162;
+    GS_GL->elements_pt_s_g8 = t163;
+    double t167 = 0.0;
+    for (int64_t t168 = 0; t168 < 36; t168++) {
+        t166.e[t168] = t167;
     }
-    GS_GL->elements_pt_d_g8 = t161;
+    GS_GL->elements_pt_d_g8 = t166;
+    GS_GL->elements_capacity_g8 = 0.0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_th_k_g8));
+    GS_GL->elements_th_k_g8.base = (&GS_GL->gs_gstk_elements_th_k_g8)->top;
+    GS_GL->elements_th_k_g8.len = 0;
+    GS_GL->elements_th_k_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_th_b_g8));
+    GS_GL->elements_th_b_g8.base = (&GS_GL->gs_gstk_elements_th_b_g8)->top;
+    GS_GL->elements_th_b_g8.len = 0;
+    GS_GL->elements_th_b_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_th_load_g8));
+    GS_GL->elements_th_load_g8.base = (&GS_GL->gs_gstk_elements_th_load_g8)->top;
+    GS_GL->elements_th_load_g8.len = 0;
+    GS_GL->elements_th_load_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_th_work_g8));
+    GS_GL->elements_th_work_g8.base = (&GS_GL->gs_gstk_elements_th_work_g8)->top;
+    GS_GL->elements_th_work_g8.len = 0;
+    GS_GL->elements_th_work_g8.len = 0;
+    GS_GL->elements_th_start_g8 = 0.0;
+    GS_GL->elements_th_index_g8 = 0;
+    GS_GL->elements_th_steps_g8 = 0;
+    GS_GL->elements_th_dt_g8 = 0.0;
     GS_GL->elements_X_g8 = 0;
     GS_GL->elements_Y_g8 = 1;
     GS_GL->elements_Z_g8 = 2;
@@ -44112,7 +44891,7 @@ static void gs_tmain_solvers_rows_worker_g7(uint8_t *p) {
 
 static void gs_program_init(int argc, char **argv) {
     if (gs_program_initialized) return;
-    gs_rt_init(argc, argv, 29, 234, 4);
+    gs_rt_init(argc, argv, 29, 243, 4);
     gs_qinit(&gs_q_solvers_CellData_g7);
     gs_qinit(&gs_q_solvers_CellJob_g7);
     gs_qinit(&gs_q_solvers_RowsY_g7);
