@@ -35,6 +35,7 @@ var range_lo: f64[>..];
 var range_hi: f64[>..];
 var range_unit: u8[..64][>..];
 var range_start: f64[>..];
+var simplex_search = false;   // method: nelder_mead, else gradient
 var max_cases = 50;
 var xtol = 0.001;
 var first_step = 0.1;
@@ -310,10 +311,11 @@ recursive fn literal(n: i64) -> f64, const u8[:], bool {
 // its param are numbers in one unit. False on an error.
 fn minimize_ranges(prog: i64, pr: i64, entries: i64[:]) -> bool {
     let method = proc_arg(pr, "method");
-    guard method >= 0 && kind(method) == syntax::N_NAME && name(method) == "gradient" else {
-        unsupported(tok(pr), "minimize runs only with method: gradient in this build", "write minimize(r, method: gradient)");
+    guard method >= 0 && kind(method) == syntax::N_NAME && (name(method) == "gradient" || name(method) == "nelder_mead") else {
+        unsupported(tok(pr), "minimize runs only with method: gradient or nelder_mead in this build", "write minimize(r, method: nelder_mead)");
         return false;
     };
+    simplex_search = name(method) == "nelder_mead";
     range_lo.clear();
     range_hi.clear();
     range_unit.clear();

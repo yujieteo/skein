@@ -433,6 +433,8 @@ let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PART
 let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
 let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
 let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
+let FIELD_VON_MISES = 10; // max(von_mises(sigma), r) on the boundary r
+let FIELD_CONSTANT = 11; // a number, a param or a let: scale is its value
 let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
 let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
 
@@ -2293,6 +2295,17 @@ fn expect(n: i64, step: i64) {
     var surf = -1;
     var scale = 1.0;
     var inverse = false;
+    if what < 0 && max_von_mises(left) {
+        what = FIELD_VON_MISES;
+        comp = 0;
+        surf = find_surf(name(arg(left, 1)));
+    }
+    // A param or a let: the study expects the optimum of its params.
+    if what < 0 && kind(left) == syntax::N_NAME && codegen::find_value(name(left)) >= 0 && !has_sample(left) {
+        what = FIELD_CONSTANT;
+        comp = 0;
+        scale = scalar_value(left);
+    }
     if what < 0 { what, comp, surf, scale, inverse = scaled_field(left); }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
@@ -2308,7 +2321,7 @@ fn expect(n: i64, step: i64) {
         return;
     }
     let point = if what == FIELD_WAVE { arg(left, 0) } else { left };
-    let no_point = what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN;
+    let no_point = what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN || what == FIELD_CONSTANT;
     var x = Expect { name: [], what: what, comp: comp, at: if no_point { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale,
@@ -3158,7 +3171,7 @@ fn reaction_unit() -> const u8[:] {
 
 fn field_unit(what: i64) -> const u8[:] {
     if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_MEAN { return value_unit(); }
-    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX { return codegen::system.pressure; }
+    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX || what == FIELD_VON_MISES { return codegen::system.pressure; }
     if what == FIELD_REACTION { return reaction_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
     if codegen::system.pressure == "MPa" { return "mW/mm^2"; }
@@ -3956,6 +3969,14 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         out.append("        let v = ");
         composite_text(out, x.comp);
         out.append(";\n        let found_v = true;\n");
+    } else if x.what == FIELD_CONSTANT {
+        out.append("        let v = ");
+        lit(out, x.scale);
+        out.append(";\n        let found_v = true;\n");
+    } else if x.what == FIELD_VON_MISES {
+        out.append("    ");
+        emit_region(out, x.surf);
+        out.append("        let v = elements::max_von_mises();\n        let found_v = true;\n");
     } else if x.what == FIELD_BODY_MEAN {
         out.append("        let v = ");
         lit(out, x.scale);
@@ -3989,7 +4010,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what == FIELD_CONSTANT { "" } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
