@@ -224,10 +224,27 @@ The 3D path:
    with the slope `grade - 1` away from each target.
    Reason for no octree: the bisection already grades the lattice, and it
    keeps the cells conforming.
-2. Find the feature curves from the CSG tree, and place protecting balls on
-   them. Not built: an axis-aligned box edge is on 2 lattice planes, and
-   thus has no error. A curved or an oblique sharp edge loses about 0.3
-   cells. Build this step only when a case needs it.
+2. Find the feature curves from φ (`src/mesher/feature.goose`): a sharp
+   edge is a curve on φ = 0 where the unit normal jumps by more than 15°.
+   Find a point of it by bisection on the jump between 2 surface points
+   in a lattice cell, and trace the curve in steps of half the wanted size.
+   Then choose a chain of lattice edges along each curve by dynamic
+   programming over the lattice points near it, and move each point of
+   the chain onto the curve. The lattice points near the chain follow by
+   smoothing. The stuffing keeps an edge between 2 points with φ = 0, so
+   the chain is a chain of edges of the mesh. A chain is refused if a
+   lattice cell then has γ < 0.03, or if an edge of the chain is not in
+   the stuffed mesh, or if the stuffed mesh has a flat cell, or if the
+   improved mesh does not pass `mesh_quality`. Then the lattice is built
+   again with a size that is 3 % and 6 % finer or coarser (5 builds in all),
+   and last without any chain: the curve is as it was before, and
+   `curves_missed` counts it.
+   Reason for a chain of lattice edges in place of protecting balls or a
+   constrained Delaunay repair: the stuffing has no Delaunay structure to
+   repair, and a ball on a curve needs a clipping of the cells that it
+   cuts. The chain uses what the stuffing already keeps, with 0 new cells.
+   An axis-aligned box edge is on 2 lattice planes and has no error, so
+   the tracing skips it.
 3. Cut the lattice at φ = 0.
 4. Improve each cell with γ < 0.35 (γ = 1 / `max_aspect`): move a vertex
    that is not on the surface, then remove an edge or flip a face (2-3),
