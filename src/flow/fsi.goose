@@ -462,6 +462,7 @@ fn solve_solid(load: f64[:], u: f64[:]) {
         for d in n { u[d] += du[d]; }
         if solvers::norm(du) <= 1.0e-10 * solvers::norm(u) + 1.0e-16 { return; }
     }
+    abort("solve_solid: the Newton iteration did not converge in 20 steps");
 }
 
 // Solves K u = load (factor_solid first) into u.
