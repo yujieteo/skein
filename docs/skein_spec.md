@@ -1020,7 +1020,7 @@ licences are not compatible with Apache 2.0.
 |---|---|
 | 2D triangles | Delaunay refinement (Chew 1989, Ruppert 1995, Shewchuk 2002) on a boundary that the mesher samples from φ, with the sharp corners as fixed vertices |
 | 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on a body-centred cubic lattice with a plane on each axis-aligned face of a `box` of the CSG tree, refined by longest-edge bisection (Rivara 1984) to `size`, `refine` and `grade` |
-| 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
+| 3D sharp edges | a chain of lattice edges moved onto each feature curve, found from φ, before the stuffing (implementation.md §7) |
 | 3D tetrahedra on a prism along z with a `cylinder` or an `extrude`, and with each `refine` target in its full z range | the triangles of the 2D case on its section, swept through layers of equal height, each prism cut into 3 tetrahedra along the diagonal of each side face from its point of smallest index (Dompierre et al. 1999) |
 | improvement of the stuffed tetrahedra | each cell with γ < 0.35 (γ = 1 / `max_aspect`): a move of a vertex that is not on the surface, then edge removal and the 2-3 flip (Klingner and Shewchuk 2007, in the sequence of Marot and Remacle 2020), with no change that makes the worst cell of its cavity worse |
 | `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ (and z) on a quarter of a ring or a tube: `(circle - circle) & rect` or `(cylinder - cylinder) & box`, with the corner of the rect or the box on the axis |
@@ -1037,9 +1037,11 @@ not longer than `size`. A cell is in the mesh if its centre is in the
 region. Thus no cell crosses a material face, and a thin layer has one
 cell through it.
 
-The sharp edges come from the CSG tree: each intersection of the surfaces
-of two primitives with a dihedral angle that `feature_angle` marks is a
-feature curve.
+The sharp edges come from φ: each curve on the surface where the normal
+jumps by more than 15 degrees is a feature curve. The mesh has each such
+curve as a chain of edges, so a curved or an oblique sharp edge stays sharp
+(the rim of a dimple is within 0.01 cells). Where no chain of edges fits a
+curve, the mesh has the curve as before, and its error is about 0.3 cells.
 
 Reason for the swept tetrahedra: femahoy gap G4. The stuffing cuts the
 sharp edge between the end plane and the curved wall of a coax line off

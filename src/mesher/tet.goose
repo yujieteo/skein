@@ -42,6 +42,7 @@ import .quality;
 import .refine;
 import .grid;
 import .improve;
+import .feature;
 
 let ALPHA_LONG = 0.24999;
 let ALPHA_SHORT = 0.41189;
@@ -111,10 +112,12 @@ fn sign_of(v: f64) -> i64 {
 
 // The point on the surface between lattice points a (inside) and b
 // (outside), as the fraction of the way from a to b.
-fn cut_fraction(g: i64, a: i64, b: i64) -> f64 {
+fn cut_fraction(g: i64, a: i64, b: i64) -> f64 { return cut_fraction_steps(g, a, b, 60); }
+
+fn cut_fraction_steps(g: i64, a: i64, b: i64, steps: i64) -> f64 {
     var lo = 0.0;
     var hi = 1.0;
-    for k in 60 {
+    for k in steps {
         let t = 0.5 * (lo + hi);
         let x = lx[3 * a] + t * (lx[3 * b] - lx[3 * a]);
         let y = lx[3 * a + 1] + t * (lx[3 * b + 1] - lx[3 * a + 1]);
@@ -295,6 +298,673 @@ fn find_edges() {
     }
 }
 
+// Sharp edges (feature.goose): a curved or an oblique sharp edge of the
+// shape is not on the edges of the lattice, so the stuffing chamfers it by
+// about one third of a lattice cell. protect_edges puts it on a chain of
+// lattice edges instead. For each curve it takes the lattice points near the
+// curve, with each lattice edge between 2 of them that goes about as far
+// along the curve as it is long, and finds the chain of such edges from one
+// end of the curve to the other (or round a closed curve) whose points are
+// the nearest to the curve. Then it moves each point of the chain onto the
+// curve and makes its φ 0. The stuffing keeps each edge between 2 points
+// with φ = 0, so the mesh has the edges of the chain, and its boundary
+// triangles on the 2 sides of it are the cuts of the 2 surfaces. The
+// lattice cells keep their orientation and a γ above MIN_GAMMA, or the
+// chain is not used and the next, thinner tube is tried.
+let TUBES: f64[4] = [0.3, 0.45, 0.6, 0.8];   // the radius of the tube about a curve, in lattice edges
+let MIN_GAMMA = 0.03;
+let STEP_LOW = 0.25;                    // the least and the largest advance along the curve, in edge lengths
+let STEP_HIGH = 1.35;
+let MAX_TRIES = 8;                      // chains for a curve, each without the points of the cells of the last
+let FLAT_GAMMA = 0.01;                   // a stuffed cell with a smaller γ shows a chain that made a flat cell
+let RETRY_SCALES = [1.0, 0.97, 1.03, 0.94, 1.06];
+let RELAX_DEPTH = 1;                   // the free lattice points this many edges from the chain move with it
+let RELAX_ROUNDS = 6;
+let RELAX = 0.6;
+let SUPPORT = 1.05;                     // the margin of the cut of warp
+let END_REACH = 0.6;                    // a chain starts and ends this near the ends of an open curve
+
+var keep_edges = true;          // false: mesh_3d does not protect the sharp edges
+var curves_found = 0;           // the sharp edges of the last mesh_3d, and those not on a chain
+var curves_missed = 0;
+var chain_a: i64[>..] = [];             // the lattice edges of the chains, from lattice point a to b
+var chain_b: i64[>..] = [];
+var chain_owner: i64[>..] = []; // the curve whose chain has the point, or -1
+
+// The mean length of the lattice edges at point p.
+fn node_edge_mean(p: i64) -> f64 {
+    var sum = 0.0;
+    var count = 0.0;
+    for e in edges_at[edge_start[p]..edge_start[p + 1]] {
+        sum += gap(lx[..], ea[e], eb[e]);
+        count += 1.0;
+    }
+    return sum / count;
+}
+
+fn lattice_at(p: i64) -> f64[3] { return [lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]]; }
+
+// Whether x is on 2 planes of the lattice, so on a lattice edge.
+fn on_lattice_edge(x: f64[3], d: f64) -> bool {
+    var planes = 0;
+    for a in 3 {
+        for i in line_start[a]..line_start[a + 1] {
+            if abs(x[a] - lattice_lines[i]) <= 1.0e-9 * d {
+                planes++;
+                break;
+            }
+        }
+    }
+    return planes >= 2;
+}
+
+// The position and the unit normal of the point of the surface on the
+// lattice edge a b (a inside, b outside), or on the lattice point a = b.
+// Made when first used, in `slots` (6 numbers each).
+fn surface_slot(g: i64, key: i64, a: i64, b: i64, d: f64, slot_of: dictionary<i64, i64>&, slots: f64[>..]&) -> i64 {
+    let have = slot_of.get(key);
+    if have { return have; }
+    var x = lattice_at(a);
+    if a != b {
+        let t = cut_fraction_steps(g, a, b, 26);   // 1.5e-8 of the edge: enough for a normal
+        x = axpy3(x, t, sub3(lattice_at(b), x));
+    }
+    // Forward differences: 4 evaluations of φ, not 6, as this runs for each surface point.
+    let eps = FD * d;
+    let f0 = phi(g, x[0], x[1], x[2]);
+    let n: f64[3] = [(phi(g, x[0] + eps, x[1], x[2]) - f0) / eps, (phi(g, x[0], x[1] + eps, x[2]) - f0) / eps,
+                     (phi(g, x[0], x[1], x[2] + eps) - f0) / eps];
+    let norm = norm3(n);
+    let slot = slots.len / 6;
+    slots.append(x);
+    slots.append(if norm > 0.0 { [n[0] / norm, n[1] / norm, n[2] / norm] } else { [0.0, 0.0, 0.0] });
+    slot_of.insert(key, slot);
+    return slot;
+}
+
+// Finds the sharp edges of g in the lattice. A lattice tetrahedron with 2
+// points of the surface (a lattice point with φ = 0, or the cut point of
+// a lattice edge) whose normals differ by more than PAIR_ANGLE may have an edge
+// between them. The edges on 2 planes of the lattice have no error, and
+// are not curves.
+fn find_curves(g: i64, size: f64) {
+    clear_curves();
+    let d = shape_scale(g);
+    var slot_of = dictionary<i64, i64> {};
+    var slots: f64[>..] = [];
+    for t in btets.len / 4 {
+        let v = btets[4 * t..4 * t + 4];
+        var found: i64[10] = [0; 10];
+        var n = 0;
+        for i in 4 {
+            if lphi[v[i]] == 0.0 {
+                found[n] = surface_slot(g, -(v[i] + 1), v[i], v[i], d, slot_of, slots);
+                n++;
+            }
+        }
+        for i in 4 {
+            for j in i + 1..4 {
+                guard lphi[v[i]] * lphi[v[j]] < 0.0 else { continue; }
+                let inside = if lphi[v[i]] < 0.0 { v[i] } else { v[j] };
+                let outside = if lphi[v[i]] < 0.0 { v[j] } else { v[i] };
+                found[n] = surface_slot(g, edge_key(v[i], v[j]), inside, outside, d, slot_of, slots);
+                n++;
+            }
+        }
+        var best = PAIR_COS;
+        var bi = -1;
+        var bj = -1;
+        for i in n {
+            for j in i + 1..n {
+                let c = slots[6 * found[i] + 3] * slots[6 * found[j] + 3] + slots[6 * found[i] + 4] * slots[6 * found[j] + 4] +
+                        slots[6 * found[i] + 5] * slots[6 * found[j] + 5];
+                if c < best && c > -1.5 {
+                    best = c;
+                    bi = i;
+                    bj = j;
+                }
+            }
+        }
+        guard bi >= 0 else { continue; }
+        let u: f64[3] = [slots[6 * found[bi]], slots[6 * found[bi] + 1], slots[6 * found[bi] + 2]];
+        let nu: f64[3] = [slots[6 * found[bi] + 3], slots[6 * found[bi] + 4], slots[6 * found[bi] + 5]];
+        let w: f64[3] = [slots[6 * found[bj]], slots[6 * found[bj] + 1], slots[6 * found[bj] + 2]];
+        let nw: f64[3] = [slots[6 * found[bj] + 3], slots[6 * found[bj] + 4], slots[6 * found[bj] + 5]];
+        guard abs(dot3(nu, nu) - 1.0) < 1.0e-6 && abs(dot3(nw, nw) - 1.0) < 1.0e-6 else { continue; }
+        let mid = axpy3(u, 0.5, sub3(w, u));
+        let local = wanted_size(mid[0], mid[1], mid[2], 0.0, size);
+        guard !near_curve(mid, local) else { continue; }
+        let r = find_ridge(g, u, nu, w, nw, d);
+        guard r.found && !on_lattice_edge(r.x, d) && !near_curve(r.x, 0.75 * local / CURVE_DIV) else { continue; }
+        trace_curve(g, r, size, d);
+    }
+}
+
+// The cumulative length along curve c, one number for each of its segments
+// and a first 0. A closed curve has a last segment to its first sample.
+fn curve_arc(c: i64, arc: f64[>..]&) {
+    arc.clear();
+    arc.push(0.0);
+    let first = curve_start[c];
+    let n = curve_start[c + 1] - first;
+    let segs = if curve_closed[c] { n } else { n - 1 };
+    for i in segs {
+        arc.push(arc[i] + norm3(sub3(sample_at(first + (i + 1) % n), sample_at(first + i))));
+    }
+}
+
+// The distance from x to curve c, and the length along the curve to the
+// nearest point.
+fn curve_foot(c: i64, arc: f64[:], x: f64[3]) -> f64, f64 {
+    let first = curve_start[c];
+    let n = curve_start[c + 1] - first;
+    let segs = arc.len - 1;
+    var best = 1.0e300;
+    var best_s = 0.0;
+    for i in segs {
+        let a = sample_at(first + i);
+        let ab = sub3(sample_at(first + (i + 1) % n), a);
+        let len2 = dot3(ab, ab);
+        let lam = if len2 > 0.0 { clamp(dot3(sub3(x, a), ab) / len2, 0.0, 1.0) } else { 0.0 };
+        let dist = norm3(sub3(x, axpy3(a, lam, ab)));
+        if dist < best {
+            best = dist;
+            best_s = arc[i] + lam * sqrt(len2);
+        }
+    }
+    return best, best_s;
+}
+
+// The point of curve c at the length s along it, found again on the
+// sharp edge between 2 points on the sides of it. Its true point, or the
+// point on the segment if the edge is not found there.
+fn curve_exact(g: i64, c: i64, arc: f64[:], s: f64, d: f64) -> f64[3] {
+    let first = curve_start[c];
+    let n = curve_start[c + 1] - first;
+    let segs = arc.len - 1;
+    var i = 0;
+    while i < segs - 1 && arc[i + 1] < s { i++; }
+    let a = sample_at(first + i);
+    let b = sample_at(first + (i + 1) % n);
+    let len = arc[i + 1] - arc[i];
+    let lam = if len > 0.0 { clamp((s - arc[i]) / len, 0.0, 1.0) } else { 0.0 };
+    let y = axpy3(a, lam, sub3(b, a));
+    guard len > 0.0 else { return y; }
+    if !curve_closed[c] && (s <= 0.0 || s >= arc[segs]) { return y; }
+    let na = sample_normal(first + i);
+    let nb = sample_normal(first + (i + 1) % n);
+    let nav = unit3([na[0] + nb[0], na[1] + nb[1], na[2] + nb[2]]);
+    let t = unit3(sub3(b, a));
+    let w = unit3(cross3(t, nav));
+    let delta = 0.2 * len;
+    let u, nu, ok_u = settle(g, axpy3(y, -delta, w), d);
+    let v, nv, ok_v = settle(g, axpy3(y, delta, w), d);
+    guard ok_u && ok_v else { return y; }
+    let r = ridge_between(g, u, nu, v, nv, d);
+    guard r.found && norm3(sub3(r.x, y)) <= 2.0 * delta else { return y; }
+    return r.x;
+}
+
+// The cost of the node with index q, at the distance d from the curve.
+fn node_cost(d: f64, l: f64) -> f64 { return (d / l) * (d / l); }
+
+// The cost of an edge of length le that advances by `advance` along the curve.
+fn step_cost(advance: f64, le: f64, l: f64) -> f64 { return (advance - le) * (advance - le) / (l * l); }
+
+// The candidates: the lattice points within the tube of radius `tube` lattice
+// edges about curve c, found from the lattice point nearest to its first
+// sample through the lattice edges. For each: the lattice point, the length
+// along the curve of its nearest point, its distance from the curve and the
+// mean length of its edges.
+fn find_candidates(c: i64, arc: f64[:], tube: f64, node: i64[>..]&, at_s: f64[>..]&, at_d: f64[>..]&, at_l: f64[>..]&) {
+    node.clear();
+    at_s.clear();
+    at_d.clear();
+    at_l.clear();
+    let start = sample_at(curve_start[c]);
+    var near = 0;
+    var near_d = 1.0e300;
+    for p in lx.len / 3 {
+        let dist = norm3(sub3(lattice_at(p), start));
+        if dist < near_d {
+            near_d = dist;
+            near = p;
+        }
+    }
+    var seen: bool[>..] = [];
+    for p in lx.len / 3 { seen.push(false); }
+    var queue: i64[>..] = [near];
+    seen[near] = true;
+    var head = 0;
+    while head < queue.len {
+        let p = queue[head];
+        head++;
+        let l = node_edge_mean(p);
+        let dist, s = curve_foot(c, arc, lattice_at(p));
+        guard dist <= 1.2 * l else { continue; }
+        if dist <= tube * l && chain_owner[p] == -1 {
+            node.push(p);
+            at_s.push(s);
+            at_d.push(dist);
+            at_l.push(l);
+        }
+        for e in edges_at[edge_start[p]..edge_start[p + 1]] {
+            let q = if ea[e] == p { eb[e] } else { ea[e] };
+            if !seen[q] {
+                seen[q] = true;
+                queue.push(q);
+            }
+        }
+    }
+}
+
+// The cells at each lattice point: tets_of[tet_start[p]..tet_start[p + 1]].
+var tet_start: i64[>..] = [];
+var tets_of: i64[>..] = [];
+
+fn find_tets_of() {
+    let points = lx.len / 3;
+    tet_start.clear();
+    for p in points + 1 { tet_start.push(0); }
+    for t in btets.len / 4 {
+        for i in 4 { tet_start[btets[4 * t + i] + 1]++; }
+    }
+    for p in points { tet_start[p + 1] += tet_start[p]; }
+    tets_of.clear();
+    for i in tet_start[points] { tets_of.push(0); }
+    var fill: i64[>..] = [];
+    fill.append(tet_start[..points]);
+    for t in btets.len / 4 {
+        for i in 4 {
+            let p = btets[4 * t + i];
+            tets_of[fill[p]] = t;
+            fill[p]++;
+        }
+    }
+}
+
+// Whether lattice point m is inside and warp does not move it onto the
+// surface: no edge of m to an outside point has its cut nearer to m than the
+// fraction alpha of the edge. The cut is found from φ at the 2 ends as if
+// φ were linear on the edge (with a margin of SUPPORT).
+fn stays_inside(m: i64) -> bool {
+    guard lphi[m] < 0.0 else { return false; }
+    for e in edges_at[edge_start[m]..edge_start[m + 1]] {
+        let q = if ea[e] == m { eb[e] } else { ea[e] };
+        guard lphi[q] > 0.0 else { continue; }
+        let t = -lphi[m] / (lphi[q] - lphi[m]);
+        if t < SUPPORT * (if elong[e] { ALPHA_LONG } else { ALPHA_SHORT }) { return false; }
+    }
+    return true;
+}
+
+// Whether the lattice edge a b, with φ = 0 at both ends, is an edge of a
+// cell of the mesh. The stuffing makes a cell on it if a lattice cell
+// of the edge has a point inside that warp does not move onto the surface.
+fn edge_supported(a: i64, b: i64) -> bool {
+    for t in tets_of[tet_start[a]..tet_start[a + 1]] {
+        var has_b = false;
+        for i in 4 {
+            if btets[4 * t + i] == b { has_b = true; }
+        }
+        guard has_b else { continue; }
+        for i in 4 {
+            let m = btets[4 * t + i];
+            if m != a && m != b && stays_inside(m) { return true; }
+        }
+    }
+    return false;
+}
+
+// The state of the search of best_chain from the start p0 (-1 for an open
+// curve): the position of each candidate along the curve from the start, the
+// candidates in that sequence, and the cost and the previous candidate.
+var dp_pos: f64[>..] = [];
+var dp_order: i64[>..] = [];
+var dp_cost: f64[>..] = [];
+var dp_prev: i64[>..] = [];
+
+fn chain_start(count: i64, closed: bool, p0: i64, total: f64, at_s: f64[:], at_d: f64[:], at_l: f64[:]) {
+    // Positions from the start, in sequence.
+    dp_pos.clear();
+    dp_order.clear();
+    dp_cost.clear();
+    dp_prev.clear();
+    var keys: i64[>..] = [];
+    for k in count {
+        let origin = if closed { at_s[p0] } else { 0.0 };
+        var x = at_s[k] - origin;
+        if x < 0.0 { x += total; }
+        dp_pos.push(x);
+        dp_cost.push(1.0e300);
+        dp_prev.push(-1);
+        keys.push(trunc(x / total * 1.0e9) as i64 * 4194304 + k);
+    }
+    sort(keys);
+    for k in count { dp_order.push(keys[k] % 4194304); }
+    if closed {
+        dp_cost[p0] = node_cost(at_d[p0], at_l[p0]);
+    } else {
+        for k in count {
+            if at_s[k] <= END_REACH * at_l[k] { dp_cost[k] = node_cost(at_d[k], at_l[k]); }
+        }
+    }
+}
+
+// The least cost of a chain to each candidate, over the lattice edges in the
+// sequence along the curve.
+fn chain_forward(count: i64, closed: bool, p0: i64, node: i64[:], index_of: dictionary<i64, i64>&, at_d: f64[:], at_l: f64[:]) {
+    for oi in count {
+        let q = dp_order[oi];
+        for e in edges_at[edge_start[node[q]]..edge_start[node[q] + 1]] {
+            let pn = if ea[e] == node[q] { eb[e] } else { ea[e] };
+            let have = index_of.get(pn);
+            guard have else { continue; }
+            let pk = have;
+            guard dp_cost[pk] < 1.0e299 && dp_pos[pk] < dp_pos[q] else { continue; }
+            let le = gap(lx[..], node[q], pn);
+            let advance = dp_pos[q] - dp_pos[pk];
+            guard advance >= STEP_LOW * le && advance <= STEP_HIGH * le else { continue; }
+            if closed && q == p0 { continue; }
+            guard edge_supported(node[pk], node[q]) else { continue; }
+            let l = 0.5 * (at_l[q] + at_l[pk]);
+            let sum = dp_cost[pk] + step_cost(advance, le, l) + node_cost(at_d[q], at_l[q]);
+            if sum < dp_cost[q] {
+                dp_cost[q] = sum;
+                dp_prev[q] = pk;
+            }
+        }
+    }
+}
+
+// The best chain of lattice edges along curve c from the candidates, as the
+// index in the candidates of each point of it, in sequence. False if there
+// is none. `total` is the length of the curve.
+fn best_chain(c: i64, total: f64, node: i64[:], at_s: f64[:], at_d: f64[:], at_l: f64[:], path: i64[>..]&) -> bool {
+    path.clear();
+    let count = node.len;
+    guard count >= 2 else { return false; }
+    let closed = curve_closed[c];
+    var index_of = dictionary<i64, i64> {};
+    for k in count { index_of.insert(node[k], k); }
+    var starts: i64[>..] = [];
+    if closed {
+        for k in count {
+            if at_s[k] < 2.5 * at_l[k] || at_s[k] > total - 0.5 * at_l[k] { starts.push(k); }
+        }
+        guard starts.len > 0 else { return false; }
+    } else {
+        starts.push(-1);
+    }
+    var best_total = 1.0e300;
+    var best_prev: i64[>..] = [];
+    var best_last = -1;
+    for p0 in starts {
+        chain_start(count, closed, p0, total, at_s, at_d, at_l);
+        chain_forward(count, closed, p0, node, index_of, at_d, at_l);
+        // The end of the chain.
+        for q in count {
+            guard dp_cost[q] < 1.0e299 else { continue; }
+            var sum = dp_cost[q];
+            if closed {
+                guard q != p0 else { continue; }
+                var closes = false;
+                for e in edges_at[edge_start[node[q]]..edge_start[node[q] + 1]] {
+                    if ea[e] == node[p0] || eb[e] == node[p0] { closes = true; }
+                }
+                let le = gap(lx[..], node[q], node[p0]);
+                let advance = total - dp_pos[q];
+                guard closes && advance >= STEP_LOW * le && advance <= STEP_HIGH * le && edge_supported(node[q], node[p0]) else { continue; }
+                sum += step_cost(advance, le, 0.5 * (at_l[q] + at_l[p0]));
+            } else {
+                guard total - at_s[q] <= END_REACH * at_l[q] else { continue; }
+            }
+            if sum < best_total {
+                best_total = sum;
+                best_last = q;
+                best_prev.clear();
+                best_prev.append(dp_prev);
+            }
+        }
+    }
+    guard best_last >= 0 else { return false; }
+    var rev: i64[>..] = [];
+    var k = best_last;
+    while k >= 0 {
+        rev.push(k);
+        k = best_prev[k];
+    }
+    for i in rev.len { path.push(rev[rev.len - 1 - i]); }
+    return true;
+}
+
+// Whether the lattice point p stays where it is when the chain moves: it is
+// on the surface, on a plane of a box of the shape (`planes`: the axis and
+// the coordinate of each), or on the chain of another curve.
+fn pinned(p: i64, planes: f64[:]) -> bool {
+    if lphi[p] == 0.0 || chain_owner[p] >= 0 { return true; }
+    for k in planes.len / 2 {
+        if abs(lx[3 * p + planes[2 * k] as i64] - planes[2 * k + 1]) <= 1.0e-12 { return true; }
+    }
+    return false;
+}
+
+// The free lattice points near the chain (RELAX_DEPTH edges): not on a plane
+// of `planes` and not on the chain.
+fn near_chain(node: i64[:], path: i64[:], planes: f64[:], free: i64[>..]&) {
+    var queue: i64[>..] = [];
+    var depth: i64[>..] = [];
+    var seen = dictionary<i64, i64> {};
+    for k in path.len {
+        queue.push(node[path[k]]);
+        depth.push(0);
+        seen.insert(node[path[k]], 0);
+    }
+    var head = 0;
+    while head < queue.len {
+        let p = queue[head];
+        let dp = depth[head];
+        head++;
+        guard dp < RELAX_DEPTH else { continue; }
+        for e in edges_at[edge_start[p]..edge_start[p + 1]] {
+            let q = if ea[e] == p { eb[e] } else { ea[e] };
+            guard !seen.get(q) else { continue; }
+            seen.insert(q, dp + 1);
+            queue.push(q);
+            depth.push(dp + 1);
+            if !pinned(q, planes) { free.push(q); }
+        }
+    }
+}
+
+// Moves each free point part of the way to the mean of its neighbours, and
+// keeps it on its side of the surface: a point that would cross it does not
+// move. `free_old` and `free_phi` are the positions and φ before.
+fn relax_free(g: i64, free: i64[:], free_old: f64[:], free_phi: f64[:]) {
+    for round in RELAX_ROUNDS {
+        for p in free {
+            var mean: f64[3] = [0.0, 0.0, 0.0];
+            var count = 0.0;
+            for e in edges_at[edge_start[p]..edge_start[p + 1]] {
+                let q = if ea[e] == p { eb[e] } else { ea[e] };
+                for a in 3 { mean[a] += lx[3 * q + a]; }
+                count += 1.0;
+            }
+            for a in 3 { lx[3 * p + a] += RELAX * (mean[a] / count - lx[3 * p + a]); }
+        }
+    }
+    for k in free.len {
+        let p = free[k];
+        let f = phi(g, lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]);
+        if f == 0.0 || (f < 0.0) != (free_phi[k] < 0.0) {
+            for a in 3 { lx[3 * p + a] = free_old[3 * k + a]; }
+        } else {
+            lphi[p] = f;
+        }
+    }
+}
+
+// Whether the lattice cells `cells` (with the orientation `sign`) are all
+// positive with γ of at least MIN_GAMMA. The point of the chain in the worst
+// cell that moved the most is not a candidate for the next try.
+fn cells_valid(cells: i64[:], sign: f64[:], marked: dictionary<i64, i64>&, target: f64[:], old: f64[:]) -> bool {
+    var ok = true;
+    for i in cells.len {
+        let v = btets[4 * cells[i]..4 * cells[i] + 4];
+        let q = if sign[i] < 0.0 { [v[1], v[0], v[2], v[3]] } else { [v[0], v[1], v[2], v[3]] };
+        guard gamma_of(lattice_at(q[0]), lattice_at(q[1]), lattice_at(q[2]), lattice_at(q[3])) < MIN_GAMMA else { continue; }
+        ok = false;
+        var far = -1;
+        var far_move = -1.0;
+        for n in v {
+            let k = marked.get(n);
+            if k {
+                let move = norm3(sub3([target[3 * k], target[3 * k + 1], target[3 * k + 2]],
+                                      [old[3 * k], old[3 * k + 1], old[3 * k + 2]]));
+                if move > far_move {
+                    far_move = move;
+                    far = n;
+                }
+            }
+        }
+        if far >= 0 { chain_owner[far] = -2; }
+    }
+    return ok;
+}
+
+// Moves the lattice points of the chain onto the curve, and the free
+// lattice points near them part of the way after them, by smoothing, so that
+// the cells next to the chain keep their shape. False, with everything as
+// before, if a lattice cell then has an inverted orientation or a γ below
+// MIN_GAMMA.
+fn snap_chain(g: i64, c: i64, arc: f64[:], d: f64, node: i64[:], at_s: f64[:], path: i64[:], planes: f64[:]) -> bool {
+    let total = arc[arc.len - 1];
+    var target: f64[>..] = [];
+    for k in path.len {
+        var s = at_s[path[k]];
+        if !curve_closed[c] {
+            if k == 0 { s = 0.0; }
+            if k == path.len - 1 { s = total; }
+        }
+        target.append(curve_exact(g, c, arc, s, d));
+    }
+    var marked = dictionary<i64, i64> {};
+    for k in path.len { marked.insert(node[path[k]], k); }
+    var free: i64[>..] = [];
+    near_chain(node, path, planes, free);
+    // The cells that move, and their orientation.
+    var cells: i64[>..] = [];
+    var sign: f64[>..] = [];
+    var moves = dictionary<i64, i64> {};
+    for p in free { moves.insert(p, 0); }
+    for t in btets.len / 4 {
+        var touched = false;
+        for i in 4 {
+            if marked.get(btets[4 * t + i]) || moves.get(btets[4 * t + i]) { touched = true; }
+        }
+        guard touched else { continue; }
+        cells.push(t);
+        sign.push(if lattice_volume(t) < 0.0 { -1.0 } else { 1.0 });
+    }
+    var old: f64[>..] = [];
+    var old_phi: f64[>..] = [];
+    for k in path.len {
+        let p = node[path[k]];
+        old.append(lattice_at(p));
+        old_phi.push(lphi[p]);
+        for a in 3 { lx[3 * p + a] = target[3 * k + a]; }
+        lphi[p] = 0.0;
+    }
+    var free_old: f64[>..] = [];
+    var free_phi: f64[>..] = [];
+    for p in free {
+        free_old.append(lattice_at(p));
+        free_phi.push(lphi[p]);
+    }
+    relax_free(g, free[..], free_old[..], free_phi[..]);
+    let ok = cells_valid(cells[..], sign[..], marked, target[..], old[..]);
+    if !ok {
+        for k in path.len {
+            let p = node[path[k]];
+            for a in 3 { lx[3 * p + a] = old[3 * k + a]; }
+            lphi[p] = old_phi[k];
+        }
+        for k in free.len {
+            for a in 3 { lx[3 * free[k] + a] = free_old[3 * k + a]; }
+            lphi[free[k]] = free_phi[k];
+        }
+    }
+    return ok;
+}
+
+fn lattice_volume(t: i64) -> f64 {
+    let v = btets[4 * t..4 * t + 4];
+    let a = lattice_at(v[0]);
+    return dot3(sub3(lattice_at(v[1]), a), cross3(sub3(lattice_at(v[2]), a), sub3(lattice_at(v[3]), a)));
+}
+
+// Protects the sharp edges of g. It returns the number of curves that it
+// did not put on a chain of lattice edges.
+fn protect_edges(g: i64, size: f64) -> i64 {
+    curves_found = 0;
+    curves_missed = 0;
+    chain_a.clear();
+    chain_b.clear();
+    find_curves(g, size);
+    chain_owner.clear();
+    for p in lx.len / 3 { chain_owner.push(-1); }
+    guard curve_count() > 0 else { return 0; }
+    find_tets_of();
+    let d = shape_scale(g);
+    var missed = 0;
+    var arc: f64[>..] = [];
+    var node: i64[>..] = [];
+    var at_s: f64[>..] = [];
+    var at_d: f64[>..] = [];
+    var at_l: f64[>..] = [];
+    var path: i64[>..] = [];
+    var boxes: f64[>..] = [];
+    box_leaves(g, boxes);
+    var planes: f64[>..] = [];
+    for k in boxes.len / 6 {
+        for a in 3 {
+            planes.append([a, boxes[6 * k + a], a, boxes[6 * k + 3 + a]]);
+        }
+    }
+    for c in curve_count() {
+        curve_arc(c, arc);
+        var done = false;
+        for tube in TUBES {
+            for attempt in MAX_TRIES {
+                find_candidates(c, arc[..], tube, node, at_s, at_d, at_l);
+                guard best_chain(c, arc[arc.len - 1], node[..], at_s[..], at_d[..], at_l[..], path) else { break; }
+                if snap_chain(g, c, arc[..], d, node[..], at_s[..], path[..], planes[..]) {
+                    for k in path { chain_owner[node[k]] = c; }
+                    for k in path.len - 1 {
+                        chain_a.push(node[path[k]]);
+                        chain_b.push(node[path[k + 1]]);
+                    }
+                    if curve_closed[c] {
+                        chain_a.push(node[path[path.len - 1]]);
+                        chain_b.push(node[path[0]]);
+                    }
+                    done = true;
+                    break;
+                }
+            }
+            if done { break; }
+        }
+        // The points that this curve could not use are free for the next.
+        for p in chain_owner.len {
+            if chain_owner[p] == -2 { chain_owner[p] = -1; }
+        }
+        if !done { missed++; }
+    }
+    curves_found = curve_count();
+    curves_missed = missed;
+    return missed;
+}
+
 // Warping: moves each lattice point that a cut point violates onto the
 // nearest such cut point.
 fn warp(g: i64) {
@@ -390,6 +1060,65 @@ fn build_lattice(g: i64, b: f64[6], size: f64) -> bool {
 // Meshes the solid g with tetrahedra of edge length about `size`, and
 // smaller at the targets of refine.goose. False if the refinement does not
 // finish.
+fn has_bad_cell() -> bool {
+    for c in cell_count() {
+        let a = vertex(cell_node(c, 0));
+        let b = vertex(cell_node(c, 1));
+        let d = vertex(cell_node(c, 2));
+        let e = vertex(cell_node(c, 3));
+        if gamma_of(a, b, d, e) < FLAT_GAMMA { return true; }
+    }
+    return false;
+}
+
+// The lattice of shape g of bounds b for the size `scale`, refined, with φ
+// at each point, and the sharp lattice edges. False if it cannot be built.
+fn lattice_pass(g: i64, b: f64[6], scale: f64) -> bool {
+    clear_mesh(3);
+    guard build_lattice(g, b, scale) else { return false; }
+    lattice_tets();
+    guard refine_cells(lx, btets, 4, scale) else { return false; }
+    var h = scale;
+    for a in 3 {
+        for i in lattice_cubes[a] { h = min(h, lattice_lines[line_start[a] + i + 1] - lattice_lines[line_start[a] + i]); }
+    }
+    for t in targets { h = min(h, t.size); }
+    lphi.clear();
+    lnode.clear();
+    for p in lx.len / 3 {
+        let f = phi(g, lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]);
+        lphi.push(if abs(f) <= 1.0e-9 * h { 0.0 } else { f });
+        lnode.push(-1);
+    }
+    find_edges();
+    return true;
+}
+
+// Whether each lattice edge of the chains is an edge of the mesh.
+fn chains_in_mesh() -> bool {
+    let n = point_count();
+    var want = dictionary<i64, i64> {};
+    for k in chain_a.len {
+        let a = lnode[chain_a[k]];
+        let b = lnode[chain_b[k]];
+        guard a >= 0 && b >= 0 else { return false; }
+        want.insert(min(a, b) * n + max(a, b), 0);
+    }
+    for c in cell_count() {
+        for i in 4 {
+            for j in i + 1..4 {
+                let a = cell_node(c, i);
+                let b = cell_node(c, j);
+                let key = min(a, b) * n + max(a, b);
+                if want.get(key) { want.update(key, 0) { it = 1; }; }
+            }
+        }
+    }
+    var missing = 0;
+    want.each() { key, v => if v == 0 { missing++; } };
+    return missing == 0;
+}
+
 fn mesh_3d(g: i64, size: f64) -> bool {
     clear_mesh(3);
     if shell_tets(g, size) { return true; }
@@ -413,22 +1142,33 @@ fn mesh_3d(g: i64, size: f64) -> bool {
             return done;
         }
     }
-    guard build_lattice(g, b, size) else { return false; }
-    lattice_tets();
-    guard refine_cells(lx, btets, 4, size) else { return false; }
-    var h = size;
-    for a in 3 {
-        for i in lattice_cubes[a] { h = min(h, lattice_lines[line_start[a] + i + 1] - lattice_lines[line_start[a] + i]); }
+    // A curve that no chain of lattice edges fits at this size may fit when
+    // the lattice is a little finer or coarser, so the lattice is built again
+    // with a size that is up to a few percent different. The last pass does
+    // not protect the curves: it is the mesh without them, which is also the
+    // result when a chain makes a cell with γ below FLAT_GAMMA, leaves a
+    // chain edge out of the mesh, or gives a mesh that mesh_quality fails.
+    let passes = RETRY_SCALES.len + 1;
+    for pass in passes {
+        let protect = keep_edges && pass < RETRY_SCALES.len;
+        let scale = if protect { size * RETRY_SCALES[pass] } else { size };
+        guard lattice_pass(g, b, scale) else { return false; }
+        if protect {
+            let missed = protect_edges(g, scale);
+            if missed > 0 && (pass + 1 < RETRY_SCALES.len || missed == curves_found) { continue; }
+        }
+        warp(g);
+        for t in btets.len / 4 { stuff(g, [btets[4 * t], btets[4 * t + 1], btets[4 * t + 2], btets[4 * t + 3]]); }
+        if protect && curves_found > 0 && (has_bad_cell() || !chains_in_mesh()) {
+            curves_missed = curves_found;
+            continue;
+        }
+        if improve_cells { improve(on_surface[..]); }
+        if protect && curves_found > 0 && !quality_passes(mesh_quality()) {
+            curves_missed = curves_found;
+            continue;
+        }
+        break;
     }
-    for t in targets { h = min(h, t.size); }
-    for p in lx.len / 3 {
-        let f = phi(g, lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]);
-        lphi.push(if abs(f) <= 1.0e-9 * h { 0.0 } else { f });
-        lnode.push(-1);
-    }
-    find_edges();
-    warp(g);
-    for t in btets.len / 4 { stuff(g, [btets[4 * t], btets[4 * t + 1], btets[4 * t + 2], btets[4 * t + 3]]); }
-    if improve_cells { improve(on_surface[..]); }
     return true;
 }
