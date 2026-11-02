@@ -48,10 +48,13 @@ examples/elements/radiation_annulus_tri.skn
 examples/elements/taylor_bar_tet.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/bar_pressure.skn
+examples/femahoy/birth_death_column.skn
+examples/femahoy/buckling_column.skn
 examples/femahoy/cantilever_2step.skn
 examples/femahoy/contact_cattaneo.skn
 examples/femahoy/contact_hertz.skn
 examples/femahoy/dynamics_bar_step.skn
+examples/femahoy/fracture_centre_crack.skn
 examples/femahoy/grid_cantilever.skn
 examples/femahoy/grid_conductivity_slab.skn
 examples/femahoy/grid_cooling_slab.skn
@@ -75,6 +78,8 @@ examples/femahoy/heat_fin.skn
 examples/femahoy/hyperelastic_tube.skn
 examples/femahoy/plasticity_sphere.skn
 examples/femahoy/scordelis_lo_roof.skn
+examples/femahoy/submodel_kirsch_hole_global.skn
+examples/femahoy/submodel_kirsch_hole.skn
 examples/femahoy/taylor_bar_impact.skn
 examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn

@@ -48,6 +48,8 @@ fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
         if kind(c) == syntax::N_HEADER && syntax::text(tok(child(c, 0))) != "2d" { return false; }
+        // A `method` item is for the simplex lane (src/elements/gen.goose): this generator has no method.
+        if kind(c) == syntax::N_METHOD { return false; }
         if kind(c) == syntax::N_MESH {
             var s = first(child(c, 1));
             while s >= 0 {

@@ -194,6 +194,23 @@ gives the roadmap phase that closes the gap:
   [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn) and
   [cht_heated_channel.skn](../examples/femahoy/cht_heated_channel.skn).
 
+- Structural models of phase 3 run with `skein run` and pass their `expect`:
+  [buckling_column.skn](../examples/femahoy/buckling_column.skn),
+  [birth_death_column.skn](../examples/femahoy/birth_death_column.skn),
+  [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn)
+  (with [submodel_kirsch_hole_global.skn](../examples/femahoy/submodel_kirsch_hole_global.skn))
+  and [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn).
+  Deviations: the quad cells of the submodel ring are meshed as P2
+  triangles. The preload form `P = defgrad(u)*S` solves the static step to
+  first order, and the buckling step takes its stress. A born node shows
+  the change since its birth. Point location on a curved P2 cell uses
+  Newton iteration. A `||` boundary with a limit inside is refused
+  (`tests/unsupported/boundary_or_limit.skn`).
+- Not run yet, because each needs a new physics family:
+  random_vibration_cantilever (a `Complex` vector unknown),
+  laminate_pagano and warpage_2p5d_frame (shell family and layup),
+  shape_hole_biaxial (a shape loop with remeshing).
+
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.
 

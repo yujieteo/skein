@@ -35,6 +35,7 @@ var dead: u8[>..] = [];         // 1 for each dead cell; empty if each cell is l
 var born: u8[>..] = [];         // 1 for each cell with a birth; empty if none
 var birth_u: f64[>..] = [];     // u_b of each node of each cell, per_cell ncomp values
 var held: f64[>..] = [];        // the solution of the last step
+var origin: f64[>..] = [];      // the value of each dof of a node at its birth: a report and an output show sol - origin
 
 // Clears the laws and the live set, for a new physics.
 fn clear_stages() {
@@ -44,6 +45,15 @@ fn clear_stages() {
     born.clear();
     birth_u.clear();
     held.clear();
+    origin.clear();
+}
+
+// The value of dof d that a report or an output shows. A node that a
+// birth made has the settlement of the column below it in sol, but its
+// point is not on the column before its cells: it shows the change since
+// its birth.
+fn shown(d: i64) -> f64 {
+    return if origin.len == sol.len { sol[d] - origin[d] } else { sol[d] };
 }
 
 fn law_now() -> Law { return Law { lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force }; }
@@ -69,8 +79,10 @@ fn use_law_0() {
 
 fn cell_in(c: i64, g: i64) -> bool {
     var p: f64[3] = [0.0, 0.0, 0.0];
-    for l in dim + 1 {
-        for t in 3 { p[t] += node_x(cell_node(c, l), t) / (dim + 1); }
+    // The centre of the corners: a simplex has dim + 1, a hexahedron has 8.
+    let corners = if hex_cells { 8 } else { dim + 1 };
+    for l in corners {
+        for t in 3 { p[t] += node_x(cell_node(c, l), t) / corners; }
     }
     return mesher::phi(g, p[0], p[1], p[2]) < 0.0;
 }
@@ -123,6 +135,49 @@ fn live_nodes() -> u8[>..] {
     return live;
 }
 
+// The new cells come alive. Each new node takes the value of the nearest shared node.
+fn adopt_values(new_cells: i64[>..]&, shared: i64[>..]&, before: u8[>..]&, seen: u8[>..]&) {
+    for c in new_cells {
+        dead[c] = 0;
+        born[c] = 1;
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if before[n] != 0 || seen[n] != 1 || shared.len == 0 { continue; }
+            var best = shared[0];
+            var best_d = 1.0e300;
+            for m in shared {
+                var d = 0.0;
+                for t in 3 { d += (node_x(n, t) - node_x(m, t)) * (node_x(n, t) - node_x(m, t)); }
+                if d < best_d {
+                    best_d = d;
+                    best = m;
+                }
+            }
+            for p in ncomp { held[ncomp * n + p] = held[ncomp * best + p]; }
+            seen[n] = 2;
+        }
+    }
+}
+
+// Records the value of each new node at its birth, for the change since birth.
+fn record_birth(new_cells: i64[>..]&, before: u8[>..]&) {
+    if origin.len != sol.len {
+        origin.clear();
+        for d in sol.len { origin.push(0.0); }
+    }
+    for c in new_cells {
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if before[n] == 0 { for p in ncomp { origin[ncomp * n + p] = held[ncomp * n + p]; } }
+        }
+    }
+    for c in new_cells {
+        for l in per_cell {
+            for p in ncomp { birth_u[(per_cell * c + l) * ncomp + p] = held[ncomp * cell_node(c, l) + p]; }
+        }
+    }
+}
+
 // Gives birth to the dead cells in shape g, strain-free on the solution of
 // the last step. It gives the number of cells in g.
 fn birth_cells(g: i64) -> i64 {
@@ -155,31 +210,8 @@ fn birth_cells(g: i64) -> i64 {
             seen[n] = 1;
         }
     }
-    for c in new_cells {
-        dead[c] = 0;
-        born[c] = 1;
-        for l in per_cell {
-            let n = cell_node(c, l);
-            if before[n] != 0 || seen[n] != 1 || shared.len == 0 { continue; }
-            var best = shared[0];
-            var best_d = 1.0e300;
-            for m in shared {
-                var d = 0.0;
-                for t in 3 { d += (node_x(n, t) - node_x(m, t)) * (node_x(n, t) - node_x(m, t)); }
-                if d < best_d {
-                    best_d = d;
-                    best = m;
-                }
-            }
-            for p in ncomp { held[ncomp * n + p] = held[ncomp * best + p]; }
-            seen[n] = 2;
-        }
-    }
-    for c in new_cells {
-        for l in per_cell {
-            for p in ncomp { birth_u[(per_cell * c + l) * ncomp + p] = held[ncomp * cell_node(c, l) + p]; }
-        }
-    }
+    adopt_values(new_cells, shared, before, seen);
+    record_birth(new_cells, before);
     return count;
 }
 
