@@ -69,6 +69,7 @@ fn claims(prog: i64) -> bool {
             }
         }
         if k == syntax::N_STEP && hex_modal(c) { return true; }
+        if k == syntax::N_STEP && has_change(c) { return true; }
         if k == syntax::N_PHYSICS {
             var u = first(c);
             while u >= 0 {
@@ -78,6 +79,16 @@ fn claims(prog: i64) -> bool {
                 u = next(u);
             }
         }
+        c = next(c);
+    }
+    return false;
+}
+
+// Whether step n has a birth or a death statement.
+fn has_change(n: i64) -> bool {
+    var c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_BIRTH || kind(c) == syntax::N_DEATH { return true; }
         c = next(c);
     }
     return false;
@@ -115,8 +126,35 @@ struct Vec {
 
 fn scalar(x: f64) -> Vec { Vec { n: 1, v: [x, 0.0, 0.0] } }
 
+// The node `t.col` of a table t in the expression n, or -1.
+recursive fn table_member(n: i64) -> i64 {
+    if n < 0 { return -1; }
+    if kind(n) == syntax::N_MEMBER && kind(first(n)) == syntax::N_NAME && position(codegen::table_names, name(first(n))) >= 0 { return n; }
+    var c = first(n);
+    while c >= 0 {
+        let m = table_member(c);
+        if m >= 0 { return m; }
+        c = next(c);
+    }
+    return -1;
+}
+
+// The values of the column of the member node m of a table.
+fn column_values(m: i64) -> f64[>..] {
+    var col: f64[>..] = [];
+    codegen::table_column(codegen::table_nodes[position(codegen::table_names, name(first(m)))], name(m), tok(m), col);
+    return col;
+}
+
+var table_row = -1;     // the row of `t.col` in value, or -1
+
 recursive fn value(n: i64) -> Vec {
     let k = kind(n);
+    if k == syntax::N_MEMBER && table_row >= 0 && table_member(n) == n {
+        let col = column_values(n);
+        guard table_row < col.len else { return scalar(0.0); };
+        return scalar(col[table_row]);
+    }
     if k == syntax::N_NUMBER && first(n) >= 0 {
         let u = first(first(n));
         if kind(u) == syntax::N_UNIT_NAME && syntax::text(tok(u)) == "degC" {
@@ -343,6 +381,7 @@ struct Change {
 struct Report {
     expr: i64,
     label: u8[..256],
+    row: i64,           // the row of the table that the point of the report names, or -1
 }
 
 struct Step {
@@ -437,6 +476,8 @@ var capacity_node = -1;         // rho*cp of `eq rho*cp*ddt(T) + div(q) = 0`, or
 var curve_node = -1;            // the k of the material when it depends on the unknown T, else -1
 var initial_node = -1;          // the initial value of the unknown, or -1
 var nl_rtol = 0.0;              // rtol of a solve item, or 0
+var hex_regions = false;         // a region of cells on the hexahedra of a box
+var quad_mesh = false;           // cell: quad of a 2D mesh, meshed as triangles
 var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
 var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
 var order = 2;
@@ -523,6 +564,8 @@ fn reset() {
     mesh_grade = 0.0;
     mesh_tok = -1;
     incompatible_family = false;
+    quad_mesh = false;
+    hex_regions = false;
     hex_mesh = false;
     curve_node = -1;
     capacity_node = -1;
@@ -1101,9 +1144,14 @@ fn find_material(word: u8[:]) -> i64 {
 fn region_shape(r: i64) -> i64 {
     let v = mesher::eval_value(r);
     guard ok() else { return -1; }
+    // The hexahedra of a box are whole in a region when its faces are on the grid of the cells.
+    if v.n == 0 && hex_mesh && geo == GEO_BOX {
+        hex_regions = true;
+        return v.g;
+    }
     guard v.n == 0 && geo == GEO_SHAPE && dim == 2 else {
-        unsupported(tok(r), "a region of cells needs a 2d body of the mesher: the 3d mesher keeps no interfaces",
-                    "use one material and no birth or death in a 3d model");
+        unsupported(tok(r), "a region of cells needs a 2d body of the mesher, or a box of hexahedra: the 3d mesher keeps no interfaces",
+                    "use one material and no birth or death in a tetrahedra model, or cell: hex on a box");
         return -1;
     };
     interfaces.push(v.g);
@@ -1255,6 +1303,9 @@ fn mesh(n: i64) {
         } else if name(s) == "cell" && kind(n) == syntax::N_MESH {
             if dim == 3 && kind(v) == syntax::N_NAME && name(v) == "hex" {
                 hex_mesh = true;
+            } else if dim == 2 && kind(v) == syntax::N_NAME && name(v) == "quad" {
+                // The quad cells of a model with a method (quad8, reduced) are P2 triangles of the same size here.
+                quad_mesh = true;
             } else if kind(v) != syntax::N_NAME || name(v) != cell {
                 unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, if dim == 3 { " or hex" } else { "" }, " cells"),
                             str("write cell: ", cell));
@@ -1550,6 +1601,9 @@ fn method(n: i64) {
             pml_setting(first(s));
         } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
             incompatible_family = true;
+        } else if kind(s) == syntax::N_SETTING && quad_mesh && ((name(s) == "family" && source_of(first(s)) == "serendipity") ||
+                  (name(s) == "quadrature" && source_of(first(s)) == "reduced")) {
+            // The quad8 of the quad cells: see quad_mesh.
         } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
             // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
@@ -2014,6 +2068,8 @@ fn wave_part(e: i64) -> i64 {
 
 fn report(item: i64) {
     let e = first(item);
+    // The checks read the first row of a table column in the point.
+    table_row = if kind(e) == syntax::N_AT && table_member(child(e, 1)) >= 0 { 0 } else { -1 };
     if physics == EDGE || physics == DARCY {
         edge_report(item);
         return;
@@ -2045,7 +2101,20 @@ fn report(item: i64) {
         unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"), REPORT_FIX);
         return;
     }
-    var r = Report { expr: e, label: [] };
+    let m = if kind(e) == syntax::N_AT { table_member(child(e, 1)) } else { -1 };
+    if m >= 0 {
+        // A table column in the point: one report for each row.
+        let rows = max(column_values(m).len, 1);
+        for row in rows {
+            var r = Report { expr: e, label: [], row: row };
+            codegen::set256(r.label, str(source_of(item), " [", row + 1, "]"));
+            reports.push(r);
+        }
+        table_row = -1;
+        return;
+    }
+    table_row = -1;
+    var r = Report { expr: e, label: [], row: -1 };
     codegen::set256(r.label, source_of(item));
     reports.push(r);
 }
@@ -3734,6 +3803,7 @@ fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3])
 fn emit_report(out: u8[>..]&, step: Step, r: Report) {
     format(out, "    // report ", r.label, "\n    {\n");
     let e = r.expr;
+    table_row = r.row;
     var v: u8[>..] = [];
     if is_call(e, "eigenvalue") {
         format(out, "        let x = elements::eigenvalue(", scalar_value(arg(e, 0)) as! i64, ");\n");
@@ -4020,7 +4090,7 @@ fn emit_head(elements_path: u8[:], out: u8[>..]&) {
 fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
     let sys = codegen::system;
     let cell = if hex_mesh { "hexahedra" } else if dim == 3 { "tetrahedra" } else { "triangles" };
-    if geo == GEO_SHAPE || pml_g >= 0 { emit_shapes(out); }
+    if geo == GEO_SHAPE || pml_g >= 0 || hex_regions { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
     } else {

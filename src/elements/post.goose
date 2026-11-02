@@ -94,7 +94,7 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     if what == FIELD_VALUE {
         var v = 0.0;
         if comp < ncomp {
-            for l in per_cell { v += shp[l] * sol[ncomp * cell_node(c, l) + comp]; }
+            for l in per_cell { v += shp[l] * shown(ncomp * cell_node(c, l) + comp); }
         }
         return v;
     }
@@ -253,7 +253,7 @@ fn write_vtu_file(path: const u8[:], field: const u8[:]) -> bool {
            "\" format=\"ascii\">\n");
     for n in node_count() {
         for a in comps {
-            let v = if a < ncomp { sol[ncomp * n + a] } else { 0.0 };
+            let v = if a < ncomp { shown(ncomp * n + a) } else { 0.0 };
             format(out, v, if a + 1 < comps { " " } else { "\n" });
         }
     }
