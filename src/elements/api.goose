@@ -40,6 +40,7 @@ import .mixed;
 import .material;
 import .solid;
 import .contact;
+import .heat_transient;
 
 let X = 0;
 let Y = 1;
@@ -52,6 +53,13 @@ let ALL = -1;
 fn mesh_box(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
             nx: i64, ny: i64, nz: i64) {
     build_box(d, ord, [x0, y0, z0], [x1, y1, z1], nx, ny, nz);
+    physics = -1;
+}
+
+// Meshes the box from (x0, y0, z0) to (x1, y1, z1) with nx × ny × nz
+// hexahedra of order 1.
+fn mesh_hex_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, nx: i64, ny: i64, nz: i64) {
+    build_hex_box([x0, y0, z0], [x1, y1, z1], nx, ny, nz);
     physics = -1;
 }
 
@@ -146,6 +154,9 @@ fn cells_for(length: f64, size: f64) -> i64 {
 fn elastic(E: f64, nu: f64) { set_elastic(E, nu, SOLID_3D, 1.0); }
 fn elastic_plane_stress(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRESS, t); }
 fn elastic_plane_strain(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRAIN, t); }
+
+// Adds the incompatible modes to the elastic hexahedra (family: incompatible).
+fn incompatible(on: bool) { incompatible_modes = on; }
 
 // Sets a uniform body force per volume (bx, by, bz) on the elastic
 // physics of the last `elastic` call, for example rho*g.
@@ -429,6 +440,25 @@ fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 // The condition dot(q, n) = h (T - t_inf) on the region.
 fn film(h: f64, t_inf: f64) { add_film(h, t_inf); }
 
+// The radiation to the surroundings at t_inf on the region: dot(q, n) = c
+// (T^4 - t_inf^4) with c = eps sigma in the units of the model.
+fn radiate_ambient(c: f64, t_inf: f64) { add_ambient(c, t_inf); }
+
+// The conductivity k(T) of a heat physics at the temperatures lo, lo + step,
+// .. hi, linear in between and beyond the ends. A step with it iterates.
+fn conductivity_curve(lo: f64, hi: f64, v: f64[:]) { set_conductivity_curve(lo, hi, v); }
+
+// The temperature of the free nodes before the first step, which is the
+// start of the iteration of a nonlinear step.
+fn initial_temperature(t: f64) { initial_value = t; }
+
+// The tolerance of the nonlinear steps: the change of T relative to its
+// largest value.
+fn nonlinear_tolerance(rtol: f64) {
+    guard rtol > 0.0 else { abort("nonlinear_tolerance: rtol > 0"); }
+    nl_tolerance = rtol;
+}
+
 // Adds the facets of the region to the enclosure of the step, with the
 // emissivity eps: the natural condition dot(q, n) = radiation(eps).
 // `sb` is the Stefan-Boltzmann constant in the units of the model.
@@ -441,6 +471,7 @@ fn clear_bcs() {
     clear_conditions();
     clear_rigid();
     clear_films();
+    clear_ambient();
     clear_radiation();
     clear_impedance();
     if physics == MIXED { clear_pressure(); }
@@ -595,6 +626,14 @@ fn set_density(rho: f64) {
     guard rho > 0.0 else { abort("set_density: rho > 0"); }
     density = rho;
 }
+
+// The transient heat step (heat_transient.goose): the capacity rho cp, the
+// number of time steps for `end` and dt in the scheme with theta (1 backward
+// Euler, 1/2 Crank-Nicolson), one time step, and the end of the step.
+fn set_capacity(c: f64) { heat_capacity(c); }
+fn heat_begin(end: f64, dt: f64, theta: f64) -> i64 { return transient_heat_begin(end, dt, theta); }
+fn heat_advance() -> bool { return transient_heat_advance(); }
+fn heat_end() { transient_heat_end(); }
 
 // The `count` lowest modes of K x = ω² M x on the free dofs (spec §14.2).
 // False if LOBPCG does not converge.

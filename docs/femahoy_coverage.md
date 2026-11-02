@@ -100,7 +100,23 @@ gives the roadmap phase that closes the gap:
   `full` and `reduced`. The grid models use `family: incompatible`, and
   `skein run` runs
   [grid_cantilever.skn](../examples/femahoy/grid_cantilever.skn) on 8-node
-  hexahedra with incompatible modes.
+  hexahedra with incompatible modes. The elements lane (`src/elements/`)
+  runs the same family in a `modal` step:
+  [grid_frequency_cantilever.skn](../examples/femahoy/grid_frequency_cantilever.skn)
+  gives 419.52 Hz (+0.42 %), and
+  [grid_free_block_modes_ccx.skn](../examples/femahoy/grid_free_block_modes_ccx.skn)
+  gives its 6 elastic modes within 0.7 % of CalculiX, after 6 rigid modes at 0 Hz.
+  [frequency_cantilever.skn](../examples/femahoy/frequency_cantilever.skn)
+  needs `family: serendipity` with `quadrature: reduced`, the 20-node
+  hexahedron. It does not run yet.
+- Phase 2 runs the hex8 heat cells in the elements lane (`cell: hex` on a
+  `box`, `order: 1`): [grid_heated_bar.skn](../examples/femahoy/grid_heated_bar.skn),
+  [grid_conductivity_slab.skn](../examples/femahoy/grid_conductivity_slab.skn)
+  (k of T), [grid_radiation_slab.skn](../examples/femahoy/grid_radiation_slab.skn)
+  and [grid_radiating_fin_ccx.skn](../examples/femahoy/grid_radiating_fin_ccx.skn)
+  (radiation to the surroundings, `boundary(fin) - base`), and
+  [grid_cooling_slab.skn](../examples/femahoy/grid_cooling_slab.skn)
+  (`backward_euler` and `crank_nicolson`). Each passes its `expect`.
 - Phase 2 closes G20. Spec [§9.1](skein_spec.md#91-mesh) states
   `crack_tip`, and the mesh of
   [fracture_centre_crack.skn](../examples/femahoy/fracture_centre_crack.skn)

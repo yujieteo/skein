@@ -678,6 +678,78 @@ fn test_eigen() {
     }
 }
 
+// --- the hexahedra ---------------------------------------------------------------
+
+// The heated bar on hexahedra, once with a constant k and once with the
+// curve k(T) = BAR_K: the centre against the series (the nonlinear step is
+// the same solve).
+fn hex_bar(curve: bool) {
+    elements::mesh_hex_box(0.0, 0.0, 0.0, BAR_A, BAR_A, 0.25 * BAR_A, 16, 16, 4);
+    elements::heat(BAR_K, BAR_Q, 1.0);
+    if curve { elements::conductivity_curve(0.0, 100.0, [BAR_K, BAR_K]); }
+    for axis in 2 {
+        for v in [0.0, BAR_A] {
+            assert(elements::plane(axis, v));
+            elements::fix(0, 0.0);
+        }
+    }
+    let name = str("hex heated bar", if curve { " with k(T)" } else { "" });
+    if !elements::solve() {
+        failures++;
+        print("FAIL ", name, ": the solve does not converge");
+    }
+    let t, found = elements::value_at(0, 0.5 * BAR_A, 0.5 * BAR_A, 0.125 * BAR_A);
+    print(name, ": ", elements::dof_count(), " dofs, centre T ", t, " K (series ", BAR_CENTRE, ")");
+    if !found { failures++; print("FAIL ", name, ": the centre is not found"); }
+    expect_near(name, t, BAR_CENTRE, 0.01);
+}
+
+// A slab at 100 K with both faces at 0: the centre at Fo = 0.2 against the
+// series of Carslaw and Jaeger (77.231160686 for 100 K), by backward Euler.
+fn hex_cooling() {
+    let h = 0.02;
+    elements::mesh_hex_box(0.0, 0.0, 0.0, 0.001, 0.001, h, 1, 1, 20);
+    elements::heat(1.0, 0.0, 1.0);
+    elements::set_capacity(1.0e6);
+    elements::initial_temperature(100.0);
+    for v in [0.0, h] {
+        assert(elements::plane(elements::Z, v));
+        elements::fix(0, 0.0);
+    }
+    let n = elements::heat_begin(20.0, 0.1, 1.0);
+    for i in n { assert(elements::heat_advance()); }
+    elements::heat_end();
+    let t, found = elements::value_at(0, 0.0005, 0.0005, 0.5 * h);
+    print("hex cooling slab: ", n, " time steps, centre T ", t, " K");
+    if !found { failures++; print("FAIL hex cooling slab: the centre is not found"); }
+    expect_near("hex cooling slab", t, 77.231160686, 0.01);
+}
+
+// The first mode of the clamped beam (Blevins: 417.758 Hz) with the
+// incompatible modes, on a mesh of 20 x 2 x 2 hexahedra.
+fn hex_modal() {
+    elements::mesh_hex_box(0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 2);
+    elements::elastic(210000.0, 0.3);
+    elements::incompatible(true);
+    elements::set_density(7.85e-9);
+    elements::clear_bcs();
+    elements::plane(elements::X, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    let done = elements::modal(1);
+    let f1 = elements::eigenvalue(1);
+    elements::incompatible(false);
+    print("hex modal: ", elements::dof_count(), " dofs, f1 ", f1, " Hz");
+    if !done { failures++; print("FAIL hex modal: LOBPCG does not converge"); }
+    expect_near("hex modal", f1, 417.758, 0.03);
+}
+
+fn test_hex() {
+    hex_bar(false);
+    hex_bar(true);
+    hex_cooling();
+    hex_modal();
+}
+
 // --- the frequency domain ---------------------------------------------------
 
 // The wave field at (x, 0.05): re and im.
@@ -1229,6 +1301,7 @@ fn main() {
     test_submodel();
     test_stages();
     test_eigen();
+    test_hex();
     test_harmonic();
     test_pml();
     test_bloch();

@@ -68,6 +68,7 @@ fn claims(prog: i64) -> bool {
                 s = next(s);
             }
         }
+        if k == syntax::N_STEP && hex_modal(c) { return true; }
         if k == syntax::N_PHYSICS {
             var u = first(c);
             while u >= 0 {
@@ -80,6 +81,13 @@ fn claims(prog: i64) -> bool {
         c = next(c);
     }
     return false;
+}
+
+// Whether step n is a modal step. A modal step of a model with hexahedra
+// runs here: the incompatible modes and the mass are in this lane.
+fn hex_modal(n: i64) -> bool {
+    let proc = child(n, 0);
+    return name(proc) == "modal";
 }
 
 // Whether type n is Complex<D> of a scalar D.
@@ -246,6 +254,7 @@ let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
 let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosure of the step
 let BC_PRESSURE = 4; // `bc inner: sigma*n = -p*n`: v[0] holds p
 let BC_FILM = 5;    // `bc skin: dot(q, n) = h*(T - T_air)`: v holds h and T_air
+let BC_AMBIENT = 8; // `bc skin: dot(q, n) = c*(T^4 - T_amb^4)`: v holds c = eps sigma and T_amb
 
 fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE || b.kind == BC_MOMENT; }
 
@@ -341,6 +350,8 @@ struct Step {
     damping: f64,       // the damping ratio of a harmonic step
     end: f64,           // the end time of a transient step
     dt: f64,            // its time step, or 0 for dt: stable
+    theta: f64,         // the scheme of a transient heat step: 1 backward Euler, 1/2 Crank-Nicolson
+    every: i64,         // the fields of a transient step each `every` time steps, or 0
 }
 
 let STATIC = 0;
@@ -404,6 +415,13 @@ var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_grade = 0.0;   // the mesh setting grade (spec §9.1), or 0 if not given
 var mesh_tok = -1;
+var capacity = 0.0;             // rho*cp of the material
+var capacity_node = -1;         // rho*cp of `eq rho*cp*ddt(T) + div(q) = 0`, or -1
+var curve_node = -1;            // the k of the material when it depends on the unknown T, else -1
+var initial_node = -1;          // the initial value of the unknown, or -1
+var nl_rtol = 0.0;              // rtol of a solve item, or 0
+var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
+var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
 var physics = -1;
@@ -443,7 +461,7 @@ var bloch_period: f64[3] = [0.0; 3];
 var bloch_theta = 0.0;          // dot(k, period)
 var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0, report_count: 0,
                       first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0, first_freq: 0, freq_count: 0,
-                      damping: 0.0, end: 0.0, dt: 0.0 };   // the step that step() reads
+                      damping: 0.0, end: 0.0, dt: 0.0, theta: 1.0, every: 0 };   // the step that step() reads
 
 fn reset() {
     density = 0.0;
@@ -474,6 +492,13 @@ fn reset() {
     mesh_fine = 0.0;
     mesh_grade = 0.0;
     mesh_tok = -1;
+    incompatible_family = false;
+    hex_mesh = false;
+    curve_node = -1;
+    capacity_node = -1;
+    capacity = 0.0;
+    initial_node = -1;
+    nl_rtol = 0.0;
     order = 2;
     rkpm_support = 0.0;
     physics = -1;
@@ -625,7 +650,7 @@ fn value_item(n: i64) {
     } else if geometric(v) {
         geometry_names.push(w);
         geometry_nodes.push(v);
-    } else if is_call(v, "boundary") {
+    } else if is_call(v, "boundary") || (kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-" && is_call(child(v, 0), "boundary")) {
         surface_lets.push(n);
     } else if is_call(v, "results") {
         results_item(n, v);
@@ -904,8 +929,35 @@ fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
     return true;
 }
 
+// `let skin: Surface = boundary(pin) - base`: every face of the box but the
+// nodes of the boundary `base`.
+fn surface_difference(n: i64) {
+    let v = child(n, 1);
+    let call = child(v, 0);
+    let b = if kind(child(v, 1)) == syntax::N_NAME { find_surf(name(child(v, 1))) } else { -1 };
+    let k = if syntax::child_count(call) == 2 && kind(arg(call, 0)) == syntax::N_NAME { find_body(name(arg(call, 0))) } else { -1 };
+    let on_body = syntax::child_count(call) == 2 && kind(arg(call, 0)) == syntax::N_NAME && (name(arg(call, 0)) == body_name || k >= 0);
+    if !on_body || b < 0 || surfs[b].hole || geo != GEO_BOX || surfs[b].axes.len == 0 {
+        unsupported(tok(v), "a boundary difference is boundary(box) less a boundary of planes that a let names above", "write let skin: Surface = boundary(pin) - base");
+        return;
+    }
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: b, body: k };
+    set64(s.name, name(n));
+    for j in dim {
+        s.axes.push(j);
+        s.values.push(lo[j]);
+        s.axes.push(j);
+        s.values.push(hi[j]);
+    }
+    surfs.push(s);
+}
+
 // `let root: Surface = boundary(plate, x == 0 mm)`.
 fn surface(n: i64) {
+    if kind(child(n, 1)) == syntax::N_BINARY {
+        surface_difference(n);
+        return;
+    }
     let v = child(n, 1);
     let of = if syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { "" };
     let k = find_body(of);
@@ -951,6 +1003,24 @@ fn region_shape(r: i64) -> i64 {
     return v.g;
 }
 
+// Whether the expression n uses the name `word`, through the values and the
+// properties that it names.
+recursive fn mentions(n: i64, word: u8[:], depth: i64) -> bool {
+    if n < 0 || depth > 20 { return false; }
+    if kind(n) == syntax::N_NAME {
+        if name(n) == word { return true; }
+        var v = codegen::find_value(name(n));
+        if v < 0 { v = property(name(n)); }
+        if v >= 0 && mentions(v, word, depth + 1) { return true; }
+    }
+    var c = first(n);
+    while c >= 0 {
+        if mentions(c, word, depth) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
 // The material property `word`, or -1.
 fn property(word: u8[:]) -> i64 {
     guard material_node >= 0 else { return -1; }
@@ -986,7 +1056,8 @@ fn read_law() {
     while p >= 0 {
         let w = name(p);
         // The eq of the wave physics names its properties.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || w == conductivity_name || w == "q_v" };
+        // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
+        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
         if !known && w != "rho" && !solid_property(w) {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -1006,7 +1077,13 @@ fn read_law() {
         }
     } else if physics == HEAT {
         let k = property(conductivity_name);
-        if k >= 0 { conductivity = scalar_value(k); }
+        if k >= 0 && mentions(k, unknown_name, 0) {
+            curve_node = k;
+            conductivity = 1.0;
+        } else if k >= 0 {
+            conductivity = scalar_value(k);
+        }
+        if capacity_node >= 0 { capacity = capacity_value(capacity_node); }
         if conductivity <= 0.0 {
             unsupported(tok(material_node), "the material needs k > 0", "give k: Conductivity = 50 W/(m*K)");
         }
@@ -1053,8 +1130,10 @@ fn mesh(n: i64) {
             mesh_grade = scalar_value(v);
             if mesh_grade <= 1.0 { unsupported(tok(v), "the grade is more than 1", "write grade: 1.3"); }
         } else if name(s) == "cell" && kind(n) == syntax::N_MESH {
-            if kind(v) != syntax::N_NAME || name(v) != cell {
-                unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, " cells"),
+            if dim == 3 && kind(v) == syntax::N_NAME && name(v) == "hex" {
+                hex_mesh = true;
+            } else if kind(v) != syntax::N_NAME || name(v) != cell {
+                unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, if dim == 3 { " or hex" } else { "" }, " cells"),
                             str("write cell: ", cell));
             }
         } else {
@@ -1128,6 +1207,7 @@ fn physics_item(n: i64) {
         } else if k == syntax::N_UNKNOWN {
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
+            if syntax::child_count(c) > 1 { initial_node = child(c, 1); }
         } else if k == syntax::N_MATASSIGN {
             materials_of(c);
         } else if k == syntax::N_ASSUME {
@@ -1149,6 +1229,8 @@ fn physics_item(n: i64) {
             }
         } else if k == syntax::N_EQN && solid_dynamic_eq(c) {
             if dynamic_eq && eq_count == 0 { eq_count++; }
+        } else if k == syntax::N_EQN && heat_dynamic_eq(c) {
+            eq_count++;
         } else if k == syntax::N_EQN && physics == WAVE {
             eq_count++;
             wave_eq(c);
@@ -1175,6 +1257,31 @@ fn physics_item(n: i64) {
     if dim == 2 && physics == ELASTIC && plane == SOLID_3D {
         unsupported(tok(n), "a 2d elastic physics needs plane_stress(t) or plane_strain", "add assume plane_stress(1 mm)");
     }
+}
+
+// `eq rho*cp*ddt(T) + div(q) = q_v` of the transient heat: the capacity and the
+// source. False for another eq.
+fn heat_dynamic_eq(c: i64) -> bool {
+    let left = child(c, 0);
+    guard flux_name.len > 0 && kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "+" else { return false; }
+    let a = child(left, 0);
+    let b = child(left, 1);
+    guard is_call(b, "div") && source_of(arg(b, 0)) == flux_name else { return false; }
+    guard kind(a) == syntax::N_BINARY && syntax::text(tok(a)) == "*" && source_of(child(a, 1)) == str("ddt(", unknown_name, ")") else { return false; }
+    capacity_node = child(a, 0);
+    source_node = child(c, 1);
+    physics = HEAT;
+    return true;
+}
+
+// The value of rho*cp: a product of properties of the material and of numbers.
+recursive fn capacity_value(n: i64) -> f64 {
+    if kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "*" { return capacity_value(child(n, 0)) * capacity_value(child(n, 1)); }
+    if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) < 0 {
+        let p = property(name(n));
+        if p >= 0 { return scalar_value(p); }
+    }
+    return scalar_value(n);
 }
 
 // `material steel, copper on pin`: the first material is law 0. Each
@@ -1295,6 +1402,8 @@ fn method(n: i64) {
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
         } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
             pml_setting(first(s));
+        } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
+            incompatible_family = true;
         } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
             // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
@@ -1305,6 +1414,12 @@ fn method(n: i64) {
     }
     if (physics == EDGE || physics == DARCY) && order != 1 {
         unsupported(tok(n), str("the family ", family_word, " has order 1 in this generator"), "write order: 1");
+    }
+    if incompatible_family && !hex_mesh {
+        unsupported(tok(n), "the family incompatible is for hexahedra", "write cell: hex in the mesh");
+    }
+    if hex_mesh && order != 1 {
+        unsupported(tok(n), "the hexahedra of this generator have order 1", "write order: 1");
     }
 }
 
@@ -1451,6 +1566,8 @@ fn bc(n: i64) -> i64 {
         if dim != 2 { unsupported(tok(v), "radiation(eps) runs in a 2d model only", "make the model 2d"); }
         b.kind = BC_RADIATE;
         b.v[0] = scalar_value(arg(v, 0));
+    } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) && ambient(v, b) {
+        b.kind = BC_AMBIENT;
     } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) && film(v, b) {
         b.kind = BC_FILM;
     } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) {
@@ -1462,6 +1579,21 @@ fn bc(n: i64) -> i64 {
     }
     bcs.push(b);
     return bcs.len - 1;
+}
+
+// `c*(T^4 - T_amb^4)`: c and T_amb in b.v. False if v is no such value.
+fn ambient(v: i64, b: Bc&) -> bool {
+    guard kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" else { return false; }
+    let d = child(v, 1);
+    guard kind(d) == syntax::N_BINARY && syntax::text(tok(d)) == "-" && source_of(child(d, 0)) == str(unknown_name, "^4") else { return false; }
+    let r = child(d, 1);
+    guard kind(r) == syntax::N_BINARY && syntax::text(tok(r)) == "^" && source_of(child(r, 1)) == "4" else { return false; }
+    b.v[0] = scalar_value(child(v, 0));
+    b.v[1] = scalar_value(child(r, 0));
+    if b.v[0] <= 0.0 || b.v[1] < 0.0 {
+        unsupported(tok(v), "the radiation c = eps*sb needs c > 0 and T_amb >= 0", "write dot(q, n) = eps*sb*(T^4 - T_amb^4)");
+    }
+    return true;
 }
 
 // `h*(T - T_air)`: h and T_air in b.v. False if v is no such value.
@@ -1479,7 +1611,7 @@ fn step(n: i64) {
     let proc = child(n, 0);
     var s = Step { name: [], first_own: bcs.len, own_count: 0, first_bc: 0, bc_count: 0,
                    first_report: reports.len, report_count: 0, first_change: changes.len, change_count: 0, output: false,
-                   procedure: STATIC, count: 0, first_freq: 0, freq_count: 0, damping: 0.0, end: 0.0, dt: 0.0 };
+                   procedure: STATIC, count: 0, first_freq: 0, freq_count: 0, damping: 0.0, end: 0.0, dt: 0.0, theta: 1.0, every: 0 };
     set64(s.name, name(n));
     procedure(proc, s);
     step_now = s;
@@ -1492,7 +1624,12 @@ fn step(n: i64) {
             s.output = true;
             var o = first(c);
             while o >= 0 {
-                if kind(o) == syntax::N_EVERY { unsupported(tok(o), "a static step has no every", "remove it"); }
+                if kind(o) == syntax::N_EVERY && s.procedure == TRANSIENT && physics == HEAT {
+                    s.every = scalar_value(first(o)) as! i64;
+                    if s.every < 1 { unsupported(tok(o), "every needs a count of time steps >= 1", "write output T every 10"); }
+                } else if kind(o) == syntax::N_EVERY {
+                    unsupported(tok(o), "only a transient heat step has every", "remove it");
+                }
                 o = next(o);
             }
         } else if k == syntax::N_REPORT {
@@ -1503,6 +1640,8 @@ fn step(n: i64) {
             }
         } else if k == syntax::N_EXPECT {
             expect(c, steps.len);
+        } else if k == syntax::N_SOLVE {
+            solve_item(c);
         } else if k == syntax::N_RELEASE {
             release(c);
         } else if k == syntax::N_BIRTH || k == syntax::N_DEATH {
@@ -1523,9 +1662,31 @@ fn step(n: i64) {
         c = next(c);
     }
     s.own_count = bcs.len - s.first_own;
+    if s.procedure == TRANSIENT && physics == HEAT {
+        for b in bcs {
+            if b.kind == BC_AMBIENT {
+                unsupported(b.tok, "a transient heat step does not include radiation to the surroundings", "use a static step, or a film bc with h and T_inf");
+            }
+        }
+    }
     s.report_count = reports.len - s.first_report;
     s.change_count = changes.len - s.first_change;
     steps.push(s);
+}
+
+// `solve { nonlinear: newton, rtol: 1e-10 }` of a heat step: the tolerance of the iteration.
+fn solve_item(n: i64) {
+    var a = first(first(n));
+    while a >= 0 {
+        let setting = kind(a) == syntax::N_SETTING;
+        if setting && name(a) == "rtol" {
+            nl_rtol = scalar_value(first(a));
+        } else if !(setting && name(a) == "nonlinear" && (source_of(first(a)) == "newton" || source_of(first(a)) == "picard")) {
+            unsupported(tok(a), "the solve item of a step has nonlinear: newton and rtol", "write solve { nonlinear: newton, rtol: 1e-10 }");
+        }
+        a = next(a);
+    }
+    if nl_rtol < 0.0 { unsupported(tok(n), "rtol must be > 0", "write rtol: 1e-10"); }
 }
 
 let REPORT_FIX = "write report reaction(root), reaction(root).x, mean(u.x, top), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
@@ -1588,14 +1749,27 @@ fn transient(proc: i64, s: Step&) {
             s.dt = if kind(v) == syntax::N_NAME && name(v) == "stable" { 0.0 } else { scalar_value(v) };
         } else if w == "scheme" && source_of(v) == "central_difference" {
             scheme = true;
+        } else if w == "scheme" && source_of(v) == "backward_euler" {
+            scheme = true;
+            s.theta = 1.0;
+        } else if w == "scheme" && source_of(v) == "crank_nicolson" {
+            scheme = true;
+            s.theta = 0.5;
         } else {
-            unsupported(tok(a), "this generator has transient(end:, dt:, scheme: central_difference)", TRANSIENT_FIX);
+            unsupported(tok(a), "this generator has transient(end:, dt:, scheme: central_difference) for a solid and scheme: backward_euler or crank_nicolson for heat", TRANSIENT_FIX);
         }
         a = next(a);
     }
-    if !scheme { unsupported(tok(proc), "this generator has the explicit scheme central_difference", "add scheme: central_difference"); }
+    if !scheme { unsupported(tok(proc), "this generator has the explicit scheme central_difference and the implicit schemes backward_euler and crank_nicolson of heat", "add scheme: central_difference"); }
     if s.end <= 0.0 || s.dt < 0.0 { unsupported(tok(proc), "the step needs an end after the start, and dt >= 0", TRANSIENT_FIX); }
-    if physics != ELASTIC { unsupported(tok(proc), "a transient step needs the linear_elastic template", PHYSICS_FIX); }
+    if physics == HEAT {
+        if capacity_node < 0 { unsupported(tok(proc), "a transient heat step needs eq rho*cp*ddt(T) + div(q) = q_v", "write eq rho*cp*ddt(T) + div(q) = 0"); }
+        if s.dt <= 0.0 { unsupported(tok(proc), "a transient heat step needs dt > 0", "write dt: 0.1 s"); }
+        if curve_node >= 0 { unsupported(tok(curve_node), "a transient heat step does not include k that depends on T", "give k as a constant, or use a static step"); }
+        s.dt = max(s.dt, 0.0);
+        return;
+    }
+    if physics != ELASTIC { unsupported(tok(proc), "a transient step needs the linear_elastic template or a heat physics", PHYSICS_FIX); }
     if solid_law > 0 && !dynamic_eq { unsupported(tok(proc), "a transient step of a nonlinear solid needs the first-order form", DYNAMIC_FIX); }
     if density <= 0.0 || region_laws.len > 0 {
         unsupported(tok(proc), "a transient step needs the density rho of one material", "give rho: Density = 7850 kg/m^3 in the material");
@@ -1646,7 +1820,7 @@ fn harmonic(proc: i64, s: Step&) {
 fn eigen_step(own: bool) -> Step {
     var at = if own { step_now } else { Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0,
                                                report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0,
-                                               first_freq: 0, freq_count: 0, damping: 0.0, end: 0.0, dt: 0.0 } };
+                                               first_freq: 0, freq_count: 0, damping: 0.0, end: 0.0, dt: 0.0, theta: 1.0, every: 0 } };
     if !own { for st in steps { if st.procedure == MODAL || st.procedure == BUCKLING { at = st; } } }
     return at;
 }
@@ -1840,6 +2014,12 @@ fn expect(n: i64, step: i64) {
     expects.push(x);
 }
 
+// Whether a bc radiates to the surroundings on boundary s.
+fn ambient_surf(s: i64) -> bool {
+    for b in bcs { if b.surf == s && b.kind == BC_AMBIENT { return true; } }
+    return false;
+}
+
 // Whether a bc fixes the unknown on boundary s.
 fn fixed_surf(s: i64) -> bool {
     for b in bcs { if b.surf == s && b.kind == BC_FIX { return true; } }
@@ -1910,7 +2090,7 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
     // The heat out of the body through a fixed boundary is -reaction.
     if physics == HEAT && is_call(f, "integral") && syntax::child_count(f) == 3 && source_of(arg(f, 0)) == str("dot(", flux_name, ", n)") {
         let s = region_surf(arg(f, 1));
-        guard s >= 0 && fixed_surf(s) else { return -1, -1, -1, 1.0; }
+        guard s >= 0 && (fixed_surf(s) || ambient_surf(s)) else { return -1, -1, -1, 1.0; }
         return FIELD_REACTION, 0, s, -scale;
     }
     if physics == HEAT && is_call(f, "reaction") && syntax::child_count(f) == 2 && region_surf(arg(f, 0)) >= 0 {
@@ -1940,6 +2120,11 @@ fn read(prog: i64) -> bool {
             header(c);
         } else if k == syntax::N_LET || k == syntax::N_PARAM {
             value_item(c);
+        } else if k == syntax::N_TABLE {
+            var w: u8[..64] = [];
+            set64(w, name(c));
+            codegen::table_names.push(w);
+            codegen::table_nodes.push(c);
         } else if k == syntax::N_MATERIAL {
             material(c);
         } else if k == syntax::N_PHYSICS {
@@ -1954,7 +2139,7 @@ fn read(prog: i64) -> bool {
             symmetries.push(c);
         } else if k == syntax::N_CONTACT {
             contact_items.push(c);
-        } else if k != syntax::N_SCALES && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY && k != syntax::N_FN {
+        } else if k != syntax::N_SCALES && k != syntax::N_ALLOW && k != syntax::N_USE && k != syntax::N_BC && k != syntax::N_STEP && k != syntax::N_EXPECT && k != syntax::N_STUDY && k != syntax::N_FN {
             unsupported(tok(c), str("the item '", syntax::kind_name(k), "' is not in this generator"),
                         "remove it: this generator runs one linear static or steady heat model");
         }
@@ -2093,12 +2278,16 @@ fn harmonic_values() {
 
 // Each step needs a fixed value, and each reaction report a fixed region.
 fn supports() {
+    if hex_mesh && (geo != GEO_BOX || physics == EDGE || physics == DARCY || physics == WAVE) {
+        unsupported(mesh_tok, "hexahedra are in this generator for a box and for the heat and elastic physics",
+                    "write cell: tet, or mesh a box");
+    }
     // A natural condition alone makes the edge physics and the Darcy flow unique.
     guard physics != EDGE && physics != DARCY else { return; }
     for s in steps {
         var fixes = 0;
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX || b.kind == BC_SOURCE { fixes++; } }
-        if fixes == 0 && physics != WAVE {
+        if fixes == 0 && physics != WAVE && s.procedure != MODAL {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
         }
@@ -2254,6 +2443,25 @@ let PRELUDE = """
         converged = elements::central_difference(end, dt);
         format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
                elements::cg_iterations(), ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        if !converged { failed = true; }
+    }
+
+    // A transient step of a heat physics: the time steps of the theta scheme,
+    // and the fields each `every` steps.
+    fn heat_time(step: u8[:], end: f64, dt: f64, theta: f64, every: i64, prefix: u8[:], field: u8[:]) {
+        let n = elements::heat_begin(end, dt, theta);
+        converged = true;
+        for i in n {
+            if !elements::heat_advance() {
+                converged = false;
+                break;
+            }
+            if every > 0 && (i + 1) % every == 0 { output(str(prefix, "_", i + 1, ".vtu"), field); }
+        }
+        elements::heat_end();
+        format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",",
+               n, ",", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
         solve_count++;
         if !converged { failed = true; }
     }
@@ -2566,6 +2774,12 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         out.append("    elements::node_force(");
         lits(out, b.v);
         out.append(");\n");
+    } else if b.kind == BC_AMBIENT {
+        out.append("    elements::radiate_ambient(");
+        lit(out, b.v[0]);
+        out.append(", ");
+        lit(out, b.v[1]);
+        out.append(");\n");
     } else if b.kind == BC_FILM {
         out.append("    elements::film(");
         lit(out, b.v[0]);
@@ -2650,7 +2864,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         emit_eigen_step(out, si, results_dir);
         return;
     }
-    format(out, "// step ", s.name, ": ", if s.procedure == TRANSIENT { "transient, central_difference" } else { "static" }, "\n");
+    format(out, "// step ", s.name, ": ", if s.procedure == TRANSIENT { if physics == HEAT { "transient, theta scheme" } else { "transient, central_difference" } } else { "static" }, "\n");
     format(out, "fn step_", s.name, "() {\n");
     // After the clear: clear_bcs keeps the solution of the last step,
     // which a birth reads.
@@ -2663,7 +2877,23 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         // still counts in the reaction.
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
-        if s.procedure == TRANSIENT && solid_law == 0 {
+        if s.procedure == TRANSIENT && physics == HEAT {
+            var prefix: u8[>..] = [];
+            format(prefix, results_dir, "/", s.name);
+            out.append("    heat_time(");
+            quoted(out, s.name);
+            out.append(", ");
+            lit(out, s.end);
+            out.append(", ");
+            lit(out, s.dt);
+            out.append(", ");
+            lit(out, s.theta);
+            format(out, ", ", s.every, ", ");
+            quoted(out, prefix);
+            out.append(", ");
+            quoted(out, unknown_name);
+            out.append(");\n");
+        } else if s.procedure == TRANSIENT && solid_law == 0 {
             out.append("    explicit(");
             quoted(out, s.name);
             out.append(", ");
@@ -2924,6 +3154,68 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     out.append(");\n    }\n");
 }
 
+let CURVE_POINTS = 257;
+
+// The initial temperature, the tolerance of the nonlinear steps, and the
+// conductivity k(T) of the material. The generator samples k at CURVE_POINTS
+// temperatures from the lowest to the highest temperature that the model
+// names (the initial value, the fixed values and the surroundings), and the
+// program interpolates linearly between them. Reason: k(T) is an expression
+// of the model, or a table, that only the generator can evaluate; the
+// sample is exact for a k that is linear in T or a table with its
+// nodes on the grid, and the error is of order h^2 k'' else.
+fn emit_nonlinear_heat(out: u8[>..]&) {
+    var lo = 1.0e300;
+    var hi = -1.0e300;
+    if initial_node >= 0 {
+        let t0 = scalar_value(initial_node);
+        lo = min(lo, t0);
+        hi = max(hi, t0);
+        out.append("    elements::initial_temperature(");
+        lit(out, t0);
+        out.append(");\n");
+    }
+    if nl_rtol > 0.0 {
+        out.append("    elements::nonlinear_tolerance(");
+        lit(out, nl_rtol);
+        out.append(");\n");
+    }
+    guard curve_node >= 0 else { return; }
+    for b in bcs {
+        if b.kind == BC_FIX || b.kind == BC_FILM || b.kind == BC_AMBIENT {
+            let t = if b.kind == BC_FIX { b.v[0] } else { b.v[1] };
+            lo = min(lo, t);
+            hi = max(hi, t);
+        }
+    }
+    if !(hi > lo) {
+        unsupported(tok(curve_node), "the temperatures of the model are all equal, so k(T) has no range", "give the initial value of T and a fixed value that differ");
+        return;
+    }
+    format(out, "    let curve: f64[", CURVE_POINTS, "] = [");
+    codegen::scope_material = material_node;
+    codegen::bound_name.clear();
+    codegen::bound_name.append(unknown_name);
+    for i in CURVE_POINTS {
+        codegen::bound_value = lo + (hi - lo) * i / (CURVE_POINTS - 1);
+        let k = scalar_value(curve_node);
+        if !(k > 0.0) {
+            unsupported(tok(curve_node), str("k is ", k, " at T = ", codegen::bound_value, ", and the iteration needs k > 0"),
+                        "give a k > 0 for the temperatures of the model");
+            break;
+        }
+        if i > 0 { out.append(", "); }
+        lit(out, k);
+    }
+    codegen::bound_name.clear();
+    codegen::scope_material = -1;
+    out.append("];\n    elements::conductivity_curve(");
+    lit(out, lo);
+    out.append(", ");
+    lit(out, hi);
+    out.append(", curve[..]);\n");
+}
+
 // The dofs of the mesh of the model that `read` read: for the hole, the
 // rows of cells that grow from `mesh_fine` by 1.25 (elements::grade_rows).
 // A shape is meshed: a P2 node is at each point and at each edge, and a
@@ -3035,7 +3327,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     if solid_law > 0 || has_ties() { emit_energy(out); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
-    let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
+    let cell = if hex_mesh { "hexahedra" } else if dim == 3 { "tetrahedra" } else { "triangles" };
     if geo == GEO_SHAPE || pml_g >= 0 { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
@@ -3059,6 +3351,19 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             lit(out, mesh_size);
             out.append(", ");
             lit(out, mesh_fine);
+            out.append(");\n");
+        } else if hex_mesh {
+            out.append("\n    elements::mesh_hex_box(");
+            lits(out, lo);
+            out.append(", ");
+            lits(out, hi);
+            for j in 3 {
+                out.append(",\n                           elements::cells_for(");
+                lit(out, hi[j] - lo[j]);
+                out.append(", ");
+                lit(out, mesh_size);
+                out.append(")");
+            }
             out.append(");\n");
         } else {
             format(out, "\n    elements::mesh_box(", dim, ", ", order, ", ");
@@ -3085,6 +3390,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         out.append(", ");
         lit(out, thickness);
         out.append(");\n");
+        if capacity_node >= 0 {
+            out.append("    elements::set_capacity(");
+            lit(out, capacity);
+            out.append(");\n");
+        }
     } else if physics == EDGE || physics == DARCY {
         out.append("    // each step sets the coefficients of the physics\n");
     } else if physics == WAVE {
@@ -3117,6 +3427,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             out.append(");\n");
         }
         emit_solid_law(out);
+        if incompatible_family { out.append("    elements::incompatible(true);\n"); }
         if body_node >= 0 {
             out.append("    elements::body_force(");
             lits(out, body_force);
@@ -3139,6 +3450,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             out.append(");\n");
         }
     }
+    if physics == HEAT { emit_nonlinear_heat(out); }
     if cut_source >= 0 { emit_source(out); }
     emit_contacts(out);
     for s in steps { format(out, "    step_", s.name, "();\n"); }

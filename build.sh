@@ -57,6 +57,9 @@ run_tests() {
     if ! "$root/scripts/generated_c.sh"; then
         status=1
     fi
+    if ! "$root/scripts/unsupported.sh"; then
+        status=1
+    fi
     return $status
 }
 
