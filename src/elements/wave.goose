@@ -44,6 +44,10 @@ var pml_h = 0.0;                   // the thickness of the layer
 var tie: i64[>..] = [];            // the master of each node, or -1
 var tie_phase: f64[>..] = [];      // cos θ and sin θ of each node
 var low_nodes: i64[>..] = [];      // the nodes of the low region of the next bloch
+var robin_cell: i64[>..] = [];     // the facets of the conditions dot(grad(u), n) = z u: cell, facet and z
+var robin_facet: i64[>..] = [];
+var robin_re: f64[>..] = [];
+var robin_im: f64[>..] = [];
 
 fn cmul(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
 
@@ -53,6 +57,49 @@ fn cdiv(a: f64[2], b: f64[2]) -> f64[2] {
 }
 
 fn conj(a: f64[2]) -> f64[2] { return [a[0], -a[1]]; }
+
+// Adds the condition dot(grad(u), n) = z u, with z complex and constant, on
+// the facets of the region (the exact outgoing wave of a sphere, an
+// impedance). It adds -∫ z u v dA to the left side.
+fn add_robin(z: f64[2]) {
+    guard physics == WAVE && dofs_sized() else { abort("add_robin: a wave physics"); }
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(c, f) { continue; }
+            robin_cell.push(c);
+            robin_facet.push(f);
+            robin_re.push(z[0]);
+            robin_im.push(z[1]);
+        }
+    }
+}
+
+fn clear_robin() {
+    robin_cell.clear();
+    robin_facet.clear();
+    robin_re.clear();
+    robin_im.clear();
+}
+
+// The matrix of the Robin facets, on the masters.
+fn robin_assemble() {
+    var fn_shape: f64[10] = [0.0; 10];
+    let fnodes = node_count_of(dim - 1, order);
+    for c, i in robin_cell {
+        let f = robin_facet[i];
+        for qp in quad_count(dim - 1) {
+            let wda = facet_point(c, f, qp, fn_shape);
+            for a in fnodes {
+                let mi, phi = master(cell_node(c, facet_node(dim, f, a)));
+                for b in fnodes {
+                    let mj, pj = master(cell_node(c, facet_node(dim, f, b)));
+                    let z = cmul(cmul(conj(phi), [-robin_re[i] * fn_shape[a] * fn_shape[b] * wda, -robin_im[i] * fn_shape[a] * fn_shape[b] * wda]), pj);
+                    add_block(mi, mj, z);
+                }
+            }
+        }
+    }
+}
 
 // Starts the wave physics on the mesh. In 2D, t is the thickness.
 fn set_wave(t: f64) {
@@ -269,6 +316,7 @@ fn wave_assemble() {
             }
         }
     }
+    robin_assemble();
     for n in node_count() {
         if tie[n] < 0 { continue; }
         let m, p = master(n);

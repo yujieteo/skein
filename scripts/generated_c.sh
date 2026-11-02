@@ -49,6 +49,7 @@ examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
 examples/elements/taylor_bar_tet.skn
 examples/elements/uniform_temperature_tet.skn
+examples/femahoy/acoustics_pulsating_sphere.skn
 examples/femahoy/bar_pressure.skn
 examples/femahoy/birth_death_column.skn
 examples/femahoy/buckling_column.skn
@@ -93,6 +94,7 @@ examples/femahoy/plasticity_sphere.skn
 examples/femahoy/random_vibration_cantilever.skn
 examples/femahoy/scordelis_lo_roof.skn
 examples/femahoy/shape_hole_biaxial.skn
+examples/femahoy/slider_crank.skn
 examples/femahoy/submodel_kirsch_hole_global.skn
 examples/femahoy/submodel_kirsch_hole.skn
 examples/femahoy/taylor_bar_impact.skn

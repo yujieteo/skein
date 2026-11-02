@@ -323,11 +323,49 @@ fn shell_direction(k: i64, s: f64, t: f64) -> f64[3] {
 // through radial layers of equal depth, each prism cut into 3 tetrahedra
 // (add_prism). Each node on an arc or a face of the shell is on it, so the
 // sharp edges stay sharp. False if g is not such a shell.
+var shell_centre: f64[3] = [0.0; 3];
+let SHELL_LAYERS = 400;
+let SHELL_CELLS = 4000000;
+
 fn shell_tets(g: i64, size: f64) -> bool {
     let centre, r0, r1 = shell_parts(g);
-    guard r1 > 0.0 && targets.len == 0 else { return false; };
-    let n = max(1, ceil(0.25 * PI * r1 / size - 1.0e-9) as! i64);
-    let nr = max(1, ceil((r1 - r0) / size - 1.0e-9) as! i64);
+    guard r1 > 0.0 else { return false; };
+    // The radii of the layers and the cells along an arc: with targets, the
+    // layers follow the wanted size (refine.goose) along the axes and the
+    // diagonal of the octant, and the arcs have the cells of the smallest
+    // wanted size of all radii. Without, equal layers and arcs of `size`.
+    var radii: f64[>..] = [r0];
+    var n = max(1, ceil(0.25 * PI * r1 / size - 1.0e-9) as! i64);
+    if targets.len == 0 {
+        let nr = max(1, ceil((r1 - r0) / size - 1.0e-9) as! i64);
+        radii.clear();
+        for l in nr + 1 { radii.push(r0 + (r1 - r0) * l / nr); }
+    } else {
+        let inv = 1.0 / sqrt(3.0);
+        let dirs: f64[12] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, inv, inv, inv];
+        fn wanted(r: f64) -> f64 {
+            var h = size;
+            for k in 4 { h = min(h, wanted_size(shell_centre[0] + r * dirs[3 * k], shell_centre[1] + r * dirs[3 * k + 1], shell_centre[2] + r * dirs[3 * k + 2], 0.0, size)); }
+            return h;
+        }
+        shell_centre = centre;
+        n = 1;
+        var r = r0;
+        while r < r1 - 1.0e-9 * r1 && radii.len < SHELL_LAYERS {
+            n = max(n, ceil(0.25 * PI * r / wanted(r) - 1.0e-9) as! i64);
+            r += max(wanted(r + 0.5 * wanted(r)), 1.0e-6 * r1);
+            radii.push(min(r, r1));
+        }
+        guard radii[radii.len - 1] >= r1 - 1.0e-9 * r1 else { return false; };
+        n = max(n, ceil(0.25 * PI * r1 / wanted(r1) - 1.0e-9) as! i64);
+        // The last layer is not a sliver: it joins the one before it.
+        if radii.len >= 3 && radii[radii.len - 1] - radii[radii.len - 2] < 0.5 * (radii[radii.len - 2] - radii[radii.len - 3]) {
+            radii.pop();
+            radii[radii.len - 1] = r1;
+        }
+        guard 3 * n * n * (radii.len - 1) * 6 <= SHELL_CELLS else { return false; };
+    }
+    let nr = radii.len - 1;
     // The directions of the nodes of the surface, each once, and the node
     // of each point (s, t) of each patch.
     var dirs: f64[>..] = [];
@@ -352,7 +390,7 @@ fn shell_tets(g: i64, size: f64) -> bool {
     let m = dirs.len / 3;
     clear_mesh(3);
     for l in nr + 1 {
-        let r = r0 + (r1 - r0) * l / nr;
+        let r = radii[l];
         for v in m { add_point(centre[0] + r * dirs[3 * v], centre[1] + r * dirs[3 * v + 1], centre[2] + r * dirs[3 * v + 2]); }
     }
     fn node(k: i64, i: i64, j: i64) -> i64 { return at[k * (n + 1) * (n + 1) + j * (n + 1) + i]; }
