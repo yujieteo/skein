@@ -13,7 +13,7 @@ let e1: Vector<Real> = (1.0, 0.0, 0.0)
 let e2: Vector<Real> = (0.0, 1.0, 0.0)
 let e3: Vector<Real> = (0.0, 0.0, 1.0)
 
-scales 10 mm, 100 MPa, 100 K
+scales 10 mm, 100 MPa, 100 K, 1 ms
 
 let block: Solid = box((0, 0, 0) mm, (10, 8, 6) mm)
 let faces_x: Surface = boundary(block, x == 0 mm || x == 10 mm)
@@ -55,7 +55,8 @@ physics solid on block solves u: Vector<Length> {
     let C12: Pressure = Ex*(nu_yx + nu_zx*nu_yz)/D
     let C13: Pressure = Ex*(nu_zx + nu_yx*nu_zy)/D
     let C23: Pressure = Ey*(nu_zy + nu_xy*nu_zx)/D
-    let eps: Tensor2<Real> = strain(u) - (T1 - T0)*(ax*outer(e1, e1) + ay*outer(e2, e2) + az*outer(e3, e3))
+    let eps: Tensor2<Real> = strain(u) -
+        (T1 - T0)*(ax*outer(e1, e1) + ay*outer(e2, e2) + az*outer(e3, e3))
     let sigma: Tensor2<Pressure> = (C11*eps.xx + C12*eps.yy + C13*eps.zz)*outer(e1, e1) +
         (C12*eps.xx + C22*eps.yy + C23*eps.zz)*outer(e2, e2) +
         (C13*eps.xx + C23*eps.yy + C33*eps.zz)*outer(e3, e3) +
@@ -74,4 +75,3 @@ step heat_up: transient(end: 1 ms, dt: 0.1 ms, scheme: central_difference) {
     bc faces_z: u.z = 0
     output u, sigma
 }
-
