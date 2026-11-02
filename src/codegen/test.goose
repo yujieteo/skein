@@ -415,8 +415,8 @@ fn test_study_cases() {
                 "error procedure_args 14:5 the lists of a zip have one length: 'b' has 1 values, not 2");
     expect_text("a grid range", cases("study s: grid {\n    a: 1 m..2 m\n}\n"),
                 "error unsupported 13:11 a grid or a zip takes a list of values, not a range");
-    expect_text("minimize", cases("study s: minimize(objective: r, method: nelder_mead, max_cases: 9) {\n    a: 1 m..2 m\n}\n"),
-                "error unsupported 12:10 minimize runs only with method: gradient in this build");
+    expect_text("minimize", cases("study s: minimize(objective: r, method: bfgs, max_cases: 9) {\n    a: 1 m..2 m\n}\n"),
+                "error unsupported 12:10 minimize runs only with method: gradient or nelder_mead in this build");
     // A gradient minimize has no case before its loop, and starts at the default.
     expect_text("minimize gradient", cases("study s: minimize(r, method: gradient) {\n    a: 0.5 m..4 m\n}\n"), "");
     expect_text("minimize start", str(codegen::range_start[0] * 3.5), "0.5");

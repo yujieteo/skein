@@ -38,6 +38,11 @@ var length_name: u8[..4] = [];
 var let_names: u8[..64][>..] = [];
 var let_values: i64[>..] = [];
 var eval_depth = 0;
+var fn_names: u8[..64][>..] = [];     // the `fn` items: a name, and the node of the item
+var fn_items: i64[>..] = [];
+var param_names: u8[..64][>..] = [];  // the parameters of the `fn` calls in progress, and their values
+var param_values: Value[>..] = [];
+var arg_scratch: Value[>..] = [];     // the arguments of a call in progress: a local array cannot live across the recursive call
 var polygon_scratch: f64[>..<] = [];
 
 fn reader_fault(t: i64, msg: u8[:], fix: u8[:]) {
@@ -89,6 +94,11 @@ recursive fn eval_value(n: i64) -> Value {
     }
     if k == syntax::N_NAME {
         if syntax::text(t) == "pi" { return number_value(PI); }
+        var p = param_names.len - 1;
+        while p >= 0 {
+            if param_names[p] == syntax::text(t) { return param_values[p]; }
+            p--;
+        }
         let v = let_node(syntax::text(t));
         guard v >= 0 && eval_depth < 100 else {
             reader_fault(t, str("'", syntax::text(t), "' is not a let with a geometry or a number"),
@@ -211,6 +221,31 @@ recursive fn read_nurbs(c: i64) -> Value {
     return Value { n: 0, v: [0.0, 0.0, 0.0], g: g };
 }
 
+// The value of the call n of the `fn` item f: its body, with the
+// arguments for the parameters.
+recursive fn call_fn(n: i64, f: i64, count: i64) -> Value {
+    guard syntax::child_count(f) - 2 == count && eval_depth < 100 else {
+        reader_fault(syntax::nodes[n].tok, str("the call of '", node_text(f), "' has the wrong number of arguments or recurses"), "give each parameter an argument");
+        return number_value(0.0);
+    }
+    let mark = param_names.len;
+    let top = arg_scratch.len;
+    for i in count { arg_scratch.push(eval_value(argument(n, i))); }
+    for i in count {
+        var w: u8[..64] = [];
+        w.append(node_text(syntax::child(f, i))[..min(node_text(syntax::child(f, i)).len, 64)]);
+        param_names.push(w);
+        param_values.push(arg_scratch[top + i]);
+    }
+    arg_scratch.resize(top);
+    eval_depth++;
+    let r = eval_value(syntax::child(f, count + 1));
+    eval_depth--;
+    param_names.resize(mark);
+    param_values.resize(mark);
+    return r;
+}
+
 recursive fn shape_call(n: i64) -> Value {
     let t = syntax::nodes[n].tok;
     let name = node_text(syntax::child(n, 0));
@@ -225,6 +260,19 @@ recursive fn shape_call(n: i64) -> Value {
         return v;
     }
     fn shape(g: i64) -> Value { Value { n: 0, v: [0.0, 0.0, 0.0], g: g } }
+    for f, i in fn_names {
+        if f == name { return call_fn(n, fn_items[i], count); }
+    }
+    if count == 1 && position(["sin", "cos", "tan", "exp", "ln", "sqrt", "abs"], name) >= 0 {
+        let x = arg(0, 1).v[0];
+        if name == "sin" { return number_value(sin(x)); }
+        if name == "cos" { return number_value(cos(x)); }
+        if name == "tan" { return number_value(tan(x)); }
+        if name == "exp" { return number_value(exp(x)); }
+        if name == "ln" { return number_value(log(x)); }
+        if name == "sqrt" { return number_value(sqrt(x)); }
+        return number_value(abs(x));
+    }
     if name == "box" && count == 2 {
         let a = arg(0, 3);
         let b = arg(1, 3);
@@ -473,6 +521,10 @@ fn read_geometry(prog: i64) -> i64 {
     clear_shapes();
     let_names.clear();
     let_values.clear();
+    fn_names.clear();
+    fn_items.clear();
+    param_names.clear();
+    param_values.clear();
     var dim = 3;
     metre = 1.0;
     length_name.clear();
@@ -489,6 +541,11 @@ fn read_geometry(prog: i64) -> i64 {
                 length_name.clear();
                 length_name.append("mm");
             }
+        } else if k == syntax::N_FN {
+            var w: u8[..64] = [];
+            w.append(node_text(item)[..min(node_text(item).len, 64)]);
+            fn_names.push(w);
+            fn_items.push(item);
         } else if k == syntax::N_LET || k == syntax::N_PARAM {
             var w: u8[..64] = [];
             w.append(node_text(item)[..min(node_text(item).len, 64)]);

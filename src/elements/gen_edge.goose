@@ -340,7 +340,8 @@ recursive fn port_terms(b: Bc, n: i64, sign: f64) {
 
 // Whether n holds a field: an `at`, an integral or far_field.
 recursive fn has_field(n: i64) -> bool {
-    if kind(n) == syntax::N_AT || is_call(n, "integral") || is_call(n, "far_field") { return true; }
+    if kind(n) == syntax::N_AT || is_call(n, "integral") || is_call(n, "far_field") || is_call(n, "rms") { return true; }
+    if complex_solid && is_call(n, "mean") { return true; }
     var c = first(n);
     while c >= 0 {
         if has_field(c) { return true; }
@@ -362,7 +363,9 @@ fn physics_let(word: u8[:]) -> i64 {
 recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
-    if !has_field(n) {
+    if is_call(n, "rms") && syntax::child_count(n) == 3 && complex_solid {
+        format(out, "[rms_value(", rms_index(n), "), 0.0]");
+    } else if !has_field(n) {
         let z = cval(n);
         out.push('[');
         lit(out, z[0]);
@@ -387,6 +390,8 @@ recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         let p = value(child(n, 1));
         if p.n != dim { probe_fail(tok(n), "the point is not a vector", "write at (x, y, z) mm"); }
         emit_field(out, child(n, 0), p.v, p.v);
+    } else if is_call(n, "mean") && syntax::child_count(n) == 3 && complex_solid {
+        emit_mean(out, pre, n);
     } else if is_call(n, "integral") && syntax::child_count(n) == 3 {
         emit_integral(out, pre, n);
     } else if is_call(n, "far_field") && syntax::child_count(n) == 5 {
@@ -394,6 +399,43 @@ recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     } else {
         probe_fail(tok(n), str("the expression '", source_of(n), "' is not in this generator"), PROBE_FIX);
     }
+}
+
+// mean(u.x, s) of the Complex unknown on a boundary s that a let names.
+fn emit_mean(out: u8[>..]&, pre: u8[>..]&, n: i64) {
+    let f = arg(n, 0);
+    let r = arg(n, 1);
+    let s = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
+    guard kind(f) == syntax::N_MEMBER && source_of(first(f)) == unknown_name && axis_of(name(f)) >= 0 && s >= 0 else {
+        probe_fail(tok(n), "mean takes a component of the unknown and a boundary that a let names", "write mean(u.z, tip)");
+        return;
+    };
+    emit_region(pre, s);
+    format(pre, "    let mean_", n, " = solid_mean(", axis_of(name(f)), ");\n");
+    format(out, "mean_", n);
+}
+
+// The rms calls of the expression n, in the order of the program.
+var rms_nodes: i64[>..];
+
+// The number of the rms call n.
+fn rms_index(n: i64) -> i64 {
+    for m, i in rms_nodes { if m == n { return i; } }
+    if rms_nodes.len >= 16 { probe_fail(tok(n), "more than 16 rms calls", "use at most 16 rms calls in a model"); return 0; }
+    rms_nodes.push(n);
+    return rms_nodes.len - 1;
+}
+
+// The first rms call in the expression n, or -1.
+recursive fn find_rms(n: i64) -> i64 {
+    if is_call(n, "rms") && syntax::child_count(n) == 3 { return n; }
+    var c = first(n);
+    while c >= 0 {
+        let m = find_rms(c);
+        if m >= 0 { return m; }
+        c = next(c);
+    }
+    return -1;
 }
 
 // integral(F.x, c) on a line c, or integral(dot(q, n), s) on a boundary s.
@@ -522,7 +564,10 @@ recursive fn emit_field(out: u8[>..]&, f: i64, a: f64[3], b: f64[3]) {
 recursive fn emit_part(out: u8[>..]&, f: i64, comp: i64, a: f64[3], b: f64[3]) {
     let k = kind(f);
     let op = if k == syntax::N_BINARY { syntax::text(tok(f)) } else { "" };
-    if k == syntax::N_NAME && physics == EDGE && name(f) == unknown_name {
+    if k == syntax::N_NAME && complex_solid && name(f) == unknown_name {
+        if a[0] != b[0] || a[1] != b[1] || a[2] != b[2] { probe_fail(tok(f), "the integral of u on a line is not in this generator", PROBE_FIX); }
+        emit_probe_sample(out, "solid_", "", comp, a, b);
+    } else if k == syntax::N_NAME && physics == EDGE && name(f) == unknown_name {
         emit_probe_sample(out, "edge_", "false, ", comp, a, b);
     } else if k == syntax::N_NAME && physics == DARCY && name(f) == flux_name {
         emit_probe_sample(out, "darcy_", "", comp, a, b);
@@ -614,6 +659,41 @@ fn edge_expect(n: i64, step: i64) {
 }
 
 // --- the program -------------------------------------------------------------------
+
+// The part of the program of a Complex vector unknown of the elastic physics.
+let HARMONIC_PRELUDE = """
+    // Component comp of u at a point, as [re, im].
+    fn solid_point(comp: i64, x: f64, y: f64, z: f64) -> f64[2] {
+        let re, found_re = elements::harmonic_at(0, comp, x, y, z);
+        let im, found_im = elements::harmonic_at(1, comp, x, y, z);
+        if !found_re || !found_im { found_all = false; }
+        return [re, im];
+    }
+
+    // Its mean on the region of the last region call.
+    fn solid_mean(comp: i64) -> f64[2] {
+        return [elements::harmonic_mean(0, comp), elements::harmonic_mean(1, comp)];
+    }
+
+    // The root mean square of a random response (spec §14.5): the integral of
+    // |v|^2 psd on the frequencies, by the trapezoidal rule, one slot for
+    // each rms call.
+    var rms_sum: f64[16] = [0.0; 16];
+    var rms_y: f64[16] = [0.0; 16];
+    var rms_f: f64[16] = [0.0; 16];
+    var rms_n: i64[16] = [0; 16];
+
+    fn rms_add(k: i64, v: f64[2], psd: f64, f: f64) {
+        let y = (v[0] * v[0] + v[1] * v[1]) * psd;
+        if rms_n[k] > 0 { rms_sum[k] += 0.5 * (rms_y[k] + y) * (f - rms_f[k]); }
+        rms_y[k] = y;
+        rms_f[k] = f;
+        rms_n[k]++;
+    }
+
+    fn rms_value(k: i64) -> f64 { return sqrt(rms_sum[k]); }
+
+    """;
 
 let EDGE_PRELUDE = """
     // The Complex values of the reports and expects of the edge and Darcy
@@ -926,6 +1006,32 @@ fn emit_edge_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     for i in count { emit_edge_case(out, si, i, results_dir); }
 }
 
+// The terms of the rms calls of step si at the frequency f: the value of
+// their function and the density of the PSD, for the trapezoidal rule of
+// rms_add.
+fn emit_rms_adds(out: u8[>..]&, si: i64, f: f64) {
+    var calls: i64[>..] = [];
+    for r in reports[steps[si].first_report..steps[si].first_report + steps[si].report_count] {
+        let m = find_rms(r.expr);
+        if m >= 0 { calls.push(m); }
+    }
+    // An expect of no step reads the last harmonic step.
+    var last = -1;
+    for t, k in steps { if t.procedure == HARMONIC { last = k; } }
+    for x in probes { if x.step == si || x.step < 0 && si == last { let m = find_rms(x.expr); if m >= 0 { calls.push(m); } } }
+    for m in calls {
+        var v: u8[>..] = [];
+        var pre: u8[>..] = [];
+        emit_cx(v, pre, arg(m, 0));
+        let psd = cval(arg(m, 1));
+        format(out, "    // rms: the term of this frequency\n    {\n        found_all = true;\n    ", pre, "        let v = ", v, ";\n        rms_add(", rms_index(m), ", v, ");
+        lit(out, psd[0]);
+        out.append(", ");
+        lit(out, f);
+        out.append(");\n        point(found_all, \"rms\");\n    }\n");
+    }
+}
+
 fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     let s = steps[si];
     let harmonic = s.procedure == HARMONIC;
@@ -934,7 +1040,13 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     var label: u8[>..] = [];
     if harmonic { format(label, s.name, " at ", f, " ", freq_unit()); } else { label.append(s.name); }
     format(out, "fn step_", s.name, "_", i + 1, "() {\n");
-    if physics == EDGE {
+    if complex_solid {
+        out.append("    elements::clear_bcs();\n    elements::set_harmonic(");
+        lit(out, omega_now);
+        out.append(", ");
+        lit(out, s.damping);
+        out.append(");\n");
+    } else if physics == EDGE {
         let nu, c = edge_terms();
         out.append("    elements::edge(");
         lit(out, nu);
@@ -948,38 +1060,46 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
         out.append(", ");
         lit(out, if darcy_f >= 0 { scalar_value(darcy_f) } else { 0.0 });
     }
-    out.append(", ");
-    lit(out, thickness);
-    out.append(");\n");
-    if physics == EDGE {
-        let base = material_node;
-        for w in region_laws {
-            material_node = w.item;
-            let nu, c = edge_terms();
-            format(out, "    cells(elements::edge_in(", w.g, ", ");
-            lit(out, nu);
-            out.append(", ");
-            lit(out, c[0]);
-            out.append(", ");
-            lit(out, c[1]);
-            out.append("), ");
-            quoted(out, w.label);
-            out.append(");\n");
+    if !complex_solid {
+        out.append(", ");
+        lit(out, thickness);
+        out.append(");\n");
+        if physics == EDGE {
+            let base = material_node;
+            for w in region_laws {
+                material_node = w.item;
+                let nu, c = edge_terms();
+                format(out, "    cells(elements::edge_in(", w.g, ", ");
+                lit(out, nu);
+                out.append(", ");
+                lit(out, c[0]);
+                out.append(", ");
+                lit(out, c[1]);
+                out.append("), ");
+                quoted(out, w.label);
+                out.append(");\n");
+            }
+            material_node = base;
         }
-        material_node = base;
     }
     // The fixed values first, then the gauge, which keeps them.
-    let step_bcs = active[s.first_bc..s.first_bc + s.bc_count];
-    for b, k in step_bcs {
-        if b.kind != BC_FIX { continue; }
-        if b.comp >= 0 && !tangent_pair(step_bcs, k) { continue; }
-        emit_edge_bc(out, b);
+    if complex_solid {
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
+    } else {
+        let step_bcs = active[s.first_bc..s.first_bc + s.bc_count];
+        for b, k in step_bcs {
+            if b.kind != BC_FIX { continue; }
+            if b.comp >= 0 && !tangent_pair(step_bcs, k) { continue; }
+            emit_edge_bc(out, b);
+        }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_edge_bc(out, b); } }
     }
-    for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_edge_bc(out, b); } }
     if gauge_tree { out.append("    elements::gauge();\n"); }
     out.append("    solve(");
     quoted(out, label);
     out.append(");\n");
+    if complex_solid { emit_rms_adds(out, si, f); }
     for r in reports[s.first_report..s.first_report + s.report_count] { emit_edge_report(out, label, r); }
     let last = i == (if harmonic { s.freq_count } else { 1 }) - 1;
     if last { for x in probes { if x.step == si { emit_edge_expect(out, x); } } }

@@ -33,6 +33,7 @@ import .source;
 import .stages;
 import .eigen;
 import .wave;
+import .harmonic;
 import .radiation;
 import .explicit;
 import .edge;
@@ -558,6 +559,7 @@ fn clear_bcs() {
 fn solve() -> bool {
     if physics == EDGE { return edge_solve(); }
     if physics == MIXED { return mixed_solve(); }
+    if physics == ELASTIC && harmonic_omega > 0.0 { return harmonic_solve(); }
     return if physics == WAVE { wave_solve() } else { solve_system() };
 }
 
