@@ -182,6 +182,10 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
 - `skein run` makes the mesh, and the generated program reads it from a
   file. Reason: the mesher has recursive functions, and Power of Ten rule
   1 forbids them in a generated program and its runtime.
+- With heat (`src/flow/heat.goose`), each node has a T dof, and a cell has
+  its own conductivity, so a solid and a fluid share one mesh. The body
+  force of `boussinesq` is affine in T. A banded LU solve
+  (`src/solvers/band.goose`) replaces GMRES for a thin channel.
 - `k_omega_sst` (`src/flow/rans.goose`) runs on P1 cells with 5 dofs at
   each vertex. The solve is pseudo-transient continuation with the lumped
   mass. A step takes at most half of k or w at a vertex, the sources of k

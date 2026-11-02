@@ -102,12 +102,12 @@ golden files again and read the diff:
 | `src/md/` | model documents |
 | `src/codegen/` | native code generation and study execution |
 | `src/runtime/` | hexahedron meshes, solid elements, solvers and VTU output |
-| `src/solvers/` | sparse matrices, ILU(0), GMRES and Newton |
+| `src/solvers/` | sparse matrices, ILU(0), GMRES, a banded LU solve and Newton |
 | `src/elements/` | triangle and tetrahedron elements for elasticity, heat and the complex wave equation of `harmonic` steps, and the Nédélec and Raviart-Thomas elements |
 | `src/mesher/` | geometry meshes, mesh checks, and STL and STEP export |
 | `src/shells/` | shell, beam and laminate solver routines, plus code generation for cylindrical shells |
 | `src/transient/` | transient heat solver routines |
-| `src/flow/` | stabilized Stokes and Navier-Stokes solver routines, plus code generation for 2D flow |
+| `src/flow/` | stabilized Stokes and Navier-Stokes solver routines with temperature coupling, plus code generation for 2D flow |
 | `src/meshless/` | point clouds, `rkpm` and `gfd` for one scalar unknown and 2D elasticity, and their direct solve |
 | `src/optim/` | a Q4 grid of 2D elasticity with a band Cholesky solve, the adjoint of a point objective, the `topology` loop (SIMP, the sensitivity filter and the optimality criteria update), and the gradients of `minimize` |
 
