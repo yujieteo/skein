@@ -440,6 +440,7 @@ fn select_solid_part<P>() -> bool {
 // Selects the vertex at (x, y). False if no vertex is within tolerance().
 fn select_point(x: f64, y: f64) -> bool {
     guard region.len == node_count() && cell_count() > 0 else { abort("select_point: a mesh"); }
+    region_part = 0;
     var best = 0;
     var dist = 1.0e300;
     for n in node_count() {

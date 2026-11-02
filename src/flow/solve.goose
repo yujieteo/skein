@@ -398,9 +398,6 @@ fn state_sizes() -> i64[18] {
             sol.len, raw.len, val.len, lu.len, pre.len, diag.len, lumped.len, wall_d.len, edge_load.len, band_work.len];
 }
 
-fn unused_state() {
-}
-
 // The sum of the reactions of velocity component comp on the region: the
 // force of the region on the flow, ∮ (σ n)_comp over it, scaled.
 fn region_force(comp: i64) -> f64 {
