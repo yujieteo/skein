@@ -225,6 +225,19 @@ fn wave_terms(c_re: f64, c_im: f64, s_re: f64, s_im: f64, damping: f64) {
     set_wave_terms([c_re, c_im], [s_re, s_im], damping);
 }
 
+// The diffusion nu of all cells of the wave physics (after wave_terms).
+fn wave_nu(nu: f64) { wave_material_all(nu); }
+
+// The integral of u over the cells in the shape g: re, im and the area.
+fn wave_region_integral(g: i64) -> f64[3] { return wave_cells_integral(g); }
+
+// Gives the cells in the shape g of src/mesher/ the diffusion nu, the
+// coefficient c and the source s of the wave physics (after wave_terms).
+// False if g holds no cell.
+fn wave_in(g: i64, nu: f64, c_re: f64, c_im: f64, s_re: f64, s_im: f64) -> bool {
+    return wave_material(g, nu, [c_re, c_im], [s_re, s_im]) > 0;
+}
+
 // The PML of the cells of shape g (spec §13): past the box from
 // (x0, y0, z0) to (x1, y1, z1), with the thickness h. Call it after
 // wave_terms, which gives the wave number.

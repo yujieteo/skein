@@ -127,7 +127,8 @@ fn scalar_type(n: i64) -> bool {
 
 // Whether type n is Complex<D> of a scalar D.
 fn complex_scalar(n: i64) -> bool {
-    return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Complex" && kind(first(n)) == syntax::N_TYPE_NAME;
+    return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Complex" && !is_vector_type(first(n)) &&
+           kind(first(n)) != syntax::N_TYPE_APPLY;
 }
 
 // Whether type n is Vector<Complex<D>> or Complex<Vector<D>>.
@@ -141,6 +142,10 @@ fn complex_vector(n: i64) -> bool {
 // gen_edge.goose: complex values at points and on regions, for each
 // frequency.
 fn probe_physics() -> bool { return physics == EDGE || physics == DARCY || complex_solid; }
+
+// Whether the reports and the expects are complex values of probes (the
+// eddy form of the scalar wave physics has them too).
+fn probe_values() -> bool { return probe_physics() || wave_eddy; }
 
 // --- values --------------------------------------------------------------------
 
@@ -267,6 +272,14 @@ recursive fn cval(n: i64) -> f64[2] {
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
     if k == syntax::N_NAME && name(n) == "im" { return [0.0, 1.0]; }
     if k == syntax::N_NAME && name(n) == "omega" { return [omega_now, 0.0]; }
+    if eddy_on && k == syntax::N_NAME && name(n) == unknown_name { return eddy_u; }
+    if eddy_on && is_call(n, "ddt") && syntax::child_count(n) == 2 { return cmul([0.0, omega_now], cval(arg(n, 0))); }
+    if eddy_on && k == syntax::N_NAME && physics_let(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let r = cval(physics_let(name(n)));
+        codegen::depth--;
+        return r;
+    }
     if k == syntax::N_NAME && codegen::find_value(name(n)) < 0 && property(name(n)) >= 0 && codegen::depth < 100 {
         codegen::depth++;
         let r = cval(property(name(n)));
@@ -546,6 +559,12 @@ var density = 0.0;
 var complex_solid = false;      // the unknown of the elastic physics is a Complex vector: harmonic steps (harmonic.goose)
 var wave_c_node = -1;           // c of eq div(grad(u)) + c*u = s, or -1 for 0
 var wave_s_node = -1;           // s, or -1 for 0
+var wave_eddy = false;          // the eq is -div(grad(u)/mu) = R(u), as in the eddy currents: c, s and mu come from the material of each region
+var eddy_mu_node = -1;          // mu of div(grad(u)/mu)
+var eddy_rhs_node = -1;         // R, the right side of the eq
+var eddy_sign = 1.0;            // -1 for -div(...) = R
+var eddy_on = false;            // cval reads the unknown as eddy_u and ddt(x) as im*omega*x
+var eddy_u: f64[2] = [0.0, 0.0];
 var omega_now = 0.0;            // omega of the frequency that the generator writes
 var freqs: f64[>..];            // the frequencies of the harmonic steps
 var pml_g = -1;                 // the shape of the pml layer, or -1
@@ -642,6 +661,11 @@ fn reset() {
     body_force = [0.0; 3];
     wave_c_node = -1;
     wave_s_node = -1;
+    wave_eddy = false;
+    eddy_mu_node = -1;
+    eddy_rhs_node = -1;
+    eddy_sign = 1.0;
+    eddy_on = false;
     omega_now = 0.0;
     freqs.clear();
     pml_g = -1;
@@ -1159,6 +1183,9 @@ fn surface(n: i64) {
     let v = child(n, 1);
     let of = if syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { "" };
     let k = find_body(of);
+    // The boundary of another shape of the model serves a `refine` only, which the mesher reads from the let.
+    let whole = if syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { of };
+    if whole != body_name && find_body(whole) < 0 && whole.len > 0 && find_geometry(whole) >= 0 { return; }
     if of != body_name && k < 0 {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
@@ -1264,7 +1291,7 @@ fn property(word: u8[:]) -> i64 {
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
-    if physics != ELASTIC && physics != HEAT && physics != EDGE && region_laws.len > 0 {
+    if physics != ELASTIC && physics != HEAT && physics != EDGE && !wave_eddy && region_laws.len > 0 {
         unsupported(tok(base), "a material on a region of a wave, edge or Darcy physics is not in this generator", "use one material");
     }
     for &w in region_laws {
@@ -1542,6 +1569,8 @@ fn physics_item(n: i64) {
             solid_state(c);
         } else if k == syntax::N_PLASTIC {
             solid_plastic(c);
+        } else if k == syntax::N_LET && physics == WAVE {
+            physics_lets.push(c);
         } else if k == syntax::N_LET && flux_let(c) < 0 {
             solid_let(c);
         } else if k == syntax::N_LET {
@@ -1646,8 +1675,48 @@ fn wave_eq(n: i64) {
             form = true;
         }
     }
+    if !form && eddy_eq(n) { return; }
     if !form { unsupported(tok(n), "this generator solves eq div(grad(u)) + c*u = s for a Complex scalar u", WAVE_FIX); }
     if source_of(child(n, 1)) != "0" { wave_s_node = child(n, 1); }
+}
+
+let EDDY_FIX = "write eq -div(Hr) = J, with let Hr = grad(Az)/mu and let J = sigma_e*(E - ddt(Az))";
+
+// `eq -div(H) = R` or `eq div(H) = R` with `let H = grad(u)/mu` and R a
+// linear function of u, ddt(u) and the properties of the material: the
+// eddy currents, with c, s and the diffusion 1/mu of each region (eddy_terms).
+// False if the eq is not of this form.
+fn eddy_eq(n: i64) -> bool {
+    let left = child(n, 0);
+    let minus = kind(left) == syntax::N_UNARY && syntax::text(tok(left)) == "-";
+    let d = if minus { first(left) } else { left };
+    guard is_call(d, "div") && syntax::child_count(d) == 2 else { return false; }
+    var h = arg(d, 0);
+    if kind(h) == syntax::N_NAME && physics_let(name(h)) >= 0 { h = physics_let(name(h)); }
+    guard kind(h) == syntax::N_BINARY && syntax::text(tok(h)) == "/" && source_of(child(h, 0)) == str("grad(", unknown_name, ")") else {
+        unsupported(tok(n), "the flux of the eq is not grad(u)/mu", EDDY_FIX);
+        return true;
+    }
+    wave_eddy = true;
+    eddy_mu_node = child(h, 1);
+    eddy_rhs_node = child(n, 1);
+    eddy_sign = if minus { -1.0 } else { 1.0 };
+    return true;
+}
+
+// nu = 1/mu, c and s of div(nu grad(u)) + c u = s for the material now, at
+// omega_now: R(u) = a u + b gives c = -sign a and s = sign b.
+fn eddy_terms() -> f64, f64[2], f64[2] {
+    eddy_on = true;
+    eddy_u = [0.0, 0.0];
+    let b = cval(eddy_rhs_node);
+    eddy_u = [1.0, 0.0];
+    let r1 = cval(eddy_rhs_node);
+    let mu = cval(eddy_mu_node);
+    eddy_on = false;
+    if !(mu[0] > 0.0) || mu[1] != 0.0 { unsupported(tok(eddy_mu_node), "mu is not a positive real value", EDDY_FIX); return 1.0, [0.0, 0.0], [0.0, 0.0]; }
+    let a = [r1[0] - b[0], r1[1] - b[1]];
+    return 1.0 / mu[0], [-eddy_sign * a[0], -eddy_sign * a[1]], [eddy_sign * b[0], eddy_sign * b[1]];
 }
 
 fn assumptions(n: i64) {
@@ -2219,7 +2288,7 @@ fn report(item: i64) {
     let e = first(item);
     // The checks read the first row of a table column in the point.
     table_row = if kind(e) == syntax::N_AT && table_member(child(e, 1)) >= 0 { 0 } else { -1 };
-    if probe_physics() {
+    if probe_values() {
         edge_report(item);
         return;
     }
@@ -2364,7 +2433,7 @@ fn composite_expect(n: i64) {
 
 // An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
-    if probe_physics() {
+    if probe_values() {
         edge_expect(n, step);
         return;
     }
@@ -3311,8 +3380,12 @@ fn harmonic_values() {
         if s.procedure != HARMONIC { continue; }
         for f in freqs[s.first_freq..s.first_freq + s.freq_count] {
             omega_now = 2.0 * PI * f;
-            let c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
+            var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
             if wave_s_node >= 0 { cval(wave_s_node); }
+            if wave_eddy {
+                let nu, ce, se = eddy_terms();
+                c = ce;
+            }
             for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_SOURCE { cval(b.node); } }
             if pml_g >= 0 && !(c[0] > 0.0) { unsupported(pml_tok, "the pml needs c > 0 in div(grad(u)) + c*u = s", PML_FIX); }
             if !ok() { return; }
@@ -4033,8 +4106,10 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     let s = steps[si];
     let f = freqs[s.first_freq + i];
     omega_now = 2.0 * PI * f;
-    let c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
-    let src = if wave_s_node >= 0 { cval(wave_s_node) } else { [0.0, 0.0] };
+    var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
+    var src = if wave_s_node >= 0 { cval(wave_s_node) } else { [0.0, 0.0] };
+    var nu0 = 1.0;
+    if wave_eddy { nu0, c, src = eddy_terms(); }
     var label: u8[>..] = [];
     format(label, s.name, " at ", f, " ", freq_unit());
     format(out, "// step ", s.name, ", frequency ", i + 1, " of ", s.freq_count, "\nfn step_", s.name, "_", i + 1, "() {\n");
@@ -4045,6 +4120,7 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     }
     lit(out, s.damping);
     out.append(");\n");
+    if wave_eddy { emit_eddy_laws(out, nu0); }
     if pml_g >= 0 {
         format(out, "    elements::pml(", pml_g, ", ");
         lits(out, pml_lo);
@@ -4058,9 +4134,12 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     out.append("    solve(");
     quoted(out, label);
     out.append(");\n");
-    for r in reports[s.first_report..s.first_report + s.report_count] { emit_wave_report(out, label, r); }
+    for r in reports[s.first_report..s.first_report + s.report_count] {
+        if wave_eddy { emit_edge_report(out, label, r); } else { emit_wave_report(out, label, r); }
+    }
     let last = i == s.freq_count - 1;
     if last { for x in expects { if x.step == si { emit_expect(out, x); } } }
+    if last { for x in probes { if x.step == si { emit_edge_expect(out, x); } } }
     if last && s.output {
         out.append("    output(");
         quoted(out, str(results_dir, "/", s.name, ".vtu"));
@@ -4071,6 +4150,48 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     if !last { format(out, "    step_", s.name, "_", i + 2, "();\n"); }
     out.append("}\n\n");
 }
+
+// The diffusion of the base material, and c, s and the diffusion of the
+// material of each region (eddy_terms), at omega_now.
+fn emit_eddy_laws(out: u8[>..]&, nu0: f64) {
+    if nu0 != 1.0 {
+        out.append("    elements::wave_nu(");
+        lit(out, nu0);
+        out.append(");\n");
+    }
+    let base = material_node;
+    for w in region_laws {
+        material_node = w.item;
+        let nu, c, src = eddy_terms();
+        format(out, "    cells(elements::wave_in(", w.g, ", ");
+        let terms = [nu, c[0], c[1], src[0], src[1]];
+        for v, k in terms {
+            if k > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        out.append("), ");
+        quoted(out, w.label);
+        out.append(");\n");
+    }
+    material_node = base;
+}
+
+let EDDY_PRELUDE = """
+    // The Complex unknown at a point, and its integral on the cells of a shape, with the area.
+    fn wave_point(x: f64, y: f64, z: f64) -> f64[2] {
+        let re, found_re = elements::value_at(0, x, y, z);
+        let im, found_im = elements::value_at(1, x, y, z);
+        if !found_re || !found_im { found_all = false; }
+        return [re, im];
+    }
+
+    fn wave_cells(g: i64) -> f64[3] {
+        let t = elements::wave_region_integral(g);
+        if t[2] <= 0.0 { found_all = false; }
+        return t;
+    }
+
+    """;
 
 fn emit_wave_report(out: u8[>..]&, step_label: u8[:], r: Report) {
     format(out, "    // report ", r.label, "\n    {\n");
@@ -4441,7 +4562,8 @@ fn emit_head(elements_path: u8[:], out: u8[>..]&) {
     }
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
-    if probe_physics() { out.append(EDGE_PRELUDE); }
+    if probe_values() { out.append(EDGE_PRELUDE); }
+    if wave_eddy { out.append(EDDY_PRELUDE); }
     if complex_solid { out.append(HARMONIC_PRELUDE); }
     if solid_law > 0 || has_ties() { emit_energy(out); }
 }
