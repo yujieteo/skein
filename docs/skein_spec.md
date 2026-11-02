@@ -2069,6 +2069,8 @@ uses Rhie-Chow interpolation (Rhie and Chow 1983) of the face velocity. The
 system is solved fully coupled by Newton's method. The unknowns are cell
 averages. Essential conditions act through the face flux.
 
+A system of several unknown components, `ddt(U) + div(F) = S`, runs on triangles in `src/cons/`, with a MUSCL limiter, a Rusanov flux and `ssprk3`.
+
 The current lowering (`src/grid/`) takes one scalar unknown with
 `ct ddt(u) + div(a*u) - d*div(grad(u)) = f` on a `rect` of `quad` cells,
 with `ct`, `a` and `d` constant. The diffusive flux uses the two cell
