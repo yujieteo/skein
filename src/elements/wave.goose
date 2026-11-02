@@ -15,8 +15,8 @@
 // A tied node of a `bloch` group takes the value of its master times the
 // phase exp(iθ). The assembly adds each term of a tied node to its master,
 // times the phase (the test function too, with the conjugate phase), so
-// the row of the tied node is the identity. GMRES with ILU(0) solves the
-// real system, then the tied nodes take their values.
+// the row of the tied node is the identity. A direct sparse LU
+// (src/solvers/slu.goose) solves the real system, then the tied nodes take their values.
 import std;
 import math;
 namespace elements;
