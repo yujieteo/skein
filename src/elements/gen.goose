@@ -1175,6 +1175,10 @@ fn region_shape(r: i64) -> i64 {
     let v = mesher::eval_value(r);
     guard ok() else { return -1; }
     // The hexahedra of a union of boxes are whole in a region: the grid has a plane on each face of it.
+    if v.n == 0 && hex_mesh && geo == GEO_BOX {
+        hex_regions = true;
+        return v.g;
+    }
     if v.n == 0 && hex_mesh && geo == GEO_SHAPE {
         var boxes: f64[>..] = [];
         guard mesher::box_union(v.g, boxes) else {
