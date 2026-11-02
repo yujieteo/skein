@@ -847,10 +847,13 @@ fn simplex_size(pts: f64[:], n: i64, j: f64[:]) -> f64 {
 
 // Evaluates z as the next case. It gives false if the loop ends: a failed
 // case or an error of the model, with `stop` and `fault` set.
+var case_points: f64[>..];
+
 fn simplex_eval(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], z: f64[:], ends: CaseEnd[>..]&, l: Ledger&, j: f64&, stop: u8[>..]&, fault: bool&) -> bool {
     let e, v, ran, ok = simplex_case(path, text, study, objective, ends.len, z, "", l);
     if !ok { fault = true; return false; }
     case_values.append(range_texts(z));
+    case_points.append(z);
     ends.push(e);
     if !ran {
         stop = str("case ", ends.len, " failed");
@@ -875,6 +878,7 @@ fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], js
     var l = new_ledger(solvers::BUDGET_SHARE * solvers::free_bytes());
     outs.clear();
     case_values.clear();
+    case_points.clear();
     var ends: CaseEnd[>..] = [];
     var pts: f64[>..] = [];
     var js: f64[>..] = [];
@@ -953,9 +957,7 @@ fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], js
         if ran && (!bran || v < b) { best = e; }
     }
     if tail.len > 0 {
-        var z: f64[>..] = [];
-        for x, k in range_start { z.push(x); }
-        for k in z.len { z[k] = (parse_value_of(case_values[best * varied.len + k]) - range_lo[k]) / (range_hi[k] - range_lo[k]); }
+        let z = case_points[best * n..(best + 1) * n];
         let e, _, _, ok = simplex_case(path, text, study, objective, best, z, tail, l);
         guard ok else { return 1; };
         ends[best] = e;
@@ -975,9 +977,3 @@ fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], js
     return status;
 }
 
-// The number at the start of a param value text such as "2.5 mm".
-fn parse_value_of(t: u8[:]) -> f64 {
-    let parts = split(t, " ");
-    let v, good = parse_flt(parts[0]);
-    return if good { v } else { 0.0 };
-}

@@ -338,6 +338,7 @@ var rms_nodes: i64[>..];
 // The number of the rms call n.
 fn rms_index(n: i64) -> i64 {
     for m, i in rms_nodes { if m == n { return i; } }
+    if rms_nodes.len >= 16 { probe_fail(tok(n), "more than 16 rms calls", "use at most 16 rms calls in a model"); return 0; }
     rms_nodes.push(n);
     return rms_nodes.len - 1;
 }

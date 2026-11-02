@@ -563,6 +563,7 @@ var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_coun
 fn reset() {
     density = 0.0;
     complex_solid = false;
+    rms_nodes.clear();
     codegen::reset();
     dim = 3;
     geometry_names.clear();
