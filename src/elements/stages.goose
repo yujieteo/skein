@@ -29,6 +29,9 @@ struct Law {
     lame_3d: f64,
     shear: f64,
     force: f64[3],
+    ani: bool,      // the written-out law of assemble.goose
+    cm: f64[36],
+    s0: f64[6],
 }
 
 var laws: Law[>..] = [];
@@ -58,7 +61,8 @@ fn shown(d: i64) -> f64 {
     return if origin.len == sol.len { sol[d] - origin[d] } else { sol[d] };
 }
 
-fn law_now() -> Law { return Law { cond: conductivity, heat: source, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force }; }
+fn law_now() -> Law { return Law { cond: conductivity, heat: source, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force,
+                                          ani: aniso_on, cm: aniso_c, s0: aniso_s0 }; }
 
 // Sets the moduli and the body force of the assembly to the law of cell c.
 fn use_law(c: i64) {
@@ -70,6 +74,12 @@ fn use_law(c: i64) {
     lame_3d = w.lame_3d;
     shear = w.shear;
     volume_force = w.force;
+    use_aniso(w);
+}
+
+// The written-out law of w, or none.
+fn use_aniso(w: Law) {
+    if w.ani { set_aniso(w.cm, w.s0); } else { aniso_on = false; }
 }
 
 // Sets them to law 0 again.
@@ -81,6 +91,7 @@ fn use_law_0() {
     lame_3d = laws[0].lame_3d;
     shear = laws[0].shear;
     volume_force = laws[0].force;
+    use_aniso(laws[0]);
 }
 
 fn cell_in(c: i64, g: i64) -> bool {
@@ -106,11 +117,30 @@ fn add_law(g: i64, E: f64, nu: f64, b: f64[3]) -> i64 {
     }
     let l3 = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     laws.push(Law { cond: conductivity, heat: source, lame: if plane == PLANE_STRESS { E * nu / (1.0 - nu * nu) } else { l3 }, lame_3d: l3,
-                    shear: E / (2.0 * (1.0 + nu)), force: b });
+                    shear: E / (2.0 * (1.0 + nu)), force: b, ani: false, cm: [0.0; 36], s0: [0.0; 6] });
     var count = 0;
     for c in cell_count() {
         if cell_in(c, g) {
             cell_law[c] = laws.len - 1;
+            count++;
+        }
+    }
+    return count;
+}
+
+// Gives the cells in shape g the written-out law c and s0 (set_aniso) and
+// the body force b. It gives the number of these cells.
+fn add_aniso_law(g: i64, c: f64[36], s0: f64[6], b: f64[3]) -> i64 {
+    guard physics == ELASTIC else { abort("add_aniso_law: an elastic physics"); }
+    if laws.len == 0 {
+        laws.push(law_now());
+        for k in cell_count() { cell_law.push(0); }
+    }
+    laws.push(Law { cond: conductivity, heat: source, lame: lame, lame_3d: lame_3d, shear: shear, force: b, ani: true, cm: c, s0: s0 });
+    var count = 0;
+    for k in cell_count() {
+        if cell_in(k, g) {
+            cell_law[k] = laws.len - 1;
             count++;
         }
     }
@@ -125,7 +155,7 @@ fn add_heat_law(g: i64, k: f64, q: f64) -> i64 {
         laws.push(law_now());
         for c in cell_count() { cell_law.push(0); }
     }
-    laws.push(Law { cond: k, heat: q, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force });
+    laws.push(Law { cond: k, heat: q, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force, ani: false, cm: [0.0; 36], s0: [0.0; 6] });
     var count = 0;
     for c in cell_count() {
         if cell_in(c, g) {

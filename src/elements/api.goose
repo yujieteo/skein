@@ -163,6 +163,13 @@ fn cells_for(length: f64, size: f64) -> i64 {
 // Linear isotropic elasticity with Young's modulus E and Poisson's ratio
 // nu: 3D, or in 2D plane stress or plane strain with thickness t.
 fn elastic(E: f64, nu: f64) { set_elastic(E, nu, SOLID_3D, 1.0); }
+// The written-out law of every cell: the stress of each strain component
+// xx, yy, zz, xy, yz, xz (with eps_xy = eps_yx = 1) in rows, and the stress of
+// the zero strain.
+fn anisotropic(c: f64[36], s0: f64[6]) { set_aniso(c, s0); }
+
+fn anisotropic_in(g: i64, c: f64[36], s0: f64[6], bx: f64, by: f64, bz: f64) -> bool { return add_aniso_law(g, c, s0, [bx, by, bz]) > 0; }
+
 fn elastic_plane_stress(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRESS, t); }
 fn elastic_plane_strain(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRAIN, t); }
 

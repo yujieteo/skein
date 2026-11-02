@@ -30,6 +30,7 @@ import syntax from "../syntax";
 import codegen.codegen;
 import mesher from "../mesher";   // the reader of the geometry, and its shapes
 import .gen_edge;                  // the edge physics and the Darcy flow
+import .gen_aniso;                // a written-out linear elastic law
 import .gen_solid;                 // plasticity, finite strain and hyperelastic energies
 import .gen_contact;               // contact and the rigid face
 
@@ -413,6 +414,8 @@ struct Law {
     young: f64,
     poisson: f64,
     force: f64[3],
+    cm: f64[36],    // the written-out elastic law of gen_aniso.goose
+    s0: f64[6],
     label: u8[..256],
 }
 
@@ -548,6 +551,8 @@ var material_items: i64[>..];   // each material item
 var region_laws: Law[>..];      // the other materials, on regions
 var changes: Change[>..];       // the birth and death statements of the steps
 var interfaces: i64[>..];       // the shapes whose boundary the mesh keeps
+var law_c: f64[36] = [0.0; 36];   // the written-out law of law 0 (gen_aniso.goose) and its stress at zero strain
+var law_s0: f64[6] = [0.0; 6];
 var young = 0.0;
 var poisson = -1.0;
 var conductivity = 0.0;
@@ -1300,12 +1305,14 @@ fn read_material() {
         w.young = young;
         w.poisson = poisson;
         w.cond = conductivity;
+        if aniso_node >= 0 { aniso_law(w.cm, w.s0); }
         if physics == HEAT && curve_node >= 0 {
             unsupported(tok(base), "a conductivity k(T) with a material on a region is not in this generator", "use a constant k in each material");
         }
     }
     material_node = base;
     read_law();
+    if aniso_node >= 0 { aniso_law(law_c, law_s0); }
 }
 
 // Reads the material `material_node` into young and poisson, or
@@ -1316,7 +1323,7 @@ fn read_law() {
         let w = name(p);
         // The eq of the wave physics names its properties.
         // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
+        let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" || aniso_node >= 0 } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
         // With several physics, a property of the material that this one does not read belongs to another.
         if !known && w != "rho" && !solid_property(w) && !multi() {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
@@ -1331,7 +1338,12 @@ fn read_law() {
         if e >= 0 { young = scalar_value(e); }
         if nu >= 0 { poisson = scalar_value(nu); }
         if rho >= 0 { density = scalar_value(rho); }
-        if solid_law != SOLID_ENERGY && (young <= 0.0 || poisson <= -1.0 || poisson >= 0.5) {
+        // The written-out law gives the moduli: the cells use it, and the others see the unit law.
+        if aniso_node >= 0 {
+            young = 1.0;
+            poisson = 0.0;
+        }
+        if solid_law != SOLID_ENERGY && aniso_node < 0 && (young <= 0.0 || poisson <= -1.0 || poisson >= 0.5) {
             unsupported(tok(material_node), "the material needs E > 0 and -1 < nu < 0.5",
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
         }
@@ -1593,7 +1605,8 @@ fn physics_item(n: i64) {
             eq_count++;
             let left = child(c, 0);
             let right = child(c, 1);
-            let div = is_call(left, "div") && flux_name.len > 0 && (source_of(arg(left, 0)) == flux_name || solid_eq(arg(left, 0)));
+            let general = general_flux(left, right);
+            let div = general || is_call(left, "div") && flux_name.len > 0 && (source_of(arg(left, 0)) == flux_name || solid_eq(arg(left, 0)));
             if !div || physics == ELASTIC && source_of(right) != "0" {
                 unsupported(tok(c), "this generator solves eq div(sigma) = 0 or eq div(q) = q_v", PHYSICS_FIX);
             } else if physics == HEAT {
@@ -1612,6 +1625,24 @@ fn physics_item(n: i64) {
     if dim == 2 && physics == ELASTIC && plane == SOLID_3D {
         unsupported(tok(n), "a 2d elastic physics needs plane_stress(t) or plane_strain", "add assume plane_stress(1 mm)");
     }
+}
+
+// `eq div(sigma) = 0` of a let sigma that is a written-out linear elastic law:
+// the generator takes the let as the flux (gen_aniso.goose).
+fn general_flux(left: i64, right: i64) -> bool {
+    guard is_call(left, "div") && flux_name.len == 0 && physics < 0 && solid_law == 0 && source_of(right) == "0" else { return false; }
+    guard kind(arg(left, 0)) == syntax::N_NAME else { return false; }
+    let l = aniso_let(name(arg(left, 0)));
+    guard l >= 0 else { return false; }
+    var strain_lets = false;
+    for m in solid_lets {
+        if find(source_of(child(m, 1)), str("strain(", unknown_name, ")")) >= 0 { strain_lets = true; }
+    }
+    guard strain_lets else { return false; }
+    aniso_node = child(l, 1);
+    physics = ELASTIC;
+    set64(flux_name, name(l));
+    return true;
 }
 
 // `eq rho*cp*ddt(T) + div(q) = q_v` of the transient heat: the capacity and the
@@ -1653,7 +1684,7 @@ fn materials_of(c: i64) {
         } else if first(m) < 0 {
             unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
         } else {
-            var w = Law { g: region_shape(first(m)), item: item, cond: 0.0, src: 0.0, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
+            var w = Law { g: region_shape(first(m)), item: item, cond: 0.0, src: 0.0, young: 0.0, poisson: 0.0, force: [0.0; 3], cm: [0.0; 36], s0: [0.0; 6], label: [] };
             codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
             region_laws.push(w);
         }
@@ -4646,6 +4677,23 @@ fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
     }
 }
 
+// The written-out law as the arguments of the call: the 36 and the 6 values.
+fn emit_aniso(out: u8[>..]&, head: u8[:], c: f64[36], s0: f64[6], tail: u8[:]) {
+    out.append(head);
+    out.append("[");
+    for i in 36 {
+        if i > 0 { out.append(", "); }
+        lit(out, c[i]);
+    }
+    out.append("], [");
+    for i in 6 {
+        if i > 0 { out.append(", "); }
+        lit(out, s0[i]);
+    }
+    out.append("]");
+    out.append(tail);
+}
+
 // The physics of the pass now, in main.
 fn emit_setup(out: u8[>..]&) {
     let sys = codegen::system;
@@ -4692,6 +4740,7 @@ fn emit_setup(out: u8[>..]&) {
             lit(out, thickness);
         }
         out.append(");\n");
+        if aniso_node >= 0 { emit_aniso(out, "    elements::anisotropic(", law_c, law_s0, ");\n"); }
         if rkpm_support > 0.0 {
             format(out, "    // method rkpm: support ", rkpm_support, " times the spacing, on the nodes of the mesh\n    rk_start(");
             lit(out, rkpm_support);
@@ -4716,6 +4765,15 @@ fn emit_setup(out: u8[>..]&) {
             out.append(");\n");
         }
         for w in region_laws {
+            if aniso_node >= 0 {
+                format(out, "    cells(elements::anisotropic_in(", w.g, ", ");
+                emit_aniso(out, "", w.cm, w.s0, ", ");
+                lits(out, w.force);
+                out.append("), ");
+                quoted(out, w.label);
+                out.append(");\n");
+                continue;
+            }
             format(out, "    cells(elements::material_in(", w.g, ", ");
             lit(out, w.young);
             out.append(", ");
