@@ -2,11 +2,14 @@
 // and Shewchuk (2007), on a uniform body-centred cubic (BCC) lattice.
 //
 // 1. The lattice covers the bounding box of the shape, with one cube more
-//    on each side. The spacing along each axis divides the side of the box
-//    into a whole number of cubes no larger than `size`, so the planes of
-//    an axis-aligned box fall on lattice points. The lattice points are
-//    the cube corners and the cube centres. Its tetrahedra each have 2
-//    centres of neighbour cubes and an edge of their common face.
+//    on each side. Each axis-aligned plane of a box of the CSG tree in the
+//    bounds is a plane of cube corners, and between two neighbour planes
+//    the lattice has the fewest equal steps that are not longer than
+//    `size` (grid_lines of grid.goose). Thus an edge of a box, where 2 such
+//    planes meet, is on edges of the mesh. The lattice points are the cube
+//    corners and the cube centres. Its tetrahedra each have 2 centres of
+//    neighbour cubes and an edge of their common face. refine_cells
+//    (refine.goose) then bisects them to the refine targets.
 // 2. φ at each lattice point gives its sign: inside (-), on the surface
 //    (0) or outside (+). Each lattice edge from - to + has a cut point on
 //    the surface, found by bisection of φ.
@@ -20,11 +23,12 @@
 //    tetrahedra along the diagonal of each quadrilateral face from its
 //    point of smallest index (Dompierre et al. 1999), so two cells that
 //    share the face cut it the same way, and the mesh is conforming.
+// 5. improve (improve.goose) repairs the cells with γ < 0.35.
 //
 // The paper's own cuts of the pyramids and the prisms give dihedral angles
 // from 10.7 to 164.8 degrees. These cuts do not have that bound, so
-// mesh_quality measures each mesh. The sharp edges of the shape are cut
-// off (chamfered) by about one lattice cell. So a prism along z with a
+// mesh_quality measures each mesh. A curved or an oblique sharp edge of
+// the shape is cut off (chamfered) by about one third of a lattice cell. So a prism along z with a
 // cylinder or an extrude in it is not stuffed: sweep_tets (sweep.goose)
 // sweeps the triangles of its section, and keeps its sharp edges, and an
 // octant of a spherical shell is swept radially (shell_tets).
@@ -36,17 +40,22 @@ import .geometry;
 import .mesh;
 import .quality;
 import .refine;
+import .grid;
+import .improve;
 
 let ALPHA_LONG = 0.24999;
 let ALPHA_SHORT = 0.41189;
 
 var lattice_cubes: i64[3] = [0, 0, 0];
-var lattice_origin: f64[3] = [0.0, 0.0, 0.0];   // corner (0, 0, 0)
-var lattice_step: f64[3] = [0.0, 0.0, 0.0];
+// The planes of the cube corners along each axis: those of axis a are
+// lattice_lines[line_start[a]..line_start[a + 1]], lattice_cubes[a] + 1.
+var lattice_lines: f64[>..] = [];
+var line_start: i64[4] = [0, 0, 0, 0];
 
 var lx: f64[>..] = [];          // x, y and z of each lattice point
 var lphi: f64[>..] = [];        // φ, or 0 after warping
 var lnode: i64[>..] = [];       // the mesh node of each lattice point, or -1
+var on_surface: bool[>..] = [];  // the mesh node is on the surface
 var cuts = dictionary<i64, i64> {};
 
 fn corner_count() -> i64 {
@@ -65,17 +74,33 @@ fn lattice_point_count() -> i64 {
     return corner_count() + lattice_cubes[0] * lattice_cubes[1] * lattice_cubes[2];
 }
 
-// The lattice point id, and its integer position in half steps.
-fn half_position(p: i64) -> i64, i64, i64 {
+// The integer position of lattice point p in half cubes along each axis.
+fn half_position(p: i64) -> i64[3] {
     let n = corner_count();
     if p < n {
         let a = lattice_cubes[0] + 1;
         let b = lattice_cubes[1] + 1;
-        return 2 * (p % a), 2 * (p / a % b), 2 * (p / (a * b));
+        return [2 * (p % a), 2 * (p / a % b), 2 * (p / (a * b))];
     }
     let q = p - n;
-    return 2 * (q % lattice_cubes[0]) + 1, 2 * (q / lattice_cubes[0] % lattice_cubes[1]) + 1,
-           2 * (q / (lattice_cubes[0] * lattice_cubes[1])) + 1;
+    return [2 * (q % lattice_cubes[0]) + 1, 2 * (q / lattice_cubes[0] % lattice_cubes[1]) + 1,
+            2 * (q / (lattice_cubes[0] * lattice_cubes[1])) + 1];
+}
+
+// Appends the lo and hi corners of each box that the unions, the
+// intersects and the subtracts of shape g reach, 6 numbers for each box.
+fn box_leaves(g: i64, out: f64[>..]&) {
+    var todo: i64[>..] = [g];
+    while todo.len > 0 {
+        let s = shapes[todo[todo.len - 1]];
+        todo.pop();
+        if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT {
+            todo.push(s.b);
+            todo.push(s.a);
+        } else if s.kind == BOX {
+            for i in 6 { out.push(s.p[i]); }
+        }
+    }
 }
 
 fn sign_of(v: f64) -> i64 {
@@ -101,7 +126,10 @@ fn cut_fraction(g: i64, a: i64, b: i64) -> f64 {
 
 // The mesh node of lattice point p, made when first used.
 fn lattice_node(p: i64) -> i64 {
-    if lnode[p] < 0 { lnode[p] = add_point(lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]); }
+    if lnode[p] < 0 {
+        lnode[p] = add_point(lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]);
+        on_surface.push(lphi[p] == 0.0);
+    }
     return lnode[p];
 }
 
@@ -116,6 +144,7 @@ fn cut_node(g: i64, a: i64, b: i64) -> i64 {
                          lx[3 * a + 1] + t * (lx[3 * b + 1] - lx[3 * a + 1]),
                          lx[3 * a + 2] + t * (lx[3 * b + 2] - lx[3 * a + 2]));
     cuts.insert(key, node);
+    on_surface.push(true);
     return node;
 }
 
@@ -326,6 +355,38 @@ fn lattice_tets() {
     }
 }
 
+// The lattice points of shape g of bounds b: the planes of grid_lines on
+// each axis, with one cube more on each side. False for a flat shape.
+fn build_lattice(g: i64, b: f64[6], size: f64) -> bool {
+    var boxes: f64[>..] = [];
+    box_leaves(g, boxes);
+    lattice_lines.clear();
+    var line: f64[>..] = [];
+    for a in 3 {
+        guard b[3 + a] > b[a] else { return false; }
+        grid_lines(boxes[..], a, b[a], b[3 + a], size, line);
+        line_start[a] = lattice_lines.len;
+        lattice_lines.push(2.0 * line[0] - line[1]);
+        lattice_lines.append(line);
+        lattice_lines.push(2.0 * line[line.len - 1] - line[line.len - 2]);
+        lattice_cubes[a] = line.len + 1;
+    }
+    line_start[3] = lattice_lines.len;
+    lx.clear();
+    lphi.clear();
+    lnode.clear();
+    cuts.clear();
+    on_surface.clear();
+    for p in lattice_point_count() {
+        let at = half_position(p);
+        for a in 3 {
+            let lo = lattice_lines[line_start[a] + at[a] / 2];
+            lx.push(if at[a] % 2 == 0 { lo } else { 0.5 * (lo + lattice_lines[line_start[a] + at[a] / 2 + 1]) });
+        }
+    }
+    return true;
+}
+
 // Meshes the solid g with tetrahedra of edge length about `size`, and
 // smaller at the targets of refine.goose. False if the refinement does not
 // finish.
@@ -352,27 +413,13 @@ fn mesh_3d(g: i64, size: f64) -> bool {
             return done;
         }
     }
-    for a in 3 {
-        let side = b[3 + a] - b[a];
-        guard side > 0.0 else { return false; }
-        let n = max(ceil(side / size - 1.0e-9) as i64, 1);
-        lattice_step[a] = side / n;
-        lattice_cubes[a] = n + 2;
-        lattice_origin[a] = b[a] - lattice_step[a];
-    }
-    lx.clear();
-    lphi.clear();
-    lnode.clear();
-    cuts.clear();
-    for p in lattice_point_count() {
-        let i, j, k = half_position(p);
-        lx.push(lattice_origin[0] + 0.5 * i * lattice_step[0]);
-        lx.push(lattice_origin[1] + 0.5 * j * lattice_step[1]);
-        lx.push(lattice_origin[2] + 0.5 * k * lattice_step[2]);
-    }
+    guard build_lattice(g, b, size) else { return false; }
     lattice_tets();
     guard refine_cells(lx, btets, 4, size) else { return false; }
-    var h = min(min(lattice_step[0], lattice_step[1]), lattice_step[2]);
+    var h = size;
+    for a in 3 {
+        for i in lattice_cubes[a] { h = min(h, lattice_lines[line_start[a] + i + 1] - lattice_lines[line_start[a] + i]); }
+    }
     for t in targets { h = min(h, t.size); }
     for p in lx.len / 3 {
         let f = phi(g, lx[3 * p], lx[3 * p + 1], lx[3 * p + 2]);
@@ -382,5 +429,6 @@ fn mesh_3d(g: i64, size: f64) -> bool {
     find_edges();
     warp(g);
     for t in btets.len / 4 { stuff(g, [btets[4 * t], btets[4 * t + 1], btets[4 * t + 2], btets[4 * t + 3]]); }
+    if improve_cells { improve(on_surface[..]); }
     return true;
 }

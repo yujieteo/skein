@@ -769,6 +769,144 @@ fn test_refine() {
     mesher::clear_refines();
 }
 
+// The share of the edges of the mesh with a length in [0.5, 1.5] times the
+// wanted size at their midpoint.
+fn edges_in_size(size: f64) -> f64 {
+    let n = mesher::point_count();
+    var seen = dictionary<i64, bool> {};
+    var total = 0;
+    var inside = 0;
+    for c in mesher::cell_count() {
+        for i in 4 {
+            for j in i + 1..4 {
+                let a = mesher::cell_node(c, i);
+                let b = mesher::cell_node(c, j);
+                guard !seen.get(min(a, b) * n + max(a, b)) else { continue; }
+                seen.insert(min(a, b) * n + max(a, b), true);
+                let pa = mesher::vertex(a);
+                let pb = mesher::vertex(b);
+                let w = mesher::wanted_size(0.5 * (pa[0] + pb[0]), 0.5 * (pa[1] + pb[1]), 0.5 * (pa[2] + pb[2]), 0.0, size);
+                let r = mesher::norm3(mesher::sub3(pa, pb)) / w;
+                total++;
+                if r >= 0.5 && r <= 1.5 { inside++; }
+            }
+        }
+    }
+    return inside * 1.0 / total;
+}
+
+// The length of the segment from p to q that no edge of the mesh on the
+// segment covers, as a share of the segment. 0 if the mesh keeps the sharp
+// edge p q.
+fn uncovered(p: f64[3], q: f64[3], tol: f64) -> f64 {
+    let u = mesher::sub3(q, p);
+    let l = mesher::norm3(u);
+    fn along(x: f64[3]) -> f64, bool {
+        let t = mesher::dot3(mesher::sub3(x, p), u) / (l * l);
+        let off = mesher::norm3(mesher::sub3(x, [p[0] + t * u[0], p[1] + t * u[1], p[2] + t * u[2]]));
+        return t, off <= tol;
+    }
+    var spans: f64[>..] = [];
+    for c in mesher::cell_count() {
+        for i in 4 {
+            for j in i + 1..4 {
+                let ta, on_a = along(mesher::vertex(mesher::cell_node(c, i)));
+                let tb, on_b = along(mesher::vertex(mesher::cell_node(c, j)));
+                if on_a && on_b { spans.append([min(ta, tb), max(ta, tb)]); }
+            }
+        }
+    }
+    // The union of the spans, by a sweep over 1000 points of the segment.
+    var missed = 0;
+    for k in 1000 {
+        let t = (k + 0.5) / 1000.0;
+        var hit = false;
+        for s in spans.len / 2 {
+            if spans[2 * s] <= t && t <= spans[2 * s + 1] { hit = true; }
+        }
+        if !hit { missed++; }
+    }
+    return missed / 1000.0;
+}
+
+// The 3D mesher gaps of phase 6 (docs/roadmap.md), on the test models of
+// its scout: a cube with a spherical dimple, with and without a refine of
+// the dimple, an L block with sharp edges off the planes of a uniform
+// lattice, and a ball.
+fn test_stuffing() {
+    let dent = mesher::sphere(0.5, 0.5, 1.0, 0.3);
+    let dimple = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), dent);
+    let dimple_volume = 1.0 - 2.0 / 3.0 * PI * 0.027;
+    mesh_case("dimple", dimple, 0.1, dimple_volume, tolerance(2.0 * PI * 0.09, 0.3, 4.0 + 2.0 * PI * 0.3, 0.1, dimple_volume));
+
+    // grade: the slope of the size away from the refine is grade - 1, so
+    // the cell count falls as grade rises, and the edges follow the size.
+    var cells = 0;
+    for grade in [1.1, 1.3, 2.0] {
+        mesher::clear_refine();
+        mesher::set_grade(grade);
+        mesher::add_refine(dent, 0.02, false);
+        let what = str("dimple_ref, grade ", grade);
+        if grade == 1.3 {
+            mesh_case(what, dimple, 0.1, dimple_volume, tolerance(2.0 * PI * 0.09, 0.3, 4.0 + 2.0 * PI * 0.3, 0.02, dimple_volume));
+        } else if !mesher::mesh_3d(dimple, 0.1) {
+            fail(str(what, ": the mesher did not finish"));
+        }
+        let q = mesher::mesh_quality();
+        print(what, ": ", q.cells, " cells");
+        if cells > 0 && q.cells >= cells { fail(str(what, ": ", q.cells, " cells, not fewer than ", cells)); }
+        cells = q.cells;
+        if q.min_angle < 10.0 || q.max_angle > 165.0 { fail(str(what, ": dihedral angles outside 10 to 165 deg")); }
+        if grade == 1.3 {
+            let share = edges_in_size(0.1);
+            print("  edges in [0.5, 1.5] of the wanted size: ", share);
+            if share < 0.9 { fail(str(what, ": ", share, " of the edges in [0.5, 1.5] of the wanted size, not 0.9")); }
+            improved_case(what, dimple, 0.1);
+        }
+    }
+    mesher::clear_refine();
+
+    // The box planes are lattice planes: steps of 0.086 and 0.095, and
+    // each sharp edge is on edges of the mesh.
+    let lblock = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), mesher::box(0.43, 0.43, -1.0, 2.0, 2.0, 2.0));
+    mesh_case("lblock", lblock, 0.1, 0.6751, 1.0e-9);
+    if mesher::mesh_quality().min_angle < 10.0 { fail("lblock: a dihedral angle below 10 deg"); }
+    let edges: f64[6][7] = [[0.43, 1.0, 0.0, 0.43, 1.0, 1.0], [1.0, 0.43, 0.0, 1.0, 0.43, 1.0], [0.43, 0.43, 0.0, 0.43, 0.43, 1.0],
+                            [0.43, 0.43, 1.0, 0.43, 1.0, 1.0], [0.43, 0.43, 1.0, 1.0, 0.43, 1.0], [0.43, 0.43, 0.0, 0.43, 1.0, 0.0],
+                            [0.43, 0.43, 0.0, 1.0, 0.43, 0.0]];
+    for e in edges {
+        let missed = uncovered([e[0], e[1], e[2]], [e[3], e[4], e[5]], 1.0e-9 * 0.1);
+        if missed > 0.0 { fail(str("lblock: ", missed, " of the sharp edge ", e, " is off the edges of the mesh")); }
+    }
+
+    // The ball at 0.05 has 536 cells with γ < 0.35 before the improvement.
+    // At 0.03 (5 times the cells) the result is the same, but the debug
+    // build of this test takes 20 s for it.
+    let ball = mesher::sphere(0.0, 0.0, 0.0, 1.0);
+    if !mesher::mesh_3d(ball, 0.05) { fail("ball, size 0.05: the mesher did not finish"); }
+    improved_case("ball, size 0.05", ball, 0.05);
+}
+
+// The improvement of the mesh that mesh_3d just made of g: each node of
+// the surface still on the surface, no cell with γ below 0.35, and no
+// cell worse than the worst cell of the stuffed mesh.
+fn improved_case(what: u8[:], g: i64, size: f64) {
+    let q = mesher::mesh_quality();
+    var off = 0;
+    for v in mesher::point_count() {
+        let p = mesher::vertex(v);
+        if mesher::on_surface[v] && abs(mesher::phi(g, p[0], p[1], p[2])) > 1.0e-9 * size { off++; }
+    }
+    if off > 0 { fail(str(what, ": ", off, " nodes of the surface are off the surface")); }
+    mesher::improve_cells = false;
+    let done = mesher::mesh_3d(g, size);
+    mesher::improve_cells = true;
+    let stuffed = mesher::mesh_quality();
+    print(what, ": max_aspect ", stuffed.max_aspect, " stuffed, ", q.max_aspect, " improved");
+    if !done || q.max_aspect > stuffed.max_aspect { fail(str(what, ": the improvement made the worst cell worse")); }
+    if q.max_aspect > 1.0 / 0.35 { fail(str(what, ": a cell with gamma ", 1.0 / q.max_aspect, ", below 0.35")); }
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -922,6 +1060,7 @@ fn main() {
     test_nurbs();
     test_interfaces();
     test_refine();
+    test_stuffing();
 
     test_grid();
     test_cells();

@@ -415,6 +415,13 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
                          "remove the line, and give a size that resolves the smallest feature");
         } else if node_text(s) == "size" {
             size = eval_value(value).v[0];
+        } else if node_text(s) == "grade" {
+            let g = eval_value(value);
+            if g.n == 1 && g.v[0] > 1.0 {
+                set_grade(g.v[0]);
+            } else {
+                reader_fault(syntax::nodes[value].tok, "the grade is a number more than 1", "write grade: 1.3");
+            }
         } else if node_text(s) == "cell" {
             let c = node_text(value);
             if c == grid {
@@ -427,7 +434,7 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
             }
         } else {
             reader_fault(syntax::nodes[s].tok, str("the mesh setting '", node_text(s), "' is not in the mesher yet"),
-                         "use size and cell");
+                         "use size, cell, grade and refine");
         }
         s = syntax::nodes[s].next;
     }
