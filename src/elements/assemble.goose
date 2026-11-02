@@ -59,6 +59,7 @@ var row_start: i64[>..] = [];
 var col: i32[>..] = [];
 var val: f64[>..] = [];
 
+var harmonic_omega = 0.0;   // ω of the next solve of the elastic physics when a harmonic step sets it (harmonic.goose), else 0
 var other_dofs = 0;     // the dofs of an edge or a mixed physics, which are not on the nodes
 
 fn dof_total() -> i64 { return if physics == EDGE || physics == MIXED { other_dofs } else { ncomp * node_count() } }
@@ -80,6 +81,7 @@ fn start_physics(kind: i64, comps: i64) {
     guard per_cell > 0 && (kind == ELASTIC || kind == HEAT || kind == WAVE) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
     physics = kind;
     ncomp = comps;
+    harmonic_omega = 0.0;
     clear_stages();
     clear_field_terms();
     fixed.clear();

@@ -220,8 +220,17 @@ gives the roadmap phase that closes the gap:
   the change since its birth. Point location on a curved P2 cell uses
   Newton iteration. A `||` boundary with a limit inside is refused
   (`tests/unsupported/boundary_or_limit.skn`).
+- The harmonic step of a `Complex` vector unknown runs with `skein run`
+  (`src/elements/harmonic.goose`): it is the complex lift of the real
+  assembly of a physics, with the matrix `(1 + 2 im zeta) K - omega^2 M` and
+  a complex skyline LDLT. Any physics with a `K` and an `M` in the elements
+  lane can use it. The elastic physics uses it now, and the heat physics
+  does not. [random_vibration_cantilever.skn](../examples/femahoy/random_vibration_cantilever.skn)
+  passes its `expect`: the RMS tip acceleration is 402270 mm/s^2 (+0.34 %,
+  Blevins 1979: 400925.4 mm/s^2). A report or an `expect` of a harmonic step
+  takes a `Complex` expression of constants, `omega`, `mean(u.c, region)`,
+  `u.c at p` and `rms(f, psd)`. The VTU output has the real part.
 - Not run yet, because each needs a new physics family:
-  random_vibration_cantilever (a `Complex` vector unknown),
   laminate_pagano and warpage_2p5d_frame (shell family and layup),
   shape_hole_biaxial (a shape loop with remeshing).
 

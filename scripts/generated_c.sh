@@ -79,6 +79,7 @@ examples/femahoy/line_stripline.skn
 examples/femahoy/heat_fin.skn
 examples/femahoy/hyperelastic_tube.skn
 examples/femahoy/plasticity_sphere.skn
+examples/femahoy/random_vibration_cantilever.skn
 examples/femahoy/scordelis_lo_roof.skn
 examples/femahoy/submodel_kirsch_hole_global.skn
 examples/femahoy/submodel_kirsch_hole.skn

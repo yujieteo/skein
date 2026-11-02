@@ -833,6 +833,46 @@ fn expect_wave(what: u8[:], got: f64[2], want: f64[2], tol: f64) {
     }
 }
 
+// The harmonic step of the elastic physics (harmonic.goose). A steel
+// cantilever of 100 x 10 x 5 mm under the body force of a base acceleration
+// of 1000 mm/s^2 in z. At 1 Hz the response is the static one. The peak of
+// the tip response of the damping ratio 0.02 is at the first frequency,
+// 417.758 Hz (Blevins 1979, Table 8-1), within 1 %.
+fn test_solid_harmonic() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 1);
+    elements::elastic(210000.0, 0.3);
+    elements::set_density(7.85e-9);
+    elements::body_force(0.0, 0.0, -7.85e-9 * 1000.0);
+    elements::clear_bcs();
+    elements::plane(elements::X, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    if !elements::solve() { failures++; print("FAIL solid harmonic: the static step does not solve"); }
+    elements::plane(elements::X, 100.0);
+    let still = elements::mean_value(elements::Z);
+    elements::set_harmonic(2.0 * PI, 0.02);
+    if !elements::solve() { failures++; print("FAIL solid harmonic: the step at 1 Hz does not solve"); }
+    elements::plane(elements::X, 100.0);
+    expect_near("solid harmonic, static limit", elements::harmonic_mean(0, elements::Z), still, 1.0e-4);
+    var best = 0.0;
+    var best_f = 0.0;
+    var f = 380.0;
+    while f <= 460.0 {
+        elements::set_harmonic(2.0 * PI * f, 0.02);
+        if !elements::solve() { failures++; print("FAIL solid harmonic: a step does not solve"); }
+        elements::plane(elements::X, 100.0);
+        let re = elements::harmonic_mean(0, elements::Z);
+        let im = elements::harmonic_mean(1, elements::Z);
+        let size = sqrt(re * re + im * im);
+        if size > best {
+            best = size;
+            best_f = f;
+        }
+        f += 4.0;
+    }
+    print("solid harmonic: static ", still, " mm, peak ", best, " mm at ", best_f, " Hz");
+    expect_near("solid harmonic, peak frequency", best_f, 417.758, 0.01);
+}
+
 // The Helmholtz equation p'' + k^2 p = 0 on a strip of length L, with
 // p(0) = 1 and p(L) = i: p = (sin k(L - x) + i sin kx)/sin kL.
 fn test_harmonic() {
@@ -1371,6 +1411,7 @@ fn main() {
     test_eigen();
     test_hex();
     test_harmonic();
+    test_solid_harmonic();
     test_pml();
     test_bloch();
     test_edge();

@@ -132,6 +132,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "lattice ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "shell skyline ldlt", entry_bytes: 9.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex newton skyline ldlt", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "simplex harmonic skyline ldlt", entry_bytes: 32.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex wave gmres ilu0", entry_bytes: 18.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "flow newton gmres ilu0", entry_bytes: 25.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },

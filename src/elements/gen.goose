@@ -113,6 +113,18 @@ fn complex_scalar(n: i64) -> bool {
     return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Complex" && kind(first(n)) == syntax::N_TYPE_NAME;
 }
 
+// Whether type n is Vector<Complex<D>> or Complex<Vector<D>>.
+fn complex_vector(n: i64) -> bool {
+    if kind(n) != syntax::N_TYPE_APPLY { return false; }
+    if syntax::text(tok(n)) == "Complex" { return is_vector_type(first(n)); }
+    return is_vector_type(n) && kind(first(n)) == syntax::N_TYPE_APPLY && syntax::text(tok(first(n))) == "Complex";
+}
+
+// Whether the reports, the expects and the steps are those of the probes of
+// gen_edge.goose: complex values at points and on regions, for each
+// frequency.
+fn probe_physics() -> bool { return physics == EDGE || physics == DARCY || complex_solid; }
+
 // --- values --------------------------------------------------------------------
 
 // A scalar or a vector of `dim` components, in the unit system of the
@@ -506,6 +518,7 @@ var source_node = -1;           // the right side of the eq, or -1 for 0
 var body_node = -1;             // the argument b of linear_elastic, or -1
 var body_force: f64[3] = [0.0; 3];
 var density = 0.0;
+var complex_solid = false;      // the unknown of the elastic physics is a Complex vector: harmonic steps (harmonic.goose)
 var wave_c_node = -1;           // c of eq div(grad(u)) + c*u = s, or -1 for 0
 var wave_s_node = -1;           // s, or -1 for 0
 var omega_now = 0.0;            // omega of the frequency that the generator writes
@@ -525,6 +538,7 @@ var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_coun
 
 fn reset() {
     density = 0.0;
+    complex_solid = false;
     codegen::reset();
     dim = 3;
     geometry_names.clear();
@@ -1430,6 +1444,7 @@ fn physics_item(n: i64) {
         } else if k == syntax::N_UNKNOWN {
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
+            if complex_vector(child(c, 0)) { complex_solid = true; }
             if syntax::child_count(c) > 1 { initial_node = child(c, 1); }
         } else if k == syntax::N_MATASSIGN {
             materials_of(c);
@@ -1936,6 +1951,10 @@ fn procedure(proc: i64, s: Step&) {
         harmonic(proc, s);
         return;
     }
+    if complex_solid {
+        unsupported(tok(proc), "a Complex vector unknown has harmonic steps in this generator", "write step sweep: harmonic(freq: [100, 200] Hz) { ... }");
+        return;
+    }
     if p == "transient" {
         transient(proc, s);
         return;
@@ -2022,7 +2041,7 @@ fn bare(n: i64) -> bool {
 // harmonic(freq: [f1, f2, ...], damping: z) of the wave physics.
 fn harmonic(proc: i64, s: Step&) {
     let fix = "write step sweep: harmonic(freq: [100, 200] Hz) { ... }, with a Complex unknown";
-    if physics != WAVE && physics != EDGE || name(proc) != "harmonic" {
+    if physics != WAVE && physics != EDGE && !complex_solid || name(proc) != "harmonic" {
         unsupported(tok(proc), "this generator has harmonic steps of a Complex unknown, and no other step of it", fix);
         return;
     }
@@ -2101,7 +2120,7 @@ fn report(item: i64) {
     let e = first(item);
     // The checks read the first row of a table column in the point.
     table_row = if kind(e) == syntax::N_AT && table_member(child(e, 1)) >= 0 { 0 } else { -1 };
-    if physics == EDGE || physics == DARCY {
+    if probe_physics() {
         edge_report(item);
         return;
     }
@@ -2241,7 +2260,7 @@ fn composite_expect(n: i64) {
 
 // An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
-    if physics == EDGE || physics == DARCY {
+    if probe_physics() {
         edge_expect(n, step);
         return;
     }
@@ -3669,7 +3688,7 @@ fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
 
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) {
     let s = steps[si];
-    if physics == EDGE || physics == DARCY {
+    if probe_physics() {
         emit_edge_step(out, si, results_dir);
         return;
     }
@@ -4163,7 +4182,8 @@ fn emit_head(elements_path: u8[:], out: u8[>..]&) {
     }
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
-    if physics == EDGE || physics == DARCY { out.append(EDGE_PRELUDE); }
+    if probe_physics() { out.append(EDGE_PRELUDE); }
+    if complex_solid { out.append(HARMONIC_PRELUDE); }
     if solid_law > 0 || has_ties() { emit_energy(out); }
 }
 
