@@ -2274,7 +2274,7 @@ fn supports() {
     for s in steps {
         var fixes = 0;
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX || b.kind == BC_SOURCE { fixes++; } }
-        if fixes == 0 && physics != WAVE {
+        if fixes == 0 && physics != WAVE && s.procedure != MODAL {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
         }
