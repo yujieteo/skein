@@ -340,6 +340,7 @@ struct Surf {
     shapes: i64[..6],
     points: f64[..48],  // x, y and z of each point of a Point let: the node nearest to each
     lims: f64[..24],    // the limits of a condition x < c or sqrt(x^2 + y^2) <= r: kind (0 coordinate, 1 radius), relation (surf_limit), axis, value or cx, cy, r
+    pcut: f64[..24],    // for the planes with a limit of their own (a && inside an ||): the plane index, axis, value and relation of the limit
     minus: i64,     // the boundary whose nodes a - b removes, or -1
     body: i64,      // the body of a contact that holds the boundary, or -1 (gen_contact.goose)
 }
@@ -736,7 +737,7 @@ recursive fn add_points(v: i64, s: Surf&) {
 
 // `let tip: Point = pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3)`.
 fn point_surf(n: i64) {
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], minus: -1, body: -1 };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: -1, body: -1 };
     set64(s.name, name(n));
     add_points(child(n, 1), s);
     surfs.push(s);
@@ -864,7 +865,7 @@ fn body(region: i64) {
     }
     set64(body_name, name(region));
     // Hexahedra with regions of materials need a grid plane on each face of a region.
-    if !structured(n) || (hex_mesh && has_regions) {
+    if !structured(n) || has_regions {
         shape_body(region);
         return;
     }
@@ -909,6 +910,7 @@ fn shape_body(region: i64) {
 let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm or abs(x) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
 var in_and = false;   // surf_parts reads the atoms of an &&
+var in_or = false;    // surf_parts reads the atoms of an ||
 
 // A limit atom `v < c`, `v <= c`, `v > c` or `v >= c` of a coordinate v, or of the
 // radius sqrt(x^2 + y^2) or x^2 + y^2 (against R^2): the nodes of the
@@ -958,7 +960,10 @@ fn limit_atom(cond: i64, s: Surf&) -> bool {
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "||" {
         let before = s.lims.len;
+        let was_or = in_or;
+        in_or = true;
         let done = surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
+        in_or = was_or;
         if done && s.lims.len > before {
             unsupported(tok(cond), "a limit inside an || would cut the planes of the other side", "make two boundaries, one for each side of the ||");
             return false;
@@ -969,8 +974,20 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "&&" {
         let was = in_and;
         in_and = true;
+        let planes = s.axes.len;
+        let lims = s.lims.len;
         let done = surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
         in_and = was;
+        // In an ||, a coordinate limit of the && cuts only the planes of the &&.
+        if done && in_or && s.lims.len == lims + 6 && s.lims[lims] == 0.0 && s.axes.len > planes && s.pcut.len + 4 * (s.axes.len - planes) <= s.pcut.cap {
+            for i in planes..s.axes.len {
+                s.pcut.push(i * 1.0);
+                s.pcut.push(s.lims[lims + 2]);
+                s.pcut.push(s.lims[lims + 3]);
+                s.pcut.push(s.lims[lims + 1]);
+            }
+            for t in 6 { s.lims.pop(); }
+        }
         return done;
     }
     if (geo == GEO_SHAPE || in_and) && limit_atom(cond, s) { return ok(); }
@@ -1105,7 +1122,7 @@ fn surface_difference(n: i64) {
         unsupported(tok(v), "a boundary difference is boundary(box) less a boundary of planes that a let names above", "write let skin: Surface = boundary(pin) - base");
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], minus: b, body: k };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: b, body: k };
     set64(s.name, name(n));
     for j in dim {
         s.axes.push(j);
@@ -1129,7 +1146,7 @@ fn surface(n: i64) {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], minus: -1, body: k };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: -1, body: k };
     set64(s.name, name(n));
     if !surf_parts(arg(v, 1), s) { return; }
     // Only limits: the whole boundary of the body.
@@ -1230,7 +1247,7 @@ fn property(word: u8[:]) -> i64 {
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
-    if physics != ELASTIC && physics != HEAT && region_laws.len > 0 {
+    if physics != ELASTIC && physics != HEAT && physics != EDGE && region_laws.len > 0 {
         unsupported(tok(base), "a material on a region of a wave, edge or Darcy physics is not in this generator", "use one material");
     }
     for &w in region_laws {
@@ -3720,6 +3737,16 @@ fn emit_region(out: u8[>..]&, si: i64) {
         out.append(")");
     }
     for a, i in s.axes {
+        var cut = -1;
+        for j in s.pcut.len / 4 { if s.pcut[4 * j] == i * 1.0 { cut = j; } }
+        if cut >= 0 {
+            format(out, if i == 0 { "elements::plane_cut(" } else { " && elements::also_plane_cut(" }, AXES[a], ", ");
+            lit(out, s.values[i]);
+            format(out, ", ", AXES[s.pcut[4 * cut + 1] as! i64], ", ");
+            lit(out, s.pcut[4 * cut + 2]);
+            format(out, ", ", s.pcut[4 * cut + 3] as! i64, ")");
+            continue;
+        }
         format(out, if i == 0 { "elements::plane(" } else { " && elements::also_plane(" }, AXES[a], ", ");
         lit(out, s.values[i]);
         out.append(")");

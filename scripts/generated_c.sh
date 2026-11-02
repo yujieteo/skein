@@ -73,6 +73,9 @@ examples/femahoy/grid_heated_bar.skn
 examples/femahoy/grid_holm_spot.skn
 examples/femahoy/grid_joule_bar.skn
 examples/femahoy/grid_resistor_bar.skn
+examples/femahoy/grid_waveguide_dielectric.skn
+examples/femahoy/grid_waveguide_step.skn
+examples/femahoy/grid_waveguide_te10.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/grid_layered_wall.skn
 examples/femahoy/grid_lame_cylinder.skn

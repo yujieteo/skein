@@ -507,6 +507,9 @@ struct Part {
     shape: i64,
     node: i64,
     rel: i64,     // 0: equal. Of `region_out` only: 2 holds the nodes at or past `value` (or `r`), 1 past it, -2 at or before it, -1 before it
+    la: i64,      // a plane only: the axis of a limit that cuts it, or -1
+    lv: f64,      // the value of that limit
+    lr: i64,      // its relation, as rel of region_out
 }
 
 var region: Part[..16] = [];
@@ -533,6 +536,11 @@ fn part_holds(p: Part, n: i64) -> bool {
     }
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
     let g = if region_body >= 0 { body_shapes[region_body] } else { body_shape };
+    if !p.hole && p.la >= 0 {
+        let v = node_x(n, p.la);
+        let cut = if p.lr == 2 { v >= p.lv - tol } else if p.lr == 1 { v > p.lv + tol } else if p.lr == -2 { v <= p.lv + tol } else { v < p.lv - tol };
+        if cut { return false; }
+    }
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (g < 0 || shape_gap(g, n) <= tol); }
     let dx = node_x(n, 0) - p.c[0];
     let dy = node_x(n, 1) - p.c[1];

@@ -36,6 +36,14 @@ var curl_coef = -1;                 // X of h = curl(u)/X or X*curl(u), or -1
 var curl_divides = false;
 var mass_terms: i64[>..];           // the coefficients of the terms c*u of the eq
 var mass_signs: f64[>..];
+var mass_ddt2: i64[>..];            // 1 for a term c*ddt2(u): -omega^2*c in a harmonic step
+var skew_form = false;              // let h = -2*skew(grad(u))/X, eq div(h) + ...: h is curl(u)/X, and h*n is cross(n, h)
+var port_bc: i64[>..];              // the token of the bc of each source term of a natural condition
+var port_node: i64[>..];            // its vector field
+var port_const: i64[>..];           // its constant factor, or -1
+var port_sign: f64[>..];
+var port_zbc: i64[>..];             // the token of a bc with a term z*(u - dot(u, n)*n), and the node of its z
+var port_znode: i64[>..];
 var gauge_tree = false;
 var darcy_k = -1;                   // k of q + k*grad(p) = 0
 var darcy_f = -1;                   // f of div(q) = f, or -1 for 0
@@ -61,6 +69,14 @@ fn edge_reset() {
     curl_divides = false;
     mass_terms.clear();
     mass_signs.clear();
+    mass_ddt2.clear();
+    skew_form = false;
+    port_bc.clear();
+    port_node.clear();
+    port_const.clear();
+    port_sign.clear();
+    port_zbc.clear();
+    port_znode.clear();
     gauge_tree = false;
     darcy_k = -1;
     darcy_f = -1;
@@ -145,13 +161,30 @@ fn edge_unknown(c: i64) {
     }
 }
 
-// `let h = curl(u)/X`, `X*curl(u)` or `curl(u)`. Another let is a value of
-// the reports.
+// The text of s with no space, newline or parenthesis.
+fn compact(s: u8[:]) -> u8[>..] {
+    var r: u8[>..] = [];
+    for ch in s { if ch != ' ' && ch != '\n' && ch != '\t' && ch != '(' && ch != ')' { r.push(ch); } }
+    return r;
+}
+
+// `let h = curl(u)/X`, `X*curl(u)` or `curl(u)`, or the form of a stress
+// tensor, `-2*skew(grad(u))/X`, whose h*n is cross(n, curl(u)/X). Another
+// let is a value of the reports.
 fn curl_let(c: i64) {
     let v = child(c, 1);
     let cu = str("curl(", unknown_name, ")");
     guard curl_name.len == 0 else { return; };
-    if source_of(v) == cu {
+    let skew = str("-2*skew(grad(", unknown_name, "))");
+    if compact(source_of(v)) == compact(skew) {
+        skew_form = true;
+        set64(curl_name, name(c));
+    } else if kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "/" && compact(source_of(child(v, 0))) == compact(skew) {
+        skew_form = true;
+        curl_coef = child(v, 1);
+        curl_divides = true;
+        set64(curl_name, name(c));
+    } else if source_of(v) == cu {
         set64(curl_name, name(c));
     } else if kind(v) == syntax::N_BINARY && (syntax::text(tok(v)) == "/" || syntax::text(tok(v)) == "*") {
         let d = syntax::text(tok(v)) == "/";
@@ -173,15 +206,17 @@ fn curl_eq(c: i64) {
     if source_of(child(c, 1)) != "0" { unsupported(tok(child(c, 1)), "the edge physics has no source in this generator", fix); }
     while kind(left) == syntax::N_BINARY && (syntax::text(tok(left)) == "+" || syntax::text(tok(left)) == "-") {
         let t = child(left, 1);
-        guard kind(t) == syntax::N_BINARY && syntax::text(tok(t)) == "*" && source_of(child(t, 1)) == unknown_name else {
-            unsupported(tok(t), str("the term '", source_of(t), "' is not c*", unknown_name), fix);
+        let ddt2 = kind(t) == syntax::N_BINARY && syntax::text(tok(t)) == "*" && source_of(child(t, 1)) == str("ddt2(", unknown_name, ")");
+        guard kind(t) == syntax::N_BINARY && syntax::text(tok(t)) == "*" && (source_of(child(t, 1)) == unknown_name || ddt2) else {
+            unsupported(tok(t), str("the term '", source_of(t), "' is not c*", unknown_name, " or c*ddt2(", unknown_name, ")"), fix);
             return;
         };
         mass_terms.push(child(t, 0));
+        mass_ddt2.push(if ddt2 { 1 } else { 0 });
         mass_signs.push(if syntax::text(tok(left)) == "-" { -1.0 } else { 1.0 });
         left = child(left, 0);
     }
-    if curl_name.len == 0 || source_of(left) != str("curl(", curl_name, ")") {
+    if curl_name.len == 0 || source_of(left) != str(if skew_form { "div(" } else { "curl(" }, curl_name, ")") {
         unsupported(tok(left), "the eq of the edge physics starts with curl(h) of the let h = curl(u)/X", fix);
     }
 }
@@ -232,7 +267,18 @@ fn edge_bc(n: i64, s: i64) -> i64 {
                                        curl_name, ") = z*", unknown_name) }
               else { str("write bc inlet: ", unknown_name, " = 1 Pa, or bc wall: dot(", flux_name, ", n) = 0 m/s") };
     let tangent = crossed(target) >= 0 && source_of(crossed(target)) == unknown_name || t == unknown_name;
-    if physics == EDGE && tangent && source_of(v) == "0" {
+    if physics == EDGE && skew_form && t == str(curl_name, "*n") {
+        // Hs*n is cross(n, h): z*(u - dot(u, n)*n) is the impedance, the other terms a field.
+        b.kind = BC_LOAD;
+        port_terms(b, v, 1.0);
+        bcs.push(b);
+        return bcs.len - 1;
+    } else if physics == EDGE && kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
+              name(first(target)) == unknown_name && axis_of(name(target)) >= 0 && source_of(v) == "0" {
+        // u.y = 0 with u.z = 0 on a plane of x holds the tangent of u. emit_edge_bc checks the pair.
+        b.comp = axis_of(name(target));
+        b.node = -1;
+    } else if physics == EDGE && tangent && source_of(v) == "0" {
         b.node = -1;
     } else if physics == EDGE && tangent && crossed(v) >= 0 {
         b.node = crossed(v);
@@ -251,6 +297,43 @@ fn edge_bc(n: i64, s: i64) -> i64 {
     }
     bcs.push(b);
     return bcs.len - 1;
+}
+
+// The terms of the value n of Hs*n = n, with sign: z*(u - dot(u, n)*n) gives
+// the impedance z of the bc, and a vector field times a constant gives a
+// source.
+recursive fn port_terms(b: Bc, n: i64, sign: f64) {
+    let k = kind(n);
+    let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
+    if k == syntax::N_BINARY && (op == "+" || op == "-") {
+        port_terms(b, child(n, 0), sign);
+        port_terms(b, child(n, 1), if op == "-" { -sign } else { sign });
+        return;
+    }
+    if k == syntax::N_UNARY && op == "-" {
+        port_terms(b, first(n), -sign);
+        return;
+    }
+    let tangential = compact(str(unknown_name, "-dot(", unknown_name, ", n)*n"));
+    var constant = -1;
+    var field = -1;
+    if k == syntax::N_BINARY && op == "*" {
+        if has_unknown(child(n, 1)) || mentions_xyz(child(n, 1)) { field = child(n, 1); constant = child(n, 0); }
+        else if has_unknown(child(n, 0)) || mentions_xyz(child(n, 0)) { field = child(n, 0); constant = child(n, 1); }
+    }
+    if field >= 0 && constant >= 0 && !has_unknown(constant) && !mentions_xyz(constant) &&
+       (compact(source_of(field)) == tangential || source_of(field) == unknown_name) && sign > 0.0 && position(port_zbc, b.tok) < 0 {
+        port_zbc.push(b.tok);
+        port_znode.push(constant);
+    } else if field >= 0 && constant >= 0 && !has_unknown(field) && !has_unknown(constant) && !mentions_xyz(constant) {
+        port_bc.push(b.tok);
+        port_node.push(field);
+        port_const.push(constant);
+        port_sign.push(sign);
+    } else {
+        unsupported(tok(n), str("the term '", source_of(n), "' of Hs*n is not in this generator"),
+                    str("write c*(", unknown_name, " - dot(", unknown_name, ", n)*n) for the impedance and c*g for a source, with g a vector of x, y and z"));
+    }
 }
 
 // --- reports and expects ---------------------------------------------------------
@@ -322,6 +405,37 @@ fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         emit_region(pre, s);
         format(pre, "    let flux_", s, " = elements::boundary_flux();\n");
         format(out, "[flux_", s, ", 0.0]");
+        return;
+    }
+    if physics == EDGE && s >= 0 && is_call(f, "dot") && syntax::child_count(f) == 3 {
+        // The integral over a boundary of dot(u, g) or dot(g, g), with g a vector of x, y and z.
+        let a = arg(f, 0);
+        let b = arg(f, 1);
+        let field = source_of(a) == unknown_name || source_of(b) == unknown_name;
+        let g = if source_of(a) == unknown_name { b } else { a };
+        if has_unknown(g) || (!field && source_of(a) != source_of(b)) {
+            probe_fail(tok(f), "the integral on a boundary is dot(u, g) or dot(g, g) with g a vector of x, y and z", PROBE_FIX);
+            return;
+        }
+        emit_region(pre, s);
+        format(pre, "    let facet_", n, " = elements::facet_integral(", if field { "true" } else { "false" }, ") { p => [");
+        if field {
+            for j in 3 {
+                if j < dim { emit_space(pre, g, j); } else { pre.append("0.0"); }
+                pre.append(", ");
+            }
+            pre.append("0.0, 0.0, 0.0");
+        } else {
+            for j in dim {
+                if j > 0 { pre.append(" + "); }
+                emit_space(pre, g, j);
+                pre.append(" * ");
+                emit_space(pre, g, j);
+            }
+            pre.append(", 0.0, 0.0, 0.0, 0.0, 0.0");
+        }
+        pre.append("] };\n");
+        format(out, "facet_", n);
         return;
     }
     let c = if kind(r) == syntax::N_NAME { codegen::find_value(name(r)) } else { -1 };
@@ -668,8 +782,10 @@ fn edge_terms() -> f64, f64[2] {
     var c: f64[2] = [0.0, 0.0];
     for t, i in mass_terms {
         let z = cval(t);
-        c[0] += mass_signs[i] * z[0];
-        c[1] += mass_signs[i] * z[1];
+        // ddt2 of a harmonic step is (im*omega)^2.
+        let k = if mass_ddt2[i] != 0 { -omega_now * omega_now } else { 1.0 };
+        c[0] += mass_signs[i] * k * z[0];
+        c[1] += mass_signs[i] * k * z[1];
     }
     return nu, c;
 }
@@ -682,6 +798,35 @@ fn emit_edge_bc(out: u8[>..]&, b: Bc) {
         out.append(if b.kind == BC_LOAD { "pressure(" } else { "normal_flux(" });
         lit(out, scalar_value(b.node));
         out.append(");\n");
+    } else if b.kind == BC_LOAD && physics == EDGE && skew_form {
+        // Hs*n = z*(u - dot(u, n)*n) + g: the impedance, then the source.
+        let zi = position(port_zbc, b.tok);
+        let z = if zi >= 0 { cval(port_znode[zi]) } else { [0.0, 0.0] };
+        out.append("impedance(");
+        lit(out, z[0]);
+        out.append(", ");
+        lit(out, z[1]);
+        out.append(");\n");
+        for t, i in port_bc {
+            if t != b.tok { continue; }
+            let c = cval(port_const[i]);
+            out.append("        let loaded = elements::traction() { p => [");
+            for part in 2 {
+                for j in 3 {
+                    if j < dim {
+                        lit(out, port_sign[i] * c[part]);
+                        out.append(" * ");
+                        emit_space(out, port_node[i], j);
+                    } else {
+                        out.append("0.0");
+                    }
+                    out.append(", ");
+                }
+            }
+            out.append("] };\n        region(loaded, ");
+            quoted(out, surfs[b.surf].name);
+            out.append(");\n");
+        }
     } else if b.kind == BC_LOAD {
         let z = cval(b.node);
         out.append("impedance(");
@@ -689,6 +834,8 @@ fn emit_edge_bc(out: u8[>..]&, b: Bc) {
         out.append(", ");
         lit(out, z[1]);
         out.append(");\n");
+    } else if b.comp >= 0 {
+        out.append("tangent() { p => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };\n");
     } else {
         out.append("tangent() { p => [");
         for j in 3 {
@@ -700,6 +847,28 @@ fn emit_edge_bc(out: u8[>..]&, b: Bc) {
     out.append("        region(held, ");
     quoted(out, surfs[b.surf].name);
     out.append(");\n    }\n");
+}
+
+// Whether bc k is the first of the bcs u.a = 0 of its boundary. The boundary
+// must be planes of one axis, and the bcs must hold the two other components,
+// so they hold the tangent of u.
+fn tangent_pair(list: Bc[:], k: i64) -> bool {
+    var mask = 0;
+    for b, i in list {
+        if b.comp < 0 || b.surf != list[k].surf { continue; }
+        if i < k { return false; }
+        mask |= 1 << b.comp;
+    }
+    let sf = surfs[list[k].surf];
+    var plane = sf.axes.len > 0 && sf.shapes.len == 0 && !sf.hole;
+    for a in sf.axes { if a != sf.axes[0] { plane = false; } }
+    let want = if plane { 7 - (1 << sf.axes[0]) } else { -1 };
+    if dim != 3 || !plane || mask != want {
+        unsupported(list[k].tok, "the components of u that a bc sets to 0 are not the tangent of u on planes of one axis",
+                    str("write bc ", sf.name, ": u.y = 0 and bc ", sf.name, ": u.z = 0 on a plane of x, or cross(n, u) = 0"));
+        return false;
+    }
+    return true;
 }
 
 // The source text of n on one line.
@@ -782,8 +951,30 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     out.append(", ");
     lit(out, thickness);
     out.append(");\n");
+    if physics == EDGE {
+        let base = material_node;
+        for w in region_laws {
+            material_node = w.item;
+            let nu, c = edge_terms();
+            format(out, "    cells(elements::edge_in(", w.g, ", ");
+            lit(out, nu);
+            out.append(", ");
+            lit(out, c[0]);
+            out.append(", ");
+            lit(out, c[1]);
+            out.append("), ");
+            quoted(out, w.label);
+            out.append(");\n");
+        }
+        material_node = base;
+    }
     // The fixed values first, then the gauge, which keeps them.
-    for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX { emit_edge_bc(out, b); } }
+    let step_bcs = active[s.first_bc..s.first_bc + s.bc_count];
+    for b, k in step_bcs {
+        if b.kind != BC_FIX { continue; }
+        if b.comp >= 0 && !tangent_pair(step_bcs, k) { continue; }
+        emit_edge_bc(out, b);
+    }
     for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_LOAD { emit_edge_bc(out, b); } }
     if gauge_tree { out.append("    elements::gauge();\n"); }
     out.append("    solve(");

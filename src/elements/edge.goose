@@ -458,6 +458,81 @@ fn add_impedance() {
     }
 }
 
+// The point of the cell c at the barycentric coordinates l.
+fn edge_cell_point(c: i64, l: f64[4]) -> f64[3] {
+    var p: f64[3] = [0.0; 3];
+    for v in dim + 1 {
+        for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
+    }
+    return p;
+}
+
+// The natural condition cross(n, h) = g of the region, with g = G(p) as in
+// edge_source (the real parts of the 3 components, then the imaginary parts).
+// The load gets -∮ g · v_t. It gives the number of facets.
+fn edge_traction<G>() -> i64 {
+    guard physics == EDGE && dofs_sized() else { abort("edge_traction: an edge physics and the arrays of the dofs"); }
+    var count = 0;
+    let le = local_edges();
+    var w: f64[18] = [0.0; 18];
+    var cw: f64[18] = [0.0; 18];
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !edge_facet_on(c, f) { continue; }
+            let n, size = facet_normal(c, f);
+            for q in quad_count(dim - 1) {
+                let l, wt = facet_point(f, q);
+                edge_basis(c, l, w, cw);
+                let g: f64[6] = G(edge_cell_point(c, l));
+                for a in le {
+                    var gr = 0.0;
+                    var gi = 0.0;
+                    var dn = 0.0;
+                    for t in 3 { dn += w[3 * a + t] * n[t]; }
+                    for t in 3 {
+                        let wt_a = w[3 * a + t] - dn * n[t];
+                        gr += g[t] * wt_a;
+                        gi += g[3 + t] * wt_a;
+                    }
+                    let d = 2 * cell_edge[le * c + a];
+                    load[d] -= gr * wt * size;
+                    load[d + 1] -= gi * wt * size;
+                }
+            }
+            count++;
+        }
+    }
+    return count;
+}
+
+// The integral over the facets of the region of the dot product of u with
+// the real field g = G(p) (field), or of the scalar G(p)[0] (not field). It
+// gives the real and the imaginary part.
+fn edge_facet_integral<G>(field: bool) -> f64[2] {
+    guard physics == EDGE && sol.len == dof_total() else { abort("edge_facet_integral: an edge physics and a solution"); }
+    var s: f64[2] = [0.0, 0.0];
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !edge_facet_on(c, f) { continue; }
+            let n, size = facet_normal(c, f);
+            for q in quad_count(dim - 1) {
+                let l, wt = facet_point(f, q);
+                let g: f64[6] = G(edge_cell_point(c, l));
+                if field {
+                    let u = edge_cell_value(c, l, false);
+                    for t in 3 {
+                        s[0] += u[t] * g[t] * wt * size;
+                        s[1] += u[3 + t] * g[t] * wt * size;
+                    }
+                } else {
+                    s[0] += g[0] * wt * size;
+                }
+            }
+        }
+    }
+    return s;
+}
+
 fn clear_impedance() {
     imp_facets.clear();
     imp_z.clear();

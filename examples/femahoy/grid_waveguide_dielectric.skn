@@ -37,7 +37,7 @@ material ptfe {
 }
 
 mesh m on guide {
-    size: 1.5 mm
+    size: 2 mm
     cell: tet
 }
 
