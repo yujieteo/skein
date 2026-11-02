@@ -1,4 +1,4 @@
-// A limit inside an || would cut the planes of the other side: skein run must refuse it
+// A round limit inside an || would cut the planes of the other side: skein run must refuse it
 // and not select the wrong boundary.
 
 model kirsch_hole: 3d, mm_N_MPa_s
@@ -16,7 +16,7 @@ let hole: Surface = boundary(plate, bore)
 let x_cut: Surface = boundary(plate, x == 0 mm)
 let y_cut: Surface = boundary(plate, y == 0 mm)
 let bottom: Surface = boundary(plate, z == 0 mm)
-let far_end: Surface = boundary(plate, x == w || y == w && z > 0.5 mm)
+let far_end: Surface = boundary(plate, x == w || y == w && sqrt(x^2 + y^2) > 10 mm)
 
 material plate_mat {
     E: Pressure = 200 GPa

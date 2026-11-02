@@ -264,6 +264,16 @@ fn tangent<G>() -> bool { return fix_tangent() { p => G(p) } > 0; }
 // holds no facet.
 fn impedance(z_re: f64, z_im: f64) -> bool { return edge_impedance([z_re, z_im]) > 0; }
 
+// The natural condition cross(n, h) = g of the edge physics on the
+// region, with g = G(p) as in `current`. False if the region holds no
+// facet.
+fn traction<G>() -> bool { return edge_traction() { p => G(p) } > 0; }
+
+// The integral over the region of the dot product of u with the real
+// field g = G(p) (f64[6], the first 3 values), or with `field` false of
+// the scalar G(p)[0]: its real and imaginary part.
+fn facet_integral<G>(field: bool) -> f64[2] { return edge_facet_integral(field) { p => G(p) }; }
+
 // The tree gauge of the edge physics (`gauge: tree`): holds at 0 the
 // edges of a spanning tree of the cells with c = 0. Call it after the
 // essential conditions. It gives the edges of the tree.
@@ -347,11 +357,32 @@ fn plane(axis: i64, value: f64) -> bool {
     return also_plane(axis, value);
 }
 
+// Adds the plane `axis` = `value` without the nodes that the limit on
+// coordinate `la` removes (relation `lr`, as in except_coord), so a limit
+// cuts only this plane of the union. It gives false when the plane holds no node.
+fn also_plane_cut(axis: i64, value: f64, la: i64, lv: f64, lr: i64) -> bool {
+    guard axis >= 0 && axis < 3 && la >= 0 && la < 3 && region.len < 16 && (lr == 2 || lr == 1 || lr == -2 || lr == -1) else {
+        abort("also_plane_cut: 0 <= axis < 3, a limit axis, a relation and at most 16 parts");
+    }
+    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: 0, la: la, lv: lv, lr: lr });
+    let k = region.len - 1;
+    for n in node_count() { if on_part(n, k) { return true; } }
+    return false;
+}
+
+// The same for the first plane of a region.
+fn plane_cut(axis: i64, value: f64, la: i64, lv: f64, lr: i64) -> bool {
+    region.clear();
+    region_out.clear();
+    region_body = -1;
+    return also_plane_cut(axis, value, la, lv, lr);
+}
+
 // Adds a plane to the region of the last `plane` or `hole` call, so the
 // region is their union. It gives false when the plane holds no node.
 fn also_plane(axis: i64, value: f64) -> bool {
     guard axis >= 0 && axis < 3 && region.len < 16 else { abort("also_plane: 0 <= axis < 3 and at most 16 parts"); }
-    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: 0 });
+    region.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: 0, la: -1, lv: 0.0, lr: 0 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
@@ -364,7 +395,7 @@ fn hole(cx: f64, cy: f64, r: f64) -> bool {
     region.clear();
     region_out.clear();
     region_body = -1;
-    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1, rel: 0 });
+    region.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1, rel: 0, la: -1, lv: 0.0, lr: 0 });
     return region_node_count() > 0;
 }
 
@@ -381,7 +412,7 @@ fn surface(g: i64) -> bool {
 // selects a region. It gives false when the surface holds no node.
 fn also_surface(g: i64) -> bool {
     guard g >= 0 && region.len < 16 else { abort("also_surface: a shape and at most 16 parts"); }
-    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1, rel: 0 });
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1, rel: 0, la: -1, lv: 0.0, lr: 0 });
     let k = region.len - 1;
     for n in node_count() { if on_part(n, k) { return true; } }
     return false;
@@ -408,7 +439,7 @@ fn also_point(x: f64, y: f64, z: f64) -> bool {
             best = n;
         }
     }
-    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: -1, node: best, rel: 0 });
+    region.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: -1, node: best, rel: 0, la: -1, lv: 0.0, lr: 0 });
     return true;
 }
 
@@ -430,7 +461,7 @@ fn mean_stress(i: i64, j: i64) -> f64 { return body_mean(FIELD_STRESS, 3 * i + j
 // that plane. It gives false when the region holds no node.
 fn except_plane(axis: i64, value: f64) -> bool {
     guard axis >= 0 && axis < 3 && region_out.len < 8 else { abort("except_plane: 0 <= axis < 3 and at most 8 parts"); }
-    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: 0 });
+    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: 0, la: -1, lv: 0.0, lr: 0 });
     return region_node_count() > 0;
 }
 
@@ -440,21 +471,21 @@ fn except_plane(axis: i64, value: f64) -> bool {
 // It gives false when the region holds no node.
 fn except_coord(axis: i64, value: f64, rel: i64) -> bool {
     guard axis >= 0 && axis < 3 && region_out.len < 8 && (rel == 2 || rel == 1 || rel == -2 || rel == -1) else { abort("except_coord: 0 <= axis < 3, a relation and at most 8 parts"); }
-    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: rel });
+    region_out.push(Part { hole: false, axis: axis, value: value, c: [0.0, 0.0], r: 0.0, shape: -1, node: -1, rel: rel, la: -1, lv: 0.0, lr: 0 });
     return region_node_count() > 0;
 }
 
 // The same by the distance r from the z axis through (cx, cy).
 fn except_radius(cx: f64, cy: f64, r: f64, rel: i64) -> bool {
     guard region_out.len < 8 && r > 0.0 && (rel == 2 || rel == 1 || rel == -2 || rel == -1) else { abort("except_radius: r > 0, a relation and at most 8 parts"); }
-    region_out.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1, rel: rel });
+    region_out.push(Part { hole: true, axis: 0, value: 0.0, c: [cx, cy], r: r, shape: -1, node: -1, rel: rel, la: -1, lv: 0.0, lr: 0 });
     return region_node_count() > 0;
 }
 
 // Removes the nodes of the surface of shape g from the region.
 fn except_surface(g: i64) -> bool {
     guard g >= 0 && region_out.len < 8 else { abort("except_surface: a shape and at most 8 parts"); }
-    region_out.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1, rel: 0 });
+    region_out.push(Part { hole: false, axis: 0, value: 0.0, c: [0.0, 0.0], r: 0.0, shape: g, node: -1, rel: 0, la: -1, lv: 0.0, lr: 0 });
     return region_node_count() > 0;
 }
 
