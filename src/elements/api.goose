@@ -40,6 +40,7 @@ import .mixed;
 import .material;
 import .solid;
 import .contact;
+import .heat_transient;
 
 let X = 0;
 let Y = 1;
@@ -622,6 +623,14 @@ fn set_density(rho: f64) {
     guard rho > 0.0 else { abort("set_density: rho > 0"); }
     density = rho;
 }
+
+// The transient heat step (heat_transient.goose): the capacity rho cp, the
+// number of time steps for `end` and dt in the scheme with theta (1 backward
+// Euler, 1/2 Crank-Nicolson), one time step, and the end of the step.
+fn set_capacity(c: f64) { heat_capacity(c); }
+fn heat_begin(end: f64, dt: f64, theta: f64) -> i64 { return transient_heat_begin(end, dt, theta); }
+fn heat_advance() -> bool { return transient_heat_advance(); }
+fn heat_end() { transient_heat_end(); }
 
 // The `count` lowest modes of K x = ω² M x on the free dofs (spec §14.2).
 // False if LOBPCG does not converge.

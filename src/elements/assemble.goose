@@ -45,6 +45,9 @@ var curve_lo = 0.0;
 var curve_step = 0.0;
 var curve_k: f64[>..] = [];
 var initial_value = 0.0;   // the temperature of the free nodes before the first step
+var state_valid = false;   // a step solved: `held` is its temperature, the start of a transient step
+var keep_factor = false;   // the direct solve keeps its factor between solves of the same matrix
+var factor_ready = false;
 
 var fixed: u8[>..] = [];
 var prescribed: f64[>..] = [];

@@ -124,6 +124,7 @@ let BASE_UNITS = [
     // skein-elements: the heat units of src/elements/gen.goose. Each system uses the kelvin.
     BaseUnit { name: "W", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
     BaseUnit { name: "K", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
+    BaseUnit { name: "J", u: Unit { f: 1.0, l: 4, m: 2, t: -4 } },
     // The frequency of eigenvalue(k) of a modal step (src/elements/eigen.goose).
     BaseUnit { name: "Hz", u: Unit { f: 1.0, l: 0, m: 0, t: -2 } },
     // The units of the edge physics (src/elements/gen_edge.goose). Each system uses the ampere,
@@ -178,7 +179,7 @@ fn unit_name(t: i64) -> Unit {
         }
     }
     unsupported(t, str("the unit '", word, "' is not in this slice"),
-                "use m, g, t, s, N, Pa, bar, W, K, Hz, A, V, C or deg, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
+                "use m, g, t, s, N, Pa, bar, W, J, K, Hz, A, V, C or deg, with a prefix n, u, m, c, k, M or G, for example mm, kN or GPa");
     return Unit { f: 1.0, l: 0, m: 0, t: 0 };
 }
 

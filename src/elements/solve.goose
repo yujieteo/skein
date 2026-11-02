@@ -99,7 +99,10 @@ fn solve_system() -> bool {
     } else {
         converged = if rad_count() > 0 { radiation_solve(start, key, warm) } else { linear_solve(start, key, warm) };
     }
-    if converged { solvers::warm_keep(key, sol); }
+    if converged {
+        solvers::warm_keep(key, sol);
+        state_valid = true;
+    }
     return converged;
 }
 
@@ -213,8 +216,14 @@ fn direct_static(start: f64, key: i64) -> bool {
     solvers::multiply(row_start, col, val, sol, du);
     for d in n { r[d] = if fixed[d] != 0 { 0.0 } else { load[d] + assembled_source[d] - du[d] }; }
     var done = key > 0 && solvers::nested_reuse(key, row_start, col, val, fixed, r, du);
+    if !done && keep_factor && factor_ready {
+        // A transient step: the matrix is the same, so the factor of the first time step solves the next.
+        solvers::nested_solve(r, du, fixed);
+        done = true;
+    }
     if !done {
         done = solvers::nested_factor(row_start, col, val, fixed);
+        factor_ready = done;
         if done {
             if key > 0 { solvers::nested_keep(key, row_start, col, val, fixed); }
             solvers::nested_solve(r, du, fixed);
