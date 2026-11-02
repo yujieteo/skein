@@ -149,7 +149,9 @@ gives the roadmap phase that closes the gap:
   the cells of femahoy. The ring of
   [hyperelastic_tube.skn](../examples/femahoy/hyperelastic_tube.skn), the
   rod of
-  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn) and
+  [taylor_bar_impact.skn](../examples/femahoy/taylor_bar_impact.skn), the
+  bar of
+  [dynamics_bar_step.skn](../examples/femahoy/dynamics_bar_step.skn) and
   the parts of
   [contact_cattaneo.skn](../examples/femahoy/contact_cattaneo.skn) use
   quadratic triangles and tetrahedra: the nonlinear solid and the contact
@@ -311,7 +313,7 @@ the feature. The model of a case has the same name, with `_` in place of
 | Linear tetrahedra of the grid solver (heat, conduction) | grid-pipe-wall, grid-plate-hole-ccx, grid-coax-capacitor, grid-holm-spot, grid-fibre-composite-cell | `cell: tet`, `method p: cg { order: 1 }` | [§9.1](skein_spec.md#91-mesh), [§13](skein_spec.md#13-methods) |
 | `C3D8`, and the hex8 heat cells of the grid solver | birth-death-column, grid-cooling-slab, grid-heated-bar, grid-layered-wall, grid-radiating-fin-ccx, grid-radiation-slab, grid-resistor-bar, grid-joule-bar, grid-conductivity-slab | `cell: hex` on a `box`, `order: 1` | [§9.1](skein_spec.md#91-mesh), [§13](skein_spec.md#13-methods) |
 | `C3D8I`, and the hex8 with incompatible modes of the grid solver | grid-cantilever, grid-bimetal-strip, grid-frequency-cantilever, grid-free-block-modes-ccx, turek-hron-fsi1 | `cell: hex`, `order: 1`, `family: incompatible` | [§13](skein_spec.md#13-methods) |
-| `C3D20`, `C3D20R`, `C3D8R`, `CPE8R`, `S8R` (serendipity, reduced integration) | frequency-cantilever, laminate-pagano, dynamics-bar-step, taylor-bar-impact, submodel-kirsch-hole, hyperelastic-tube | `family: serendipity` with `order: 2`, `quadrature: reduced`, or both | [§13](skein_spec.md#13-methods) |
+| `C3D20`, `C3D20R`, `C3D8R`, `CPE8R`, `S8R` (serendipity, reduced integration) | frequency-cantilever, laminate-pagano, taylor-bar-impact, submodel-kirsch-hole, hyperelastic-tube | `family: serendipity` with `order: 2`, `quadrature: reduced`, or both | [§13](skein_spec.md#13-methods) |
 | A hex grid through layers or a union of blocks | warpage-thick-copper, grid-heated-block-ccx, grid-layered-wall, grid-laminate-cell | `cell: hex` on a union of `box` regions, with a grid plane on each face of each box | [§9.1](skein_spec.md#91-mesh), [§9.2](skein_spec.md#92-mesh-generation) |
 | A hex or quad grid on a region that is not a union of boxes or rects | warpage-2p5d-frame, submodel-kirsch-hole, hyperelastic-tube, contact-cattaneo, turek-hron-fsi1, taylor-bar-impact | `cell: hex` or `cell: quad`: a grid in r and θ, Blossom-Quad, or a swept or mapped hex grid | [§9.1](skein_spec.md#91-mesh), [§9.2](skein_spec.md#92-mesh-generation) |
 | Plane strain elements (`CPE4`, `CPE6`, `CPE8`, `CPE8R`) | submodel-kirsch-hole, fracture-centre-crack, contact-cattaneo, hyperelastic-tube, topology-mbb-beam | header `2d`, `cell: tri` or `cell: quad`, `assume plane_strain(th)` | [§3](skein_spec.md#3-grammar), [§9.1](skein_spec.md#91-mesh), [§11.1](skein_spec.md#111-assumption-table) |
