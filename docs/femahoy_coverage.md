@@ -190,9 +190,23 @@ gives the roadmap phase that closes the gap:
   [line_stripline.skn](../examples/femahoy/line_stripline.skn).
   Still open: the stress of
   [grid_heated_block_stress_ccx.skn](../examples/femahoy/grid_heated_block_stress_ccx.skn)
-  (hex cells on a union of boxes, laws by region) and the flow coupling of
-  [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn) and
-  [cht_heated_channel.skn](../examples/femahoy/cht_heated_channel.skn).
+  (hex cells on a union of boxes, laws by region).
+- The flow coupling runs two more models with `skein run`:
+  [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn)
+  (Boussinesq buoyancy, both Ra cases of the study) and
+  [cht_heated_channel.skn](../examples/femahoy/cht_heated_channel.skn)
+  (a solid and a fluid on one mesh, T within 0.006 K). `src/flow` has a T
+  dof at each node, a conductivity for each cell, a body force that is
+  affine in T, natural boundary fluxes, and the mean, the integral and the
+  maximum of any field expression on a region. A banded LU solve
+  (`src/solvers/band.goose`) replaces GMRES for the thin channel.
+- Not run yet in the flow batch, each needs a new solver family:
+  naca0012_ladson and naca23012_flap (the generator has no `nu`, no turbulence
+  model in a written-out physics), wedge_oblique_shock (compressible Euler
+  with a vector unknown in `fv`), dam_break_vof and dam_break_martin_moyce
+  (two-phase VOF), turek_hron_fsi1 (a second physics in the flow generator),
+  slider_crank (a multibody first-order form) and acoustics_pulsating_sphere
+  (3D acoustic reports at a point and on a region).
 
 - Structural models of phase 3 run with `skein run` and pass their `expect`:
   [buckling_column.skn](../examples/femahoy/buckling_column.skn),

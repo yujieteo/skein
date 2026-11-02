@@ -15,6 +15,13 @@
 //
 // A turbulent flow (rans.goose) has P1 cells, and each vertex then has 5
 // dofs: vx, vy, p, k and w.
+//
+// A thermal flow (heat.goose) has a temperature T at each node: a vertex has
+// vx, vy, p and T, and an edge node has vx, vy and T. A cell of the mesh is
+// in the fluid (part 0) or in a solid (part 1). A solid cell has only the
+// rows of T, with its own conductivity, so that T is continuous across the
+// interface and the heat flux that leaves the solid goes into the fluid
+// (conjugate heat transfer).
 import std;
 import math;
 import dictionary;
@@ -25,6 +32,7 @@ let EDGES: i64[6] = [0, 1, 1, 2, 2, 0];
 
 var order = 1;          // the order of the velocity; the pressure has order 1
 var turbulent = false;  // the k-ω SST unknowns k and w at each vertex
+var thermal = false;    // the temperature T at each node (heat.goose)
 var per_cell = 3;
 var vertex_count = 0;
 var coords: f64[>..] = [];      // x and y of each node
@@ -33,6 +41,12 @@ var on_boundary: u8[>..] = [];  // 1 for a node on the boundary of the mesh
 var first_dof: i64[>..] = [];   // the first dof of each node
 var twin: i64[>..] = [];        // the node whose dofs a node shares (periodic), or -1
 var dof_total = 0;
+let MAX_CELL_DOFS = 21; // P2 velocity, P1 pressure and P2 temperature
+var part: u8[>..] = [];         // 0 for a fluid cell, 1 for a solid cell (empty: all fluid)
+var edge_free: u8[>..] = [];    // 1 for the edge of a cell that no other cell of its part has
+var on_part_boundary: u8[>..] = []; // 1 for a node on the boundary of the solid cells
+var in_fluid: u8[>..] = [];     // 1 for a node of a fluid cell
+var region_part = 0;            // the part of the last select call
 var diameter = 0.0;             // of the bounding box
 
 // The sparsity of the Jacobian: CSR, with the columns of each row in
@@ -46,9 +60,24 @@ var region: u8[>..] = [];
 // A turbulent flow has the unknowns k and w. Call it before the mesh.
 fn set_turbulent(on: bool) { turbulent = on; }
 
+// A thermal flow has the unknown T. Call it before the mesh.
+fn set_thermal(on: bool) {
+    guard !(on && turbulent) else { abort("set_thermal: a flow is thermal or turbulent"); }
+    thermal = on;
+}
+
 fn node_count() -> i64 { return coords.len / 2; }
 fn cell_count() -> i64 { return conn.len / per_cell; }
-fn vertex_dofs() -> i64 { return if turbulent { 5 } else { 3 }; }
+fn vertex_dofs() -> i64 { return if turbulent { 5 } else if thermal { 4 } else { 3 }; }
+fn edge_dofs() -> i64 { return if thermal { 3 } else { 2 }; }
+
+fn is_solid_cell(c: i64) -> bool { return part.len > 0 && part[c] != 0; }
+
+// The dof of T at node n of a thermal flow.
+fn tdof(n: i64) -> i64 {
+    guard thermal && n >= 0 && n < first_dof.len else { abort("tdof: a thermal flow and n < node_count()"); }
+    return first_dof[n] + (if n < vertex_count { 3 } else { 2 });
+}
 fn dof_count() -> i64 { return dof_total; }
 
 fn vdof(n: i64, comp: i64) -> i64 {
@@ -75,13 +104,17 @@ fn cell_node(c: i64, l: i64) -> i64 {
 // The dofs of cell c in the local sequence of cell.goose: vx and vy of
 // each node, then p of each vertex, then for a turbulent flow k and then w
 // of each vertex.
-fn cell_dofs(c: i64, dofs: i64[15]&) {
+fn cell_dofs(c: i64, dofs: i64[21]&) {
     guard c >= 0 && c < cell_count() else { abort("cell_dofs: c < cell_count()"); }
     for l in per_cell {
         dofs[2 * l] = vdof(cell_node(c, l), 0);
         dofs[2 * l + 1] = vdof(cell_node(c, l), 1);
     }
     for k in 3 { dofs[2 * per_cell + k] = pdof(cell_node(c, k)); }
+    if thermal {
+        for l in per_cell { dofs[2 * per_cell + 3 + l] = tdof(cell_node(c, l)); }
+        return;
+    }
     guard turbulent else { return; }
     for k in 3 {
         dofs[2 * per_cell + 3 + k] = turbulence_dof(cell_node(c, k), 0);
@@ -89,21 +122,31 @@ fn cell_dofs(c: i64, dofs: i64[15]&) {
     }
 }
 
-fn cell_dof_count() -> i64 { return 2 * per_cell + (if turbulent { 9 } else { 3 }); }
+fn cell_dof_count() -> i64 { return 2 * per_cell + (if turbulent { 9 } else if thermal { 3 + per_cell } else { 3 }); }
 
 // Takes the vertices `xy` (x and y of each) and the triangles `tri` (3
 // vertices each), turns each triangle to positive orientation, and adds
 // the edge nodes for order 2.
 fn mesh_from_arrays(xy: f64[:], tri: i64[:], ord: i64) {
+    var none: u8[>..] = [];
+    mesh_from_parts(xy, tri, none[..], ord);
+}
+
+// The same with the part of each triangle: 0 for the fluid, 1 for a solid
+// (conjugate heat transfer). No parts: all triangles are fluid.
+fn mesh_from_parts(xy: f64[:], tri: i64[:], parts: u8[:], ord: i64) {
     guard (ord == 1 || ord == 2) && (ord == 1 || !turbulent) && xy.len % 2 == 0 && tri.len % 3 == 0 && tri.len > 0 else {
         abort("mesh_from_arrays: order 1 or 2 (1 for a turbulent flow), and triangles");
     }
+    guard parts.len == 0 || (thermal && parts.len == tri.len / 3) else { abort("mesh_from_parts: parts of a thermal flow, one for each triangle"); }
     order = ord;
     per_cell = if ord == 1 { 3 } else { 6 };
     vertex_count = xy.len / 2;
     coords.clear();
     coords.append(xy);
     conn.clear();
+    part.clear();
+    part.append(parts);
     var mid = dictionary<i64, i64> {};
     var count = dictionary<i64, i64> {};
     for c in tri.len / 3 {
@@ -121,7 +164,7 @@ fn mesh_from_arrays(xy: f64[:], tri: i64[:], ord: i64) {
             let a = v[EDGES[2 * e]];
             let b = v[EDGES[2 * e + 1]];
             let key = min(a, b) * vertex_count + max(a, b);
-            count.update(key, 0) { it += 1; };
+            count.update(2 * key + (if parts.len > 0 { parts[c] as! i64 } else { 0 }), 0) { it += 1; };
             guard ord == 2 else { continue; }
             let m = mid.get_or_insert(key, node_count());
             if m == node_count() {
@@ -154,23 +197,54 @@ fn read_mesh(dir: const u8[:], ord: i64) -> bool {
     let xy, xy_ok = from_bytes<f64[>..]>(a);
     let tri, tri_ok = from_bytes<i64[>..]>(b);
     guard xy_ok && tri_ok && tri.len > 0 else { return false; }
-    mesh_from_arrays(xy, tri, ord);
+    var c: u8[>..] = [];
+    var parts: u8[>..] = [];
+    if thermal && read_file(str(dir, "/flow.part"), c) {
+        let p, p_ok = from_bytes<u8[>..]>(c);
+        guard p_ok && p.len == tri.len / 3 else { return false; }
+        parts.append(p);
+    }
+    mesh_from_parts(xy, tri, parts[..], ord);
     return true;
 }
 
-// Marks the nodes of the edges of one cell, and sets the diameter.
+// Marks the nodes of the edges of one cell, and sets the diameter. `count`
+// holds, for each edge and part (key 2 e + part), the cells of that part
+// that have the edge. A node is on the boundary of the fluid, or on the
+// boundary of the solid cells (on_part_boundary).
 fn mark_boundary(count: dictionary<i64, i64>&, mid: dictionary<i64, i64>&) {
     on_boundary.clear();
+    on_part_boundary.clear();
+    in_fluid.clear();
     region.clear();
     for n in node_count() {
         on_boundary.push(0);
+        on_part_boundary.push(0);
+        in_fluid.push(0);
         region.push(0);
+    }
+    edge_free.clear();
+    for c in cell_count() {
+        for k in per_cell { if !is_solid_cell(c) { in_fluid[cell_node(c, k)] = 1; } }
+        for e in 3 {
+            let a = cell_node(c, EDGES[2 * e]);
+            let b = cell_node(c, EDGES[2 * e + 1]);
+            let key = 2 * (min(a, b) * vertex_count + max(a, b)) + (if is_solid_cell(c) { 1 } else { 0 });
+            edge_free.push(if count.get_or_insert(key, 0) == 1 { 1 } else { 0 });
+        }
     }
     count.each() { key, k =>
         if k == 1 {
-            on_boundary[key / vertex_count] = 1;
-            on_boundary[key % vertex_count] = 1;
-            if mid.contains(key) { on_boundary[mid.get_or_insert(key, 0)] = 1; }
+            let e = key / 2;
+            if key % 2 == 0 {
+                on_boundary[e / vertex_count] = 1;
+                on_boundary[e % vertex_count] = 1;
+                if mid.contains(e) { on_boundary[mid.get_or_insert(e, 0)] = 1; }
+            } else {
+                on_part_boundary[e / vertex_count] = 1;
+                on_part_boundary[e % vertex_count] = 1;
+                if mid.contains(e) { on_part_boundary[mid.get_or_insert(e, 0)] = 1; }
+            }
         }
     };
     var lo: f64[2] = [coords[0], coords[1]];
@@ -267,7 +341,7 @@ fn order_nodes() {
         let v = seq[n - 1 - i];
         if twin[v] >= 0 { continue; }
         first_dof[v] = d;
-        d += if v < vertex_count { vertex_dofs() } else { 2 };
+        d += if v < vertex_count { vertex_dofs() } else { edge_dofs() };
     }
     for v in n {
         if twin[v] >= 0 { first_dof[v] = first_dof[twin[v]]; }
@@ -303,7 +377,7 @@ fn periodic(px: f64, py: f64) -> bool {
 fn build_pattern() {
     let n = dof_count();
     var pairs: i64[>..] = [];
-    var dofs: i64[15] = [0; 15];
+    var dofs: i64[21] = [0; 21];
     let k = cell_dof_count();
     for c in cell_count() {
         cell_dofs(c, dofs);
@@ -334,6 +408,7 @@ fn tolerance() -> f64 { return 1.0e-6 * diameter; }
 fn select_boundary<P>() -> bool {
     guard region.len == node_count() && cell_count() > 0 else { abort("select_boundary: a mesh"); }
     var found = false;
+    region_part = 0;
     for n in node_count() {
         region[n] = if on_boundary[n] != 0 && P(coords[2 * n], coords[2 * n + 1]) { 1 } else { 0 };
     }
@@ -346,6 +421,19 @@ fn select_boundary<P>() -> bool {
         }
     }
     for n in node_count() { if region[n] != 0 { found = true; } }
+    return found;
+}
+
+// Selects the nodes on the boundary of the solid cells where P(x, y) holds
+// (a thermal flow with a solid, heat.goose).
+fn select_solid_part<P>() -> bool {
+    guard region.len == node_count() && cell_count() > 0 && part.len > 0 else { abort("select_solid_part: a mesh with solid cells"); }
+    var found = false;
+    region_part = 1;
+    for n in node_count() {
+        region[n] = if on_part_boundary[n] != 0 && P(coords[2 * n], coords[2 * n + 1]) { 1 } else { 0 };
+        if region[n] != 0 { found = true; }
+    }
     return found;
 }
 

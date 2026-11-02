@@ -33,8 +33,8 @@ material air {
 }
 
 mesh m on cav {
-    size: a/129
-    cell: quad
+    size: a/32
+    cell: tri
 }
 
 // Boussinesq flow. The body force has the density change in it, so the model needs no
@@ -49,11 +49,10 @@ physics flow on cav solves v: Vector<Velocity>, p: Pressure, T: Temperature = T0
     eq rho*cp*dot(v, grad(T)) + div(q) = 0
 }
 
-method flow: fv {
+method flow: cg {
     mesh: m
-    gradient: green_gauss
-    flux: central
-    pv_coupling: rhie_chow
+    order: { v: 2, p: 1 }
+    stabilize: supg_pspg
 }
 
 step steady: static {

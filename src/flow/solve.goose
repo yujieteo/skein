@@ -13,6 +13,7 @@ import solvers from "../solvers";
 import .mesh;
 import .cell;
 import .rans;
+import .heat;
 
 let NEWTON_MAX = 30;            // the most Newton steps
 let NEWTON_SUFFICIENT = 1.0e-4; // the Armijo constant of the line search
@@ -32,6 +33,16 @@ var lu: f64[>..] = [];
 var pre: f64[>..] = [];     // the matrix of the preconditioner
 var diag: i64[>..] = [];
 var lumped: f64[>..] = [];  // the lumped mass of each dof of v, k and w (turbulent)
+
+// A thermal flow with a narrow band solves each Newton step with the banded
+// LU of src/solvers/band.goose. Reason: on the heated channel of 90 mm by 2
+// mm, GMRES(150) with ILU(0) did not converge in 5000 iterations on 25,000
+// dofs, and the banded LU of its 40 dofs width took a second.
+let BAND_MAX = 200000000;   // the most entries of the band (1.6 GB)
+var use_band = false;
+var band_kl = 0;
+var band_ku = 0;
+var band_work: f64[>..] = [];
 
 var newton_steps = 0;
 var linear_iterations = 0;
@@ -77,7 +88,15 @@ fn clear_bcs() {
     // The matrices and the solve of solve_steady: the basis of GMRES, f, du,
     // trial, r, z and the `where` of ILU(0). Each worker of the assembly
     // copies the mesh and u.
-    solvers::memory_check("flow newton gmres ilu0", col.len, n, LINEAR_RESTART + 7, 8 * (coords.len + conn.len + first_dof.len + n), "");
+    use_band = false;
+    band_work.clear();
+    if thermal {
+        band_kl, band_ku = solvers::band_widths(row_start, col);
+        use_band = solvers::band_size(n, band_kl, band_ku) <= BAND_MAX;
+    }
+    let band_vectors = if use_band { 2 * band_kl + band_ku + 1 } else { 0 };
+    solvers::memory_check("flow newton gmres ilu0", col.len, n, LINEAR_RESTART + 7 + band_vectors, 8 * (coords.len + conn.len + first_dof.len + n), "");
+    if use_band { solvers::zeros(band_work, solvers::band_size(n, band_kl, band_ku)); }
     val.clear();
     lu.clear();
     pre.clear();
@@ -93,6 +112,21 @@ fn clear_bcs() {
         lumped.push(0.0);
     }
     if turbulent { clear_walls(); }
+    if thermal { clear_thermal(); }
+}
+
+// The load of the boundary values of T, and the v and p of the nodes that
+// no fluid cell has, fixed at 0. Reason: a node of the solid cells only has
+// no row of v or p.
+fn clear_thermal() {
+    edge_load.clear();
+    for d in dof_count() { edge_load.push(0.0); }
+    for n in node_count() {
+        if in_fluid[n] != 0 { continue; }
+        fixed[vdof(n, 0)] = 1;
+        fixed[vdof(n, 1)] = 1;
+        if n < vertex_count { fixed[pdof(n)] = 1; }
+    }
 }
 
 // Fixes velocity component comp (0 or 1) on the nodes of the region.
@@ -132,6 +166,7 @@ fn assemble_residual(u: f64[:], r: f64[:]) {
     guard u.len == dof_count() && r.len == u.len else { abort("assemble_residual: u and r have one entry for each dof"); }
     for d in r.len { r[d] = 0.0; }
     assemble_cells(u, false, r);
+    if thermal { for d in r.len { r[d] += edge_load[d]; } }
 }
 
 // F(u): the residual with the boundary conditions.
@@ -198,7 +233,11 @@ thread_fn cell_worker(a: Assembly) {
 // Appends to d the residual of cell c at u, or with jac its Jacobian, row
 // by row: cell_dof_count() or cell_dof_count() squared values.
 fn cell_values(c: i64, u: f64[:], jac: bool, d: f64[>..]&) {
-    var dofs: i64[15] = [0; 15];
+    if thermal {
+        thermal_values(c, u, jac, d);
+        return;
+    }
+    var dofs: i64[21] = [0; 21];
     var ul: f64[15] = [0.0; 15];
     var rl: f64[15] = [0.0; 15];
     var kl: f64[225] = [0.0; 225];
@@ -214,10 +253,28 @@ fn cell_values(c: i64, u: f64[:], jac: bool, d: f64[>..]&) {
     for a in k { d.append(kl[15 * a..15 * a + k]); }
 }
 
+// The same for a cell of a thermal flow, with up to 21 dofs.
+fn thermal_values(c: i64, u: f64[:], jac: bool, d: f64[>..]&) {
+    var dofs: i64[21] = [0; 21];
+    var ul: f64[21] = [0.0; 21];
+    var rl: f64[21] = [0.0; 21];
+    var kl: f64[441] = [0.0; 441];
+    let k = cell_dof_count();
+    cell_dofs(c, dofs);
+    for a in k { ul[a] = u[dofs[a]]; }
+    if !jac {
+        thermal_residual(c, ul, rl);
+        d.append(rl[..k]);
+        return;
+    }
+    thermal_jacobian(c, ul, rl, kl);
+    for a in k { d.append(kl[21 * a..21 * a + k]); }
+}
+
 // Adds the values of cell c (cell_values) into out. The Jacobian skips
 // the rows of the fixed dofs.
 fn add_cell(c: i64, d: f64[:], jac: bool, out: f64[:]) {
-    var dofs: i64[15] = [0; 15];
+    var dofs: i64[21] = [0; 21];
     let k = cell_dof_count();
     cell_dofs(c, dofs);
     for a in k {
@@ -241,6 +298,9 @@ fn solve_steady(rtol: f64) -> bool {
     let start = clock();
     let sizes = state_sizes();
     for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else if warm { sol[d] } else { 0.0 }; }
+    if thermal && !warm {
+        for n in node_count() { if fixed[tdof(n)] == 0 { sol[tdof(n)] = t_start; } }
+    }
     var f: f64[>..] = [];
     var du: f64[>..] = [];
     var trial: f64[>..] = [];
@@ -269,19 +329,7 @@ fn solve_steady(rtol: f64) -> bool {
 // line search fails.
 fn newton_step(f: f64[:], du: f64[:], trial: f64[:]) -> bool {
     jacobian(sol, val);
-    preconditioner(sol);
-    if !solvers::ilu0(row_start, col, pre, lu, diag) { return false; }
-    for d in f.len {
-        f[d] = -f[d];
-        du[d] = 0.0;
-    }
-    solvers::rows_start(row_start, col, val);
-    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
-        solvers::ilu0_apply(row_start, col, lu, diag, r, z);
-    };
-    solvers::rows_stop();
-    linear_iterations += its;
-    if !solved { return false; }
+    if !linear_solve(f, du) { return false; }
     var lambda = 1.0;
     for h in NEWTON_HALVINGS + 1 {
         for d in sol.len { trial[d] = sol[d] + lambda * du[d]; }
@@ -298,6 +346,26 @@ fn newton_step(f: f64[:], du: f64[:], trial: f64[:]) -> bool {
     return false;
 }
 
+// Solves J du = -f with the Jacobian in val: the banded LU, or GMRES with
+// ILU(0). f becomes -f.
+fn linear_solve(f: f64[:], du: f64[:]) -> bool {
+    for d in f.len { f[d] = -f[d]; }
+    if use_band {
+        linear_iterations++;
+        return solvers::band_solve(row_start, col, val, f, du, band_kl, band_ku, band_work);
+    }
+    preconditioner(sol);
+    if !solvers::ilu0(row_start, col, pre, lu, diag) { return false; }
+    for d in f.len { du[d] = 0.0; }
+    solvers::rows_start(row_start, col, val);
+    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
+        solvers::ilu0_apply(row_start, col, lu, diag, r, z);
+    };
+    solvers::rows_stop();
+    linear_iterations += its;
+    return solved;
+}
+
 // The matrix of the preconditioner: the Jacobian, plus the PSPG term of
 // the pressure rows when the equations have no PSPG. Reason: with the
 // dofs of each node together (mesh.goose), the pressure rows of
@@ -306,11 +374,12 @@ fn preconditioner(u: f64[:]) {
     guard u.len == dof_count() && pre.len == val.len else { abort("preconditioner: clear_bcs, and u has one entry for each dof"); }
     for e in val.len { pre[e] = val[e]; }
     guard stabilize < SUPG_PSPG else { return; }
-    var dofs: i64[15] = [0; 15];
+    var dofs: i64[21] = [0; 21];
     var ul: f64[15] = [0.0; 15];
     var kp: f64[9] = [0.0; 9];
-    let k = cell_dof_count();
+    let k = min(cell_dof_count(), 2 * per_cell + 3);
     for c in cell_count() {
+        if is_solid_cell(c) { continue; }
         cell_dofs(c, dofs);
         for a in k { ul[a] = u[dofs[a]]; }
         pressure_term(c, ul, kp);
@@ -324,9 +393,12 @@ fn preconditioner(u: f64[:]) {
 
 // The length of each array of the state of the package. A solve grows none
 // of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
-fn state_sizes() -> i64[16] {
+fn state_sizes() -> i64[18] {
     return [coords.len, conn.len, on_boundary.len, row_start.len, col.len, region.len, fixed.len, prescribed.len,
-            sol.len, raw.len, val.len, lu.len, pre.len, diag.len, lumped.len, wall_d.len];
+            sol.len, raw.len, val.len, lu.len, pre.len, diag.len, lumped.len, wall_d.len, edge_load.len, band_work.len];
+}
+
+fn unused_state() {
 }
 
 // The sum of the reactions of velocity component comp on the region: the
@@ -418,7 +490,7 @@ fn rans_start() {
         if fixed[d] != 0 { sol[d] = prescribed[d]; }
         lumped[d] = 0.0;
     }
-    var dofs: i64[15] = [0; 15];
+    var dofs: i64[21] = [0; 21];
     for c in cell_count() {
         cell_dofs(c, dofs);
         let m = geometry(c).area / 3.0;

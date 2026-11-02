@@ -36,15 +36,15 @@ material pvc {
     k: Conductivity = 0.25 W/(m*K)
 }
 
-// The femahoy cells are 0.2 mm long and 0.1 mm high, 10 across each region.
+// P2 triangles, 4 across each region. The femahoy cells are 0.2 mm long and 0.1 mm high.
 mesh mf on fluid {
-    size: 0.1 mm
-    cell: quad
+    size: 0.25 mm
+    cell: tri
 }
 
 mesh ms on wall {
-    size: 0.1 mm
-    cell: quad
+    size: 0.25 mm
+    cell: tri
 }
 
 physics flow on fluid solves v: Vector<Velocity>, p: Pressure, Tf: Temperature = T_in {
@@ -63,24 +63,24 @@ physics solid on wall solves Ts: Temperature = T_in {
     eq div(qs) = 0
 }
 
-method flow: fv {
+method flow: cg {
     mesh: mf
-    gradient: green_gauss
-    flux: central
-    pv_coupling: rhie_chow
+    order: { v: 2, p: 1 }
+    stabilize: supg_pspg
 }
 
-method solid: fv {
+method solid: cg {
     mesh: ms
-    gradient: green_gauss
 }
 
 step steady: static {
+    // The corner of the inlet and the wall has the inlet value, since a later bc wins at a
+    // shared node: the mass flow is then U*b, and the no-slip wall is in the rest of the wall.
+    bc iface: v = 0
+    bc axis: v.y = 0
     bc inlet: v = (U, 0)
     bc inlet: Tf = T_in
     bc outlet: sigma*n = -p_out*n
-    bc axis: v.y = 0
-    bc iface: v = 0
     // The interface: the same temperature, and the heat that leaves the wall goes into the air.
     // n is the outward normal of the wall.
     bc iface: Tf = Ts
