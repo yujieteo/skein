@@ -496,7 +496,7 @@ fn region_facet(c: i64, f: i64) -> bool {
     if region_body >= 0 && cell_body[c] != region_body { return false; }
     for k in region.len {
         var all = true;
-        for l in dim { if !on_part(cell_node(c, facet_node(dim, f, l)), k) { all = false; } }
+        for l in facet_vertices(dim) { if !on_part(cell_node(c, facet_node(dim, f, l)), k) { all = false; } }
         if all { return true; }
     }
     return false;

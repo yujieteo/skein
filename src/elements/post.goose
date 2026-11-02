@@ -17,9 +17,42 @@ let FIELD_VALUE = 0;    // component comp of u, or T
 let FIELD_STRESS = 1;   // sigma at comp = 3 i + j
 let FIELD_FLUX = 2;     // the heat flux -k grad(T) at comp
 
+// The reference point xi in [0, 1]^3 of p in hexahedron c: Newton's method
+// on x(xi) = p, which is exact in one step for a box. It gives l with
+// l[1..3] = xi, and l[0] = the smallest 1 - xi_r, so that p is in the cell
+// when the smallest of l is >= 0, as for a simplex.
+fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
+    var xi: f64[3] = [0.5; 3];
+    var n: f64[10] = [0.0; 10];
+    var dn: f64[30] = [0.0; 30];
+    for it in 8 {
+        shape(3, 1, xi, n, dn);
+        var r: f64[3] = [0.0; 3];
+        var j: f64[9] = [0.0; 9];
+        for l in 8 {
+            let v = cell_node(c, l);
+            for t in 3 {
+                r[t] += n[l] * node_x(v, t);
+                for a in 3 { j[3 * t + a] += dn[3 * l + a] * node_x(v, t); }
+            }
+        }
+        for t in 3 { r[t] -= p[t]; }
+        // j[3 t + a] = dx_t / dxi_a: solve j d = r by Cramer's rule.
+        let det = j[0] * (j[4] * j[8] - j[5] * j[7]) - j[1] * (j[3] * j[8] - j[5] * j[6]) + j[2] * (j[3] * j[7] - j[4] * j[6]);
+        guard det > 0.0 else { break; };
+        for a in 3 {
+            var m = j;
+            for t in 3 { m[3 * t + a] = r[t]; }
+            xi[a] -= (m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])) / det;
+        }
+    }
+    return [min(1.0 - xi[0], min(1.0 - xi[1], 1.0 - xi[2])), xi[0], xi[1], xi[2]];
+}
+
 // The barycentric coordinates of p in cell c, from its vertices.
 fn barycentric(c: i64, p: f64[3]) -> f64[4] {
     guard c >= 0 && c < cell_count() && (dim == 2 || dim == 3) else { abort("barycentric: c < cell_count()"); }
+    if hex_cells { return cube_coordinates(c, p); }
     var e: f64[9] = [0.0; 9];
     var b: f64[3] = [0.0; 3];
     let v0 = cell_node(c, 0);
@@ -174,10 +207,11 @@ fn region_max_stress(i: i64, j: i64, sign: f64) -> f64 {
 
 // --- VTU -----------------------------------------------------------------------
 
-// VTK cell types: the triangle, the quadratic triangle, the tetrahedron and
-// the quadratic tetrahedron. Their node sequence is the one of shape.goose.
+// VTK cell types: the triangle, the quadratic triangle, the tetrahedron, the
+// quadratic tetrahedron and the hexahedron. Their node sequence is the one of shape.goose.
 fn vtk_type() -> i64 {
     if dim == 2 { return if order == 1 { 5 } else { 22 }; }
+    if hex_cells { return 12; }
     return if order == 1 { 10 } else { 24 };
 }
 

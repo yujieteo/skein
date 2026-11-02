@@ -403,6 +403,7 @@ var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_tok = -1;
+var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
 var physics = -1;
@@ -472,6 +473,7 @@ fn reset() {
     mesh_size = 0.0;
     mesh_fine = 0.0;
     mesh_tok = -1;
+    hex_mesh = false;
     order = 2;
     rkpm_support = 0.0;
     physics = -1;
@@ -1048,8 +1050,10 @@ fn mesh(n: i64) {
         } else if name(s) == size_name {
             mesh_size = scalar_value(v);
         } else if name(s) == "cell" && kind(n) == syntax::N_MESH {
-            if kind(v) != syntax::N_NAME || name(v) != cell {
-                unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, " cells"),
+            if dim == 3 && kind(v) == syntax::N_NAME && name(v) == "hex" {
+                hex_mesh = true;
+            } else if kind(v) != syntax::N_NAME || name(v) != cell {
+                unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, if dim == 3 { " or hex" } else { "" }, " cells"),
                             str("write cell: ", cell));
             }
         } else {
@@ -1300,6 +1304,9 @@ fn method(n: i64) {
     }
     if (physics == EDGE || physics == DARCY) && order != 1 {
         unsupported(tok(n), str("the family ", family_word, " has order 1 in this generator"), "write order: 1");
+    }
+    if hex_mesh && order != 1 {
+        unsupported(tok(n), "the hexahedra of this generator have order 1", "write order: 1");
     }
 }
 
@@ -2088,6 +2095,10 @@ fn harmonic_values() {
 
 // Each step needs a fixed value, and each reaction report a fixed region.
 fn supports() {
+    if hex_mesh && (geo != GEO_BOX || physics == EDGE || physics == DARCY || physics == WAVE) {
+        unsupported(mesh_tok, "hexahedra are in this generator for a box and for the heat and elastic physics",
+                    "write cell: tet, or mesh a box");
+    }
     // A natural condition alone makes the edge physics and the Darcy flow unique.
     guard physics != EDGE && physics != DARCY else { return; }
     for s in steps {
@@ -3024,7 +3035,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     if solid_law > 0 || has_ties() { emit_energy(out); }
     for si in 0..steps.len { emit_step(out, si, results_dir, share); }
     out.append("fn main() {\n");
-    let cell = if dim == 3 { "tetrahedra" } else { "triangles" };
+    let cell = if hex_mesh { "hexahedra" } else if dim == 3 { "tetrahedra" } else { "triangles" };
     if geo == GEO_SHAPE || pml_g >= 0 { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
         codegen::emit_share(out, "", "elements::read_mesh", share, "");
@@ -3048,6 +3059,19 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             lit(out, mesh_size);
             out.append(", ");
             lit(out, mesh_fine);
+            out.append(");\n");
+        } else if hex_mesh {
+            out.append("\n    elements::mesh_hex_box(");
+            lits(out, lo);
+            out.append(", ");
+            lits(out, hi);
+            for j in 3 {
+                out.append(",\n                           elements::cells_for(");
+                lit(out, hi[j] - lo[j]);
+                out.append(", ");
+                lit(out, mesh_size);
+                out.append(")");
+            }
             out.append(");\n");
         } else {
             format(out, "\n    elements::mesh_box(", dim, ", ", order, ", ");

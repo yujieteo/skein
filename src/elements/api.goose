@@ -55,6 +55,13 @@ fn mesh_box(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f
     physics = -1;
 }
 
+// Meshes the box from (x0, y0, z0) to (x1, y1, z1) with nx × ny × nz
+// hexahedra of order 1.
+fn mesh_hex_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, nx: i64, ny: i64, nz: i64) {
+    build_hex_box([x0, y0, z0], [x1, y1, z1], nx, ny, nz);
+    physics = -1;
+}
+
 // Meshes the box (or the rectangle) less a hole of radius r whose axis is
 // z through the corner (x0, y0): the quarter model of a plate with a hole.
 // The cells are of size `fine` at the hole and grow to `size`.
