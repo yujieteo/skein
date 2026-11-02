@@ -14,6 +14,7 @@ import .mesh;
 import .kernels;   // cell_matrix
 import .csg;
 import .stages;
+import .field;
 import solvers from "../solvers";
 
 let ELASTIC = 0;
@@ -80,6 +81,7 @@ fn start_physics(kind: i64, comps: i64) {
     physics = kind;
     ncomp = comps;
     clear_stages();
+    clear_field_terms();
     fixed.clear();
     prescribed.clear();
     load.clear();
@@ -431,6 +433,7 @@ fn cell_terms(c: i64) {
     use_law(c);
     cell_matrix(c);
     if incompatible_modes && physics == ELASTIC && hex_cells && dim == 3 { condense_incompatible(c); }
+    if ft_kind.len > 0 { add_field_terms(c); }
     if born.len > 0 && born[c] != 0 {
         for r in m {
             var s = 0.0;
@@ -503,6 +506,7 @@ struct Part {
     r: f64,
     shape: i64,
     node: i64,
+    rel: i64,     // 0: equal. Of `region_out` only: 2 holds the nodes at or past `value` (or `r`), 1 past it, -2 at or before it, -1 before it
 }
 
 var region: Part[..16] = [];
@@ -517,6 +521,16 @@ fn on_part(n: i64, k: i64) -> bool {
 fn part_holds(p: Part, n: i64) -> bool {
     if p.node >= 0 { return n == p.node; }
     let tol = geometry_tolerance();
+    if p.rel != 0 {
+        let dx = node_x(n, 0) - p.c[0];
+        let dy = node_x(n, 1) - p.c[1];
+        let v = if p.hole { sqrt(dx * dx + dy * dy) } else { node_x(n, p.axis) };
+        let at = if p.hole { p.r } else { p.value };
+        if p.rel == 2 { return v >= at - tol; }
+        if p.rel == 1 { return v > at + tol; }
+        if p.rel == -2 { return v <= at + tol; }
+        return v < at - tol;
+    }
     if p.shape >= 0 { return shape_gap(p.shape, n) <= tol; }
     let g = if region_body >= 0 { body_shapes[region_body] } else { body_shape };
     if !p.hole { return abs(node_x(n, p.axis) - p.value) <= tol && (g < 0 || shape_gap(g, n) <= tol); }

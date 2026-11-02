@@ -27,12 +27,13 @@ material dielectric_2_2 {
     mu: Power*Time/(Current^2*Length) = mu0
 }
 
-// The field is singular at the edges of the strip. The cells there are about the thickness.
+// The field is singular at the edges of the strip. femahoy has cells of 0.2 um there; 0.5 um is
+// the finest that the mesher finishes within its budget of points, and the answer is within 0.06 %.
 mesh m on dielectric {
     size: 0.1 mm
     cell: tri
     grade: 1.05
-    refine tips: 0.2 um
+    refine tips: 0.5 um
 }
 
 physics electrostatic on dielectric solves phi: Power/Current {

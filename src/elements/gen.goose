@@ -72,7 +72,7 @@ fn claims(prog: i64) -> bool {
         if k == syntax::N_PHYSICS {
             var u = first(c);
             while u >= 0 {
-                if kind(u) == syntax::N_UNKNOWN && kind(child(u, 0)) == syntax::N_TYPE_NAME { return true; }
+                if kind(u) == syntax::N_UNKNOWN && scalar_type(child(u, 0)) { return true; }
                 if kind(u) == syntax::N_UNKNOWN && complex_scalar(child(u, 0)) { return true; }
                 if kind(u) == syntax::N_USES && name(u) == "heat" { return true; }
                 u = next(u);
@@ -88,6 +88,13 @@ fn claims(prog: i64) -> bool {
 fn hex_modal(n: i64) -> bool {
     let proc = child(n, 0);
     return name(proc) == "modal";
+}
+
+// Whether type n is a scalar dimension: a name, or names with *, / and ^
+// (Power/Current), but no Vector<..>.
+fn scalar_type(n: i64) -> bool {
+    let k = kind(n);
+    return k == syntax::N_TYPE_NAME || k == syntax::N_DIM_MUL || k == syntax::N_DIM_DIV || k == syntax::N_DIM_POW;
 }
 
 // Whether type n is Complex<D> of a scalar D.
@@ -277,6 +284,7 @@ struct Surf {
     values: f64[..6],
     shapes: i64[..6],
     points: f64[..48],  // x, y and z of each point of a Point let: the node nearest to each
+    lims: f64[..24],    // the limits of a condition x < c or sqrt(x^2 + y^2) <= r: kind (0 coordinate, 1 radius), relation (surf_limit), axis, value or cx, cy, r
     minus: i64,     // the boundary whose nodes a - b removes, or -1
     body: i64,      // the body of a contact that holds the boundary, or -1 (gen_contact.goose)
 }
@@ -287,6 +295,11 @@ struct Refine {
     g: i64,
     size: f64,
     surface: bool,
+    axis: i64,      // clipped to the planes `axis` = planes (mesher::add_refine_clip), or -1
+    planes: f64[2],
+    plane_count: i64,
+    round: bool,
+    ring: f64[3],
 }
 
 struct Bc {
@@ -369,6 +382,7 @@ let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PART
 let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
 let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
 let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
+let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
 let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
 
 struct Expect {
@@ -411,6 +425,9 @@ var expects: Expect[>..];
 var skipped: u8[..256][>..];
 var sources: Source[>..];
 var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
+var flux_plus = false;          // the flux is +c*grad(u): integral(dot(F, n)) is the reaction, not minus it
+var coef_inverse = false;       // the coefficient of the flux is 1/c, for a flux grad(u)/c
+var thermal_strain_node = -1;   // S of hooke(E, nu, strain(u) - S*I), or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_grade = 0.0;   // the mesh setting grade (spec §9.1), or 0 if not given
@@ -488,6 +505,19 @@ fn reset() {
     skipped.clear();
     sources.clear();
     cut_source = -1;
+    flux_plus = false;
+    coef_inverse = false;
+    thermal_strain_node = -1;
+    tn_op.clear();
+    tn_a.clear();
+    tn_b.clear();
+    tn_x.clear();
+    tn_y.clear();
+    tn_c.clear();
+    ftm_kind.clear();
+    ftm_root.clear();
+    terms.clear();
+    term_nodes.clear();
     mesh_size = 0.0;
     mesh_fine = 0.0;
     mesh_grade = 0.0;
@@ -635,7 +665,7 @@ recursive fn add_points(v: i64, s: Surf&) {
 
 // `let tip: Point = pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3)`.
 fn point_surf(n: i64) {
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: -1, body: -1 };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], minus: -1, body: -1 };
     set64(s.name, name(n));
     add_points(child(n, 1), s);
     surfs.push(s);
@@ -805,11 +835,72 @@ fn shape_body(region: i64) {
 
 let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm or abs(x) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
+var in_and = false;   // surf_parts reads the atoms of an &&
+
+// A limit atom `v < c`, `v <= c`, `v > c` or `v >= c` of a coordinate v, or of the
+// radius sqrt(x^2 + y^2) or x^2 + y^2 (against R^2): the nodes of the
+// boundary that it keeps. It gives false when `cond` is no such atom.
+fn limit_atom(cond: i64, s: Surf&) -> bool {
+    guard kind(cond) == syntax::N_BINARY else { return false; }
+    let op = syntax::text(tok(cond));
+    guard op == "<" || op == "<=" || op == ">" || op == ">=" else { return false; }
+    let low = op == ">" || op == ">=";
+    // The nodes that the limit removes: v >= c removes v < c (-1), v > c removes v <= c (-2), v < c removes v >= c (2), v <= c removes v > c (1).
+    let rel = if op == ">=" { -1 } else if op == ">" { -2 } else if op == "<" { 2 } else { 1 };
+    guard s.lims.len + 6 <= s.lims.cap else {
+        unsupported(tok(cond), "a boundary has at most 4 limits", SURF_FIX);
+        return true;
+    }
+    let left = child(cond, 0);
+    if kind(left) == syntax::N_NAME && axis_of(name(left)) >= 0 {
+        s.lims.push(0.0);
+        s.lims.push(rel * 1.0);
+        s.lims.push(axis_of(name(left)) * 1.0);
+        s.lims.push(scalar_value(child(cond, 1)));
+        s.lims.push(0.0);
+        s.lims.push(0.0);
+        return true;
+    }
+    let root = is_call(left, "sqrt") && syntax::child_count(left) == 2;
+    let sum = if root { arg(left, 0) } else { left };
+    guard kind(sum) == syntax::N_BINARY && syntax::text(tok(sum)) == "+" else { return false; }
+    let a, ca = square(child(sum, 0));
+    let b, cb = square(child(sum, 1));
+    guard a >= 0 && b >= 0 && a != b else { return false; }
+    let r = scalar_value(child(cond, 1));
+    if a + b != 1 || dim == 3 && geo != GEO_SHAPE && geo != GEO_BOX || r <= 0.0 {
+        unsupported(tok(cond), "a round limit is for the x and y of a boundary, with a radius > 0", SURF_FIX);
+        return true;
+    }
+    s.lims.push(1.0);
+    s.lims.push(rel * 1.0);
+    s.lims.push(0.0);
+    s.lims.push(ca);
+    s.lims.push(cb);
+    s.lims.push(if root { r } else { sqrt(r) });
+    return true;
+}
+
 // Adds the planes of condition `cond` to `s`.
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "||" {
-        return surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
+        let before = s.lims.len;
+        let done = surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
+        if done && s.lims.len > before {
+            unsupported(tok(cond), "a limit inside an || would cut the planes of the other side", "make two boundaries, one for each side of the ||");
+            return false;
+        }
+        return done;
     }
+    // a && b: the nodes of a plane, or of the surface, that the limits keep.
+    if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "&&" {
+        let was = in_and;
+        in_and = true;
+        let done = surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
+        in_and = was;
+        return done;
+    }
+    if (geo == GEO_SHAPE || in_and) && limit_atom(cond, s) { return ok(); }
     if kind(cond) == syntax::N_NAME && hole_name.len > 0 && name(cond) == hole_name && geo == GEO_HOLE {
         s.hole = true;
         return true;
@@ -941,7 +1032,7 @@ fn surface_difference(n: i64) {
         unsupported(tok(v), "a boundary difference is boundary(box) less a boundary of planes that a let names above", "write let skin: Surface = boundary(pin) - base");
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: b, body: k };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], minus: b, body: k };
     set64(s.name, name(n));
     for j in dim {
         s.axes.push(j);
@@ -965,9 +1056,25 @@ fn surface(n: i64) {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
-    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: -1, body: k };
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], minus: -1, body: k };
     set64(s.name, name(n));
     if !surf_parts(arg(v, 1), s) { return; }
+    // Only limits: the whole boundary of the body.
+    if s.lims.len > 0 && s.axes.len == 0 && s.shapes.len == 0 && !s.hole {
+        if geo == GEO_SHAPE {
+            s.shapes.push(body_shape);
+        } else if geo == GEO_BOX && 2 * dim <= s.axes.cap {
+            for j in dim {
+                s.axes.push(j);
+                s.values.push(lo[j]);
+                s.axes.push(j);
+                s.values.push(hi[j]);
+            }
+        } else {
+            unsupported(tok(v), "limits alone are a boundary of a box or of a shape", "add a face to the condition");
+            return;
+        }
+    }
     if s.hole && s.axes.len > 0 || s.shapes.len > 0 && s.axes.len > 0 {
         unsupported(tok(v), "a boundary is a surface or planes, not both", "make two boundaries");
         return;
@@ -1057,7 +1164,7 @@ fn read_law() {
         let w = name(p);
         // The eq of the wave physics names its properties.
         // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
+        let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
         if !known && w != "rho" && !solid_property(w) {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -1082,6 +1189,7 @@ fn read_law() {
             conductivity = 1.0;
         } else if k >= 0 {
             conductivity = scalar_value(k);
+            if coef_inverse && conductivity != 0.0 { conductivity = 1.0 / conductivity; }
         }
         if capacity_node >= 0 { capacity = capacity_value(capacity_node); }
         if conductivity <= 0.0 {
@@ -1109,11 +1217,26 @@ fn mesh(n: i64) {
             // A boundary by a condition of one surface (a mantle) refines that surface.
             let si = if kind(first(s)) == syntax::N_NAME { find_surf(name(first(s))) } else { -1 };
             let one = si >= 0 && surfs[si].shapes.len == 1 && surfs[si].axes.len == 0;
-            var g = if one { surfs[si].shapes[0] } else { -1 };
+            // A boundary by planes (and a round limit) on the shape: its surface near the planes.
+            let clip = si >= 0 && surfs[si].shapes.len == 0 && surfs[si].axes.len > 0 && surfs[si].axes.len <= 2 && !surfs[si].hole &&
+                (surfs[si].axes.len == 1 || surfs[si].axes[0] == surfs[si].axes[1]);
+            var g = if one { surfs[si].shapes[0] } else if clip { body_shape } else { -1 };
             var surface = true;
-            if !one { g, surface = mesher::refine_target(first(s)); }
+            if !one && !clip { g, surface = mesher::refine_target(first(s)); }
             let size = scalar_value(child(s, 1));
-            if g >= 0 && size > 0.0 { refines.push(Refine { g: g, size: size, surface: surface }); }
+            var r = Refine { g: g, size: size, surface: surface, axis: -1, planes: [0.0; 2], plane_count: 0, round: false, ring: [0.0; 3] };
+            if clip {
+                r.axis = surfs[si].axes[0];
+                for j in surfs[si].axes.len { r.planes[j] = surfs[si].values[j]; }
+                r.plane_count = surfs[si].axes.len;
+                for i in surfs[si].lims.len / 6 {
+                    if surfs[si].lims[6 * i] == 1.0 {
+                        r.round = true;
+                        r.ring = [surfs[si].lims[6 * i + 3], surfs[si].lims[6 * i + 4], surfs[si].lims[6 * i + 5]];
+                    }
+                }
+            }
+            if g >= 0 && size > 0.0 { refines.push(r); }
         } else if kind(s) == syntax::N_REFINE {
             let r = first(s);
             let si = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
@@ -1156,6 +1279,25 @@ fn flux_let(n: i64) -> i64 {
     let hooke = is_call(v, "hooke") && syntax::child_count(v) == 4 && source_of(arg(v, 0)) == "E" &&
         source_of(arg(v, 1)) == "nu" && is_call(arg(v, 2), "strain") && source_of(arg(arg(v, 2), 0)) == u;
     if hooke { return ELASTIC; }
+    // hooke(E, nu, strain(u) - S*I): an isotropic thermal strain S.
+    let a2 = if is_call(v, "hooke") && syntax::child_count(v) == 4 { arg(v, 2) } else { -1 };
+    let thermal = a2 >= 0 && source_of(arg(v, 0)) == "E" && source_of(arg(v, 1)) == "nu" &&
+        kind(a2) == syntax::N_BINARY && syntax::text(tok(a2)) == "-" && is_call(child(a2, 0), "strain") &&
+        source_of(arg(child(a2, 0), 0)) == u && kind(child(a2, 1)) == syntax::N_BINARY &&
+        syntax::text(tok(child(a2, 1))) == "*" && source_of(child(child(a2, 1), 1)) == "I";
+    if thermal {
+        thermal_strain_node = child(child(a2, 1), 0);
+        return ELASTIC;
+    }
+    // grad(u)/c: the flux +grad(u)/c, as the heat physics with the coefficient 1/c.
+    let quotient = kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "/" && source_of(child(v, 0)) == str("grad(", u, ")") &&
+        kind(child(v, 1)) == syntax::N_NAME;
+    if quotient {
+        set64(conductivity_name, name(child(v, 1)));
+        coef_inverse = true;
+        flux_plus = true;
+        return HEAT;
+    }
     let fourier = is_call(v, "fourier") && syntax::child_count(v) == 3 && source_of(arg(v, 0)) == "k" &&
         source_of(arg(v, 1)) == u;
     if fourier || source_of(v) == str("-k*grad(", u, ")") { return HEAT; }
@@ -1348,6 +1490,10 @@ fn assumptions(n: i64) {
 // The source of the heat equation: a value, or the material property q_v.
 fn heat_source() {
     guard physics == HEAT else { return; }
+    if source_node >= 0 && uses_earlier(source_node) {
+        field_term(FT_SOURCE, source_node);
+        return;
+    }
     if source_node < 0 {
         let p = property("q_v");
         if p >= 0 { source = scalar_value(p); }
@@ -1619,11 +1765,17 @@ fn step(n: i64) {
     while c >= 0 {
         let k = kind(c);
         if k == syntax::N_BC {
-            bc(c);
+            if mine(child(c, 1)) { bc(c); }
         } else if k == syntax::N_OUTPUT {
-            s.output = true;
             var o = first(c);
+            var own = !multi();
             while o >= 0 {
+                if kind(o) != syntax::N_EVERY && mine(o) { own = true; }
+                o = next(o);
+            }
+            if own { s.output = true; }
+            o = first(c);
+            while own && o >= 0 {
                 if kind(o) == syntax::N_EVERY && s.procedure == TRANSIENT && physics == HEAT {
                     s.every = scalar_value(first(o)) as! i64;
                     if s.every < 1 { unsupported(tok(o), "every needs a count of time steps >= 1", "write output T every 10"); }
@@ -1635,7 +1787,7 @@ fn step(n: i64) {
         } else if k == syntax::N_REPORT {
             var r = first(c);
             while r >= 0 {
-                report(r);
+                if mine(first(r)) { report(r); }
                 r = next(r);
             }
         } else if k == syntax::N_EXPECT {
@@ -1955,6 +2107,26 @@ fn region_surf(r: i64) -> i64 {
     return surfs.len - 1;
 }
 
+// An `expect` of a value of two physics: each pass registers the terms
+// of its physics, and the last pass keeps the expect, after the terms of all.
+fn composite_expect(n: i64) {
+    let left = child(n, 0);
+    let right = child(n, 1);
+    let within = child(n, 2);
+    collect_terms(left);
+    guard pass_now == physics_nodes.len - 1 else { return; }
+    var label: u8[>..] = [];
+    format(label, source_of(right), " within ", source_of(within));
+    var x = Expect { name: [], what: FIELD_COMPOSITE, comp: left, at: [0.0; 3], want: scalar_value(right),
+                     within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: -1,
+                     modal: false, surf: -1, scale: 1.0, inverse: false, unit: [] };
+    let unit = if kind(right) == syntax::N_NUMBER { syntax::child_of_kind(right, syntax::N_UNIT) } else { -1 };
+    if unit >= 0 { set64(x.unit, source_of(unit)); }
+    set64(x.name, name(n));
+    codegen::set256(x.label, label);
+    expects.push(x);
+}
+
 // An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
     if physics == EDGE || physics == DARCY {
@@ -1968,6 +2140,16 @@ fn expect(n: i64, step: i64) {
     format(label, source_of(right), " within ", source_of(within));
     var what = -1;
     var comp = -1;
+    if multi() {
+        var owners = 0;
+        let m = owner_mask(left);
+        for p in physics_nodes.len { if (m / pass_bit(p)) % 2 == 1 { owners++; } }
+        if owners > 1 {
+            composite_expect(n);
+            return;
+        }
+        if !mine(left) { return; }
+    }
     if kind(left) == syntax::N_AT {
         what, comp = point_field(left, false);
     } else if is_call(left, "eigenvalue") {
@@ -2091,7 +2273,7 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
     if physics == HEAT && is_call(f, "integral") && syntax::child_count(f) == 3 && source_of(arg(f, 0)) == str("dot(", flux_name, ", n)") {
         let s = region_surf(arg(f, 1));
         guard s >= 0 && (fixed_surf(s) || ambient_surf(s)) else { return -1, -1, -1, 1.0; }
-        return FIELD_REACTION, 0, s, -scale;
+        return FIELD_REACTION, 0, s, if flux_plus { scale } else { -scale };
     }
     if physics == HEAT && is_call(f, "reaction") && syntax::child_count(f) == 2 && region_surf(arg(f, 0)) >= 0 {
         return FIELD_REACTION, 0, region_surf(arg(f, 0)), scale;
@@ -2104,12 +2286,475 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
     return -1, -1, -1, 1.0;
 }
 
-// Reads the program `prog`. False on an error, and `syntax::errors` holds
-// the errors.
+// --- field terms --------------------------------------------------------------
+//
+// An expression of the solution of an earlier physics, as a term of this
+// physics (src/elements/field.goose): the source of a heat physics (the
+// Joule heat of a current, `eq div(q) = dot(J, -grad(phi))`) or the thermal
+// strain of an elastic physics (`strain(u) - alpha*(T - T0)*I`). It is the
+// same for each physics: the expression names the unknown, or a let, of an
+// earlier physics, and the generator writes it as the postfix code of the
+// stack machine of the runtime.
+let TN_CONST = 0;
+let TN_VAL = 1;
+let TN_GRAD = 2;
+let TN_ADD = 10;
+let TN_SUB = 11;
+let TN_MUL = 12;
+let TN_DIV = 13;
+let TN_NEG = 14;
+let TN_SQRT = 15;
+let FT_SOURCE = 0;
+let FT_STRAIN = 1;
+
+var tn_op: i64[>..];
+var tn_a: i64[>..];
+var tn_b: i64[>..];
+var tn_x: i64[>..];
+var tn_y: i64[>..];
+var tn_c: f64[>..];
+var ftm_kind: i64[>..];     // the field terms of the pass now
+var ftm_root: i64[>..];
+
+// A scalar (n = 1) or a vector of n components, each a node of the tree.
+struct FTerm {
+    n: i64,
+    id: i64[3],
+}
+
+fn tnode(op: i64, a: i64, b: i64, x: i64, y: i64, c: f64) -> i64 {
+    tn_op.push(op);
+    tn_a.push(a);
+    tn_b.push(b);
+    tn_x.push(x);
+    tn_y.push(y);
+    tn_c.push(c);
+    return tn_op.len - 1;
+}
+
+fn fscalar(id: i64) -> FTerm { return FTerm { n: 1, id: [id, -1, -1] }; }
+
+// Whether the tree n names the unknown, or a let, of an earlier physics.
+fn uses_earlier(n: i64) -> bool {
+    let m = owner_mask(n);
+    for p in pass_now { if (m / pass_bit(p)) % 2 == 1 { return true; } }
+    return false;
+}
+
+fn fbinary(op: i64, a: FTerm, b: FTerm, at: i64) -> FTerm {
+    if a.n != b.n && a.n != 1 && b.n != 1 || a.n > 1 && b.n > 1 && (op == TN_MUL || op == TN_DIV) {
+        unsupported(tok(at), "the field expression combines vectors that it cannot", "use +, - of two vectors, and * or / of a vector and a scalar");
+        return a;
+    }
+    if (op == TN_DIV) && b.n > 1 {
+        unsupported(tok(at), "a scalar is divided by a vector", "divide by a scalar");
+        return a;
+    }
+    if (op == TN_ADD || op == TN_SUB) && a.n != b.n {
+        unsupported(tok(at), "a scalar and a vector are added", "add two scalars or two vectors");
+        return a;
+    }
+    let count = max(a.n, b.n);
+    var r = FTerm { n: count, id: [-1, -1, -1] };
+    for j in count {
+        let x = a.id[if a.n == 1 { 0 } else { j }];
+        let y = b.id[if b.n == 1 { 0 } else { j }];
+        r.id[j] = tnode(op, 0, 0, x, y, 0.0);
+    }
+    return r;
+}
+
+// The tree of expression n of the pass now.
+recursive fn fterm(n: i64, depth: i64) -> FTerm {
+    if depth > 30 {
+        unsupported(tok(n), "the field expression is too deep", "write a shorter expression");
+        return fscalar(tnode(TN_CONST, 0, 0, -1, -1, 0.0));
+    }
+    if !uses_earlier(n) {
+        let v = value(n);
+        var r = FTerm { n: v.n, id: [-1, -1, -1] };
+        for j in v.n { r.id[j] = tnode(TN_CONST, 0, 0, -1, -1, v.v[j]); }
+        return r;
+    }
+    let k = kind(n);
+    if k == syntax::N_NAME {
+        for o in owned {
+            if o.name != name(n) || o.pass >= pass_now { continue; }
+            if o.node >= 0 { return fterm(o.node, depth + 1); }
+            keep_needed[o.pass] = 1;
+            let comps = if o.vector { dim } else { 1 };
+            var r = FTerm { n: comps, id: [-1, -1, -1] };
+            for j in comps { r.id[j] = tnode(TN_VAL, o.pass, j, -1, -1, 0.0); }
+            return r;
+        }
+    }
+    if k == syntax::N_MEMBER {
+        let o = fterm(first(n), depth + 1);
+        let a = axis_of(name(n));
+        guard a >= 0 && a < o.n else {
+            unsupported(tok(n), "the component is not in the field expression", "write .x, .y or .z of a vector");
+            return o;
+        };
+        return fscalar(o.id[a]);
+    }
+    if k == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
+        var r = fterm(first(n), depth + 1);
+        for j in r.n { r.id[j] = tnode(TN_NEG, 0, 0, r.id[j], -1, 0.0); }
+        return r;
+    }
+    if k == syntax::N_BINARY {
+        let op = syntax::text(tok(n));
+        let a = fterm(child(n, 0), depth + 1);
+        if op == "^" {
+            guard a.n == 1 && scalar_value(child(n, 1)) == 2.0 else {
+                unsupported(tok(n), "the field expression has ^2 of a scalar only", "write x*x");
+                return a;
+            };
+            return fscalar(tnode(TN_MUL, 0, 0, a.id[0], a.id[0], 0.0));
+        }
+        let b = fterm(child(n, 1), depth + 1);
+        if op == "+" { return fbinary(TN_ADD, a, b, n); }
+        if op == "-" { return fbinary(TN_SUB, a, b, n); }
+        if op == "*" { return fbinary(TN_MUL, a, b, n); }
+        if op == "/" { return fbinary(TN_DIV, a, b, n); }
+    }
+    if is_call(n, "grad") && syntax::child_count(n) == 2 && kind(arg(n, 0)) == syntax::N_NAME {
+        for o in owned {
+            if o.name != name(arg(n, 0)) || o.pass >= pass_now || o.node >= 0 || o.vector { continue; }
+            keep_needed[o.pass] = 1;
+            var r = FTerm { n: dim, id: [-1, -1, -1] };
+            for j in dim { r.id[j] = tnode(TN_GRAD, o.pass, j, -1, -1, 0.0); }
+            return r;
+        }
+    }
+    if is_call(n, "dot") && syntax::child_count(n) == 3 {
+        let a = fterm(arg(n, 0), depth + 1);
+        let b = fterm(arg(n, 1), depth + 1);
+        guard a.n == b.n else {
+            unsupported(tok(n), "dot needs two vectors of the same size", "write dot(a, b)");
+            return a;
+        };
+        var sum = tnode(TN_MUL, 0, 0, a.id[0], b.id[0], 0.0);
+        for j in 1..a.n { sum = tnode(TN_ADD, 0, 0, sum, tnode(TN_MUL, 0, 0, a.id[j], b.id[j], 0.0), 0.0); }
+        return fscalar(sum);
+    }
+    if is_call(n, "sqrt") && syntax::child_count(n) == 2 {
+        let a = fterm(arg(n, 0), depth + 1);
+        guard a.n == 1 else {
+            unsupported(tok(n), "sqrt needs a scalar", "write sqrt(x)");
+            return a;
+        };
+        return fscalar(tnode(TN_SQRT, 0, 0, a.id[0], -1, 0.0));
+    }
+    unsupported(tok(n), str("'", source_of(n), "' of an earlier physics is not in the field expression"),
+                "use +, -, *, /, ^2, sqrt, dot, grad, .x of the unknown or a let of an earlier physics, and constants");
+    return fscalar(tnode(TN_CONST, 0, 0, -1, -1, 0.0));
+}
+
+// Adds the field term of kind `kind` for expression n, a scalar.
+fn field_term(kind: i64, n: i64) {
+    let r = fterm(n, 0);
+    if r.n != 1 {
+        unsupported(tok(n), "the field term is a vector", "write a scalar");
+        return;
+    }
+    ftm_kind.push(kind);
+    ftm_root.push(r.id[0]);
+}
+
+recursive fn fserialize(id: i64, code: i64[>..]&, consts: f64[>..]&) {
+    let op = tn_op[id];
+    if op == TN_CONST {
+        code.push(0);
+        code.push(consts.len);
+        code.push(0);
+        consts.push(tn_c[id]);
+        return;
+    }
+    if op == TN_VAL || op == TN_GRAD {
+        code.push(op);
+        code.push(tn_a[id]);
+        code.push(tn_b[id]);
+        return;
+    }
+    fserialize(tn_x[id], code, consts);
+    if tn_y[id] >= 0 { fserialize(tn_y[id], code, consts); }
+    code.push(op);
+    code.push(0);
+    code.push(0);
+}
+
+fn emit_field_terms(out: u8[>..]&) {
+    for t in ftm_kind.len {
+        var code: i64[>..] = [];
+        var consts: f64[>..] = [];
+        fserialize(ftm_root[t], code, consts);
+        if consts.len == 0 { consts.push(0.0); }
+        format(out, "    {\n        let code: i64[", code.len, "] = [");
+        for v, i in code { format(out, if i > 0 { ", " } else { "" }, v); }
+        format(out, "];\n        let consts: f64[", consts.len, "] = [");
+        for v, i in consts {
+            if i > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        format(out, "];\n        elements::field_term(", ftm_kind[t], ", code[..], consts[..]);\n    }\n");
+    }
+}
+
+// --- composite expects ------------------------------------------------------------
+//
+// An `expect` of a value that names two physics, for example the impedance
+// sqrt(L/C) of the lines: each integral(dot(F, n), r) of it is a term that
+// its physics samples at its end (elements::reaction of r), and the value is
+// the expression of the terms.
+struct Term {
+    id: i64,
+    surf: i64,
+    sign: f64,
+}
+
+var terms: Term[>..];       // the terms of the pass now
+var term_nodes: i64[>..];   // the integral call of each term, in the order of the model
+
+recursive fn has_integral(n: i64) -> bool {
+    if is_call(n, "integral") { return true; }
+    var c = first(n);
+    while c >= 0 {
+        if has_integral(c) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
+// Registers the integrals of expression n, and the terms of the pass now.
+recursive fn collect_terms(n: i64) {
+    if is_call(n, "integral") && syntax::child_count(n) == 3 {
+        let id = term_nodes.len;
+        term_nodes.push(n);
+        let flux = source_of(arg(n, 0));
+        if owner_of(n) != pass_now { return; }
+        let s = region_surf(arg(n, 1));
+        let fixed = s >= 0 && fixed_surf(s);
+        if physics != HEAT || !(flux.len > 8 && flux[..4] == "dot(" && flux[flux.len - 4..] == ", n)") || !fixed {
+            unsupported(tok(n), str("the integral '", source_of(n), "' is not in a value of two physics"),
+                        "write integral(dot(D, n), r) of the flux of a scalar physics on a boundary r that a bc holds");
+            return;
+        }
+        if !(codegen::system.l == 1.0 && codegen::system.m == 1.0 && codegen::system.t == 1.0) {
+            unsupported(tok(n), "a value of two physics runs in the SI system", "write the header SI");
+            return;
+        }
+        terms.push(Term { id: id, surf: s, sign: if flux_plus { 1.0 } else { -1.0 } });
+        return;
+    }
+    var c = first(n);
+    while c >= 0 {
+        collect_terms(c);
+        c = next(c);
+    }
+}
+
+fn emit_term(out: u8[>..]&, tm: Term) {
+    format(out, "    // term ", tm.id, ": ", source_of(term_nodes[tm.id]), "\n    ");
+    emit_region(out, tm.surf);
+    format(out, "    {\n        let rx, ry, rz = elements::reaction();\n        term(", tm.id, ", ");
+    lit(out, tm.sign);
+    out.append(" * rx);\n    }\n");
+}
+
+// The end of the pass now, in main: the terms that this physics gives to a composite expect, and its solution
+// for a later physics.
+fn emit_pass_end(out: u8[>..]&) {
+    for tm in terms { emit_term(out, tm); }
+    if pass_now < keep_needed.len && keep_needed[pass_now] == 1 { format(out, "    elements::keep(", pass_now, ");\n"); }
+}
+
+// The Goose text of the value of expression n of a composite expect.
+recursive fn composite_text(out: u8[>..]&, n: i64) {
+    if !has_integral(n) {
+        out.append("(");
+        lit(out, scalar_value(n));
+        out.append(")");
+        return;
+    }
+    let k = kind(n);
+    if is_call(n, "integral") {
+        for c, i in term_nodes { if c == n { format(out, "terms[", i, "]"); } }
+        return;
+    }
+    if k == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
+        out.append("(-");
+        composite_text(out, first(n));
+        out.append(")");
+        return;
+    }
+    if k == syntax::N_BINARY {
+        let op = syntax::text(tok(n));
+        if op == "^" && scalar_value(child(n, 1)) == 2.0 {
+            out.append("(");
+            composite_text(out, child(n, 0));
+            out.append(" * ");
+            composite_text(out, child(n, 0));
+            out.append(")");
+            return;
+        }
+        if op == "+" || op == "-" || op == "*" || op == "/" {
+            out.append("(");
+            composite_text(out, child(n, 0));
+            format(out, " ", op, " ");
+            composite_text(out, child(n, 1));
+            out.append(")");
+            return;
+        }
+    }
+    if is_call(n, "sqrt") && syntax::child_count(n) == 2 {
+        out.append("sqrt(");
+        composite_text(out, arg(n, 0));
+        out.append(")");
+        return;
+    }
+    unsupported(tok(n), str("'", source_of(n), "' is not in a value of two physics"), "use +, -, *, /, ^2, sqrt, integral and constants");
+}
+
+// The physics of the program, in order. Each one is a pass: the generator
+// reads and writes the program of one physics at a time (read_pass), on the
+// one mesh, and a physics after the first can use the solution of the
+// physics before it (field terms, below).
+var physics_nodes: i64[>..];
+var pass_now = 0;
+
+// A name that a physics declares: its unknown, or a let of its block with
+// the value `node`.
+struct Owned {
+    name: u8[..64],
+    pass: i64,
+    node: i64,
+    vector: bool,
+}
+
+var owned: Owned[>..];
+var keep_needed: i64[>..];   // 1 for pass i if a later physics reads its solution
+
+fn collect_owned() {
+    owned.clear();
+    for p in physics_nodes.len {
+        var c = first(physics_nodes[p]);
+        while c >= 0 {
+            let k = kind(c);
+            if k == syntax::N_UNKNOWN || k == syntax::N_LET {
+                var o = Owned { name: [], pass: p, node: if k == syntax::N_LET { child(c, 1) } else { -1 },
+                                vector: k == syntax::N_UNKNOWN && kind(child(c, 0)) == syntax::N_TYPE_APPLY && syntax::text(tok(child(c, 0))) == "Vector" };
+                set64(o.name, name(c));
+                owned.push(o);
+            }
+            c = next(c);
+        }
+    }
+}
+
+fn pass_bit(p: i64) -> i64 {
+    var bit = 1;
+    for i in p { bit *= 2; }
+    return bit;
+}
+
+// The passes that own a name of the tree n, as a set of bits.
+recursive fn owner_mask(n: i64) -> i64 {
+    var m = 0;
+    if kind(n) == syntax::N_NAME {
+        for o in owned {
+            if o.name == name(n) && (m / pass_bit(o.pass)) % 2 == 0 { m += pass_bit(o.pass); }
+        }
+    }
+    var c = first(n);
+    while c >= 0 {
+        let sub = owner_mask(c);
+        for p in physics_nodes.len { if (sub / pass_bit(p)) % 2 == 1 && (m / pass_bit(p)) % 2 == 0 { m += pass_bit(p); } }
+        c = next(c);
+    }
+    return m;
+}
+
+// The first pass that owns a name of the tree n, or -1.
+fn owner_of(n: i64) -> i64 {
+    let m = owner_mask(n);
+    for p in physics_nodes.len { if (m / pass_bit(p)) % 2 == 1 { return p; } }
+    return -1;
+}
+
+// Whether the pass now holds the statement whose target is n. A statement with no name of a physics belongs to the first.
+fn mine(n: i64) -> bool {
+    if physics_nodes.len <= 1 { return true; }
+    let o = owner_of(n);
+    return o == pass_now || (o < 0 && pass_now == 0);
+}
+
+fn multi() -> bool { return physics_nodes.len > 1; }
+
+// The suffix of the names of the steps and files of the pass now: empty for
+// one physics, and `_<physics>` for several.
+fn tag() -> u8[>..] {
+    var s: u8[>..] = [];
+    if multi() {
+        s.push('_');
+        s.append(physics_name[..]);
+    }
+    return s;
+}
+
+// Reads the program `prog`, each physics in its pass. False on an error,
+// and `syntax::errors` holds the errors.
 fn read(prog: i64) -> bool {
+    physics_nodes.clear();
+    var c = first(prog);
+    while c >= 0 {
+        if kind(c) == syntax::N_PHYSICS { physics_nodes.push(c); }
+        c = next(c);
+    }
+    keep_needed.clear();
+    for p in physics_nodes.len { keep_needed.push(0); }
+    collect_owned();
+    if physics_nodes.len == 0 { return read_pass(prog, -1); }
+    for p in physics_nodes.len {
+        if !read_pass(prog, p) { return false; }
+        if multi() && !shares_mesh(p) { return false; }
+    }
+    return true;
+}
+
+var mesh_signature: u8[..256] = [];
+
+// Several physics run in sequence on one mesh: the heat and elastic physics
+// of linear cells, and the same mesh and order for each. Reason: the solution of
+// one physics is a field of the nodes of the next.
+fn shares_mesh(p: i64) -> bool {
+    if (physics != HEAT && physics != ELASTIC) || rkpm_support > 0.0 || cut_source >= 0 || solid_law > 0 || has_ties() || family_word.len > 0 {
+        unsupported(physics_tok, "several physics are the heat and linear elastic physics of the simplex and hexahedron cells in this generator",
+                    "keep one physics, or use heat and linear elastic physics");
+        return false;
+    }
+    var key: u8[>..] = [];
+    format(key, geo, "|", body_name, "|", mesh_size, "|", mesh_fine, "|", mesh_grade, "|", order, "|", hex_mesh, "|", refines.len, "|", interfaces.len, "|", dim);
+    for j in 3 { format(key, "|", lo[j], "|", hi[j]); }
+    var sig: u8[..256] = [];
+    codegen::set256(sig, key);
+    if p == 0 {
+        mesh_signature = sig;
+        return true;
+    }
+    if sig[..] != mesh_signature[..] {
+        unsupported(physics_tok, "the physics of a model have one mesh, with the same body and the same order",
+                    "write the same body and the same method order for each physics");
+        return false;
+    }
+    return true;
+}
+
+fn read_pass(prog: i64, pass: i64) -> bool {
     reset();
+    pass_now = max(pass, 0);
     program_node = prog;
-    var physics_node = -1;
+    var physics_node = if pass >= 0 { physics_nodes[pass] } else { -1 };
     var mesh_node = -1;
     var methods: i64[>..] = [];
     var symmetries: i64[>..] = [];
@@ -2128,8 +2773,7 @@ fn read(prog: i64) -> bool {
         } else if k == syntax::N_MATERIAL {
             material(c);
         } else if k == syntax::N_PHYSICS {
-            if physics_node >= 0 { unsupported(tok(c), "a second physics: this generator has one", "remove the second physics"); }
-            physics_node = c;
+            // The physics of the pass: physics_nodes (read).
         } else if k == syntax::N_MESH || k == syntax::N_POINTS {
             if mesh_node >= 0 { unsupported(tok(c), "a second mesh: this generator has one", "remove the second mesh"); }
             mesh_node = c;
@@ -2161,9 +2805,10 @@ fn read(prog: i64) -> bool {
     if material_node < 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     read_material();
     heat_source();
+    if thermal_strain_node >= 0 && physics == ELASTIC { field_term(FT_STRAIN, thermal_strain_node); }
     body_force_arg();
     if mesh_node < 0 { unsupported(at, "the model has no mesh", "add mesh m on plate { size: 5 mm }"); } else { mesh(mesh_node); }
-    for m in methods { method(m); }
+    for m in methods { if !multi() || name(m) == physics_name { method(m); } }
     for y in symmetries { symmetry(y); }
     if mesh_node >= 0 && (kind(mesh_node) == syntax::N_POINTS) != (rkpm_support > 0.0) {
         unsupported(tok(mesh_node), "points need the rkpm method, and the rkpm method needs points",
@@ -2174,8 +2819,10 @@ fn read(prog: i64) -> bool {
     while c >= 0 {
         let k = kind(c);
         if k == syntax::N_BC {
-            let b = bc(c);
-            if b >= 0 { global_bcs.push(b); }
+            if mine(child(c, 1)) {
+                let b = bc(c);
+                if b >= 0 { global_bcs.push(b); }
+            }
         } else if k == syntax::N_STEP {
             step(c);
         } else if k == syntax::N_EXPECT {
@@ -2362,6 +3009,10 @@ let PRELUDE = """
     var result_count = 0;
     var failed = false;
     var converged = false;
+    // The integrals of the physics, for the values that name two physics.
+    var terms: f64[64] = [0.0; 64];
+
+    fn term(i: i64, v: f64) { terms[i] = v; }
 
     // Appends `s` as a TOON value, in quotes when it needs them.
     fn toon(into: u8[>..]&, s: u8[:]) {
@@ -2727,6 +3378,22 @@ fn emit_region(out: u8[>..]&, si: i64) {
         out.append(")");
     }
     for g, i in s.shapes { format(out, if i == 0 { "elements::surface(" } else { " && elements::also_surface(" }, g, ")"); }
+    for i in s.lims.len / 6 {
+        let rel = s.lims[6 * i + 1] as! i64;
+        if s.lims[6 * i] == 0.0 {
+            format(out, " && elements::except_coord(", AXES[s.lims[6 * i + 2] as! i64], ", ");
+            lit(out, s.lims[6 * i + 3]);
+            format(out, ", ", rel, ")");
+        } else {
+            out.append(" && elements::except_radius(");
+            lit(out, s.lims[6 * i + 3]);
+            out.append(", ");
+            lit(out, s.lims[6 * i + 4]);
+            out.append(", ");
+            lit(out, s.lims[6 * i + 5]);
+            format(out, ", ", rel, ")");
+        }
+    }
     for i in s.points.len / 3 {
         out.append(if i == 0 { "elements::point(" } else { " && elements::also_point(" });
         lits(out, [s.points[3 * i], s.points[3 * i + 1], s.points[3 * i + 2]]);
@@ -2864,14 +3531,14 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         emit_eigen_step(out, si, results_dir);
         return;
     }
-    format(out, "// step ", s.name, ": ", if s.procedure == TRANSIENT { if physics == HEAT { "transient, theta scheme" } else { "transient, central_difference" } } else { "static" }, "\n");
-    format(out, "fn step_", s.name, "() {\n");
+    format(out, "// step ", s.name, tag(), ": ", if s.procedure == TRANSIENT { if physics == HEAT { "transient, theta scheme" } else { "transient, central_difference" } } else { "static" }, "\n");
+    format(out, "fn step_", s.name, tag(), "() {\n");
     // After the clear: clear_bcs keeps the solution of the last step,
     // which a birth reads.
     format(out, "    ", api(), "clear_bcs();\n");
     for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
     if share.stages >= 2 && share.reads {
-        codegen::emit_share(out, "", "elements::read_solution", share, s.name);
+        codegen::emit_share(out, "", "elements::read_solution", share, str(s.name, tag()));
     } else {
         // The fixed values first: a load on a node that a later fix holds
         // still counts in the reaction.
@@ -2879,9 +3546,9 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
         if s.procedure == TRANSIENT && physics == HEAT {
             var prefix: u8[>..] = [];
-            format(prefix, results_dir, "/", s.name);
+            format(prefix, results_dir, "/", s.name, tag());
             out.append("    heat_time(");
-            quoted(out, s.name);
+            quoted(out, str(s.name, tag()));
             out.append(", ");
             lit(out, s.end);
             out.append(", ");
@@ -2895,7 +3562,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             out.append(");\n");
         } else if s.procedure == TRANSIENT && solid_law == 0 {
             out.append("    explicit(");
-            quoted(out, s.name);
+            quoted(out, str(s.name, tag()));
             out.append(", ");
             lit(out, s.end);
             out.append(", ");
@@ -2905,20 +3572,20 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             emit_solid_solve(out, s);
         } else if has_ties() {
             out.append("    nonlinear(");
-            quoted(out, s.name);
+            quoted(out, str(s.name, tag()));
             format(out, ", elements::solve_contact(", max(1, s.count), "));\n");
         } else {
             out.append("    solve(");
-            quoted(out, s.name);
+            quoted(out, str(s.name, tag()));
             out.append(");\n");
         }
-        if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, s.name); }
+        if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, str(s.name, tag())); }
         // The state of the step, for a `results` of another model.
         if rkpm_support <= 0.0 {
             out.append("    state(");
             quoted(out, results_dir);
             out.append(", ");
-            quoted(out, s.name);
+            quoted(out, str(s.name, tag()));
             out.append(");\n");
         }
     }
@@ -2935,7 +3602,7 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     for x in expects { if x.step == si { emit_expect(out, x); } }
     if s.output {
         var path: u8[>..] = [];
-        format(path, results_dir, "/", s.name, ".vtu");
+        format(path, results_dir, "/", s.name, tag(), ".vtu");
         out.append("    output(");
         quoted(out, path);
         out.append(", ");
@@ -3115,7 +3782,11 @@ fn emit_report(out: u8[>..]&, step: Step, r: Report) {
 
 fn emit_expect(out: u8[>..]&, x: Expect) {
     format(out, "    // expect ", x.name, "\n    {\n");
-    if x.what == FIELD_BODY_MEAN {
+    if x.what == FIELD_COMPOSITE {
+        out.append("        let v = ");
+        composite_text(out, x.comp);
+        out.append(";\n        let found_v = true;\n");
+    } else if x.what == FIELD_BODY_MEAN {
         out.append("        let v = ");
         lit(out, x.scale);
         format(out, " * elements::mean_stress(", x.comp / 3, ", ", x.comp % 3, ");\n        let found_v = true;\n");
@@ -3148,7 +3819,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
@@ -3224,7 +3895,9 @@ fn dof_estimate() -> i64 {
     if geo == GEO_SHAPE {
         mesher::clear_refine();
         if mesh_grade > 1.0 { mesher::set_grade(mesh_grade); }
-        for r in refines { mesher::add_refine(r.g, r.size, r.surface); }
+        for r in refines {
+            if r.axis >= 0 { mesher::add_refine_clip(r.g, r.size, r.surface, r.axis, r.planes, r.plane_count, r.round, r.ring); } else { mesher::add_refine(r.g, r.size, r.surface); }
+        }
         mesher::clear_interfaces();
         for g in interfaces { mesher::add_interface(g); }
         let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
@@ -3279,6 +3952,22 @@ fn emit_shapes(out: u8[>..]&) {
         out.append(");\n");
     }
     for r in refines {
+        if r.axis >= 0 {
+            format(out, "    mesher::add_refine_clip(", r.g, ", ");
+            lit(out, r.size);
+            format(out, ", ", if r.surface { "true" } else { "false" }, ", ", r.axis, ", [");
+            lit(out, r.planes[0]);
+            out.append(", ");
+            lit(out, r.planes[1]);
+            format(out, "], ", r.plane_count, ", ", if r.round { "true" } else { "false" }, ", [");
+            lit(out, r.ring[0]);
+            out.append(", ");
+            lit(out, r.ring[1]);
+            out.append(", ");
+            lit(out, r.ring[2]);
+            out.append("]);\n");
+            continue;
+        }
         format(out, "    mesher::add_refine(", r.g, ", ");
         lit(out, r.size);
         format(out, ", ", if r.surface { "true" } else { "false" }, ");\n");
@@ -3289,7 +3978,7 @@ fn emit_shapes(out: u8[>..]&) {
 // Writes the Goose program of the model that `read` read. The program
 // imports the elements from `elements_path` and writes its VTU files under
 // `results_dir`. In a study, it writes or reads the stages of `share`.
-fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out: u8[>..]&) {
+fn emit_head(elements_path: u8[:], out: u8[>..]&) {
     let sys = codegen::system;
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     format(out, "// All values are in the units of the model: length in ", sys.length, ", force in ", sys.force,
@@ -3325,8 +4014,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
     if physics == WAVE { out.append(WAVE_PRELUDE); }
     if physics == EDGE || physics == DARCY { out.append(EDGE_PRELUDE); }
     if solid_law > 0 || has_ties() { emit_energy(out); }
-    for si in 0..steps.len { emit_step(out, si, results_dir, share); }
-    out.append("fn main() {\n");
+}
+
+// The mesh of the program, in main.
+fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
+    let sys = codegen::system;
     let cell = if hex_mesh { "hexahedra" } else if dim == 3 { "tetrahedra" } else { "triangles" };
     if geo == GEO_SHAPE || pml_g >= 0 { emit_shapes(out); }
     if share.stages >= 1 && share.reads {
@@ -3381,6 +4073,11 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         }
         if share.stages >= 1 { codegen::emit_share(out, "", "elements::write_mesh", share, ""); }
     }
+}
+
+// The physics of the pass now, in main.
+fn emit_setup(out: u8[>..]&) {
+    let sys = codegen::system;
     format(out, "    // physics ", physics_name, ", material ", material_name, "\n");
     if physics == HEAT {
         out.append("    elements::heat(");
@@ -3451,9 +4148,15 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         }
     }
     if physics == HEAT { emit_nonlinear_heat(out); }
+    emit_field_terms(out);
     if cut_source >= 0 { emit_source(out); }
     emit_contacts(out);
-    for s in steps { format(out, "    step_", s.name, "();\n"); }
+}
+
+// The steps of the pass now, and its expects of no step, in main.
+fn emit_calls(out: u8[>..]&) {
+    for s in steps { format(out, "    step_", s.name, tag(), "();\n"); }
+    if multi() { emit_pass_end(out); }
     for x in expects { if x.step < 0 { emit_expect(out, x); } }
     for x in probes { if x.step < 0 { emit_edge_expect(out, x); } }
     for s in skipped {
@@ -3461,6 +4164,25 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
         quoted(out, s);
         out.append(");\n");
     }
+}
+
+fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out: u8[>..]&) {
+    var step_text: u8[>..] = [];
+    var main_text: u8[>..] = [];
+    let n = max(physics_nodes.len, 1);
+    for p in n {
+        if multi() { read_pass(program_node, p); }
+        if p == 0 {
+            emit_head(elements_path, out);
+            emit_mesh_part(main_text, share);
+        }
+        for si in 0..steps.len { emit_step(step_text, si, results_dir, share); }
+        emit_setup(main_text);
+        emit_calls(main_text);
+    }
+    out.append(step_text);
+    out.append("fn main() {\n");
+    out.append(main_text);
     out.append("    print_records();\n");
     out.append("    if failed { exit(1); }\n");
     out.append("}\n");

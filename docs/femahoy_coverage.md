@@ -182,6 +182,17 @@ gives the roadmap phase that closes the gap:
   `copy(r)`, the index of the copy of a pattern at a point. `skein run`
   runs both models with the cuts, and
   [window_barrel.skn](../examples/shells/window_barrel.skn) runs `copy(r)`.
+- Coupled physics on one mesh runs five more models with `skein run`:
+  [grid_resistor_bar.skn](../examples/femahoy/grid_resistor_bar.skn),
+  [grid_joule_bar.skn](../examples/femahoy/grid_joule_bar.skn),
+  [grid_holm_spot.skn](../examples/femahoy/grid_holm_spot.skn),
+  [line_coax.skn](../examples/femahoy/line_coax.skn) and
+  [line_stripline.skn](../examples/femahoy/line_stripline.skn).
+  Still open: the stress of
+  [grid_heated_block_stress_ccx.skn](../examples/femahoy/grid_heated_block_stress_ccx.skn)
+  (hex cells on a union of boxes, laws by region) and the flow coupling of
+  [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn) and
+  [cht_heated_channel.skn](../examples/femahoy/cht_heated_channel.skn).
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.

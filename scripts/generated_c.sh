@@ -60,12 +60,17 @@ examples/femahoy/grid_coax_tem.skn
 examples/femahoy/grid_free_block_modes_ccx.skn
 examples/femahoy/grid_frequency_cantilever.skn
 examples/femahoy/grid_heated_bar.skn
+examples/femahoy/grid_holm_spot.skn
+examples/femahoy/grid_joule_bar.skn
+examples/femahoy/grid_resistor_bar.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/grid_lame_cylinder.skn
 examples/femahoy/grid_pipe_wall.skn
 examples/femahoy/grid_radiating_fin_ccx.skn
 examples/femahoy/grid_radiation_slab.skn
 examples/femahoy/grid_round_cantilever.skn
+examples/femahoy/line_coax.skn
+examples/femahoy/line_stripline.skn
 examples/femahoy/heat_fin.skn
 examples/femahoy/hyperelastic_tube.skn
 examples/femahoy/plasticity_sphere.skn

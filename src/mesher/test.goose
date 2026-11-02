@@ -829,6 +829,21 @@ fn uncovered(p: f64[3], q: f64[3], tol: f64) -> f64 {
     return missed / 1000.0;
 }
 
+// The wanted size of a refine clipped to a plane and a ring (the rim of a
+// round spot on a face): small at the rim, and larger with the distance to
+// the plane and to the ring.
+fn test_refine_clip() {
+    let b = mesher::cylinder(0.0, 0.0, -20.0, 0.0, 0.0, 1.0, 20.0, 20.0);
+    mesher::clear_refine();
+    mesher::add_refine_clip(b, 0.02, true, 2, [0.0, 0.0], 1, true, [0.0, 0.0, 1.0]);
+    let rim = mesher::wanted_size(1.0, 0.0, 0.0, 0.0, 4.0);
+    let off_ring = mesher::wanted_size(5.0, 0.0, 0.0, 0.0, 4.0);
+    let below = mesher::wanted_size(1.0, 0.0, -5.0, 0.0, 4.0);
+    mesher::clear_refine();
+    print("refine clip: wanted size ", rim, " at the rim, ", off_ring, " 4 mm off the ring, ", below, " 5 mm below");
+    if abs(rim - 0.02) > 1.0e-12 || off_ring < 1.0 || below < 1.0 { fail("refine clip: small at the rim, and larger away from the plane and the ring"); }
+}
+
 // The 3D mesher gaps of phase 6 (docs/roadmap.md), on the test models of
 // its scout: a cube with a spherical dimple, with and without a refine of
 // the dimple, an L block with sharp edges off the planes of a uniform
@@ -1060,6 +1075,7 @@ fn main() {
     test_nurbs();
     test_interfaces();
     test_refine();
+    test_refine_clip();
     test_stuffing();
 
     test_grid();
