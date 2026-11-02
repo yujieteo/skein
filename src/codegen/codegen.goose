@@ -150,11 +150,12 @@ struct System {
     pressure: u8[..4],
 }
 
-let SYSTEM_NAMES = ["SI", "mm_N_MPa_s", "mm_kg_ms"];
+let SYSTEM_NAMES = ["SI", "mm_N_MPa_s", "mm_kg_ms", "nondim"];
 let SYSTEMS = [
     System { l: 1.0, m: 1.0, t: 1.0, length: "m", force: "N", pressure: "Pa" },
     System { l: 1.0e-3, m: 1000.0, t: 1.0, length: "mm", force: "N", pressure: "MPa" },
     System { l: 1.0e-3, m: 1.0, t: 1.0e-3, length: "mm", force: "kN", pressure: "GPa" },
+    System { l: 1.0, m: 1.0, t: 1.0, length: "", force: "", pressure: "" },
 ];
 
 var system = SYSTEMS[0];

@@ -130,6 +130,18 @@ fn complex_scalar(n: i64) -> bool {
     return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Complex" && kind(first(n)) == syntax::N_TYPE_NAME;
 }
 
+// Whether type n is Vector<Complex<D>> or Complex<Vector<D>>.
+fn complex_vector(n: i64) -> bool {
+    if kind(n) != syntax::N_TYPE_APPLY { return false; }
+    if syntax::text(tok(n)) == "Complex" { return is_vector_type(first(n)); }
+    return is_vector_type(n) && kind(first(n)) == syntax::N_TYPE_APPLY && syntax::text(tok(first(n))) == "Complex";
+}
+
+// Whether the reports, the expects and the steps are those of the probes of
+// gen_edge.goose: complex values at points and on regions, for each
+// frequency.
+fn probe_physics() -> bool { return physics == EDGE || physics == DARCY || complex_solid; }
+
 // --- values --------------------------------------------------------------------
 
 // A scalar or a vector of `dim` components, in the unit system of the
@@ -441,6 +453,8 @@ let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PART
 let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
 let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
 let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
+let FIELD_VON_MISES = 12; // max(von_mises(sigma), r) on the boundary r
+let FIELD_CONSTANT = 11; // a number, a param or a let: scale is its value
 let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
 let FIELD_EXTREME = 10; // max(u.z, r), min(u.z, r) or their difference on the boundary r: comp is the component + 10 for min, + 20 for the range
 let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
@@ -529,6 +543,7 @@ var source_node = -1;           // the right side of the eq, or -1 for 0
 var body_node = -1;             // the argument b of linear_elastic, or -1
 var body_force: f64[3] = [0.0; 3];
 var density = 0.0;
+var complex_solid = false;      // the unknown of the elastic physics is a Complex vector: harmonic steps (harmonic.goose)
 var wave_c_node = -1;           // c of eq div(grad(u)) + c*u = s, or -1 for 0
 var wave_s_node = -1;           // s, or -1 for 0
 var omega_now = 0.0;            // omega of the frequency that the generator writes
@@ -548,6 +563,8 @@ var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_coun
 
 fn reset() {
     density = 0.0;
+    complex_solid = false;
+    rms_nodes.clear();
     codegen::reset();
     dim = 3;
     geometry_names.clear();
@@ -1515,6 +1532,7 @@ fn physics_item(n: i64) {
         } else if k == syntax::N_UNKNOWN {
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
+            if complex_vector(child(c, 0)) { complex_solid = true; }
             if syntax::child_count(c) > 1 { initial_node = child(c, 1); }
         } else if k == syntax::N_MATASSIGN {
             materials_of(c);
@@ -2032,6 +2050,10 @@ fn procedure(proc: i64, s: Step&) {
         harmonic(proc, s);
         return;
     }
+    if complex_solid {
+        unsupported(tok(proc), "a Complex vector unknown has harmonic steps in this generator", "write step sweep: harmonic(freq: [100, 200] Hz) { ... }");
+        return;
+    }
     if p == "transient" {
         transient(proc, s);
         return;
@@ -2118,7 +2140,7 @@ fn bare(n: i64) -> bool {
 // harmonic(freq: [f1, f2, ...], damping: z) of the wave physics.
 fn harmonic(proc: i64, s: Step&) {
     let fix = "write step sweep: harmonic(freq: [100, 200] Hz) { ... }, with a Complex unknown";
-    if physics != WAVE && physics != EDGE || name(proc) != "harmonic" {
+    if physics != WAVE && physics != EDGE && !complex_solid || name(proc) != "harmonic" {
         unsupported(tok(proc), "this generator has harmonic steps of a Complex unknown, and no other step of it", fix);
         return;
     }
@@ -2197,7 +2219,7 @@ fn report(item: i64) {
     let e = first(item);
     // The checks read the first row of a table column in the point.
     table_row = if kind(e) == syntax::N_AT && table_member(child(e, 1)) >= 0 { 0 } else { -1 };
-    if physics == EDGE || physics == DARCY {
+    if probe_physics() {
         edge_report(item);
         return;
     }
@@ -2342,7 +2364,7 @@ fn composite_expect(n: i64) {
 
 // An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
-    if physics == EDGE || physics == DARCY {
+    if probe_physics() {
         edge_expect(n, step);
         return;
     }
@@ -2375,6 +2397,17 @@ fn expect(n: i64, step: i64) {
     var surf = -1;
     var scale = 1.0;
     var inverse = false;
+    if what < 0 && max_von_mises(left) {
+        what = FIELD_VON_MISES;
+        comp = 0;
+        surf = find_surf(name(arg(left, 1)));
+    }
+    // A param or a let: the study expects the optimum of its params.
+    if what < 0 && kind(left) == syntax::N_NAME && codegen::find_value(name(left)) >= 0 && !has_sample(left) {
+        what = FIELD_CONSTANT;
+        comp = 0;
+        scale = scalar_value(left);
+    }
     if what < 0 { what, comp, surf, scale, inverse = scaled_field(left); }
     // An expect on a field this generator cannot sample stays, and the
     // report says that it did not run.
@@ -2390,7 +2423,7 @@ fn expect(n: i64, step: i64) {
         return;
     }
     let point = if what == FIELD_WAVE { arg(left, 0) } else { left };
-    let no_point = what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN;
+    let no_point = what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN || what == FIELD_CONSTANT;
     var x = Expect { name: [], what: what, comp: comp, at: if no_point { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale,
@@ -3353,7 +3386,7 @@ fn reaction_unit() -> const u8[:] {
 
 fn field_unit(what: i64) -> const u8[:] {
     if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_MEAN || what == FIELD_EXTREME { return value_unit(); }
-    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX { return codegen::system.pressure; }
+    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX || what == FIELD_VON_MISES { return codegen::system.pressure; }
     if what == FIELD_REACTION { return reaction_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
     if codegen::system.pressure == "MPa" { return "mW/mm^2"; }
@@ -3893,7 +3926,7 @@ fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
 
 fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) {
     let s = steps[si];
-    if physics == EDGE || physics == DARCY {
+    if probe_physics() {
         emit_edge_step(out, si, results_dir);
         return;
     }
@@ -4168,6 +4201,14 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         out.append("        let v = ");
         composite_text(out, x.comp);
         out.append(";\n        let found_v = true;\n");
+    } else if x.what == FIELD_CONSTANT {
+        out.append("        let v = ");
+        lit(out, x.scale);
+        out.append(";\n        let found_v = true;\n");
+    } else if x.what == FIELD_VON_MISES {
+        out.append("    ");
+        emit_region(out, x.surf);
+        out.append("        let v = elements::max_von_mises();\n        let found_v = true;\n");
     } else if x.what == FIELD_BODY_MEAN {
         out.append("        let v = ");
         lit(out, x.scale);
@@ -4201,7 +4242,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what == FIELD_CONSTANT { "" } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");
@@ -4400,7 +4441,8 @@ fn emit_head(elements_path: u8[:], out: u8[>..]&) {
     }
     if cut_source >= 0 { out.append(SUBMODEL_PRELUDE); }
     if physics == WAVE { out.append(WAVE_PRELUDE); }
-    if physics == EDGE || physics == DARCY { out.append(EDGE_PRELUDE); }
+    if probe_physics() { out.append(EDGE_PRELUDE); }
+    if complex_solid { out.append(HARMONIC_PRELUDE); }
     if solid_law > 0 || has_ties() { emit_energy(out); }
 }
 

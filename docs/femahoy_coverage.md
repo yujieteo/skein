@@ -237,6 +237,27 @@ gives the roadmap phase that closes the gap:
   the change since its birth. Point location on a curved P2 cell uses
   Newton iteration. A `||` boundary with a round limit inside is refused
   (`tests/unsupported/boundary_or_limit.skn`).
+- The harmonic step of a `Complex` vector unknown runs with `skein run`
+  (`src/elements/harmonic.goose`): it is the complex lift of the real
+  assembly of a physics, with the matrix `(1 + 2 im zeta) K - omega^2 M` and
+  a complex skyline LDLT. Any physics with a `K` and an `M` in the elements
+  lane can use it. The elastic physics uses it now, and the heat physics
+  does not. [random_vibration_cantilever.skn](../examples/femahoy/random_vibration_cantilever.skn)
+  passes its `expect`: the RMS tip acceleration is 402270 mm/s^2 (+0.34 %,
+  Blevins 1979: 400925.4 mm/s^2). A report or an `expect` of a harmonic step
+  takes a `Complex` expression of constants, `omega`, `mean(u.c, region)`,
+  `u.c at p` and `rms(f, psd)`. The VTU output has the real part.
+- The shape loop runs with `skein run --study shape`
+  ([shape_hole_biaxial.skn](../examples/femahoy/shape_hole_biaxial.skn)):
+  `minimize(method: nelder_mead)` (`src/codegen/run.goose`) is a simplex
+  search on the params in 0..1 of their ranges, and each case remeshes and
+  solves the model. The mesher reader takes `fn` items, `sin`, `cos`, `tan`,
+  `exp`, `ln`, `sqrt` and `abs` in a shape, and the `nondim` unit system runs.
+  An `expect` of a param, a let or `max(von_mises(sigma), r)` runs. The 51
+  cases take 23 min, because each builds its own program, so `./build.sh test`
+  runs only the default case. The best case is ratio 2.0003, power 2.003 and a
+  peak of 1.5008 (the reference: ratio 2, power 2, peak 1.5), and its three
+  `expect` lines pass within 0.5 %.
 - The wave-port batch runs three waveguide models with `skein run`:
   [grid_waveguide_te10.skn](../examples/femahoy/grid_waveguide_te10.skn)
   (phase of S21 within 0.1 deg),
@@ -262,10 +283,13 @@ gives the roadmap phase that closes the gap:
   team7_eddy_current (the `stadium` shape of the mesher, and a source in the
   edge physics), dipole_king_middleton and optics_mie_cylinder (order 2 and a
   PML in 3D and a scattering form with regions).
-- Not run yet, because each needs a new physics family:
-  random_vibration_cantilever (a `Complex` vector unknown),
-  laminate_pagano and warpage_2p5d_frame (shell family and layup),
-  shape_hole_biaxial (a shape loop with remeshing).
+- Not run yet, each for a large missing piece:
+  laminate_pagano needs the orthotropic written-out law on serendipity
+  hexahedra with reduced integration, a per-region material on hexahedra and
+  a composite `reissner_mindlin` shell on quad cells of a flat plate (the
+  shell lane takes only a part of a cylinder). warpage_2p5d_frame needs a
+  hexahedron grid on boxes cut by a turned box and by the CSG of boxes (the
+  hex lane takes a box).
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.

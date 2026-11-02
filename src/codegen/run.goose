@@ -428,7 +428,10 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         fmt::write_errors();
         return 1;
     }
-    if name(syntax::nodes[s].first) == "minimize" { return run_minimize(path, text, prog, s, study, json); }
+    if name(syntax::nodes[s].first) == "minimize" {
+        if simplex_search { return run_nelder_mead(path, text, prog, s, study, json); }
+        return run_minimize(path, text, prog, s, study, json);
+    }
     var stage = -1;
     for p in varied { stage = max(stage, check::param_stage(prog, p.name)); }
     // The program of each case.
@@ -765,6 +768,214 @@ fn run_minimize(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json:
         ends[best] = e;
     }
     optim_gen::gradient_objective = [];
+    case_count = ends.len;
+    let p = syntax::parse_model(path, text);
+    let hash = syntax::source_hash();
+    var printed: u8[>..] = [];
+    var table: u8[>..] = [];
+    let status = study_table(study, tok(find_study(p, study)), 1, p, ends, best, stop, json, printed, table);
+    let file = str(".skein/studies/", model_name, "/", study);
+    if !write_file(str(file, ".toon"), table) || !write_file(str(file, ".hash"), hash) {
+        write_stderr(str("skein run: cannot write '", file, ".toon'\n"));
+        return 1;
+    }
+    write_stdout(printed);
+    return status;
+}
+
+// --- minimize with Nelder-Mead (spec §20.2) ----------------------------------------
+
+// The value of the objective in the report records of a case: the first
+// report whose expression starts with `objective =`.
+fn case_objective(e: CaseEnd, objective: u8[:]) -> f64, bool {
+    var section: u8[..16] = [];
+    for line in split(outs[e.out_lo..e.out_hi], "\n") {
+        if line.len > 0 && line[0] != ' ' {
+            section = [];
+            if starts_with(line, "report[") { section.append("report"); }
+            continue;
+        }
+        let f = toon_fields(line);
+        if section == "report" && f.len == 3 && starts_with(f[1], str(objective, " =")) {
+            let parts = split(f[2], " ");
+            let v, good = parse_flt(parts[0]);
+            if good && e.ended && e.built { return v, true; }
+        }
+    }
+    return 0.0, false;
+}
+
+// Builds and runs case c at z with `tail` at the end of the model text. It
+// gives the end of the case and J. ran is false if the case gave no J, and
+// ok is false on an error of the model, with the message written.
+fn simplex_case(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], c: i64, z: f64[:], tail: u8[:], l: Ledger&) -> CaseEnd, f64, bool, bool {
+    var none = CaseEnd { ended: false, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 };
+    let cp = syntax::parse_model(path, values_source(text, range_texts(z), tail));
+    let lane = if cp >= 0 { read_model(cp) } else { -1 };
+    guard lane >= 0 else {
+        fmt::write_errors();
+        return none, 0.0, false, false;
+    };
+    let build_dir = str(".skein/build/", model_name, "/", study, "/", c + 1);
+    let case_dir = str(".skein/studies/", model_name, "/", study, "/", c + 1);
+    var program: u8[>..] = [];
+    guard make_dirs(build_dir) && make_dirs(case_dir) && write_program(lane, case_dir, no_share(), program) else {
+        write_stderr("skein run: cannot make the directory .skein\n");
+        return none, 0.0, false, false;
+    };
+    let source = str(build_dir, "/main.goose");
+    guard write_file(source, program) else {
+        write_stderr(str("skein run: cannot write '", source, "'\n"));
+        return none, 0.0, false, false;
+    };
+    var job = CaseJob { case: c, threads: 1, budget: l.budget as! i64, build: [], exe: [], out: [], err: [] };
+    var goose: u8[>..] = [];
+    if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
+    format(job.build, shell_quoted(goose), " build -q ", shell_quoted(source), " -o ", shell_quoted(str(build_dir, "/", model_name)), " >",
+           shell_quoted(str(case_dir, "/run.err")), " 2>&1");
+    job.exe.append(shell_quoted(str("./", build_dir, "/", model_name)));
+    set1024(job.out, str(case_dir, "/run.toon"));
+    set1024(job.err, str(case_dir, "/run.err"));
+    var dofs: i64[>..] = [];
+    for i in c + 1 { dofs.push(dof_estimate(lane)); }
+    let ends = run_cases([job], dofs, 1, l);
+    let j, ran = case_objective(ends[0], objective);
+    return ends[0], j, ran, true;
+}
+
+// The point a + t (b - a) of the cube 0..1, cut to the bounds.
+fn simplex_point(a: f64[:], b: f64[:], t: f64) -> f64[>..] {
+    var r: f64[>..] = [];
+    for x, k in a { r.push(min(1.0, max(0.0, x + t * (b[k] - x)))); }
+    return r;
+}
+
+// The largest distance, on one param, of a point of the simplex from the best.
+fn simplex_size(pts: f64[:], n: i64, j: f64[:]) -> f64 {
+    var best = 0;
+    for v, i in j { if v < j[best] { best = i; } }
+    var size = 0.0;
+    for i in n + 1 { for k in n { size = max(size, abs(pts[i * n + k] - pts[best * n + k])); } }
+    return size;
+}
+
+// Evaluates z as the next case. It gives false if the loop ends: a failed
+// case or an error of the model, with `stop` and `fault` set.
+var case_points: f64[>..];
+
+fn simplex_eval(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], z: f64[:], ends: CaseEnd[>..]&, l: Ledger&, j: f64&, stop: u8[>..]&, fault: bool&) -> bool {
+    let e, v, ran, ok = simplex_case(path, text, study, objective, ends.len, z, "", l);
+    if !ok { fault = true; return false; }
+    case_values.append(range_texts(z));
+    case_points.append(z);
+    ends.push(e);
+    if !ran {
+        stop = str("case ", ends.len, " failed");
+        return false;
+    }
+    j = v;
+    return true;
+}
+
+// `skein run --study` of a minimize study with method: nelder_mead: the
+// simplex search on z, the param values in 0..1 of their ranges. The first
+// simplex is the default and a step of `step` of the range along each
+// param (towards the range when the default is on a bound). A step is a
+// reflection (1), an expansion (2), a contraction (0.5) or a shrink (0.5),
+// and a point is cut to the bounds. The loop stops when each point of the
+// simplex is in `xtol` of the range from the best, or after max_cases
+// cases. Each case remeshes and solves the model. The expects of the study
+// then run in the best case.
+fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json: bool) -> i64 {
+    let objective = str(objective_name(syntax::nodes[s].first));
+    let tail = str(case_expects[expect_at[0]..expect_at[1]]);
+    var l = new_ledger(solvers::BUDGET_SHARE * solvers::free_bytes());
+    outs.clear();
+    case_values.clear();
+    case_points.clear();
+    var ends: CaseEnd[>..] = [];
+    var pts: f64[>..] = [];
+    var js: f64[>..] = [];
+    var stop: u8[>..] = str("max_cases");
+    var fault = false;
+    var j = 0.0;
+    let n = range_start.len;
+    pts.append(range_start);
+    for k in n {
+        pts.append(range_start);
+        pts[(k + 1) * n + k] = if range_start[k] + first_step <= 1.0 { range_start[k] + first_step } else { range_start[k] - first_step };
+    }
+    var live = true;
+    for i in n + 1 {
+        if !live { break; }
+        live = simplex_eval(path, text, study, objective, pts[i * n..(i + 1) * n], ends, l, j, stop, fault);
+        js.push(j);
+    }
+    guard !fault else { return 1; };
+    while live && ends.len < max_cases {
+        var order: i64[>..] = [];
+        for i in n + 1 { order.push(i); }
+        sort(order) { a, b => js[a] < js[b] }
+        if simplex_size(pts, n, js) < xtol { stop = str("xtol"); break; }
+        let worst = order[n];
+        var centre: f64[>..] = [];
+        for k in n { centre.push(0.0); }
+        for i in n { for k in n { centre[k] += pts[order[i] * n + k] / n; } }
+        let reflected = simplex_point(centre, pts[worst * n..(worst + 1) * n], -1.0);
+        live = simplex_eval(path, text, study, objective, reflected, ends, l, j, stop, fault);
+        guard !fault else { return 1; };
+        if !live { break; }
+        let jr = j;
+        if jr < js[order[0]] && ends.len < max_cases {
+            let expanded = simplex_point(centre, pts[worst * n..(worst + 1) * n], -2.0);
+            live = simplex_eval(path, text, study, objective, expanded, ends, l, j, stop, fault);
+            guard !fault else { return 1; };
+            if !live { break; }
+            if j < jr {
+                for k in n { pts[worst * n + k] = expanded[k]; }
+                js[worst] = j;
+            } else {
+                for k in n { pts[worst * n + k] = reflected[k]; }
+                js[worst] = jr;
+            }
+        } else if jr < js[order[n - 1]] {
+            for k in n { pts[worst * n + k] = reflected[k]; }
+            js[worst] = jr;
+        } else if ends.len < max_cases {
+            let outside = jr < js[worst];
+            let contracted = simplex_point(centre, if outside { reflected[..] } else { pts[worst * n..(worst + 1) * n] }, 0.5);
+            live = simplex_eval(path, text, study, objective, contracted, ends, l, j, stop, fault);
+            guard !fault else { return 1; };
+            if !live { break; }
+            if j < (if outside { jr } else { js[worst] }) {
+                for k in n { pts[worst * n + k] = contracted[k]; }
+                js[worst] = j;
+            } else {
+                // Shrink to the best point.
+                for i in 1..n + 1 {
+                    if ends.len >= max_cases { break; }
+                    let q = simplex_point(pts[order[0] * n..(order[0] + 1) * n], pts[order[i] * n..(order[i] + 1) * n], 0.5);
+                    live = simplex_eval(path, text, study, objective, q, ends, l, j, stop, fault);
+                    guard !fault else { return 1; };
+                    if !live { break; }
+                    for k in n { pts[order[i] * n + k] = q[k]; }
+                    js[order[i]] = j;
+                }
+            }
+        }
+    }
+    var best = 0;
+    for e in ends.len {
+        let v, ran = case_objective(ends[e], objective);
+        let b, bran = case_objective(ends[best], objective);
+        if ran && (!bran || v < b) { best = e; }
+    }
+    if tail.len > 0 {
+        let z = case_points[best * n..(best + 1) * n];
+        let e, _, _, ok = simplex_case(path, text, study, objective, best, z, tail, l);
+        guard ok else { return 1; };
+        ends[best] = e;
+    }
     case_count = ends.len;
     let p = syntax::parse_model(path, text);
     let hash = syntax::source_hash();

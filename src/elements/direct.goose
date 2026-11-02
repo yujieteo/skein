@@ -87,6 +87,18 @@ fn order_nodes() {
 // factorization takes more than DIRECT_WORK multiplies: the step then
 // solves with CG and AMG.
 fn direct_setup() -> bool {
+    guard skyline_layout(DIRECT_WORK) else { return false; }
+    let n = sol.len;
+    solvers::memory_check("simplex newton skyline ldlt", sky_start[n], n, 2, 0, "");
+    solvers::zeros(sky_upper, sky_start[n]);
+    solvers::zeros(sky_lower, sky_start[n]);
+    return true;
+}
+
+// The order and the profile of the pattern, with at most `limit` multiplies
+// to factor. False if it takes more. The harmonic step of harmonic.goose
+// has its own limit: it factors one complex matrix for each frequency.
+fn skyline_layout(limit: f64) -> bool {
     order_nodes();
     let n = sol.len;
     sky_top.clear();
@@ -100,13 +112,10 @@ fn direct_setup() -> bool {
     }
     var work = 0.0;
     for j in n { work += 0.5 * (j - sky_top[j]) * (j - sky_top[j]); }
-    guard work <= DIRECT_WORK else { return false; }
+    guard work <= limit else { return false; }
     sky_start.clear();
     sky_start.push(0);
     for j in n { sky_start.push(sky_start[j] + j - sky_top[j] + 1); }
-    solvers::memory_check("simplex newton skyline ldlt", sky_start[n], n, 2, 0, "");
-    solvers::zeros(sky_upper, sky_start[n]);
-    solvers::zeros(sky_lower, sky_start[n]);
     return true;
 }
 
