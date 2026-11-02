@@ -40,6 +40,7 @@ let ENERGY_FIX = "write let S: Tensor2<Pressure> = 2*diff(W, C), with C = transp
 var solid_law = 0;              // a SOLID_ constant, or 0 for the linear law
 var finite_strain = false;      // assume finite_strain
 var finite_eq = false;          // eq div(defgrad(u)*S) = 0
+var pk_name: u8[..64];          // P of `let P = defgrad(u)*sigma` with a linear sigma: the preload form
 var plastic_tok = -1;
 var state_names: u8[..64][>..];
 var strain_state: u8[..64];     // eps_p of hooke(E, nu, strain(u) - eps_p)
@@ -58,6 +59,7 @@ fn solid_reset() {
     solid_law = 0;
     finite_strain = false;
     finite_eq = false;
+    pk_name = [];
     plastic_tok = -1;
     state_names.clear();
     strain_state = [];
@@ -107,6 +109,7 @@ fn solid_dynamic_eq(c: i64) -> bool {
 // The left side of a traction bc: sigma*n, or defgrad(u)*S*n at finite
 // strain, a load on the reference shape (P N).
 fn traction_target() -> u8[>..] {
+    if pk_name.len > 0 { return str(pk_name, "*n"); }
     if finite_eq { return str("defgrad(", unknown_name, ")*", flux_name, "*n"); }
     return str(flux_name, "*n");
 }
@@ -145,6 +148,11 @@ fn solid_let(n: i64) -> bool {
         set_flux(n);
         return true;
     }
+    // P = defgrad(u)*S of the flux S: the preload form, which the buckling step reads (solid_finish).
+    if flux_name.len > 0 && source_of(v) == str("defgrad(", u, ")*", flux_name) && physics == ELASTIC {
+        set64(pk_name, name(n));
+        return true;
+    }
     if source_of(v) == str("transpose(defgrad(", u, "))*defgrad(", u, ")") {
         set64(c_name, name(n));
         return true;
@@ -176,6 +184,10 @@ fn set_flux(n: i64) {
 // Whether the eq div(x) = 0 has x = defgrad(u)*S, the flux of the
 // reference configuration.
 fn solid_eq(x: i64) -> bool {
+    if pk_name.len > 0 && source_of(x) == pk_name {
+        finite_eq = true;
+        return true;
+    }
     guard source_of(x) == str("defgrad(", unknown_name, ")*", flux_name) else { return false; }
     finite_eq = true;
     return true;
@@ -217,6 +229,15 @@ fn plastic_yield(v: i64) {
 
 // The checks at the end of the physics.
 fn solid_finish(n: i64) {
+    // The preload form: a linear S with P = defgrad(u)*S. The steps solve the first-order form (the
+    // load of a preload is small), and a buckling step takes the geometric stiffness of its stress.
+    if pk_name.len > 0 && solid_law == 0 && strain_state.len == 0 {
+        if !finite_strain || !finite_eq {
+            unsupported(tok(n), "P = defgrad(u)*S needs assume finite_strain and eq div(P) = 0", "write both");
+        }
+        finite_strain = false;
+        finite_eq = false;
+    }
     if solid_law == SOLID_ENERGY || strain_state.len > 0 {
         if finite_strain != finite_eq {
             unsupported(tok(n), "assume finite_strain goes with eq div(defgrad(u)*S) = 0", "write both, or neither");
