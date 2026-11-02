@@ -2,7 +2,7 @@
 // alone, so that one mechanism serves each kind of shape of the CSG tree.
 //
 // A sharp edge is a curve on the surface φ = 0 where the unit normal
-// ∇φ / |∇φ| jumps by more than SHARP_ANGLE. It is where 2 primitives meet,
+// ∇φ / |∇φ| jumps by more than sharp_angle. It is where 2 primitives meet,
 // or 2 sides of one primitive (a box, a polygon).
 //
 // 1. ridge_between: 2 points u and v on the surface, whose normals differ,
@@ -26,9 +26,17 @@ import .geometry;
 import .refine;
 import .quality;
 
-let SHARP_ANGLE = 15.0;                 // degrees: a larger jump of the normal is a sharp edge
-let SHARP_COS = 0.9659258262890683;     // cos of SHARP_ANGLE
-let PAIR_COS = 0.9781476007338057;      // cos 12 deg: a pair of surface points in a cell with normals this far apart may have an edge between
+var sharp_angle = 30.0;                 // degrees: a larger jump of the normal is a sharp edge (feature_angle, spec §9.1)
+var sharp_cos = 0.8660254037844387;     // cos of sharp_angle
+var pair_cos = 0.9135454576426009;      // cos of 0.8 sharp_angle: a pair of surface points in a cell with normals this far apart may have an edge between
+
+// Sets feature_angle, in degrees.
+fn set_feature_angle(degrees: f64) {
+    guard degrees > 0.0 && degrees < 90.0 else { abort("set_feature_angle: an angle from 0 to 90 degrees"); }
+    sharp_angle = degrees;
+    sharp_cos = cos(radians(degrees));
+    pair_cos = cos(radians(0.8 * degrees));
+}
 let FD = 1.0e-8;                        // the step of the differences, times the size of the shape
 let BISECT_STOP = 30.0;                 // steps of the differences in the last interval
 let CURVE_DIV = 2.0;                    // samples of a curve for each wanted size
@@ -114,7 +122,7 @@ fn ridge_between(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -
     var na = nu;
     var b = v;
     var nb = nv;
-    guard dot3(na, nb) < SHARP_COS else { return r; }
+    guard dot3(na, nb) < sharp_cos else { return r; }
     let stop = BISECT_STOP * FD * d;
     for k in 80 {
         guard norm3(sub3(a, b)) > stop else { break; }
@@ -128,7 +136,7 @@ fn ridge_between(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -
             na = nm;
         }
     }
-    guard dot3(na, nb) < SHARP_COS else { return r; }
+    guard dot3(na, nb) < sharp_cos else { return r; }
     // The intersection of the tangent planes at a and b, nearest to the
     // middle between them.
     let c = dot3(na, nb);
@@ -149,7 +157,7 @@ fn angle_of(a: f64[3], b: f64[3]) -> f64 { return acos(clamp(dot3(a, b), -1.0, 1
 
 // The sharp edge between the surface points u and v, if the normal at the
 // middle shows one: the larger of the 2 halves has a jump of more than
-// SHARP_ANGLE, and either it is more than 2.5 times the smaller, or the whole
+// sharp_angle, and either it is more than 2.5 times the smaller, or the whole
 // jump is too large for a smooth surface in a lattice cell.
 fn find_ridge(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -> Ridge {
     var r = Ridge { found: false, x: u, na: nu, nb: nv };
@@ -159,7 +167,7 @@ fn find_ridge(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -> R
     let a2 = angle_of(nm, nv);
     let big = max(a1, a2);
     let small = min(a1, a2);
-    guard big > radians(SHARP_ANGLE) else { return r; }
+    guard big > radians(sharp_angle) else { return r; }
     guard big > 2.5 * small || angle_of(nu, nv) > radians(45.0) else { return r; }
     return ridge_between(g, u, nu, v, nv, d);
 }

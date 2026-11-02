@@ -56,7 +56,7 @@ physics solid on part solves u: Vector<Length> {
 }
 
 // The stress does not change the temperature: a one-way coupling.
-method solid: cg { mesh: m, order: 2, couple: staggered }
+method solid: cg { mesh: m, order: 1, couple: staggered }
 
 step load: static {
     bc bottom: dot(q, n) = h_c*(T - T0)

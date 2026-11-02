@@ -238,6 +238,49 @@ fn region_max_von_mises() -> f64 {
     return most;
 }
 
+// The integral over the boundary facets of the region of the expression
+// `code` (field.goose) of the coordinates and the solution: the solution
+// at a point of a facet is its interpolation from the nodes of the facet.
+fn region_integral(code: i64[:], consts: f64[:]) -> f64 {
+    guard physics >= 0 && sol.len == dof_total() && ncomp <= 3 else { abort("region_integral: a physics and its solution"); }
+    let fd = dim - 1;
+    let fnodes = node_count_of(fd, order);
+    var fn_shape: f64[10] = [0.0; 10];
+    var total = 0.0;
+    var any = false;
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(c, f) { continue; }
+            any = true;
+            for qp in quad_count(fd) {
+                let dw = facet_point(c, f, qp, fn_shape);
+                var x: f64[3] = [0.0; 3];
+                var u: f64[3] = [0.0; 3];
+                for l in fnodes {
+                    let n = cell_node(c, facet_node(dim, f, l));
+                    for t in 3 { x[t] += fn_shape[l] * node_x(n, t); }
+                    for k in ncomp { u[k] += fn_shape[l] * shown(ncomp * n + k); }
+                }
+                total += eval_facet_code(code, consts, x, u) * dw;
+            }
+        }
+    }
+    return if any { total } else { 0.0 / 0.0 };
+}
+
+// The largest sign * (component comp of the solution) at the nodes of the
+// region. NaN if the region holds no node.
+fn region_extreme(comp: i64, sign: f64) -> f64 {
+    guard sol.len == dof_total() && comp >= 0 && comp < ncomp else { abort("region_extreme: a solution and a component of it"); }
+    var most = 0.0 / 0.0;
+    for n in node_count() {
+        guard on_region(n) else { continue; };
+        let v = sign * shown(ncomp * n + comp);
+        if !(most >= v) { most = v; }
+    }
+    return most;
+}
+
 // The largest sign σ_ij at the nodes of the region, with σ at a node the
 // mean of the stress of the live cells at the node. NaN if the region
 // holds no node. Reason: at a corner of a P2 cell the stress of one cell

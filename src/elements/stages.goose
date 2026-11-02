@@ -23,6 +23,8 @@ import .mesh;
 import .assemble;
 
 struct Law {
+    cond: f64,      // the conductivity and the source of a heat physics
+    heat: f64,
     lame: f64,
     lame_3d: f64,
     shear: f64,
@@ -56,12 +58,14 @@ fn shown(d: i64) -> f64 {
     return if origin.len == sol.len { sol[d] - origin[d] } else { sol[d] };
 }
 
-fn law_now() -> Law { return Law { lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force }; }
+fn law_now() -> Law { return Law { cond: conductivity, heat: source, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force }; }
 
 // Sets the moduli and the body force of the assembly to the law of cell c.
 fn use_law(c: i64) {
     guard cell_law.len > 0 else { return; }
     let w = laws[cell_law[c]];
+    conductivity = w.cond;
+    source = w.heat;
     lame = w.lame;
     lame_3d = w.lame_3d;
     shear = w.shear;
@@ -71,6 +75,8 @@ fn use_law(c: i64) {
 // Sets them to law 0 again.
 fn use_law_0() {
     guard laws.len > 0 else { return; }
+    conductivity = laws[0].cond;
+    source = laws[0].heat;
     lame = laws[0].lame;
     lame_3d = laws[0].lame_3d;
     shear = laws[0].shear;
@@ -99,8 +105,27 @@ fn add_law(g: i64, E: f64, nu: f64, b: f64[3]) -> i64 {
         for c in cell_count() { cell_law.push(0); }
     }
     let l3 = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    laws.push(Law { lame: if plane == PLANE_STRESS { E * nu / (1.0 - nu * nu) } else { l3 }, lame_3d: l3,
+    laws.push(Law { cond: conductivity, heat: source, lame: if plane == PLANE_STRESS { E * nu / (1.0 - nu * nu) } else { l3 }, lame_3d: l3,
                     shear: E / (2.0 * (1.0 + nu)), force: b });
+    var count = 0;
+    for c in cell_count() {
+        if cell_in(c, g) {
+            cell_law[c] = laws.len - 1;
+            count++;
+        }
+    }
+    return count;
+}
+
+// Gives the cells in shape g the heat law of the conductivity k and the
+// source q. It gives the number of these cells.
+fn add_heat_law(g: i64, k: f64, q: f64) -> i64 {
+    guard physics == HEAT && k > 0.0 && curve_k.len == 0 else { abort("add_heat_law: a heat physics with a constant conductivity, and k > 0"); }
+    if laws.len == 0 {
+        laws.push(law_now());
+        for c in cell_count() { cell_law.push(0); }
+    }
+    laws.push(Law { cond: k, heat: q, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force });
     var count = 0;
     for c in cell_count() {
         if cell_in(c, g) {

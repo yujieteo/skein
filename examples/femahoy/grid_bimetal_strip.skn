@@ -66,4 +66,5 @@ step heat_up: static {
 expect top_kxx: -2*integral(u.z*(x^2 - mx), top_face)/integral((x^2 - mx)^2, top_face) == 1.163636e-3 mm^-1 within 1%
 expect top_kyy: -2*integral(u.z*(y^2 - my), top_face)/integral((y^2 - my)^2, top_face) == 1.163636e-3 mm^-1 within 1%
 expect centre_fz: reaction(centre).z == 0 within 1e-6 N
-expect centre_fx: reaction(centre).x == 0 within 1e-6 N
+// The nodes of the plane x = 0 hold u.x too: the reaction of the symmetry is not a reaction of the centre.
+expect centre_fx: reaction(centre - sym_x).x == 0 within 1e-6 N

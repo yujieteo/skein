@@ -188,8 +188,9 @@ gives the roadmap phase that closes the gap:
   [grid_holm_spot.skn](../examples/femahoy/grid_holm_spot.skn),
   [line_coax.skn](../examples/femahoy/line_coax.skn) and
   [line_stripline.skn](../examples/femahoy/line_stripline.skn).
-  Still open: the stress of
+  The heat then stress of
   [grid_heated_block_stress_ccx.skn](../examples/femahoy/grid_heated_block_stress_ccx.skn)
+<<<<<<< HEAD
   (hex cells on a union of boxes, laws by region).
 - The flow coupling runs two more models with `skein run`:
   [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn)
@@ -207,6 +208,25 @@ gives the roadmap phase that closes the gap:
   (two-phase VOF), turek_hron_fsi1 (a second physics in the flow generator),
   slider_crank (a multibody first-order form) and acoustics_pulsating_sphere
   (3D acoustic reports at a point and on a region).
+||||||| parent of 6c4904f (feat(elements): run femahoy 3D region models with hex regions and tet interfaces)
+  (hex cells on a union of boxes, laws by region) and the flow coupling of
+  [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn) and
+  [cht_heated_channel.skn](../examples/femahoy/cht_heated_channel.skn).
+=======
+  (hex cells on a union of boxes, laws by region, a film bc) and of
+  [grid_bimetal_strip.skn](../examples/femahoy/grid_bimetal_strip.skn) runs
+  in the elements lane. Each region has its own conductivity, source and
+  thermal strain. The 3D mesher keeps the boundary of a region as an
+  interface: it cuts each tetrahedron that the boundary crosses
+  (`cut_interface` in `src/mesher/tet.goose`), so
+  [grid_plate_hole_ccx.skn](../examples/femahoy/grid_plate_hole_ccx.skn) and
+  [grid_plate_hole_stress_ccx.skn](../examples/femahoy/grid_plate_hole_stress_ccx.skn)
+  pass. Still open: the orthotropic law of
+  [grid_constrained_block.skn](../examples/femahoy/grid_constrained_block.skn)
+  (a general anisotropic stiffness) and the flow coupling of
+  [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn) and
+  [cht_heated_channel.skn](../examples/femahoy/cht_heated_channel.skn).
+>>>>>>> 6c4904f (feat(elements): run femahoy 3D region models with hex regions and tet interfaces)
 
 - Structural models of phase 3 run with `skein run` and pass their `expect`:
   [buckling_column.skn](../examples/femahoy/buckling_column.skn),

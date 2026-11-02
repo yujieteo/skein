@@ -82,6 +82,15 @@ fn mesh_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
     return build_shape(d, ord, g, size);
 }
 
+// Meshes the shape g, a union of boxes, with hexahedra of order 1 and at
+// most `size`, with a grid plane on each face of g and of each shape of
+// `planes` (the regions of the materials). False if g is not a union of
+// boxes or the mesher does not finish.
+fn mesh_hex_shape(g: i64, size: f64, planes: i64[:]) -> bool {
+    physics = -1;
+    return build_hex_shape(g, size, planes);
+}
+
 // Meshes each shape of `shapes` alone, as mesh_shape, for the bodies of a
 // contact: two bodies share no node. g is their union. False if the
 // mesher does not finish.
@@ -174,6 +183,11 @@ fn material_in(g: i64, E: f64, nu: f64, bx: f64, by: f64, bz: f64) -> bool {
     return add_law(g, E, nu, [bx, by, bz]) > 0;
 }
 
+// Gives the cells in the shape g of src/mesher/ the conductivity k and the
+// source q per volume, after `heat` set the material of the other cells.
+// False if g holds no cell.
+fn heat_in(g: i64, k: f64, q: f64) -> bool { return add_heat_law(g, k, q) > 0; }
+
 // Removes the cells in the shape g from the live set, for the next solves
 // (spec §14.3). False if g holds no cell.
 fn kill(g: i64) -> bool { return kill_cells(g) > 0; }
@@ -190,6 +204,10 @@ fn keep(slot: i64) { keep_field(slot); }
 // Adds a field term to the physics now (field.goose): `kind` is FT_SOURCE or
 // FT_STRAIN, `code` the instructions and `consts` the constants of its expression.
 fn field_term(kind: i64, code: i64[:], consts: f64[:]) { add_field_term(kind, code, consts); }
+
+// The same term on the cells of law `law` only (law 0 is the material of the
+// physics, then each `material_in` or `heat_in` adds one).
+fn field_term_in(law: i64, kind: i64, code: i64[:], consts: f64[:]) { add_field_term_in(law, kind, code, consts); }
 
 // Steady heat conduction with conductivity k and a uniform source q per
 // volume. In 2D, t is the thickness.
@@ -620,6 +638,13 @@ fn cut_difference() -> f64, f64 {
     }
     return most, scale;
 }
+
+// The integral over the region of the expression `code` of the coordinates
+// and of the solution (field.goose, eval_facet_code). NaN if it holds no facet.
+fn integral_expr(code: i64[:], consts: f64[:]) -> f64 { return region_integral(code, consts); }
+
+// The largest sign * (component comp of the solution) at the nodes of the region.
+fn extreme_value(comp: i64, sign: f64) -> f64 { return region_extreme(comp, sign); }
 
 // The largest von Mises stress at the nodes of the region.
 fn max_von_mises() -> f64 { return region_max_von_mises(); }
