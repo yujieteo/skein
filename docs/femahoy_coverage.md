@@ -228,7 +228,7 @@ gives the roadmap phase that closes the gap:
   triangles. The preload form `P = defgrad(u)*S` solves the static step to
   first order, and the buckling step takes its stress. A born node shows
   the change since its birth. Point location on a curved P2 cell uses
-  Newton iteration. A `||` boundary with a limit inside is refused
+  Newton iteration. A `||` boundary with a round limit inside is refused
   (`tests/unsupported/boundary_or_limit.skn`).
 - The harmonic step of a `Complex` vector unknown runs with `skein run`
   (`src/elements/harmonic.goose`): it is the complex lift of the real
@@ -251,6 +251,31 @@ gives the roadmap phase that closes the gap:
   runs only the default case. The best case is ratio 2.0003, power 2.003 and a
   peak of 1.5008 (the reference: ratio 2, power 2, peak 1.5), and its three
   `expect` lines pass within 0.5 %.
+- The wave-port batch runs three waveguide models with `skein run`:
+  [grid_waveguide_te10.skn](../examples/femahoy/grid_waveguide_te10.skn)
+  (phase of S21 within 0.1 deg),
+  [grid_waveguide_step.skn](../examples/femahoy/grid_waveguide_step.skn)
+  and [grid_waveguide_dielectric.skn](../examples/femahoy/grid_waveguide_dielectric.skn)
+  (S11 and S21 within 0.035 and 0.012). The edge physics takes the stress
+  tensor form `let Hs = -2*skew(grad(E))/mu`, `eq div(Hs) + eps*ddt2(E) = 0`
+  (`ddt2` is `-omega^2` in a `harmonic` step) and the natural bc
+  `Hs*n = z*(E - dot(E, n)*n) + g` with `g` a vector of x, y and z (a port
+  with an incident wave). The bcs `E.y = 0` and `E.z = 0` on a plane of x
+  hold the tangent of E. A `material a on r1, b on r2` gives each region its
+  own mu and eps, and `integral(dot(E, g), s)` on a boundary projects E on a
+  mode. A limit of a `&&` inside a `||` of a boundary cuts only the planes of
+  that `&&` (`plane_cut` in `src/elements/api.goose`). Deviations: the mesh
+  sizes are 1.6 mm (te10, for the phase), 2 mm (step) and 2 mm (dielectric),
+  because the tetrahedra of the mesher need the finer mesh of te10 to put the
+  phase of S21 within 0.1 deg, and the step and the dielectric guide at the
+  femahoy sizes (1.4 mm and 1.5 mm) do not finish in 25 minutes.
+- Not run yet in the electromagnetic batch: grid_cavity_te101 (the modal step
+  of an edge physics, with a wall impedance that depends on the eigenvalue),
+  line_wire_skin and line_bars_getdp (a scalar eddy-current physics with a
+  conductivity and a mu for each region, and `integral(J, r)` of a let),
+  team7_eddy_current (the `stadium` shape of the mesher, and a source in the
+  edge physics), dipole_king_middleton and optics_mie_cylinder (order 2 and a
+  PML in 3D and a scattering form with regions).
 - Not run yet, each for a large missing piece:
   laminate_pagano needs the orthotropic written-out law on serendipity
   hexahedra with reduced integration, a per-region material on hexahedra and

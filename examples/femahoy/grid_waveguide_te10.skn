@@ -30,7 +30,7 @@ material air {
 }
 
 mesh m on guide {
-    size: 2 mm
+    size: 1.6 mm
     cell: tet
 }
 

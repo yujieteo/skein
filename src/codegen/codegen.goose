@@ -15,6 +15,7 @@
 // (command_line.md §6.3, §6.4).
 import std;
 import math;
+import os;
 namespace codegen;
 import syntax from "../syntax";
 import .dispatch;
@@ -641,6 +642,26 @@ fn shell_quoted(s: u8[:]) -> u8[>..] {
     }
     out.push('\'');
     return out;
+}
+
+// `path` relative to the directory that skein run started in, which is the
+// project root, if it is below it and the real working directory resolves
+// it. So the generated program names the same file in each checkout.
+fn project_path(path: u8[:]) -> u8[>..] {
+    var cwd: u8[>..] = [];
+    if env("PWD", cwd) && cwd.len > 0 && path.len > cwd.len && path[..cwd.len] == cwd[..] && path[cwd.len] == '/' {
+        var rel = str(path[cwd.len + 1..]);
+        var probe: u8[>..] = [];
+        if read_file(rel, probe) { return rel; }
+    }
+    return str(path);
+}
+
+// The shell command that runs the model at `path` with skein. The program
+// finds skein in $SKEIN_EXE, which skein run sets, so the program has no
+// path of the build tree.
+fn skein_run_command(path: u8[:]) -> u8[>..] {
+    return str("exec \"${SKEIN_EXE:-skein}\" run ", shell_quoted(project_path(path)));
 }
 
 // The directory of the results of model `model`, run with the --set words

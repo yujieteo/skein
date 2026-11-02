@@ -28,6 +28,7 @@ import solvers from "../solvers";   // the memory budget of a study
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
+    fn setenv(name: const u8&, value: const u8&, overwrite: i32) -> i32;
 }
 
 let USAGE = "usage: skein run <file.skn> [--set name=value]... [--study <name> [--jobs k] [--format toon|json]]\n";
@@ -142,6 +143,10 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
 // `skein run`. `args` are the words after `run`. It gives the exit status
 // (command_line.md §10).
 fn run(args: const u8[:][:]) -> i64 {
+    // A submodel finds this skein in $SKEIN_EXE (skein_run_command).
+    var exe = str(resource_dir(), "skein");
+    exe.push(0);
+    setenv("SKEIN_EXE\0"[0], exe[0], 1);
     // The indices in `args` of the model file and of the study name.
     var at = -1;
     var study_at = -1;
