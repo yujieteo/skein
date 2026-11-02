@@ -632,7 +632,7 @@ fn value_item(n: i64) {
     } else if geometric(v) {
         geometry_names.push(w);
         geometry_nodes.push(v);
-    } else if is_call(v, "boundary") {
+    } else if is_call(v, "boundary") || (kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-" && is_call(child(v, 0), "boundary")) {
         surface_lets.push(n);
     } else if is_call(v, "results") {
         results_item(n, v);
@@ -911,8 +911,35 @@ fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
     return true;
 }
 
+// `let skin: Surface = boundary(pin) - base`: every face of the box but the
+// nodes of the boundary `base`.
+fn surface_difference(n: i64) {
+    let v = child(n, 1);
+    let call = child(v, 0);
+    let b = if kind(child(v, 1)) == syntax::N_NAME { find_surf(name(child(v, 1))) } else { -1 };
+    let k = if syntax::child_count(call) == 2 && kind(arg(call, 0)) == syntax::N_NAME { find_body(name(arg(call, 0))) } else { -1 };
+    let on_body = syntax::child_count(call) == 2 && kind(arg(call, 0)) == syntax::N_NAME && (name(arg(call, 0)) == body_name || k >= 0);
+    if !on_body || b < 0 || surfs[b].hole || geo != GEO_BOX || surfs[b].axes.len == 0 {
+        unsupported(tok(v), "a boundary difference is boundary(box) less a boundary of planes that a let names above", "write let skin: Surface = boundary(pin) - base");
+        return;
+    }
+    var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], minus: b, body: k };
+    set64(s.name, name(n));
+    for j in dim {
+        s.axes.push(j);
+        s.values.push(lo[j]);
+        s.axes.push(j);
+        s.values.push(hi[j]);
+    }
+    surfs.push(s);
+}
+
 // `let root: Surface = boundary(plate, x == 0 mm)`.
 fn surface(n: i64) {
+    if kind(child(n, 1)) == syntax::N_BINARY {
+        surface_difference(n);
+        return;
+    }
     let v = child(n, 1);
     let of = if syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { "" };
     let k = find_body(of);
