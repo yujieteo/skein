@@ -21,7 +21,7 @@ namespace solvers;
 
 let SLU_LEAF = 96;          // the blocks of a part that the dissection does not cut
 let SLU_PIVOT = 1.0e-14;    // the smallest pivot, relative to the largest entry of its row
-let SLU_RATE = 4.0e8;       // Reason: the multiplies and adds for each second of slu_factor on the desktop (waveguide_step, 1.4 mm)
+let SLU_RATE = 3.8e9;       // Reason: the multiplies and adds for each second of slu_factor on the desktop (waveguide_step at 1.4 mm: 186 s, waveguide_dielectric at 1.5 mm: 143 s)
 
 var slu_n = 0;                   // the dofs
 var slu_perm: i64[>..] = [];     // the dof of each place of the order

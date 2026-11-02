@@ -287,9 +287,12 @@ gives the roadmap phase that closes the gap:
   GMRES with ILU(0) did not converge on the step at 1.4 mm in 5 minutes, and
   its cap of 20,000 iterations was never reached. The plan counts the entries
   of L and the multiplies before the factors are sized, so the memory check
-  and the time estimate come first. A system that needs more than
-  3e12 multiplies takes GMRES with ILU(0), which stops after 3e11 multiplies
-  with a message, so a run never hangs.
+  and the time estimate come first. The run prints the estimate if it is
+  over 20 s. A system with an estimate over 900 s (15 minutes) stops before
+  the solve with a message that gives the estimate and says to use a coarser
+  mesh, so a run never looks like a hang. The step at 1.4 mm (202 s estimate,
+  186 s measured) and the dielectric at 1.5 mm (134 s estimate, 143 s
+  measured) run within the limit.
 - The batch of the eddy currents runs
   [line_wire_skin.skn](../examples/femahoy/line_wire_skin.skn) (R within
   0.1 % of the Bessel function answer) and

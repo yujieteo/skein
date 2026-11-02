@@ -35,8 +35,6 @@ import .post;
 import .eigen;
 import solvers from "../solvers";
 
-let EDGE_TOLERANCE = 1.0e-10;   // the GMRES residual relative to the right side
-let EDGE_ITERATIONS = 20000;
 
 var edge_v: i64[>..] = [];      // the two vertices of each edge, the lower index first
 var cell_edge: i64[>..] = [];   // the edge of each local edge of each cell

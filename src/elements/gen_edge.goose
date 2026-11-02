@@ -544,8 +544,13 @@ fn emit_cell_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let b = cval(f);
     eddy_u = [1.0, 0.0];
     let a1 = cval(f);
+    eddy_u = [2.0, 0.0];
+    let a2 = cval(f);
     eddy_on = false;
     material_node = base;
+    if abs(a2[0] - 2.0 * a1[0] + b[0]) > 1.0e-9 * (abs(a2[0]) + abs(b[0]) + 1.0e-300) || abs(a2[1] - 2.0 * a1[1] + b[1]) > 1.0e-9 * (abs(a2[1]) + abs(b[1]) + 1.0e-300) {
+        probe_fail(tok(f), "the integrand is not affine in the unknown", PROBE_FIX);
+    }
     format(pre, "    let cells_", n, " = wave_cells(", cached_region_shape(r), ");\n");
     out.append("cadd(cmul(");
     format(out, "[", a1[0] - b[0], ", ", a1[1] - b[1], "]");

@@ -29,9 +29,6 @@ import .solve;
 import solvers from "../solvers";
 
 let WAVE_TOLERANCE = 1.0e-10;  // the GMRES residual relative to the right side
-let WAVE_RESTART = 1000;        // the largest restart: GMRES(200) stalls on a PML duct of 8 rows of cells
-let WAVE_KRYLOV = 50000000;     // the largest restart times the dofs: 400 MB of Krylov vectors
-let WAVE_ITERATIONS = 20000;
 let PML_REFLECTION = 1.0e-6;    // the reflection of the layer at normal incidence
 
 var wave_c: f64[2] = [0.0, 0.0];   // c, the coefficient of u
@@ -364,70 +361,48 @@ fn wave_rhs() -> f64[>..] {
     return b;
 }
 
-// The GMRES restart of a system of n dofs.
-fn wave_restart(n: i64) -> i64 { return min(WAVE_RESTART, max(50, WAVE_KRYLOV / max(n, 1))); }
 
-let WAVE_WORK = 3.0e12;         // the multiplies and adds above which a system takes GMRES, not the direct solve
-let WAVE_GMRES_WORK = 3.0e11;   // the multiplies and adds that GMRES may use before it stops (about 3 minutes)
+let WAVE_SECONDS = 900.0;       // the longest estimated time of a direct solve (15 minutes). Reason: a run that cannot finish stops with a message and never looks like a hang
 var wave_direct = false;        // the system of this solve takes the direct solve
 
 // The solution path of a system with its pattern in row_start and col: the
 // direct solve of src/solvers/slu.goose, whose factor is also the
-// preconditioner of GMRES, or GMRES with ILU(0) if the factor needs more
-// than WAVE_WORK multiplies. Checks the memory of the path. Reason: GMRES
-// with ILU(0) does not converge on the indefinite systems of a fine mesh
+// preconditioner of GMRES. Prints the time estimate if it is over 20 s.
+// Stops before the solve, with the estimate and the fix, if the estimate is
+// over WAVE_SECONDS. Checks the memory of the path. Reason: GMRES with
+// ILU(0) does not converge on the indefinite systems of a fine mesh
 // (waveguide_step at 1.4 mm ran for more than 5 minutes).
 fn wave_choose_path() {
-    wave_direct = solvers::slu_plan(row_start, col, 2) && solvers::slu_work() <= WAVE_WORK;
-    if wave_direct {
-        solvers::memory_check("simplex wave lu", solvers::slu_entry_count(), dof_total(), 40, 0, "");
-        if solvers::slu_work() > 20.0 * solvers::SLU_RATE {
-            write_stderr(str("skein run: the direct solve of ", dof_total(), " dofs takes about ", round(solvers::slu_work() / solvers::SLU_RATE) as! i64, " seconds\n"));
-        }
-        solvers::slu_build();
-        return;
+    wave_direct = false;
+    guard solvers::slu_plan(row_start, col, 2) else {
+        write_stderr(str("skein run: the direct solve cannot plan the system of ", dof_total(), " dofs. Use a coarser mesh\n"));
+        exit(1);
+    };
+    let seconds = solvers::slu_work() / solvers::SLU_RATE;
+    if seconds > WAVE_SECONDS {
+        write_stderr(str("skein run: the direct solve of ", dof_total(), " dofs takes about ", round(seconds) as! i64,
+                         " seconds, and the limit is ", round(WAVE_SECONDS) as! i64, " seconds. Use a coarser mesh\n"));
+        exit(1);
     }
-    let m = wave_restart(dof_total());
-    write_stderr(str("skein run: the direct solve needs about ", solvers::slu_work() / 1.0e9, " G multiplies, so GMRES with ILU(0) takes the solve and stops after ",
-                     WAVE_GMRES_WORK / 1.0e9, " G\n"));
-    solvers::memory_check("simplex wave gmres ilu0", col.len, dof_total(), m + 9 + (m + 1) * m / max(dof_total(), 1), 0, "");
+    wave_direct = true;
+    solvers::memory_check("simplex wave lu", solvers::slu_entry_count(), dof_total(), 40, 0, "");
+    if seconds > 20.0 {
+        write_stderr(str("skein run: the direct solve of ", dof_total(), " dofs takes about ", round(seconds) as! i64, " seconds\n"));
+    }
+    solvers::slu_build();
 }
 
-// The most iterations of GMRES(restart) for n dofs: WAVE_GMRES_WORK multiplies.
-fn wave_iterations(n: i64, restart: i64) -> i64 {
-    return max(restart, min(WAVE_ITERATIONS, (WAVE_GMRES_WORK / (4.0 * n * (restart / 2 + 10))) as! i64));
-}
-
-// The solve of b with the factor of the direct solve or ILU(0): x in sol. G
-// is the correction after ILU(0) when `corrected`. False if GMRES does not
-// converge. After a failure the program says why.
+// The solve of b with the factor of the direct solve: x in sol. False if
+// GMRES does not converge.
 fn wave_krylov<G>(b: f64[:], corrected: bool) -> i64, bool {
-    var lu: f64[>..] = [];
-    var diag: i64[>..] = [];
     var its = 0;
-    var converged = false;
-    if wave_direct {
-        converged = solvers::slu_factor(row_start, col, val);
-        if converged {
-            solvers::rows_start(row_start, col, val);
-            its, converged = solvers::gmres(row_start, col, val, b, sol, WAVE_TOLERANCE, 30, 200) { r, z => solvers::slu_apply(r, z); };
-            solvers::rows_stop();
-        }
-        solvers::slu_free();
-        return its, converged;
-    }
-    converged = solvers::ilu0(row_start, col, val, lu, diag);
+    var converged = solvers::slu_factor(row_start, col, val);
     if converged {
-        let restart = wave_restart(b.len);
-        let most = wave_iterations(b.len, restart);
         solvers::rows_start(row_start, col, val);
-        its, converged = solvers::gmres(row_start, col, val, b, sol, WAVE_TOLERANCE, restart, most) { r, z =>
-            solvers::ilu0_apply(row_start, col, lu, diag, r, z);
-            if corrected { G(r, z); }
-        };
+        its, converged = solvers::gmres(row_start, col, val, b, sol, WAVE_TOLERANCE, 30, 200) { r, z => solvers::slu_apply(r, z); };
         solvers::rows_stop();
-        if !converged { write_stderr(str("skein run: GMRES stopped after ", its, " iterations with no convergence. Use a coarser mesh\n")); }
     }
+    solvers::slu_free();
     return its, converged;
 }
 

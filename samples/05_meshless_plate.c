@@ -2294,9 +2294,6 @@ typedef struct {
     gs_stack gs_gstk_elements_basis_a_g8;
     int64_t elements_eigen_its_g8;
     double elements_WAVE_TOLERANCE_g8;
-    int64_t elements_WAVE_RESTART_g8;
-    int64_t elements_WAVE_KRYLOV_g8;
-    int64_t elements_WAVE_ITERATIONS_g8;
     double elements_PML_REFLECTION_g8;
     a2_f64 elements_wave_c_g8;
     a2_f64 elements_wave_s_g8;
@@ -2313,11 +2310,8 @@ typedef struct {
     gs_stack gs_gstk_elements_tie_phase_g8;
     gs_rhdr elements_low_nodes_g8;
     gs_stack gs_gstk_elements_low_nodes_g8;
-    double elements_WAVE_WORK_g8;
-    double elements_WAVE_GMRES_WORK_g8;
+    double elements_WAVE_SECONDS_g8;
     uint8_t elements_wave_direct_g8;
-    double elements_EDGE_TOLERANCE_g8;
-    int64_t elements_EDGE_ITERATIONS_g8;
     gs_rhdr elements_edge_v_g8;
     gs_stack gs_gstk_elements_edge_v_g8;
     gs_rhdr elements_cell_edge_g8;
@@ -24462,7 +24456,7 @@ static void gs_init_globals(void) {
     GS_GL->solvers_memory_checks_g7 = 0;
     GS_GL->solvers_SLU_LEAF_g7 = 96;
     GS_GL->solvers_SLU_PIVOT_g7 = 1e-14;
-    GS_GL->solvers_SLU_RATE_g7 = 400000000.0;
+    GS_GL->solvers_SLU_RATE_g7 = 3800000000.0;
     GS_GL->solvers_slu_n_g7 = 0;
     gs_stack_init((&GS_GL->gs_gstk_solvers_slu_perm_g7));
     GS_GL->solvers_slu_perm_g7.base = (&GS_GL->gs_gstk_solvers_slu_perm_g7)->top;
@@ -25625,9 +25619,6 @@ static void gs_init_globals(void) {
     GS_GL->elements_basis_a_g8.len = 0;
     GS_GL->elements_eigen_its_g8 = 0;
     GS_GL->elements_WAVE_TOLERANCE_g8 = 1e-10;
-    GS_GL->elements_WAVE_RESTART_g8 = 1000;
-    GS_GL->elements_WAVE_KRYLOV_g8 = 50000000;
-    GS_GL->elements_WAVE_ITERATIONS_g8 = 20000;
     GS_GL->elements_PML_REFLECTION_g8 = 1e-06;
     t156.e[0] = 0.0;
     t156.e[1] = 0.0;
@@ -25664,11 +25655,8 @@ static void gs_init_globals(void) {
     GS_GL->elements_low_nodes_g8.base = (&GS_GL->gs_gstk_elements_low_nodes_g8)->top;
     GS_GL->elements_low_nodes_g8.len = 0;
     GS_GL->elements_low_nodes_g8.len = 0;
-    GS_GL->elements_WAVE_WORK_g8 = 3000000000000.0;
-    GS_GL->elements_WAVE_GMRES_WORK_g8 = 300000000000.0;
+    GS_GL->elements_WAVE_SECONDS_g8 = 900.0;
     GS_GL->elements_wave_direct_g8 = 0;
-    GS_GL->elements_EDGE_TOLERANCE_g8 = 1e-10;
-    GS_GL->elements_EDGE_ITERATIONS_g8 = 20000;
     gs_stack_init((&GS_GL->gs_gstk_elements_edge_v_g8));
     GS_GL->elements_edge_v_g8.base = (&GS_GL->gs_gstk_elements_edge_v_g8)->top;
     GS_GL->elements_edge_v_g8.len = 0;

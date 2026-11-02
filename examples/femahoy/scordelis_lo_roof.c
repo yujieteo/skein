@@ -16590,7 +16590,7 @@ static void gs_init_globals(void) {
     GS_GL->solvers_memory_checks_g7 = 0;
     GS_GL->solvers_SLU_LEAF_g7 = 96;
     GS_GL->solvers_SLU_PIVOT_g7 = 1e-14;
-    GS_GL->solvers_SLU_RATE_g7 = 400000000.0;
+    GS_GL->solvers_SLU_RATE_g7 = 3800000000.0;
     GS_GL->solvers_slu_n_g7 = 0;
     gs_stack_init((&GS_GL->gs_gstk_solvers_slu_perm_g7));
     GS_GL->solvers_slu_perm_g7.base = (&GS_GL->gs_gstk_solvers_slu_perm_g7)->top;

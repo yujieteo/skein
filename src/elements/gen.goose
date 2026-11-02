@@ -1712,8 +1712,13 @@ fn eddy_terms() -> f64, f64[2], f64[2] {
     let b = cval(eddy_rhs_node);
     eddy_u = [1.0, 0.0];
     let r1 = cval(eddy_rhs_node);
+    eddy_u = [2.0, 0.0];
+    let r2 = cval(eddy_rhs_node);
     let mu = cval(eddy_mu_node);
     eddy_on = false;
+    if abs(r2[0] - 2.0 * r1[0] + b[0]) > 1.0e-9 * (abs(r2[0]) + abs(b[0]) + 1.0e-300) || abs(r2[1] - 2.0 * r1[1] + b[1]) > 1.0e-9 * (abs(r2[1]) + abs(b[1]) + 1.0e-300) {
+        unsupported(tok(eddy_rhs_node), "the right side is not affine in the unknown", EDDY_FIX);
+    }
     if !(mu[0] > 0.0) || mu[1] != 0.0 { unsupported(tok(eddy_mu_node), "mu is not a positive real value", EDDY_FIX); return 1.0, [0.0, 0.0], [0.0, 0.0]; }
     let a = [r1[0] - b[0], r1[1] - b[1]];
     return 1.0 / mu[0], [-eddy_sign * a[0], -eddy_sign * a[1]], [eddy_sign * b[0], eddy_sign * b[1]];
