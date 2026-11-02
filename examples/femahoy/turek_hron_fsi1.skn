@@ -14,14 +14,16 @@ scales D, U_mean, rho_f
 
 let chan: Surface = rect((0, 0) m, (2.5 m, H))
 let cyl: Surface = circle((0.2, 0.2) m, D/2)
-let bar: Surface = rect((0.2, 0.19) m, (0.6, 0.21) m) - cyl
-let fluid_dom: Surface = chan - cyl - bar
+let flag: Surface = rect((0.2, 0.19) m, (0.6, 0.21) m)
+let bar: Surface = flag - cyl
+let fluid_dom: Surface = chan - cyl - flag
 let inlet: Curve = boundary(fluid_dom, x == 0 m)
 let walls: Curve = boundary(fluid_dom, y == 0 m || y == H)
 let cyl_wall: Curve = boundary(fluid_dom, cyl)
-let wet_fluid: Curve = boundary(fluid_dom, bar)
+let wet_fluid: Curve = boundary(fluid_dom, flag)
 let root: Curve = boundary(bar, cyl)
-let wet_solid: Curve = boundary(bar) - root
+let body: Curve = cyl_wall | wet_fluid
+let wet_solid: Curve = boundary(bar, flag)
 
 material water {
     rho: Density = rho_f
@@ -35,15 +37,15 @@ material flag_svk {
 }
 
 mesh mf on fluid_dom {
-    size: 0.02 m
+    size: 0.04 m
     cell: tri
-    refine cyl_wall | wet_fluid: 0.005 m
+    refine cyl_wall: 0.0025 m
+    refine wet_fluid: 0.0025 m
 }
 
-// Quads on the flag, with Lagrange order 2 on the triangles that stay.
 mesh ms on bar {
-    size: 0.005 m
-    cell: quad
+    size: 0.0025 m
+    cell: tri
 }
 
 physics flow on fluid_dom solves v: Vector<Velocity>, p: Pressure {
@@ -66,11 +68,9 @@ interface fsi: wet_fluid, wet_solid {
     mesh_motion: harmonic
 }
 
-method flow: fv {
+method flow: cg {
     mesh: mf
-    gradient: green_gauss
-    flux: linear_upwind
-    pv_coupling: rhie_chow
+    order: { v: 2, p: 1 }
 }
 
 method flag: cg {
@@ -81,13 +81,14 @@ method flag: cg {
 // FSI1 is steady. The outlet takes the default natural condition sigma_f*n = 0.
 step steady: static {
     bc inlet: v = (6*U_mean*y*(H - y)/H^2, 0)
-    bc walls | cyl_wall: v = 0
+    bc walls: v = 0
+    bc cyl_wall: v = 0
     bc root: u = 0
     output v, p, u
 }
 
 // n points out of the fluid, so the force on the cylinder and the flag is -sigma_f*n.
-expect drag: -integral((sigma_f*n).x, cyl_wall | wet_fluid) == 14.295 N/m within 4%
-expect lift: -integral((sigma_f*n).y, cyl_wall | wet_fluid) == 0.7638 N/m within 4%
+expect drag: -integral((sigma_f*n).x, body) == 14.295 N/m within 4%
+expect lift: -integral((sigma_f*n).y, body) == 0.7638 N/m within 4%
 expect ux_a: u.x at (0.6, 0.2) m == 0.0227 mm within 4%
 expect uy_a: u.y at (0.6, 0.2) m == 0.8209 mm within 4%

@@ -214,9 +214,18 @@ gives the roadmap phase that closes the gap:
   naca0012_ladson and naca23012_flap (the generator has no `nu`, no turbulence
   model in a written-out physics), wedge_oblique_shock (compressible Euler
   with a vector unknown in `fv`), dam_break_vof and dam_break_martin_moyce
-  (two-phase VOF), turek_hron_fsi1 (a second physics in the flow generator),
-  slider_crank (a multibody first-order form) and acoustics_pulsating_sphere
-  (3D acoustic reports at a point and on a region).
+  (two-phase VOF).
+- turek_hron_fsi1 runs in the flow lane (drag +0.02 %, lift -0.06 %, ux_a +0.1 %,
+  uy_a -2.1 %). The flag is written out as St. Venant-Kirchhoff
+  (`assume finite_strain`, `hooke` of `strain(u)`, `div(defgrad(u)*S) = 0`). It is solved by
+  Newton in the total Lagrangian form (`src/flow/fsi.goose`). Deviations: the model uses
+  `method flow: cg` with `order: { v: 2, p: 1 }` in place of `fv`, and tri cells for the flag
+  in place of quads.
+- slider_crank runs in the `ode` lane (`src/ode`): exact Taylor series in time and Newton on the
+  history polynomial. `generalized_alpha(rho)` is mapped to 6-point backward differences, so the
+  numerical dissipation of the alpha method is not reproduced.
+- acoustics_pulsating_sphere runs in the wave lane: a Robin boundary term, complex sample
+  expressions, and a graded mesh of the octant shell (`shell_tets` in `src/mesher/sweep.goose`).
 
 - Structural models of phase 3 run with `skein run` and pass their `expect`:
   [buckling_column.skn](../examples/femahoy/buckling_column.skn),

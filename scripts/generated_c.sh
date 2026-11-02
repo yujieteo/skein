@@ -97,6 +97,7 @@ examples/femahoy/shape_hole_biaxial.skn
 examples/femahoy/slider_crank.skn
 examples/femahoy/submodel_kirsch_hole_global.skn
 examples/femahoy/submodel_kirsch_hole.skn
+examples/femahoy/turek_hron_fsi1.skn
 examples/femahoy/taylor_bar_impact.skn
 examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn

@@ -318,24 +318,19 @@ fn shell_direction(k: i64, s: f64, t: f64) -> f64[3] {
     return q * (1.0 / sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]));
 }
 
-// Meshes an octant of a spherical shell (shell_parts) with tetrahedra: the
-// triangles of the 3 patches of a cubed sphere (shell_direction) swept
-// through radial layers of equal depth, each prism cut into 3 tetrahedra
-// (add_prism). Each node on an arc or a face of the shell is on it, so the
-// sharp edges stay sharp. False if g is not such a shell.
-var shell_centre: f64[3] = [0.0; 3];
-let SHELL_LAYERS = 400;
-let SHELL_CELLS = 4000000;
-
-fn shell_tets(g: i64, size: f64) -> bool {
-    let centre, r0, r1 = shell_parts(g);
-    guard r1 > 0.0 else { return false; };
+// The radii of the layers and the cells n along an arc of the shell: with targets, the layers follow
+// the wanted size (refine.goose) along the axes and the diagonal of the octant, and the arcs have
+// the cells of the smallest wanted size of all radii. Without, equal layers and arcs of `size`.
+// False if the layers or the cells are too many.
+fn shell_layers(centre: f64[3], r0: f64, r1: f64, size: f64, radii: f64[>..]&, cells: i64&) -> bool {
+    var n = 1;
     // The radii of the layers and the cells along an arc: with targets, the
     // layers follow the wanted size (refine.goose) along the axes and the
     // diagonal of the octant, and the arcs have the cells of the smallest
     // wanted size of all radii. Without, equal layers and arcs of `size`.
-    var radii: f64[>..] = [r0];
-    var n = max(1, ceil(0.25 * PI * r1 / size - 1.0e-9) as! i64);
+    radii.clear();
+    radii.push(r0);
+    n = max(1, ceil(0.25 * PI * r1 / size - 1.0e-9) as! i64);
     if targets.len == 0 {
         let nr = max(1, ceil((r1 - r0) / size - 1.0e-9) as! i64);
         radii.clear();
@@ -356,15 +351,34 @@ fn shell_tets(g: i64, size: f64) -> bool {
             r += max(wanted(r + 0.5 * wanted(r)), 1.0e-6 * r1);
             radii.push(min(r, r1));
         }
-        guard radii[radii.len - 1] >= r1 - 1.0e-9 * r1 else { return false; };
+        guard radii[radii.len - 1] >= r1 - 1.0e-9 * r1 else { return false; }
         n = max(n, ceil(0.25 * PI * r1 / wanted(r1) - 1.0e-9) as! i64);
         // The last layer is not a sliver: it joins the one before it.
         if radii.len >= 3 && radii[radii.len - 1] - radii[radii.len - 2] < 0.5 * (radii[radii.len - 2] - radii[radii.len - 3]) {
             radii.pop();
             radii[radii.len - 1] = r1;
         }
-        guard 3 * n * n * (radii.len - 1) * 6 <= SHELL_CELLS else { return false; };
+        guard 3 * n * n * (radii.len - 1) * 6 <= SHELL_CELLS else { return false; }
     }
+    cells = n;
+    return true;
+}
+
+// Meshes an octant of a spherical shell (shell_parts) with tetrahedra: the
+// triangles of the 3 patches of a cubed sphere (shell_direction) swept
+// through radial layers of equal depth, each prism cut into 3 tetrahedra
+// (add_prism). Each node on an arc or a face of the shell is on it, so the
+// sharp edges stay sharp. False if g is not such a shell.
+var shell_centre: f64[3] = [0.0; 3];
+let SHELL_LAYERS = 400;
+let SHELL_CELLS = 4000000;
+
+fn shell_tets(g: i64, size: f64) -> bool {
+    let centre, r0, r1 = shell_parts(g);
+    guard r1 > 0.0 else { return false; };
+    var radii: f64[>..] = [r0];
+    var n = 1;
+    guard shell_layers(centre, r0, r1, size, radii, n) else { return false; };
     let nr = radii.len - 1;
     // The directions of the nodes of the surface, each once, and the node
     // of each point (s, t) of each patch.
