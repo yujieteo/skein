@@ -135,6 +135,49 @@ fn live_nodes() -> u8[>..] {
     return live;
 }
 
+// The new cells come alive. Each new node takes the value of the nearest shared node.
+fn adopt_values(new_cells: i64[>..]&, shared: i64[>..]&, before: u8[>..]&, seen: u8[>..]&) {
+    for c in new_cells {
+        dead[c] = 0;
+        born[c] = 1;
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if before[n] != 0 || seen[n] != 1 || shared.len == 0 { continue; }
+            var best = shared[0];
+            var best_d = 1.0e300;
+            for m in shared {
+                var d = 0.0;
+                for t in 3 { d += (node_x(n, t) - node_x(m, t)) * (node_x(n, t) - node_x(m, t)); }
+                if d < best_d {
+                    best_d = d;
+                    best = m;
+                }
+            }
+            for p in ncomp { held[ncomp * n + p] = held[ncomp * best + p]; }
+            seen[n] = 2;
+        }
+    }
+}
+
+// Records the value of each new node at its birth, for the change since birth.
+fn record_birth(new_cells: i64[>..]&, before: u8[>..]&) {
+    if origin.len != sol.len {
+        origin.clear();
+        for d in sol.len { origin.push(0.0); }
+    }
+    for c in new_cells {
+        for l in per_cell {
+            let n = cell_node(c, l);
+            if before[n] == 0 { for p in ncomp { origin[ncomp * n + p] = held[ncomp * n + p]; } }
+        }
+    }
+    for c in new_cells {
+        for l in per_cell {
+            for p in ncomp { birth_u[(per_cell * c + l) * ncomp + p] = held[ncomp * cell_node(c, l) + p]; }
+        }
+    }
+}
+
 // Gives birth to the dead cells in shape g, strain-free on the solution of
 // the last step. It gives the number of cells in g.
 fn birth_cells(g: i64) -> i64 {
@@ -167,41 +210,8 @@ fn birth_cells(g: i64) -> i64 {
             seen[n] = 1;
         }
     }
-    for c in new_cells {
-        dead[c] = 0;
-        born[c] = 1;
-        for l in per_cell {
-            let n = cell_node(c, l);
-            if before[n] != 0 || seen[n] != 1 || shared.len == 0 { continue; }
-            var best = shared[0];
-            var best_d = 1.0e300;
-            for m in shared {
-                var d = 0.0;
-                for t in 3 { d += (node_x(n, t) - node_x(m, t)) * (node_x(n, t) - node_x(m, t)); }
-                if d < best_d {
-                    best_d = d;
-                    best = m;
-                }
-            }
-            for p in ncomp { held[ncomp * n + p] = held[ncomp * best + p]; }
-            seen[n] = 2;
-        }
-    }
-    if origin.len != sol.len {
-        origin.clear();
-        for d in sol.len { origin.push(0.0); }
-    }
-    for c in new_cells {
-        for l in per_cell {
-            let n = cell_node(c, l);
-            if before[n] == 0 { for p in ncomp { origin[ncomp * n + p] = held[ncomp * n + p]; } }
-        }
-    }
-    for c in new_cells {
-        for l in per_cell {
-            for p in ncomp { birth_u[(per_cell * c + l) * ncomp + p] = held[ncomp * cell_node(c, l) + p]; }
-        }
-    }
+    adopt_values(new_cells, shared, before, seen);
+    record_birth(new_cells, before);
     return count;
 }
 
