@@ -436,6 +436,25 @@ fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 // The condition dot(q, n) = h (T - t_inf) on the region.
 fn film(h: f64, t_inf: f64) { add_film(h, t_inf); }
 
+// The radiation to the surroundings at t_inf on the region: dot(q, n) = c
+// (T^4 - t_inf^4) with c = eps sigma in the units of the model.
+fn radiate_ambient(c: f64, t_inf: f64) { add_ambient(c, t_inf); }
+
+// The conductivity k(T) of a heat physics at the temperatures lo, lo + step,
+// .. hi, linear in between and beyond the ends. A step with it iterates.
+fn conductivity_curve(lo: f64, hi: f64, v: f64[:]) { set_conductivity_curve(lo, hi, v); }
+
+// The temperature of the free nodes before the first step, which is the
+// start of the iteration of a nonlinear step.
+fn initial_temperature(t: f64) { initial_value = t; }
+
+// The tolerance of the nonlinear steps: the change of T relative to its
+// largest value.
+fn nonlinear_tolerance(rtol: f64) {
+    guard rtol > 0.0 else { abort("nonlinear_tolerance: rtol > 0"); }
+    nl_tolerance = rtol;
+}
+
 // Adds the facets of the region to the enclosure of the step, with the
 // emissivity eps: the natural condition dot(q, n) = radiation(eps).
 // `sb` is the Stefan-Boltzmann constant in the units of the model.
@@ -448,6 +467,7 @@ fn clear_bcs() {
     clear_conditions();
     clear_rigid();
     clear_films();
+    clear_ambient();
     clear_radiation();
     clear_impedance();
     if physics == MIXED { clear_pressure(); }

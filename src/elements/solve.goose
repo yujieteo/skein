@@ -88,10 +88,17 @@ fn solve_system() -> bool {
     // AMG with their copy
     assemble(if physics == ELASTIC { "simplex elastic cg amg" } else { "simplex cg amg" }, 6 + 2 * mode_count());
     hold_dead_nodes();
-    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
+    let nonlinear = physics == HEAT && (curve_k.len > 0 || amb_cell.len > 0);
+    for d in sol.len { sol[d] = if fixed[d] != 0 { prescribed[d] } else if nonlinear { initial_value } else { 0.0 }; }
+    if nonlinear && curve_k.len > 0 { reassemble(); }
     let key = solvers::warm_key();
-    let warm = !direct && solvers::warm_start(key, sol, fixed);
-    let converged = if rad_count() > 0 { radiation_solve(start, key, warm) } else { linear_solve(start, key, warm) };
+    let warm = !direct && !nonlinear && solvers::warm_start(key, sol, fixed);
+    var converged = false;
+    if nonlinear {
+        converged = nonlinear_heat_solve(start, key);
+    } else {
+        converged = if rad_count() > 0 { radiation_solve(start, key, warm) } else { linear_solve(start, key, warm) };
+    }
     if converged { solvers::warm_keep(key, sol); }
     return converged;
 }
@@ -268,6 +275,61 @@ fn radiation_solve(start: f64, key: i64, warm: bool) -> bool {
     radiated(r, dg);
     for d in n { load[d] = base[d] - r[d]; }
     for e in val.len { val[e] = k[e]; }
+    last_iterations = its;
+    return converged;
+}
+
+let NL_STEPS = 200;             // the most steps of nonlinear_heat_solve
+var nl_tolerance = 1.0e-10;     // the change of T relative to its largest value
+var nl_steps = 0;               // the steps of the last nonlinear solve
+
+// The nonlinear steady heat of k(T) and of the radiation to the
+// surroundings, from the temperature in `sol` (the initial value and the
+// fixed values). Each step solves (K(T) + R'(T)) T' = f - R(T) + R'(T) T
+// with the solve of a linear system: the conductivity is the one of the
+// last step (Picard), and the radiation has the Newton tangent R'. At the
+// end `load` holds f - R(T) and the matrix K(T), so that the reactions and
+// the check of the equilibrium hold the radiated heat.
+fn nonlinear_heat_solve(start: f64, key: i64) -> bool {
+    let n = sol.len;
+    var base: f64[>..] = [];
+    base.append(load);
+    var r = zeros(n);
+    var last = zeros(n);
+    var tangent = zeros(val.len);
+    var tangent_sol = zeros(n);
+    var converged = false;
+    var its = 0;
+    nl_steps = 0;
+    while !converged && nl_steps < NL_STEPS {
+        if nl_steps > 0 && curve_k.len > 0 { reassemble(); }
+        for d in n { r[d] = 0.0; }
+        for e in val.len { tangent[e] = 0.0; }
+        ambient_residual(r);
+        ambient_tangent(tangent);
+        solvers::multiply(row_start, col, tangent, sol, tangent_sol);
+        for e in val.len { val[e] += tangent[e]; }
+        for d in n {
+            load[d] = base[d] - r[d] + tangent_sol[d];
+            last[d] = sol[d];
+        }
+        let done = linear_solve(start, if nl_steps == 0 { key } else { -1 }, false);
+        for e in val.len { val[e] -= tangent[e]; }
+        guard done else { return false; }
+        its += last_iterations;
+        nl_steps++;
+        var change = 0.0;
+        var top = 0.0;
+        for d in n {
+            change = max(change, abs(sol[d] - last[d]));
+            top = max(top, abs(sol[d]));
+        }
+        converged = change <= nl_tolerance * top;
+    }
+    if curve_k.len > 0 { reassemble(); }
+    for d in n { r[d] = 0.0; }
+    ambient_residual(r);
+    for d in n { load[d] = base[d] - r[d]; }
     last_iterations = its;
     return converged;
 }

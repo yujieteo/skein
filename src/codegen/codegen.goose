@@ -237,6 +237,11 @@ fn number(t: i64) -> f64 {
 }
 
 // The value of expression `n`.
+// The name that eval gives the value bound_value (the temperature T of a
+// conductivity k(T) that the generator samples), or empty.
+var bound_name: u8[..64] = [];
+var bound_value = 0.0;
+
 recursive fn eval(n: i64) -> Val {
     let k = kind(n);
     if k == syntax::N_NUMBER {
@@ -257,6 +262,7 @@ recursive fn eval(n: i64) -> Val {
         return scalar(x / 100.0);
     }
     if k == syntax::N_NAME {
+        if bound_name.len > 0 && name(n) == bound_name { return scalar(bound_value); }
         var v = find_value(name(n));
         if v < 0 && name(n) == "pi" { return scalar(PI); }
         if v < 0 { v = property(name(n)); }

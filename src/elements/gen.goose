@@ -246,6 +246,7 @@ let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
 let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosure of the step
 let BC_PRESSURE = 4; // `bc inner: sigma*n = -p*n`: v[0] holds p
 let BC_FILM = 5;    // `bc skin: dot(q, n) = h*(T - T_air)`: v holds h and T_air
+let BC_AMBIENT = 8; // `bc skin: dot(q, n) = c*(T^4 - T_amb^4)`: v holds c = eps sigma and T_amb
 
 fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE || b.kind == BC_MOMENT; }
 
@@ -403,6 +404,9 @@ var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
 var mesh_tok = -1;
+var curve_node = -1;            // the k of the material when it depends on the unknown T, else -1
+var initial_node = -1;          // the initial value of the unknown, or -1
+var nl_rtol = 0.0;              // rtol of a solve item, or 0
 var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
@@ -474,6 +478,9 @@ fn reset() {
     mesh_fine = 0.0;
     mesh_tok = -1;
     hex_mesh = false;
+    curve_node = -1;
+    initial_node = -1;
+    nl_rtol = 0.0;
     order = 2;
     rkpm_support = 0.0;
     physics = -1;
@@ -951,6 +958,24 @@ fn region_shape(r: i64) -> i64 {
     return v.g;
 }
 
+// Whether the expression n uses the name `word`, through the values and the
+// properties that it names.
+recursive fn mentions(n: i64, word: u8[:], depth: i64) -> bool {
+    if n < 0 || depth > 20 { return false; }
+    if kind(n) == syntax::N_NAME {
+        if name(n) == word { return true; }
+        var v = codegen::find_value(name(n));
+        if v < 0 { v = property(name(n)); }
+        if v >= 0 && mentions(v, word, depth + 1) { return true; }
+    }
+    var c = first(n);
+    while c >= 0 {
+        if mentions(c, word, depth) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
 // The material property `word`, or -1.
 fn property(word: u8[:]) -> i64 {
     guard material_node >= 0 else { return -1; }
@@ -986,7 +1011,8 @@ fn read_law() {
     while p >= 0 {
         let w = name(p);
         // The eq of the wave physics names its properties.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || w == conductivity_name || w == "q_v" };
+        // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
+        let known = if physics == ELASTIC { w == "E" || w == "nu" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
         if !known && w != "rho" && !solid_property(w) {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -1006,7 +1032,12 @@ fn read_law() {
         }
     } else if physics == HEAT {
         let k = property(conductivity_name);
-        if k >= 0 { conductivity = scalar_value(k); }
+        if k >= 0 && mentions(k, unknown_name, 0) {
+            curve_node = k;
+            conductivity = 1.0;
+        } else if k >= 0 {
+            conductivity = scalar_value(k);
+        }
         if conductivity <= 0.0 {
             unsupported(tok(material_node), "the material needs k > 0", "give k: Conductivity = 50 W/(m*K)");
         }
@@ -1127,6 +1158,7 @@ fn physics_item(n: i64) {
         } else if k == syntax::N_UNKNOWN {
             set64(unknown_name, name(c));
             if complex_scalar(child(c, 0)) { physics = WAVE; }
+            if syntax::child_count(c) > 1 { initial_node = child(c, 1); }
         } else if k == syntax::N_MATASSIGN {
             materials_of(c);
         } else if k == syntax::N_ASSUME {
@@ -1453,6 +1485,8 @@ fn bc(n: i64) -> i64 {
         if dim != 2 { unsupported(tok(v), "radiation(eps) runs in a 2d model only", "make the model 2d"); }
         b.kind = BC_RADIATE;
         b.v[0] = scalar_value(arg(v, 0));
+    } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) && ambient(v, b) {
+        b.kind = BC_AMBIENT;
     } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) && film(v, b) {
         b.kind = BC_FILM;
     } else if physics == HEAT && (t == str("dot(", flux_name, ", n)") || t == str(flux_name, "*n")) {
@@ -1464,6 +1498,21 @@ fn bc(n: i64) -> i64 {
     }
     bcs.push(b);
     return bcs.len - 1;
+}
+
+// `c*(T^4 - T_amb^4)`: c and T_amb in b.v. False if v is no such value.
+fn ambient(v: i64, b: Bc&) -> bool {
+    guard kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" else { return false; }
+    let d = child(v, 1);
+    guard kind(d) == syntax::N_BINARY && syntax::text(tok(d)) == "-" && source_of(child(d, 0)) == str(unknown_name, "^4") else { return false; }
+    let r = child(d, 1);
+    guard kind(r) == syntax::N_BINARY && syntax::text(tok(r)) == "^" && source_of(child(r, 1)) == "4" else { return false; }
+    b.v[0] = scalar_value(child(v, 0));
+    b.v[1] = scalar_value(child(r, 0));
+    if b.v[0] <= 0.0 || b.v[1] < 0.0 {
+        unsupported(tok(v), "the radiation c = eps*sb needs c > 0 and T_amb >= 0", "write dot(q, n) = eps*sb*(T^4 - T_amb^4)");
+    }
+    return true;
 }
 
 // `h*(T - T_air)`: h and T_air in b.v. False if v is no such value.
@@ -1505,6 +1554,8 @@ fn step(n: i64) {
             }
         } else if k == syntax::N_EXPECT {
             expect(c, steps.len);
+        } else if k == syntax::N_SOLVE {
+            solve_item(c);
         } else if k == syntax::N_RELEASE {
             release(c);
         } else if k == syntax::N_BIRTH || k == syntax::N_DEATH {
@@ -1528,6 +1579,21 @@ fn step(n: i64) {
     s.report_count = reports.len - s.first_report;
     s.change_count = changes.len - s.first_change;
     steps.push(s);
+}
+
+// `solve { nonlinear: newton, rtol: 1e-10 }` of a heat step: the tolerance of the iteration.
+fn solve_item(n: i64) {
+    var a = first(first(n));
+    while a >= 0 {
+        let setting = kind(a) == syntax::N_SETTING;
+        if setting && name(a) == "rtol" {
+            nl_rtol = scalar_value(first(a));
+        } else if !(setting && name(a) == "nonlinear" && (source_of(first(a)) == "newton" || source_of(first(a)) == "picard")) {
+            unsupported(tok(a), "the solve item of a step has nonlinear: newton and rtol", "write solve { nonlinear: newton, rtol: 1e-10 }");
+        }
+        a = next(a);
+    }
+    if nl_rtol < 0.0 { unsupported(tok(n), "rtol must be > 0", "write rtol: 1e-10"); }
 }
 
 let REPORT_FIX = "write report reaction(root), reaction(root).x, mean(u.x, top), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
@@ -1842,6 +1908,12 @@ fn expect(n: i64, step: i64) {
     expects.push(x);
 }
 
+// Whether a bc radiates to the surroundings on boundary s.
+fn ambient_surf(s: i64) -> bool {
+    for b in bcs { if b.surf == s && b.kind == BC_AMBIENT { return true; } }
+    return false;
+}
+
 // Whether a bc fixes the unknown on boundary s.
 fn fixed_surf(s: i64) -> bool {
     for b in bcs { if b.surf == s && b.kind == BC_FIX { return true; } }
@@ -1912,7 +1984,7 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
     // The heat out of the body through a fixed boundary is -reaction.
     if physics == HEAT && is_call(f, "integral") && syntax::child_count(f) == 3 && source_of(arg(f, 0)) == str("dot(", flux_name, ", n)") {
         let s = region_surf(arg(f, 1));
-        guard s >= 0 && fixed_surf(s) else { return -1, -1, -1, 1.0; }
+        guard s >= 0 && (fixed_surf(s) || ambient_surf(s)) else { return -1, -1, -1, 1.0; }
         return FIELD_REACTION, 0, s, -scale;
     }
     if physics == HEAT && is_call(f, "reaction") && syntax::child_count(f) == 2 && region_surf(arg(f, 0)) >= 0 {
@@ -1942,6 +2014,11 @@ fn read(prog: i64) -> bool {
             header(c);
         } else if k == syntax::N_LET || k == syntax::N_PARAM {
             value_item(c);
+        } else if k == syntax::N_TABLE {
+            var w: u8[..64] = [];
+            set64(w, name(c));
+            codegen::table_names.push(w);
+            codegen::table_nodes.push(c);
         } else if k == syntax::N_MATERIAL {
             material(c);
         } else if k == syntax::N_PHYSICS {
@@ -2572,6 +2649,12 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         out.append("    elements::node_force(");
         lits(out, b.v);
         out.append(");\n");
+    } else if b.kind == BC_AMBIENT {
+        out.append("    elements::radiate_ambient(");
+        lit(out, b.v[0]);
+        out.append(", ");
+        lit(out, b.v[1]);
+        out.append(");\n");
     } else if b.kind == BC_FILM {
         out.append("    elements::film(");
         lit(out, b.v[0]);
@@ -2930,6 +3013,68 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     out.append(");\n    }\n");
 }
 
+let CURVE_POINTS = 257;
+
+// The initial temperature, the tolerance of the nonlinear steps, and the
+// conductivity k(T) of the material. The generator samples k at CURVE_POINTS
+// temperatures from the lowest to the highest temperature that the model
+// names (the initial value, the fixed values and the surroundings), and the
+// program interpolates linearly between them. Reason: k(T) is an expression
+// of the model, or a table, that only the generator can evaluate; the
+// sample is exact for a k that is linear in T or a table with its
+// nodes on the grid, and the error is of order h^2 k'' else.
+fn emit_nonlinear_heat(out: u8[>..]&) {
+    var lo = 1.0e300;
+    var hi = -1.0e300;
+    if initial_node >= 0 {
+        let t0 = scalar_value(initial_node);
+        lo = min(lo, t0);
+        hi = max(hi, t0);
+        out.append("    elements::initial_temperature(");
+        lit(out, t0);
+        out.append(");\n");
+    }
+    if nl_rtol > 0.0 {
+        out.append("    elements::nonlinear_tolerance(");
+        lit(out, nl_rtol);
+        out.append(");\n");
+    }
+    guard curve_node >= 0 else { return; }
+    for b in bcs {
+        if b.kind == BC_FIX || b.kind == BC_FILM || b.kind == BC_AMBIENT {
+            let t = if b.kind == BC_FIX { b.v[0] } else { b.v[1] };
+            lo = min(lo, t);
+            hi = max(hi, t);
+        }
+    }
+    if !(hi > lo) {
+        unsupported(tok(curve_node), "the temperatures of the model are all equal, so k(T) has no range", "give the initial value of T and a fixed value that differ");
+        return;
+    }
+    format(out, "    let curve: f64[", CURVE_POINTS, "] = [");
+    codegen::scope_material = material_node;
+    codegen::bound_name.clear();
+    codegen::bound_name.append(unknown_name);
+    for i in CURVE_POINTS {
+        codegen::bound_value = lo + (hi - lo) * i / (CURVE_POINTS - 1);
+        let k = scalar_value(curve_node);
+        if !(k > 0.0) {
+            unsupported(tok(curve_node), str("k is ", k, " at T = ", codegen::bound_value, ", and the iteration needs k > 0"),
+                        "give a k > 0 for the temperatures of the model");
+            break;
+        }
+        if i > 0 { out.append(", "); }
+        lit(out, k);
+    }
+    codegen::bound_name.clear();
+    codegen::scope_material = -1;
+    out.append("];\n    elements::conductivity_curve(");
+    lit(out, lo);
+    out.append(", ");
+    lit(out, hi);
+    out.append(", curve[..]);\n");
+}
+
 // The dofs of the mesh of the model that `read` read: for the hole, the
 // rows of cells that grow from `mesh_fine` by 1.25 (elements::grade_rows).
 // A shape is meshed: a P2 node is at each point and at each edge, and a
@@ -3152,6 +3297,7 @@ fn generate(elements_path: u8[:], results_dir: u8[:], share: codegen::Share, out
             out.append(");\n");
         }
     }
+    if physics == HEAT { emit_nonlinear_heat(out); }
     if cut_source >= 0 { emit_source(out); }
     emit_contacts(out);
     for s in steps { format(out, "    step_", s.name, "();\n"); }

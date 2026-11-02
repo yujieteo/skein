@@ -108,7 +108,7 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
             for t in dim { du[3 * a + t] += v * grad[3 * l + t]; }
         }
     }
-    if what == FIELD_FLUX { return if comp < dim { -conductivity * du[comp] } else { 0.0 }; }
+    if what == FIELD_FLUX { return if comp < dim { -conductivity_at(c) * du[comp] } else { 0.0 }; }
     let i = comp / 3;
     let j = comp % 3;
     var tr = 0.0;

@@ -124,7 +124,7 @@ fn heat_block(lo_a: i64, hi_a: i64, lo_b: i64, hi_b: i64, dim: i64, size: i64) {
     format(block_text, "    for i in ", lo_a, "..", hi_a, " {\n");
     format(block_text, "        for j in ", lo_b, "..", hi_b, " {\n");
     gradient_dot(dim, true);
-    format(block_text, "            ke[", size, " * i + j] += conductivity * dot * dv;\n");
+    format(block_text, "            ke[", size, " * i + j] += kq * dot * dv;\n");
     block_text.append("        }\n    }\n");
 }
 
@@ -335,6 +335,7 @@ fn simplex_cell_kernel(out: u8[>..]&, physics: i64, dim: i64, order: i64, cube: 
     format(head, "    for qp in quad_count(", dim, ") {\n");
     format(head, "        let xi, w = quad_point(", dim, ", qp);\n");
     head.append("        let dv = w * cell_geometry(c, xi) * thickness;\n");
+    if physics == 1 { head.append("        let kq = conductivity_at(c);\n"); }
     format(head, "        for i in ", nodes, " {\n");
     if physics == 1 {
         head.append("            fe[i] += source * shp[i] * dv;\n");

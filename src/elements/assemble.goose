@@ -38,6 +38,14 @@ var conductivity = 0.0;
 var source = 0.0;       // the heat source per volume
 var volume_force: f64[3] = [0.0; 3];   // the elastic body force per volume
 
+// A conductivity that depends on the temperature: k(T) on a uniform grid of
+// temperatures from curve_lo, with curve_step between the values, linear in
+// between and linear beyond the ends. Empty: the constant `conductivity`.
+var curve_lo = 0.0;
+var curve_step = 0.0;
+var curve_k: f64[>..] = [];
+var initial_value = 0.0;   // the temperature of the free nodes before the first step
+
 var fixed: u8[>..] = [];
 var prescribed: f64[>..] = [];
 var load: f64[>..] = [];
@@ -100,6 +108,33 @@ fn set_heat(k: f64, q: f64, t: f64) {
     thickness = if dim == 3 { 1.0 } else { t };
     conductivity = k;
     source = q;
+}
+
+// Sets k(T) to the values `v` at the temperatures lo, lo + step, .. hi.
+fn set_conductivity_curve(lo: f64, hi: f64, v: f64[:]) {
+    guard physics == HEAT && v.len >= 2 && hi > lo else { abort("set_conductivity_curve: a heat physics, 2 values and hi > lo"); }
+    for k in v { guard k > 0.0 else { abort("set_conductivity_curve: k > 0 over the temperatures"); } }
+    curve_lo = lo;
+    curve_step = (hi - lo) / (v.len - 1);
+    curve_k.clear();
+    curve_k.append(v);
+}
+
+// k at temperature t from the curve.
+fn curve_value(t: f64) -> f64 {
+    let n = curve_k.len;
+    let x = (t - curve_lo) / curve_step;
+    let i = min(max(floor(x) as! i64, 0), n - 2);
+    return curve_k[i] + (curve_k[i + 1] - curve_k[i]) * (x - i);
+}
+
+// The conductivity of cell c at the point of the last cell_geometry: k(T)
+// with T of the iterate in `sol`, else the constant.
+fn conductivity_at(c: i64) -> f64 {
+    guard curve_k.len > 0 else { return conductivity; };
+    var t = 0.0;
+    for l in per_cell { t += shp[l] * sol[cell_node(c, l)]; }
+    return curve_value(t);
 }
 
 // --- the geometry of a cell at a point ---------------------------------------
@@ -235,6 +270,23 @@ fn assemble(path: u8[:], vectors: i64) {
     if !plan_direct(path, vectors) { solvers::memory_check(path, col.len, dof_total(), vectors, worker_mesh_bytes(), ""); }
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
+    fill_cells();
+    add_films();
+}
+
+// Assembles the matrix again on its pattern, with the cell terms at the
+// iterate in `sol` (a conductivity k(T)) and the films. The loads stay.
+fn reassemble() {
+    guard physics >= 0 && dofs_sized() && row_start.len > 0 else { abort("reassemble: a physics, the arrays of the dofs and a matrix"); }
+    for e in val.len { val[e] = 0.0; }
+    for d in assembled_source.len { assembled_source[d] = 0.0; }
+    fill_cells();
+    add_films();
+}
+
+// Adds the matrix and the source of each live cell, on the pool of the threads of the case
+// if it has more than one thread.
+fn fill_cells() {
     let m = per_cell * ncomp;
     let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
     if workers < 2 {
@@ -244,14 +296,12 @@ fn assemble(path: u8[:], vectors: i64) {
             add_cell(c, ke[..m * m], fe[..m]);
         }
         use_law_0();
-        add_films();
         return;
     }
     var ids: i64[>..] = [];
     for w in workers { ids.push(thread_spawn(cell_worker)); }
     solvers::gather_cells(cell_count(), workers, m * m + m, add_cells);
     for id in ids { thread_wait(id); }
-    add_films();
 }
 
 // Whether the static solve of the pattern takes the direct solve of a
@@ -577,6 +627,96 @@ fn clear_films() {
     film_h.clear();
 }
 
+// The facets of the radiation to the surroundings dot(q, n) = c (T^4 - T_inf^4),
+// with c = eps sigma: the cell, the facet, c and T_inf of each. The heat
+// that leaves through a facet is nonlinear in T, so the solve of
+// solve.goose makes the Newton step of it (ambient_residual and
+// ambient_tangent).
+var amb_cell: i64[>..] = [];
+var amb_facet: i64[>..] = [];
+var amb_c: f64[>..] = [];
+var amb_t: f64[>..] = [];
+
+// Adds the facets of the region to the radiation with the coefficient c =
+// eps sigma and the surroundings at t_inf.
+fn add_ambient(c: f64, t_inf: f64) {
+    guard physics == HEAT && c > 0.0 && t_inf >= 0.0 && dofs_sized() else { abort("add_ambient: a heat physics, c > 0 and t_inf >= 0"); }
+    for cell in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(cell, f) { continue; }
+            amb_cell.push(cell);
+            amb_facet.push(f);
+            amb_c.push(c);
+            amb_t.push(t_inf);
+        }
+    }
+}
+
+fn clear_ambient() {
+    amb_cell.clear();
+    amb_facet.clear();
+    amb_c.clear();
+    amb_t.clear();
+}
+
+// The temperature of `sol` at the quadrature point shape fn_shape of facet f of cell c.
+fn facet_temperature(c: i64, f: i64, fn_shape: f64[10]&) -> f64 {
+    var t = 0.0;
+    for a in node_count_of(dim - 1, order) { t += fn_shape[a] * sol[cell_node(c, facet_node(dim, f, a))]; }
+    return t;
+}
+
+// Adds to r the heat ∫ c (T^4 - T_inf^4) Ni dA that each node radiates, at
+// the temperature in `sol`.
+fn ambient_residual(r: f64[:]) {
+    var fn_shape: f64[10] = [0.0; 10];
+    let fnodes = node_count_of(dim - 1, order);
+    for c, i in amb_cell {
+        let f = amb_facet[i];
+        for qp in quad_count(dim - 1) {
+            let wda = facet_point(c, f, qp, fn_shape);
+            let t = facet_temperature(c, f, fn_shape);
+            let g = amb_c[i] * (t * t * t * t - amb_t[i] * amb_t[i] * amb_t[i] * amb_t[i]);
+            for a in fnodes { r[cell_node(c, facet_node(dim, f, a))] += fn_shape[a] * g * wda; }
+        }
+    }
+}
+
+// Adds ∫ 4 c T^3 Ni Nj dA of each facet to the entries of `m`, an array with the pattern of the matrix.
+fn ambient_tangent(m: f64[:]) {
+    var fn_shape: f64[10] = [0.0; 10];
+    let fnodes = node_count_of(dim - 1, order);
+    for c, i in amb_cell {
+        let f = amb_facet[i];
+        for qp in quad_count(dim - 1) {
+            let wda = facet_point(c, f, qp, fn_shape);
+            let t = facet_temperature(c, f, fn_shape);
+            let h = 4.0 * amb_c[i] * t * t * t * wda;
+            for a in fnodes {
+                let na = cell_node(c, facet_node(dim, f, a));
+                for b in fnodes { m[entry(na, cell_node(c, facet_node(dim, f, b)))] += fn_shape[a] * fn_shape[b] * h; }
+            }
+        }
+    }
+}
+
+// The heat ∫ c (T^4 - T_inf^4) dA that the radiation facets of the region
+// take out of the body.
+fn region_ambient_heat() -> f64 {
+    var fn_shape: f64[10] = [0.0; 10];
+    var heat = 0.0;
+    for c, i in amb_cell {
+        let f = amb_facet[i];
+        if !region_facet(c, f) { continue; }
+        for qp in quad_count(dim - 1) {
+            let wda = facet_point(c, f, qp, fn_shape);
+            let t = facet_temperature(c, f, fn_shape);
+            heat += amb_c[i] * (t * t * t * t - amb_t[i] * amb_t[i] * amb_t[i] * amb_t[i]) * wda;
+        }
+    }
+    return heat;
+}
+
 // The heat ∫ h T dA that the film facets give, with T of the solution:
 // the part of a film condition that the load does not hold.
 fn film_heat() -> f64 {
@@ -652,6 +792,8 @@ fn region_reaction() -> f64[3] {
             sum[p] += ku - load[d] - assembled_source[d];
         }
     }
+    // The heat that the radiation to the surroundings takes out of the region is a reaction too.
+    if physics == HEAT { sum[0] -= region_ambient_heat(); }
     return sum;
 }
 
