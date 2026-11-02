@@ -923,7 +923,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
             let x, y, r, q, apex = circumcentre(t);
             let gx = (px[tv[3 * t]] + px[tv[3 * t + 1]] + px[tv[3 * t + 2]]) / 3.0;
             let gy = (py[tv[3 * t]] + py[tv[3 * t + 1]] + py[tv[3 * t + 2]]) / 3.0;
-            let wanted = if targets.len > 0 { min(local_size(size, gx, gy), wanted_size(x, y, section_z, r, size, sweeping)) } else { local_size(size, gx, gy) };
+            let wanted = if targets.len > 0 { min(local_size(size, gx, gy), wanted_size(x, y, section_z, r, size)) } else { local_size(size, gx, gy) };
             let largest = wanted / sqrt(3.0) * (1.0 + 1.0e-9);
             if (q <= ratio || sharp(apex, MIN_ANGLE)) && r <= largest { continue; }
             if px.len >= budget { done = false; break; }

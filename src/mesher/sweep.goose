@@ -221,10 +221,8 @@ fn targets_span_z(z0: f64, z1: f64) -> bool {
 // False as mesh_2d.
 fn sweep_tets(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     section_z = 0.5 * (z0 + z1);
-    sweeping = true;
     let done = mesh_2d(s, size);
     section_z = 0.0;
-    sweeping = false;
     var xy: f64[>..] = [];
     for v in point_count() {
         let p = point(v);

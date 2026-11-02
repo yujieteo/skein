@@ -989,7 +989,7 @@ mesh m on beam {
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
 | `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` on a union of `rect` or `box` regions, or on a quarter of a ring or a tube, are a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. `hex` on another `Solid` is a swept or a mapped grid (§9.2). |
-| `grade` | `Real` | 1.3 in 2D, 1.4 in 3D | largest ratio of the size of two neighbour cells |
+| `grade` | `Real` | 1.3 in 2D, 1.4 in 3D | largest ratio of the size of two neighbour cells. See the defaults per path below. |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
 | `layers r` | record | none | boundary layer cells on `r` (CFD) |
@@ -1052,10 +1052,14 @@ and a sloped fillet with quad or hex cells.
 
 The 3D `grade` is the slope of the size: the wanted size at the distance
 d from a `refine` target of size h is `min(size, h + (grade - 1) d)`, as in
-2D. The default `grade` in 3D is 1.4, not the 2D default 1.3. The 3D models
-that exist use the slope 0.4, and the slope 0.3 gives more cells and a
-longer solve (46,200 cells in place of 41,640 for `grid_coax_tem`, and the
-solve did not end in 10 minutes).
+2D. An explicit `grade` always sets the slope `grade - 1`, on every path.
+With no `grade` written, each path keeps the slope that it had before
+`grade` became a setting. A `refine` of a shape, in 2D and in 3D, uses the
+slope 0.4 (grade 1.4). The other 2D paths that read `grade` (the segment and
+circle refines and the flow mesher) use grade 1.3. The existing models use
+these slopes, and the slope 0.3 for a shape gives more cells and a longer
+solve (46,200 cells in place of 41,640 for `grid_coax_tem`, and the solve
+did not end in 10 minutes).
 
 Isosurface stuffing alone guarantees dihedral angles between 10.7° and
 164.8°. The feature protection and the boundary layers remove this

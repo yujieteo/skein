@@ -38,7 +38,6 @@ var targets: Target[>..] = [];
 var grade = 1.3;       // the mesh setting grade (spec §9.1)
 var grade_given = false;
 var section_z = 0.0;   // the z at which the 2D mesher measures a target
-var sweeping = false;  // true while the 2D mesher meshes the section of a 3D sweep
 
 fn clear_refine() {
     targets.clear();
@@ -59,9 +58,9 @@ fn add_refine(g: i64, size: f64, surface: bool) {
 }
 
 // The wanted size at a point at most `reach` from (x, y, z). With no
-// grade given, the slope is 0.3 in 2D and 0.4 in 3D (spec §9.1).
-fn wanted_size(x: f64, y: f64, z: f64, reach: f64, size: f64, solid: bool) -> f64 {
-    let slope = if grade_given || !solid { grade - 1.0 } else { 0.4 };
+// grade given, the slope is 0.4 (spec §9.1).
+fn wanted_size(x: f64, y: f64, z: f64, reach: f64, size: f64) -> f64 {
+    let slope = if grade_given { grade - 1.0 } else { 0.4 };
     var h = size;
     for t in targets {
         let f = phi(t.g, x, y, z);
@@ -133,7 +132,7 @@ fn refine_cells(xyz: f64[>..]&, cells: i64[>..]&, k: i64, size: f64) -> bool {
                 for t in 3 { s += (xyz[3 * n + t] - centre[t]) * (xyz[3 * n + t] - centre[t]); }
                 reach = max(reach, sqrt(s));
             }
-            guard l > SLACK * wanted_size(centre[0], centre[1], centre[2], reach, size, true) || hanging(mids, v) else {
+            guard l > SLACK * wanted_size(centre[0], centre[1], centre[2], reach, size) || hanging(mids, v) else {
                 next.append(v);
                 continue;
             }

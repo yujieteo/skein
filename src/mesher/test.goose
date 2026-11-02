@@ -785,7 +785,7 @@ fn edges_in_size(size: f64) -> f64 {
                 seen.insert(min(a, b) * n + max(a, b), true);
                 let pa = mesher::vertex(a);
                 let pb = mesher::vertex(b);
-                let w = mesher::wanted_size(0.5 * (pa[0] + pb[0]), 0.5 * (pa[1] + pb[1]), 0.5 * (pa[2] + pb[2]), 0.0, size, true);
+                let w = mesher::wanted_size(0.5 * (pa[0] + pb[0]), 0.5 * (pa[1] + pb[1]), 0.5 * (pa[2] + pb[2]), 0.0, size);
                 let r = mesher::norm3(mesher::sub3(pa, pb)) / w;
                 total++;
                 if r >= 0.5 && r <= 1.5 { inside++; }
