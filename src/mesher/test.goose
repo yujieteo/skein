@@ -718,6 +718,48 @@ fn test_interfaces() {
     if abs(area_lift - 7.0) > 1.0e-9 || abs(area - 43.0) > 1.0e-9 { fail(str("interfaces: the areas ", area_lift, " and ", area, " are not 7 and 43")); }
 }
 
+// The interfaces of mesh_3d: a block with a ball in it. No tetrahedron has
+// nodes inside and outside the ball, the volumes of the two parts add up
+// to the volume of the block, and each tetrahedron has a positive volume.
+fn test_interfaces_3d() {
+    mesher::clear_shapes();
+    let slab = mesher::box(-2.0, -2.0, -2.0, 2.0, 2.0, 2.0);
+    let ball = mesher::sphere(0.0, 0.0, 0.0, 1.0);
+    mesher::clear_interfaces();
+    mesher::add_interface(ball);
+    let done = mesher::mesh_3d(slab, 0.5);
+    mesher::clear_interfaces();
+    if !done { fail("interfaces 3d: the mesher did not finish"); }
+    var volume_ball = 0.0;
+    var volume = 0.0;
+    var crossed = 0;
+    var flat = 0;
+    for c in mesher::cell_count() {
+        var inside = 0;
+        var outside = 0;
+        var centre: f64[3] = [0.0; 3];
+        let a = mesher::vertex(mesher::cell_node(c, 0));
+        let u = mesher::sub3(mesher::vertex(mesher::cell_node(c, 1)), a);
+        let v = mesher::sub3(mesher::vertex(mesher::cell_node(c, 2)), a);
+        let w = mesher::sub3(mesher::vertex(mesher::cell_node(c, 3)), a);
+        let size = mesher::dot3(u, mesher::cross3(v, w)) / 6.0;
+        if size <= 0.0 { flat++; }
+        for i in 4 {
+            let p = mesher::vertex(mesher::cell_node(c, i));
+            let f = mesher::phi(ball, p[0], p[1], p[2]);
+            if f < -1.0e-6 { inside++; }
+            if f > 1.0e-6 { outside++; }
+            for t in 3 { centre[t] += p[t] / 4.0; }
+        }
+        if inside > 0 && outside > 0 { crossed++; }
+        if mesher::phi(ball, centre[0], centre[1], centre[2]) < 0.0 { volume_ball += size; }
+        volume += size;
+    }
+    print("interfaces 3d: ", mesher::cell_count(), " tetrahedra, ", crossed, " cross the ball, volume of the ball ", volume_ball);
+    if crossed > 0 || flat > 0 { fail(str("interfaces 3d: ", crossed, " tetrahedra cross the ball, ", flat, " are not positive")); }
+    if abs(volume - 64.0) > 1.0e-6 || abs(volume_ball - 4.18879) > 0.25 { fail(str("interfaces 3d: the volumes ", volume_ball, " and ", volume, " are not 4.19 and 64")); }
+}
+
 // The longest edge of a 2D mesh with both ends within `d` of the line
 // y = y0, or of the circle of centre (cx, cy) and radius r.
 fn longest_near(d: f64, y0: f64, cx: f64, cy: f64, r: f64, circle: bool) -> f64 {
@@ -1174,6 +1216,7 @@ fn main() {
     test_fill();
     test_nurbs();
     test_interfaces();
+    test_interfaces_3d();
     test_refine();
     test_refine_clip();
     test_stuffing();

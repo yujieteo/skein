@@ -27,7 +27,7 @@ material copper {
 
 // A grid on the union of 2 boxes, with a grid plane on each face of the block.
 mesh m on part {
-    size: 0.000625 m
+    size: 0.00125 m
     cell: hex
 }
 

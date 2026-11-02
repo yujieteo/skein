@@ -411,7 +411,7 @@ fn find_curves(g: i64, size: f64) {
                 n++;
             }
         }
-        var best = PAIR_COS;
+        var best = pair_cos;
         var bi = -1;
         var bj = -1;
         for i in n {
@@ -1119,7 +1119,7 @@ fn chains_in_mesh() -> bool {
     return missing == 0;
 }
 
-fn mesh_3d(g: i64, size: f64) -> bool {
+fn mesh_3d_body(g: i64, size: f64) -> bool {
     clear_mesh(3);
     curves_found = 0;       // the counters are those of this mesh, also when it has no lattice
     curves_missed = 0;
@@ -1172,5 +1172,178 @@ fn mesh_3d(g: i64, size: f64) -> bool {
         }
         break;
     }
+    return true;
+}
+
+// The interfaces of the mesh (add_interface): each tetrahedron that the
+// boundary of an interface shape crosses is cut in the pieces on each side
+// of it, so a cell is in the shape or out of it as a whole. A node that
+// is within CUT_SNAP of the mean edge length of the interface is on it.
+// The cut points of an edge are shared by the cells about it, and the
+// quadrilaterals of the cut have the diagonal of the smallest node, so the
+// mesh stays conforming.
+let CUT_SNAP = 0.12;
+var cut_px: f64[>..] = [];      // x, y and z of each node
+var cut_cells: i64[>..] = [];   // the 4 nodes of each cell
+var cut_next: i64[>..] = [];    // the cells of this interface
+var cut_edge = dictionary<i64, i64> {};
+var cut_sign: i64[>..] = [];
+var cut_h = 0;
+
+fn cut_add(a: i64, b: i64, c: i64, d: i64) {
+    let pa: f64[3] = [cut_px[3 * a], cut_px[3 * a + 1], cut_px[3 * a + 2]];
+    let u = sub3([cut_px[3 * b], cut_px[3 * b + 1], cut_px[3 * b + 2]], pa);
+    let v = sub3([cut_px[3 * c], cut_px[3 * c + 1], cut_px[3 * c + 2]], pa);
+    let w = sub3([cut_px[3 * d], cut_px[3 * d + 1], cut_px[3 * d + 2]], pa);
+    if dot3(u, cross3(v, w)) < 0.0 {
+        cut_next.append([a, c, b, d]);
+    } else {
+        cut_next.append([a, b, c, d]);
+    }
+}
+
+fn cut_pyramid(z: i64, q0: i64, q1: i64, q2: i64, q3: i64) {
+    let m = min(min(q0, q1), min(q2, q3));
+    if m == q0 || m == q2 {
+        cut_add(z, q0, q1, q2);
+        cut_add(z, q0, q2, q3);
+    } else {
+        cut_add(z, q1, q2, q3);
+        cut_add(z, q1, q3, q0);
+    }
+}
+
+fn cut_prism(a0: i64, a1: i64, a2: i64, b0: i64, b1: i64, b2: i64) {
+    var a: i64[3] = [a0, a1, a2];
+    var b: i64[3] = [b0, b1, b2];
+    let low = min(min(min(a0, a1), min(a2, b0)), min(b1, b2));
+    if low == b0 || low == b1 || low == b2 { swap(a, b); }
+    var m = 0;
+    for i in 3 {
+        if a[i] == low { m = i; }
+    }
+    let r: i64[3] = [a[m], a[(m + 1) % 3], a[(m + 2) % 3]];
+    let s: i64[3] = [b[m], b[(m + 1) % 3], b[(m + 2) % 3]];
+    cut_add(r[0], s[0], s[1], s[2]);
+    if min(r[1], s[2]) < min(r[2], s[1]) {
+        cut_add(r[0], r[1], r[2], s[2]);
+        cut_add(r[0], r[1], s[2], s[1]);
+    } else {
+        cut_add(r[0], r[1], r[2], s[1]);
+        cut_add(r[0], r[2], s[2], s[1]);
+    }
+}
+
+// The node on the edge from node a (inside) to node b (outside).
+fn cut_point(a: i64, b: i64) -> i64 {
+    let key = min(a, b) * 1073741824 + max(a, b);
+    let have = cut_edge.get(key);
+    if have { return have; }
+    var lo = 0.0;
+    var hi = 1.0;
+    for k in 50 {
+        let t = 0.5 * (lo + hi);
+        let x = cut_px[3 * a] + t * (cut_px[3 * b] - cut_px[3 * a]);
+        let y = cut_px[3 * a + 1] + t * (cut_px[3 * b + 1] - cut_px[3 * a + 1]);
+        let z = cut_px[3 * a + 2] + t * (cut_px[3 * b + 2] - cut_px[3 * a + 2]);
+        if phi(cut_h, x, y, z) < 0.0 { lo = t; } else { hi = t; }
+    }
+    let t = 0.5 * (lo + hi);
+    let n = cut_px.len / 3;
+    for i in 3 { cut_px.push(cut_px[3 * a + i] + t * (cut_px[3 * b + i] - cut_px[3 * a + i])); }
+    cut_sign.push(0);
+    cut_edge.insert(key, n);
+    return n;
+}
+
+// The part of the tetrahedron p on the inside of the interface (sign -1).
+// sgn is the sign of each node of p, flipped for the outside.
+fn cut_side(p: i64[4], sgn: i64[4]) {
+    var minus: i64[..4] = [];
+    var zero: i64[..4] = [];
+    var plus: i64[..4] = [];
+    for i in 4 {
+        if sgn[i] < 0 { minus.push(p[i]); } else if sgn[i] == 0 { zero.push(p[i]); } else { plus.push(p[i]); }
+    }
+    guard minus.len > 0 else { return; }
+    if plus.len == 0 {
+        cut_add(p[0], p[1], p[2], p[3]);
+    } else if minus.len == 3 {
+        cut_prism(minus[0], minus[1], minus[2], cut_point(minus[0], plus[0]), cut_point(minus[1], plus[0]), cut_point(minus[2], plus[0]));
+    } else if minus.len == 2 && plus.len == 2 {
+        cut_prism(minus[0], cut_point(minus[0], plus[0]), cut_point(minus[0], plus[1]),
+                  minus[1], cut_point(minus[1], plus[0]), cut_point(minus[1], plus[1]));
+    } else if minus.len == 2 {
+        cut_pyramid(zero[0], minus[0], minus[1], cut_point(minus[1], plus[0]), cut_point(minus[0], plus[0]));
+    } else if minus.len == 1 && plus.len == 1 {
+        cut_add(minus[0], zero[0], zero[1], cut_point(minus[0], plus[0]));
+    } else if minus.len == 1 && plus.len == 2 {
+        cut_add(minus[0], zero[0], cut_point(minus[0], plus[0]), cut_point(minus[0], plus[1]));
+    } else if minus.len == 1 {
+        cut_add(minus[0], cut_point(minus[0], plus[0]), cut_point(minus[0], plus[1]), cut_point(minus[0], plus[2]));
+    }
+}
+
+fn cut_interface(h: i64) {
+    cut_h = h;
+    let n = cut_px.len / 3;
+    var total: f64[>..] = [];
+    var count: f64[>..] = [];
+    var psi: f64[>..] = [];
+    for i in n {
+        total.push(0.0);
+        count.push(0.0);
+        psi.push(phi(h, cut_px[3 * i], cut_px[3 * i + 1], cut_px[3 * i + 2]));
+    }
+    for c in cut_cells.len / 4 {
+        for i in 4 {
+            for j in i + 1..4 {
+                let a = cut_cells[4 * c + i];
+                let b = cut_cells[4 * c + j];
+                var l = 0.0;
+                for k in 3 { l += (cut_px[3 * a + k] - cut_px[3 * b + k]) * (cut_px[3 * a + k] - cut_px[3 * b + k]); }
+                l = sqrt(l);
+                total[a] += l; count[a] += 1.0;
+                total[b] += l; count[b] += 1.0;
+            }
+        }
+    }
+    cut_sign.clear();
+    for i in n {
+        let mean = if count[i] > 0.0 { total[i] / count[i] } else { 1.0 };
+        cut_sign.push(if abs(psi[i]) <= CUT_SNAP * mean { 0 } else { sign_of(psi[i]) });
+    }
+    cut_edge.clear();
+    cut_next.clear();
+    for c in cut_cells.len / 4 {
+        let p: i64[4] = [cut_cells[4 * c], cut_cells[4 * c + 1], cut_cells[4 * c + 2], cut_cells[4 * c + 3]];
+        let s: i64[4] = [cut_sign[p[0]], cut_sign[p[1]], cut_sign[p[2]], cut_sign[p[3]]];
+        if s[0] <= 0 && s[1] <= 0 && s[2] <= 0 && s[3] <= 0 || s[0] >= 0 && s[1] >= 0 && s[2] >= 0 && s[3] >= 0 {
+            cut_next.append(p);
+            continue;
+        }
+        cut_side(p, s);
+        cut_side(p, [-s[0], -s[1], -s[2], -s[3]]);
+    }
+    cut_cells.clear();
+    cut_cells.append(cut_next);
+}
+
+fn mesh_3d(g: i64, size: f64) -> bool {
+    guard mesh_3d_body(g, size) else { return false; }
+    guard interfaces.len > 0 else { return true; }
+    cut_px.clear();
+    cut_cells.clear();
+    for n in point_count() {
+        let x = point(n);
+        for i in 3 { cut_px.push(x[i]); }
+    }
+    for c in cell_count() {
+        for i in 4 { cut_cells.push(cell_node(c, i)); }
+    }
+    for h in interfaces { cut_interface(h); }
+    clear_mesh(3);
+    for n in cut_px.len / 3 { add_point(cut_px[3 * n], cut_px[3 * n + 1], cut_px[3 * n + 2]); }
+    for c in cut_cells.len / 4 { add_simplex([cut_cells[4 * c], cut_cells[4 * c + 1], cut_cells[4 * c + 2], cut_cells[4 * c + 3]]); }
     return true;
 }

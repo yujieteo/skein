@@ -84,6 +84,23 @@ fn claims(prog: i64) -> bool {
     return false;
 }
 
+// Whether the model has a mesh of cell: hex of a 3D body: the fallback of
+// the box lane (src/codegen/run.goose).
+fn hex_claims(prog: i64) -> bool {
+    var c = first(prog);
+    while c >= 0 {
+        if kind(c) == syntax::N_MESH {
+            var s = first(child(c, 1));
+            while s >= 0 {
+                if kind(s) == syntax::N_SETTING && name(s) == "cell" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "hex" { return true; }
+                s = next(s);
+            }
+        }
+        c = next(c);
+    }
+    return false;
+}
+
 // Whether step n has a birth or a death statement.
 fn has_change(n: i64) -> bool {
     var c = first(n);
@@ -377,6 +394,8 @@ struct Source {
 struct Law {
     g: i64,
     item: i64,      // the material item
+    cond: f64,      // the conductivity and the source of a heat physics
+    src: f64,
     young: f64,
     poisson: f64,
     force: f64[3],
@@ -433,9 +452,10 @@ let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PART
 let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
 let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
 let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
-let FIELD_VON_MISES = 10; // max(von_mises(sigma), r) on the boundary r
+let FIELD_VON_MISES = 12; // max(von_mises(sigma), r) on the boundary r
 let FIELD_CONSTANT = 11; // a number, a param or a let: scale is its value
 let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
+let FIELD_EXTREME = 10; // max(u.z, r), min(u.z, r) or their difference on the boundary r: comp is the component + 10 for min, + 20 for the range
 let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
 
 struct Expect {
@@ -483,6 +503,7 @@ var coef_inverse = false;       // the coefficient of the flux is 1/c, for a flu
 var thermal_strain_node = -1;   // S of hooke(E, nu, strain(u) - S*I), or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
+var mesh_angle = 0.0;   // the mesh setting feature_angle in radians (spec §9.1), or 0 if not given
 var mesh_grade = 0.0;   // the mesh setting grade (spec §9.1), or 0 if not given
 var mesh_tok = -1;
 var capacity = 0.0;             // rho*cp of the material
@@ -492,7 +513,8 @@ var initial_node = -1;          // the initial value of the unknown, or -1
 var nl_rtol = 0.0;              // rtol of a solve item, or 0
 var mesh_has_tip = false;        // the mesh has a crack_tip: the body is a shape of the mesher
 var crack_tips: f64[3][>..];     // x, y and the size of each crack_tip
-var hex_regions = false;         // a region of cells on the hexahedra of a box
+var hex_regions = false;         // a region of cells on the hexahedra of a union of boxes
+var has_regions = false;         // the physics has a `material m on r`
 var quad_mesh = false;           // cell: quad of a 2D mesh, meshed as triangles
 var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
 var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
@@ -575,16 +597,19 @@ fn reset() {
     tn_c.clear();
     ftm_kind.clear();
     ftm_root.clear();
+    ftm_law.clear();
     terms.clear();
     term_nodes.clear();
     mesh_size = 0.0;
     mesh_fine = 0.0;
     mesh_grade = 0.0;
+    mesh_angle = 0.0;
     mesh_tok = -1;
     incompatible_family = false;
     quad_mesh = false;
     crack_tips.clear();
     hex_regions = false;
+    has_regions = false;
     hex_mesh = false;
     curve_node = -1;
     capacity_node = -1;
@@ -854,7 +879,8 @@ fn body(region: i64) {
         return;
     }
     set64(body_name, name(region));
-    if !structured(n) {
+    // Hexahedra with regions of materials need a grid plane on each face of a region.
+    if !structured(n) || (hex_mesh && has_regions) {
         shape_body(region);
         return;
     }
@@ -1164,14 +1190,23 @@ fn find_material(word: u8[:]) -> i64 {
 fn region_shape(r: i64) -> i64 {
     let v = mesher::eval_value(r);
     guard ok() else { return -1; }
-    // The hexahedra of a box are whole in a region when its faces are on the grid of the cells.
+    // The hexahedra of a union of boxes are whole in a region: the grid has a plane on each face of it.
     if v.n == 0 && hex_mesh && geo == GEO_BOX {
         hex_regions = true;
         return v.g;
     }
-    guard v.n == 0 && geo == GEO_SHAPE && dim == 2 else {
-        unsupported(tok(r), "a region of cells needs a 2d body of the mesher, or a box of hexahedra: the 3d mesher keeps no interfaces",
-                    "use one material and no birth or death in a tetrahedra model, or cell: hex on a box");
+    if v.n == 0 && hex_mesh && geo == GEO_SHAPE {
+        var boxes: f64[>..] = [];
+        guard mesher::box_union(v.g, boxes) else {
+            unsupported(tok(r), "a region of hexahedra is a box or a union of boxes", "write the region as box(..) | box(..)");
+            return -1;
+        };
+        hex_regions = true;
+        return v.g;
+    }
+    guard v.n == 0 && geo == GEO_SHAPE else {
+        unsupported(tok(r), "a region of cells needs a body of the mesher",
+                    "use cell: hex on a box or a union of boxes, or a body of the mesher");
         return -1;
     };
     interfaces.push(v.g);
@@ -1211,14 +1246,18 @@ fn property(word: u8[:]) -> i64 {
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
-    if physics != ELASTIC && region_laws.len > 0 {
-        unsupported(tok(base), "a material on a region of a heat or wave physics is not in this generator", "use one material");
+    if physics != ELASTIC && physics != HEAT && region_laws.len > 0 {
+        unsupported(tok(base), "a material on a region of a wave, edge or Darcy physics is not in this generator", "use one material");
     }
     for &w in region_laws {
         material_node = w.item;
         read_law();
         w.young = young;
         w.poisson = poisson;
+        w.cond = conductivity;
+        if physics == HEAT && curve_node >= 0 {
+            unsupported(tok(base), "a conductivity k(T) with a material on a region is not in this generator", "use a constant k in each material");
+        }
     }
     material_node = base;
     read_law();
@@ -1233,7 +1272,8 @@ fn read_law() {
         // The eq of the wave physics names its properties.
         // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
         let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
-        if !known && w != "rho" && !solid_property(w) {
+        // With several physics, a property of the material that this one does not read belongs to another.
+        if !known && w != "rho" && !solid_property(w) && !multi() {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
         }
@@ -1322,6 +1362,9 @@ fn mesh(n: i64) {
         } else if name(s) == "grade" && kind(n) == syntax::N_MESH && geo == GEO_SHAPE {
             mesh_grade = scalar_value(v);
             if mesh_grade <= 1.0 { unsupported(tok(v), "the grade is more than 1", "write grade: 1.3"); }
+        } else if name(s) == "feature_angle" && kind(n) == syntax::N_MESH && geo == GEO_SHAPE {
+            mesh_angle = scalar_value(v);
+            if mesh_angle <= 0.0 || mesh_angle >= 1.5707963 { unsupported(tok(v), "the feature angle is from 0 to 90 deg", "write feature_angle: 30 deg"); }
         } else if name(s) == "cell" && kind(n) == syntax::N_MESH {
             if dim == 3 && kind(v) == syntax::N_NAME && name(v) == "hex" {
                 hex_mesh = true;
@@ -1407,6 +1450,31 @@ fn flux_let(n: i64) -> i64 {
     guard scaled else { return -1; }
     set64(conductivity_name, name(first(c)));
     return HEAT;
+}
+
+// Whether the mesh item n has cell: hex, before the body of the physics is read.
+fn prescan_mesh(n: i64) {
+    guard kind(n) == syntax::N_MESH && dim == 3 else { return; }
+    var s = first(child(n, 1));
+    while s >= 0 {
+        if kind(s) == syntax::N_SETTING && name(s) == "cell" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "hex" { hex_mesh = true; order = 1; }
+        s = next(s);
+    }
+}
+
+// Whether the physics item n has a `material m on r`, before its body is read.
+fn prescan_regions(n: i64) {
+    var c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_MATASSIGN {
+            var m = first(c);
+            while m >= 0 {
+                if first(m) >= 0 { has_regions = true; }
+                m = next(m);
+            }
+        }
+        c = next(c);
+    }
 }
 
 fn physics_item(n: i64) {
@@ -1538,7 +1606,7 @@ fn materials_of(c: i64) {
         } else if first(m) < 0 {
             unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
         } else {
-            var w = Law { g: region_shape(first(m)), item: item, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
+            var w = Law { g: region_shape(first(m)), item: item, cond: 0.0, src: 0.0, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
             codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
             region_laws.push(w);
         }
@@ -1585,29 +1653,38 @@ fn assumptions(n: i64) {
     }
 }
 
-// The source of the heat equation: a value, or the material property q_v.
+// The source of the heat equation: a value, or the material property q_v,
+// of the material now. A source of an earlier physics is a field term.
 fn heat_source() {
     guard physics == HEAT else { return; }
     if source_node >= 0 && uses_earlier(source_node) {
         field_term(FT_SOURCE, source_node);
         return;
     }
+    let base = material_node;
+    source = heat_source_value();
+    for &w in region_laws {
+        material_node = w.item;
+        w.src = heat_source_value();
+    }
+    material_node = base;
+}
+
+fn heat_source_value() -> f64 {
     if source_node < 0 {
         let p = property("q_v");
-        if p >= 0 { source = scalar_value(p); }
-        return;
+        return if p >= 0 { scalar_value(p) } else { 0.0 };
     }
     if kind(source_node) == syntax::N_NAME && codegen::find_value(name(source_node)) < 0 {
         let p = property(name(source_node));
         if p < 0 {
             unsupported(tok(source_node), str("'", name(source_node), "' is not a value or a property of the material"),
                         "give the source as a let or as q_v in the material");
-            return;
+            return 0.0;
         }
-        source = scalar_value(p);
-        return;
+        return scalar_value(p);
     }
-    source = scalar_value(source_node);
+    return scalar_value(source_node);
 }
 
 // The body force b of linear_elastic: a vector, for example rho*(0, 0, -g)
@@ -1644,6 +1721,8 @@ fn method(n: i64) {
         if kind(s) == syntax::N_SETTING && name(s) == "order" {
             order = scalar_value(first(s)) as! i64;
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
+        } else if kind(s) == syntax::N_SETTING && name(s) == "couple" && source_of(first(s)) == "staggered" && multi() {
+            // One physics after the other: the passes of this generator.
         } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
             pml_setting(first(s));
         } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
@@ -2232,6 +2311,11 @@ fn region_surf(r: i64) -> i64 {
 recursive fn has_sample(n: i64) -> bool {
     if n < 0 { return false; }
     if kind(n) == syntax::N_AT { return true; }
+    // The integral of a field on a boundary: not the flux of a heat physics.
+    if is_call(n, "integral") && syntax::child_count(n) == 3 {
+        let flux = source_of(arg(n, 0));
+        if !(flux.len > 8 && flux[..4] == "dot(" && flux[flux.len - 4..] == ", n)") { return true; }
+    }
     var c = first(n);
     while c >= 0 {
         if has_sample(c) { return true; }
@@ -2381,6 +2465,33 @@ fn scaled_field(e: i64) -> i64, i64, i64, f64, bool {
     return what, comp, surf, scale, false;
 }
 
+// The component of the solution that the value v is: u.x of an elastic physics, or T of a heat
+// physics. Or -1.
+fn solution_comp(v: i64) -> i64 {
+    if physics == HEAT && source_of(v) == unknown_name { return 0; }
+    if physics == ELASTIC && kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME && name(first(v)) == unknown_name {
+        return axis_of(name(v));
+    }
+    return -1;
+}
+
+// `max(u.z, r)` (mode 0), `min(u.z, r)` (1), or `max(u.z, r) - min(u.z, r)` (2) on a boundary r:
+// the mode, the component and the boundary, or -1.
+recursive fn extreme_parts(f: i64) -> i64, i64, i64 {
+    if kind(f) == syntax::N_BINARY && syntax::text(tok(f)) == "-" {
+        let a = child(f, 0);
+        let b = child(f, 1);
+        let ma, ca, sa = extreme_parts(a);
+        let mb, cb, sb = extreme_parts(b);
+        guard ma == 0 && mb == 1 && ca == cb && sa == sb else { return -1, -1, -1; };
+        return 2, ca, sa;
+    }
+    guard (is_call(f, "max") || is_call(f, "min")) && syntax::child_count(f) == 3 && region_surf(arg(f, 1)) >= 0 else { return -1, -1, -1; };
+    let c = solution_comp(arg(f, 0));
+    guard c >= 0 else { return -1, -1, -1; };
+    return if is_call(f, "max") { 0 } else { 1 }, c, region_surf(arg(f, 1));
+}
+
 // An expect of a value on a boundary: mean(T, r), mean(u.x, r),
 // reaction(r).x, reaction(r) of a heat physics, or integral(dot(q, n), r)
 // on a boundary r that a bc fixes, with a minus sign or not. It gives the
@@ -2401,6 +2512,8 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
         guard i >= 0 && j >= 0 else { return -1, -1, -1, 1.0; }
         return FIELD_BODY_MEAN, 3 * i + j, -1, scale;
     }
+    let mode, ext_comp, ext_surf = extreme_parts(f);
+    if mode >= 0 { return FIELD_EXTREME, 10 * mode + ext_comp, ext_surf, scale; }
     if is_call(f, "max") && syntax::child_count(f) == 3 && region_surf(arg(f, 1)) >= 0 && physics == ELASTIC {
         var v = arg(f, 0);
         let minus = kind(v) == syntax::N_UNARY && syntax::text(tok(v)) == "-";
@@ -2447,6 +2560,8 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
 let TN_CONST = 0;
 let TN_VAL = 1;
 let TN_GRAD = 2;
+let TN_COORD = 3;
+let KEEP_SLOTS = 8;
 let TN_ADD = 10;
 let TN_SUB = 11;
 let TN_MUL = 12;
@@ -2464,6 +2579,7 @@ var tn_y: i64[>..];
 var tn_c: f64[>..];
 var ftm_kind: i64[>..];     // the field terms of the pass now
 var ftm_root: i64[>..];
+var ftm_law: i64[>..];      // the law of the cells of each term, or -1 for each cell
 
 // A scalar (n = 1) or a vector of n components, each a node of the tree.
 struct FTerm {
@@ -2483,8 +2599,29 @@ fn tnode(op: i64, a: i64, b: i64, x: i64, y: i64, c: f64) -> i64 {
 
 fn fscalar(id: i64) -> FTerm { return FTerm { n: 1, id: [id, -1, -1] }; }
 
+var self_terms = false;   // fterm reads an integral of the unknown and the coordinates of the physics now
+
+// Whether the tree n names the unknown of the physics now, or a coordinate x, y or z that no let
+// names: the expression of an integral on a boundary.
+recursive fn self_dependent(n: i64, depth: i64) -> bool {
+    if n < 0 || depth > 20 { return false; }
+    if kind(n) == syntax::N_NAME {
+        if name(n) == unknown_name { return true; }
+        let v = codegen::find_value(name(n));
+        if v >= 0 { return self_dependent(v, depth + 1); }
+        if axis_of(name(n)) >= 0 && property(name(n)) < 0 { return true; }
+    }
+    var c = first(n);
+    while c >= 0 {
+        if self_dependent(c, depth) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
 // Whether the tree n names the unknown, or a let, of an earlier physics.
 fn uses_earlier(n: i64) -> bool {
+    if self_terms && self_dependent(n, 0) { return true; }
     let m = owner_mask(n);
     for p in pass_now { if (m / pass_bit(p)) % 2 == 1 { return true; } }
     return false;
@@ -2526,6 +2663,17 @@ recursive fn fterm(n: i64, depth: i64) -> FTerm {
         return r;
     }
     let k = kind(n);
+    if k == syntax::N_NAME && self_terms {
+        if name(n) == unknown_name {
+            let comps = if physics == ELASTIC { dim } else { 1 };
+            var r = FTerm { n: comps, id: [-1, -1, -1] };
+            for j in comps { r.id[j] = tnode(TN_VAL, KEEP_SLOTS, j, -1, -1, 0.0); }
+            return r;
+        }
+        let v = codegen::find_value(name(n));
+        if v >= 0 { return fterm(v, depth + 1); }
+        if axis_of(name(n)) >= 0 { return fscalar(tnode(TN_COORD, axis_of(name(n)), 0, -1, -1, 0.0)); }
+    }
     if k == syntax::N_NAME {
         for o in owned {
             if o.name != name(n) || o.pass >= pass_now { continue; }
@@ -2602,6 +2750,18 @@ recursive fn fterm(n: i64, depth: i64) -> FTerm {
 
 // Adds the field term of kind `kind` for expression n, a scalar.
 fn field_term(kind: i64, n: i64) {
+    guard region_laws.len > 0 else { field_term_law(kind, n, -1); return; };
+    // A property of the material in the term has the value of each region.
+    let base = material_node;
+    field_term_law(kind, n, 0);
+    for &w, i in region_laws {
+        material_node = w.item;
+        field_term_law(kind, n, i + 1);
+    }
+    material_node = base;
+}
+
+fn field_term_law(kind: i64, n: i64, law: i64) {
     let r = fterm(n, 0);
     if r.n != 1 {
         unsupported(tok(n), "the field term is a vector", "write a scalar");
@@ -2609,6 +2769,7 @@ fn field_term(kind: i64, n: i64) {
     }
     ftm_kind.push(kind);
     ftm_root.push(r.id[0]);
+    ftm_law.push(law);
 }
 
 recursive fn fserialize(id: i64, code: i64[>..]&, consts: f64[>..]&) {
@@ -2620,7 +2781,7 @@ recursive fn fserialize(id: i64, code: i64[>..]&, consts: f64[>..]&) {
         consts.push(tn_c[id]);
         return;
     }
-    if op == TN_VAL || op == TN_GRAD {
+    if op == TN_VAL || op == TN_GRAD || op == TN_COORD {
         code.push(op);
         code.push(tn_a[id]);
         code.push(tn_b[id]);
@@ -2646,7 +2807,11 @@ fn emit_field_terms(out: u8[>..]&) {
             if i > 0 { out.append(", "); }
             lit(out, v);
         }
-        format(out, "];\n        elements::field_term(", ftm_kind[t], ", code[..], consts[..]);\n    }\n");
+        if ftm_law[t] >= 0 {
+            format(out, "];\n        elements::field_term_in(", ftm_law[t], ", ", ftm_kind[t], ", code[..], consts[..]);\n    }\n");
+        } else {
+            format(out, "];\n        elements::field_term(", ftm_kind[t], ", code[..], consts[..]);\n    }\n");
+        }
     }
 }
 
@@ -2663,6 +2828,7 @@ struct Term {
     what: i64,      // the field of a sample
     comp: i64,
     at: f64[3],
+    root: i64,      // the tree of the expression of an integral of a field, or -1
 }
 
 var terms: Term[>..];       // the terms of the pass now
@@ -2687,15 +2853,27 @@ recursive fn collect_terms(n: i64) {
         if owner_of(n) != pass_now { return; }
         let what, comp = point_field(n, true);
         if what < 0 || comp < 0 { return; }
-        terms.push(Term { id: id, surf: -1, sign: 1.0, what: what, comp: comp, at: value(child(n, 1)).v });
+        terms.push(Term { id: id, surf: -1, sign: 1.0, what: what, comp: comp, at: value(child(n, 1)).v, root: -1 });
         return;
     }
     if is_call(n, "integral") && syntax::child_count(n) == 3 {
         let id = term_nodes.len;
         term_nodes.push(n);
         let flux = source_of(arg(n, 0));
-        if owner_of(n) != pass_now { return; }
+        if owner_of(n) != pass_now && !self_dependent(arg(n, 0), 0) { return; }
         let s = region_surf(arg(n, 1));
+        // The integral of an expression of the unknown and the coordinates on a boundary.
+        if s >= 0 && !(flux.len > 8 && flux[..4] == "dot(" && flux[flux.len - 4..] == ", n)") && (physics == ELASTIC || physics == HEAT) {
+            self_terms = true;
+            let r = fterm(arg(n, 0), 0);
+            self_terms = false;
+            if r.n != 1 {
+                unsupported(tok(n), "the integrand is a vector", "write a scalar, for example u.z*(x^2 - m)");
+                return;
+            }
+            terms.push(Term { id: id, surf: s, sign: 1.0, what: -1, comp: -1, at: [0.0; 3], root: r.id[0] });
+            return;
+        }
         let fixed = s >= 0 && fixed_surf(s);
         if physics != HEAT || !(flux.len > 8 && flux[..4] == "dot(" && flux[flux.len - 4..] == ", n)") || !fixed {
             unsupported(tok(n), str("the integral '", source_of(n), "' is not in a value of two physics"),
@@ -2706,7 +2884,7 @@ recursive fn collect_terms(n: i64) {
             unsupported(tok(n), "a value of two physics runs in the SI system", "write the header SI");
             return;
         }
-        terms.push(Term { id: id, surf: s, sign: if flux_plus { 1.0 } else { -1.0 }, what: -1, comp: -1, at: [0.0; 3] });
+        terms.push(Term { id: id, surf: s, sign: if flux_plus { 1.0 } else { -1.0 }, what: -1, comp: -1, at: [0.0; 3], root: -1 });
         return;
     }
     var c = first(n);
@@ -2722,6 +2900,23 @@ fn emit_term(out: u8[>..]&, tm: Term) {
         out.append("    {\n");
         emit_sample(out, "v", tm.what, tm.comp, tm.at);
         format(out, "        term(", tm.id, ", v);\n    }\n");
+        return;
+    }
+    if tm.root >= 0 {
+        var code: i64[>..] = [];
+        var consts: f64[>..] = [];
+        fserialize(tm.root, code, consts);
+        if consts.len == 0 { consts.push(0.0); }
+        out.append("    ");
+        emit_region(out, tm.surf);
+        format(out, "    {\n        let code: i64[", code.len, "] = [");
+        for v, i in code { format(out, if i > 0 { ", " } else { "" }, v); }
+        format(out, "];\n        let consts: f64[", consts.len, "] = [");
+        for v, i in consts {
+            if i > 0 { out.append(", "); }
+            lit(out, v);
+        }
+        format(out, "];\n        term(", tm.id, ", elements::integral_expr(code[..], consts[..]));\n    }\n");
         return;
     }
     out.append("    ");
@@ -2903,7 +3098,7 @@ fn shares_mesh(p: i64) -> bool {
         return false;
     }
     var key: u8[>..] = [];
-    format(key, geo, "|", body_name, "|", mesh_size, "|", mesh_fine, "|", mesh_grade, "|", order, "|", hex_mesh, "|", refines.len, "|", interfaces.len, "|", dim);
+    format(key, geo, "|", body_name, "|", mesh_size, "|", mesh_fine, "|", mesh_grade, "|", mesh_angle, "|", order, "|", hex_mesh, "|", refines.len, "|", interfaces.len, "|", dim);
     for j in 3 { format(key, "|", lo[j], "|", hi[j]); }
     var sig: u8[..256] = [];
     codegen::set256(sig, key);
@@ -2977,6 +3172,8 @@ fn read_pass(prog: i64, pass: i64) -> bool {
     let family = family_of(methods);
     if family == "nedelec" || family == "raviart_thomas" { set64(family_word, family); }
     mesher::read_geometry(prog);
+    if mesh_node >= 0 { prescan_mesh(mesh_node); }
+    if physics_node >= 0 { prescan_regions(physics_node); }
     physics_item(physics_node);
     if !ok() { return false; }
     contact_bodies(prog);
@@ -3107,7 +3304,7 @@ fn harmonic_values() {
 
 // Each step needs a fixed value, and each reaction report a fixed region.
 fn supports() {
-    if hex_mesh && (geo != GEO_BOX || physics == EDGE || physics == DARCY || physics == WAVE) {
+    if hex_mesh && (geo == GEO_HOLE || physics == EDGE || physics == DARCY || physics == WAVE) {
         unsupported(mesh_tok, "hexahedra are in this generator for a box and for the heat and elastic physics",
                     "write cell: tet, or mesh a box");
     }
@@ -3115,7 +3312,7 @@ fn supports() {
     guard physics != EDGE && physics != DARCY else { return; }
     for s in steps {
         var fixes = 0;
-        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX || b.kind == BC_SOURCE { fixes++; } }
+        for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind == BC_FIX || b.kind == BC_SOURCE || (physics == HEAT && b.kind == BC_FILM) { fixes++; } }
         if fixes == 0 && physics != WAVE && s.procedure != MODAL {
             unsupported(physics_tok, str("step ", s.name, " fixes no value, so the solution is not unique"),
                         if physics == ELASTIC { "add bc root: u = 0" } else { "add bc wall: T = 20 degC" });
@@ -3170,7 +3367,7 @@ fn reaction_unit() -> const u8[:] {
 }
 
 fn field_unit(what: i64) -> const u8[:] {
-    if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_MEAN { return value_unit(); }
+    if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_MEAN || what == FIELD_EXTREME { return value_unit(); }
     if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX || what == FIELD_VON_MISES { return codegen::system.pressure; }
     if what == FIELD_REACTION { return reaction_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
@@ -3887,10 +4084,17 @@ fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3])
         out.append(");\n");
         return;
     }
-    if what == FIELD_REACTION || what == FIELD_MEAN || what == FIELD_MAX {
+    if what == FIELD_REACTION || what == FIELD_MEAN || what == FIELD_MAX || what == FIELD_EXTREME {
         out.append("    ");
         emit_region(out, at[0] as! i64);
-        if what == FIELD_MAX {
+        if what == FIELD_EXTREME {
+            let c = comp % 10;
+            format(out, "        let ", var_name, " = ");
+            if comp >= 10 && comp < 20 { out.append("-"); }
+            if comp < 20 { format(out, "elements::extreme_value(", c, ", ", if comp < 10 { "1.0" } else { "-1.0" }, ")"); }
+            if comp >= 20 { format(out, "elements::extreme_value(", c, ", 1.0) + elements::extreme_value(", c, ", -1.0)"); }
+            out.append(";\n");
+        } else if what == FIELD_MAX {
             let c = comp % 9;
             format(out, "        let ", var_name, " = elements::max_stress(", AXES[c / 3], ", ", AXES[c % 3], ", ", if comp >= 9 { "-1.0" } else { "1.0" }, ");\n");
         } else if what == FIELD_MEAN {
@@ -3981,7 +4185,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         out.append("        let v = ");
         lit(out, x.scale);
         format(out, " * elements::mean_stress(", x.comp / 3, ", ", x.comp % 3, ");\n        let found_v = true;\n");
-    } else if x.what == FIELD_MAX {
+    } else if x.what == FIELD_MAX || x.what == FIELD_EXTREME {
         emit_sample(out, "m", x.what, x.comp, [x.surf * 1.0, 0.0, 0.0]);
         out.append("        let v = ");
         lit(out, x.scale);
@@ -4086,6 +4290,7 @@ fn dof_estimate() -> i64 {
     if geo == GEO_SHAPE {
         mesher::clear_refine();
         if mesh_grade > 1.0 { mesher::set_grade(mesh_grade); }
+        mesher::set_feature_angle(if mesh_angle > 0.0 { mesh_angle * 57.29577951308232 } else { 30.0 });
         for r in refines {
             if r.axis >= 0 { mesher::add_refine_clip(r.g, r.size, r.surface, r.axis, r.planes, r.plane_count, r.round, r.ring); } else { mesher::add_refine(r.g, r.size, r.surface); }
         }
@@ -4136,6 +4341,11 @@ fn emit_shapes(out: u8[>..]&) {
             lit(out, v);
         }
         out.append("]);\n");
+    }
+    if mesh_angle > 0.0 {
+        out.append("    mesher::set_feature_angle(");
+        lit(out, mesh_angle * 57.29577951308232);
+        out.append(");\n");
     }
     if mesh_grade > 1.0 {
         out.append("    mesher::set_grade(");
@@ -4219,6 +4429,13 @@ fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
         format(out, "    // mesh on ", body_name, ": P", order, " ", cell, " of at most ", mesh_size, " ", sys.length);
         if body_shapes.len > 0 {
             emit_bodies(out);
+        } else if geo == GEO_SHAPE && hex_mesh {
+            format(out, ", by the grid of the mesher\n    if !elements::mesh_hex_shape(", body_shape, ", ");
+            lit(out, mesh_size);
+            out.append(", [");
+            for w, i in region_laws { format(out, if i > 0 { ", " } else { "" }, w.g); }
+            out.append("]) {\n        write_stderr(\"skein run: the mesher did not finish in its budget of points: give a larger size\\n\");\n");
+            out.append("        exit(1);\n    }\n");
         } else if geo == GEO_SHAPE {
             format(out, ", by the mesher\n    if !elements::mesh_shape(", dim, ", ", order, ", ", body_shape, ", ");
             lit(out, mesh_size);
@@ -4289,6 +4506,15 @@ fn emit_setup(out: u8[>..]&) {
         if capacity_node >= 0 {
             out.append("    elements::set_capacity(");
             lit(out, capacity);
+            out.append(");\n");
+        }
+        for w in region_laws {
+            format(out, "    cells(elements::heat_in(", w.g, ", ");
+            lit(out, w.cond);
+            out.append(", ");
+            lit(out, w.src);
+            out.append("), ");
+            quoted(out, w.label);
             out.append(");\n");
         }
     } else if physics == EDGE || physics == DARCY {
