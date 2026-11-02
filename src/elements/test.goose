@@ -852,7 +852,8 @@ fn test_solid_harmonic() {
     elements::set_harmonic(2.0 * PI, 0.02);
     if !elements::solve() { failures++; print("FAIL solid harmonic: the step at 1 Hz does not solve"); }
     elements::plane(elements::X, 100.0);
-    expect_near("solid harmonic, static limit", elements::harmonic_mean(0, elements::Z), still, 1.0e-4);
+    // At 1 Hz the real part is the static value over 1 + 4 zeta^2 (zeta 0.02); the mass term is below 1e-5.
+    expect_near("solid harmonic, static limit", elements::harmonic_mean(0, elements::Z), still / (1.0 + 4.0 * 0.02 * 0.02), 1.0e-4);
     var best = 0.0;
     var best_f = 0.0;
     var f = 380.0;
