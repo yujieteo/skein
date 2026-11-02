@@ -402,6 +402,7 @@ var sources: Source[>..];
 var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
+var mesh_grade = 0.0;   // the mesh setting grade (spec §9.1), or 0 if not given
 var mesh_tok = -1;
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
@@ -471,6 +472,7 @@ fn reset() {
     cut_source = -1;
     mesh_size = 0.0;
     mesh_fine = 0.0;
+    mesh_grade = 0.0;
     mesh_tok = -1;
     order = 2;
     rkpm_support = 0.0;
@@ -1047,6 +1049,9 @@ fn mesh(n: i64) {
             unsupported(tok(s), "layers and crack_tip are not in this generator", "remove the line");
         } else if name(s) == size_name {
             mesh_size = scalar_value(v);
+        } else if name(s) == "grade" && kind(n) == syntax::N_MESH && geo == GEO_SHAPE {
+            mesh_grade = scalar_value(v);
+            if mesh_grade <= 1.0 { unsupported(tok(v), "the grade is more than 1", "write grade: 1.3"); }
         } else if name(s) == "cell" && kind(n) == syntax::N_MESH {
             if kind(v) != syntax::N_NAME || name(v) != cell {
                 unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, " cells"),
@@ -2926,6 +2931,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 fn dof_estimate() -> i64 {
     if geo == GEO_SHAPE {
         mesher::clear_refine();
+        if mesh_grade > 1.0 { mesher::set_grade(mesh_grade); }
         for r in refines { mesher::add_refine(r.g, r.size, r.surface); }
         mesher::clear_interfaces();
         for g in interfaces { mesher::add_interface(g); }
@@ -2974,6 +2980,11 @@ fn emit_shapes(out: u8[>..]&) {
             lit(out, v);
         }
         out.append("]);\n");
+    }
+    if mesh_grade > 1.0 {
+        out.append("    mesher::set_grade(");
+        lit(out, mesh_grade);
+        out.append(");\n");
     }
     for r in refines {
         format(out, "    mesher::add_refine(", r.g, ", ");

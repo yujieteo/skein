@@ -989,7 +989,7 @@ mesh m on beam {
 |---|---|---|---|
 | `size` | `Length` | required | target edge length |
 | `cell` | `tri`, `quad`, `tet`, `hex` | `tri` in 2D, `tet` in 3D | `quad` and `hex` on a union of `rect` or `box` regions, or on a quarter of a ring or a tube, are a structured grid. `quad` on another `Surface` has triangles only where the shape needs them. `hex` on another `Solid` is a swept or a mapped grid (§9.2). |
-| `grade` | `Real` | 1.3 | largest ratio of the size of two neighbour cells |
+| `grade` | `Real` | 1.3 in 2D, 1.4 in 3D | largest ratio of the size of two neighbour cells. See the defaults per path below. |
 | `feature_angle` | `Angle` | 30 deg | an edge with a dihedral angle smaller than 180 deg minus this angle is sharp |
 | `refine r` | `Length` | none | size on region `r` and near it |
 | `layers r` | record | none | boundary layer cells on `r` (CFD) |
@@ -1019,10 +1019,10 @@ licences are not compatible with Apache 2.0.
 | Case | Algorithm |
 |---|---|
 | 2D triangles | Delaunay refinement (Chew 1989, Ruppert 1995, Shewchuk 2002) on a boundary that the mesher samples from φ, with the sharp corners as fixed vertices |
-| 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on an octree graded by `size`, `refine` and `grade` |
+| 3D tetrahedra | isosurface stuffing (Labelle and Shewchuk 2007) on a body-centred cubic lattice with a plane on each axis-aligned face of a `box` of the CSG tree, refined by longest-edge bisection (Rivara 1984) to `size`, `refine` and `grade` |
 | 3D sharp edges | protecting balls on the feature curves (Cheng, Dey and Ramos 2007), then the stuffing |
 | 3D tetrahedra on a prism along z with a `cylinder` or an `extrude`, and with each `refine` target in its full z range | the triangles of the 2D case on its section, swept through layers of equal height, each prism cut into 3 tetrahedra along the diagonal of each side face from its point of smallest index (Dompierre et al. 1999) |
-| smoothing | optimal Delaunay triangulation smoothing (Chen and Xu 2004, Alliez et al. 2005), with no move that makes a cell worse |
+| improvement of the stuffed tetrahedra | each cell with γ < 0.35 (γ = 1 / `max_aspect`): a move of a vertex that is not on the surface, then edge removal and the 2-3 flip (Klingner and Shewchuk 2007, in the sequence of Marot and Remacle 2020), with no change that makes the worst cell of its cavity worse |
 | `quad`, `hex` | a structured grid on a union of `box` or `rect` regions, or in r, θ (and z) on a quarter of a ring or a tube: `(circle - circle) & rect` or `(cylinder - cylinder) & box`, with the corner of the rect or the box on the axis |
 | `quad` on another `Surface` | the triangles of the 2D case, then the merge of pairs of neighbour triangles into quads (Blossom-Quad, Remacle et al. 2012): a matching of the largest size (Edmonds 1965) on the pairs whose quad has an acceptable quality. A triangle stays where it has no such pair. |
 | `hex` on a prism along z | a `Solid` of `box`, `cylinder` along z and `extrude` regions that each hold its z range: the quads of Blossom-Quad on its section at twice the size, each cut into 4 quads and each remaining triangle into 3, swept through layers of equal height |
@@ -1049,6 +1049,17 @@ touch the wall, and the port voltage floats.
 Reason for the `quad` and `hex` cells on a region that is not a union of
 boxes: femahoy gap G36. Femahoy meshes a ring about a hole, a tube, a rod
 and a sloped fillet with quad or hex cells.
+
+The 3D `grade` is the slope of the size: the wanted size at the distance
+d from a `refine` target of size h is `min(size, h + (grade - 1) d)`, as in
+2D. An explicit `grade` always sets the slope `grade - 1`, on every path.
+With no `grade` written, each path keeps the slope that it had before
+`grade` became a setting. A `refine` of a shape, in 2D and in 3D, uses the
+slope 0.4 (grade 1.4). The other 2D paths that read `grade` (the segment and
+circle refines and the flow mesher) use grade 1.3. The existing models use
+these slopes, and the slope 0.3 for a shape gives more cells and a longer
+solve (46,200 cells in place of 41,640 for `grid_coax_tem`, and the solve
+did not end in 10 minutes).
 
 Isosurface stuffing alone guarantees dihedral angles between 10.7° and
 164.8°. The feature protection and the boundary layers remove this

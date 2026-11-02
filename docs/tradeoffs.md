@@ -195,7 +195,7 @@ Goose code that the compiler writes and the runtime.
 
 | # | Rule | Skein source | Generated Goose and runtime |
 |---|---|---|---|
-| 1 | simple control flow, no goto, no recursion | **by construction**: no control flow at all | the emitter writes no `recursive fn`. The runtime has none either: the octree and AMG use loops over levels with a fixed maximum. A test fails if a `recursive` keyword is in the runtime or the output. |
+| 1 | simple control flow, no goto, no recursion | **by construction**: no control flow at all | the emitter writes no `recursive fn`. The runtime has none either: the mesher and AMG use loops over levels with a fixed maximum. A test fails if a `recursive` keyword is in the runtime or the output. |
 | 2 | a fixed upper bound on each loop | **by construction**: no loops | each loop is over an array whose length is fixed before the solve, or an iteration with a `max_iter` that always has a value (§14.4) |
 | 3 | no dynamic memory after initialization | **by construction**: no allocation | Goose has no heap. The runtime sizes each array after the mesh is made and before the solve. The solve does not grow an array. A test runs each sample with a check that no array grows after the start of the solve. |
 | 4 | functions of at most 60 lines | **by construction**: a function is one expression (spec §7.4) | runtime functions obey it. The emitter splits each long kernel into functions of at most 60 lines, by blocks of the cell matrix (spec §18.3). A test checks the length of each generated function (G6.4). |

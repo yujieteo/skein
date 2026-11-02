@@ -12,6 +12,7 @@ phase starts only after the gate passes.
 | 4 | `fv`, then `dg`, then the meshless methods `rkpm` and `gfd`. `verify convergence`. Limiters. `Complex`, the `harmonic` procedure, the `bloch` symmetry group. The WebGL viewer. The browser target: Goose to C, then `emcc`. Tessellated STEP export. | sample 05 runs. Each method passes its manufactured solution test. The femahoy gaps G2, G8 and G26 are closed, and their `// blocked-by:` marks are removed. |
 | 4.5 | WebGPU in the page of `skein build --target wasm`. The explicit step `central_difference` of `linear_elastic` with a lumped mass, natively and in the page. The `ssprk3` steps of `fv` and `dg` and `central_difference` on the GPU when the page has WebGPU, else on the CPU. An implicit path (CG) on the GPU, off by default, with a control in the page. The page shows the device of each step. | an explicit transient example and an `ssprk3` example run in the page on the GPU and on the CPU, and the results agree within the tolerance of `tests/gpu/gpu.test.mjs`. An implicit solve with the GPU control on matches the CPU solve. With no GPU adapter the GPU test skips, and `SKEIN_GPU=1` makes that a failure. |
 | 5 | plasticity, hyperelasticity, finite strain, contact, FSI, turbulence, NURBS geometry, the shell, beam and turbulence templates, radiation with view factors, Nédélec and Raviart-Thomas elements, `minimize` with adjoint gradients. The tessellated STEP export of phase 4 is done, so it is no longer a cut candidate. The next cut if the schedule is late is not decided, and the captain decides it ([tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order)). | the benchmarks of [implementation.md §10](implementation.md#10-testing-and-the-verification-suite) pass. The femahoy gaps G1, G3, G4, G13, G22, G23 and G27 are closed, and their `// blocked-by:` marks are removed. |
+| 6 | the 3D mesher: `grade` in 3D, lattice planes on the box planes of the CSG tree, the improvement of the bad tetrahedra. Ideas from Gmsh and from published papers, no code or text from them (implementation.md §7). Curved and oblique sharp edges (protecting balls or a local constrained Delaunay repair) only when a case needs them. | on the scout models of `src/mesher/test.goose`: the cell count falls as `grade` rises, and 90 % of the edges are within 0.5 to 1.5 times the wanted size. The sharp edges of an axis-aligned box are on edges of the mesh. No cell has γ < 0.35 (`max_aspect` > 2.857), the worst cell is never worse than the stuffed one, the mesh time at most doubles, and each surface node stays on φ = 0. Each `cell: tet` example passes `mesh_quality` and its `expect`. |
 
 The build order of the methods is `cg`, `fv`, `dg`, then meshless
 (decision 5 in [decisions.md](decisions.md)).
@@ -116,6 +117,15 @@ Each phase 5 lane changes only the rows of its own items.
 No femahoy gap belongs to the radiation, turbulence and FSI items, and
 implementation.md §10 has no benchmark for them or for the Nédélec and
 Raviart-Thomas items.
+
+## Phase 6 status
+
+| Item | Status |
+|---|---|
+| `grade` in 3D | done: `skein verify` and `skein run` read `grade` (no `grade` written: slope 0.4 for a shape refine and in 3D, see the spec), and the slope of the wanted size is `grade - 1` (`src/mesher/refine.goose`). The bisection compares the longest edge with the least wanted size in the cell. On the dimple with `refine dent: 0.02 m`, `grade` 1.1, 1.3 and 2.0 give 200,710, 87,380 and 56,422 cells, and 92.7 % of the edges are within 0.5 to 1.5 times the wanted size at 1.3 (before: 73.7 %). [grid_coax_tem.skn](../examples/femahoy/grid_coax_tem.skn) writes no `grade` and keeps 41,640 cells. |
+| lattice planes on the box planes | done: each axis-aligned plane of a `box` of the CSG tree is a lattice plane (`src/mesher/tet.goose`). The L block `box - box((0.43, 0.43, -1), (2, 2, 2))` has each of its 7 sharp edges on edges of the mesh, a volume error of 5.5e-14, and a minimum dihedral angle of 40.7° (before: 0.26 cells of error on each edge, -0.34 % volume, 19.6°). |
+| improvement of the bad cells | done: smoothing, edge removal and the 2-3 flip on each cell with γ < 0.35 (`src/mesher/improve.goose`). The worst `max_aspect` falls from 3.29 to 2.77 on the refined dimple and from 3.88 to 2.83 on the ball at h = 0.03. The ball at 0.03 meshes in 1.83 s, against 1.59 s with no improvement. |
+| curved and oblique sharp edges | not done: the rim of the dimple loses 0.33 cells. No example needs it now. |
 
 ## Risks
 
