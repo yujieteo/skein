@@ -17098,7 +17098,7 @@ static double wall_force_g(uint8_t found_g, int64_t comp_g, void *name_g_data, i
         {
             t15.data = ((uint8_t *)gs_str150); t15.len = 38;
             t16 = t15;
-            gs_abort_msg(t16.data, t16.len, gs_file2, 407);
+            gs_abort_msg(t16.data, t16.len, gs_file2, 404);
         }
         L12:;
         double s_g = 0.0;
@@ -17107,10 +17107,10 @@ static double wall_force_g(uint8_t found_g, int64_t comp_g, void *name_g_data, i
             int64_t t21 = n_g;
             if (!((uint8_t)(!((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->flow_region_g4.base) + t21 * 1))))) == (uint8_t)(0))))) goto L20;
             int64_t t23 = n_g;
-            if ((uint8_t)((int64_t)((int64_t)((((int64_t *)((GS_GL->flow_twin_g4.base)))[GS_IDX((int64_t)(t23), (GS_GL->flow_twin_g4.len), gs_file2, 411)]))) < (int64_t)(0))) goto L22;
+            if ((uint8_t)((int64_t)((int64_t)((((int64_t *)((GS_GL->flow_twin_g4.base)))[GS_IDX((int64_t)(t23), (GS_GL->flow_twin_g4.len), gs_file2, 408)]))) < (int64_t)(0))) goto L22;
             int64_t t24 = n_g;
             int64_t t25 = (((int64_t *)((GS_GL->flow_twin_g4.base)))[t24]);
-            if (!((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->flow_region_g4.base) + GS_IDX((int64_t)(t25), (GS_GL->flow_region_g4.len), gs_file2, 411) * 1))))) == (uint8_t)(0)))) goto L20;
+            if (!((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->flow_region_g4.base) + GS_IDX((int64_t)(t25), (GS_GL->flow_region_g4.len), gs_file2, 408) * 1))))) == (uint8_t)(0)))) goto L20;
             L22:;
             {
                 double t26 = s_g;
@@ -17118,7 +17118,7 @@ static double wall_force_g(uint8_t found_g, int64_t comp_g, void *name_g_data, i
                 int64_t t28 = (GS_GL->flow_raw_g4.len);
                 int64_t t29 = flow_vdof_g4(n_g, comp_g_2, gs_sp + 0);
                 int64_t t30 = t29;
-                s_g = (t26 + ((((double *)(t27))[GS_IDX((int64_t)(t30), t28, gs_file2, 411)])));
+                s_g = (t26 + ((((double *)(t27))[GS_IDX((int64_t)(t30), t28, gs_file2, 408)])));
             }
             L20:;
         }

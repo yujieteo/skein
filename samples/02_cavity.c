@@ -5725,19 +5725,20 @@ static void step_steady_g(int64_t gs_sp) {
             gs_abort_msg(t157.data, t157.len, gs_file0, 442);
         }
         L152:;
+        GS_GL->flow_region_part_g4 = 0;
         int64_t best_g = 0;
         double dist_g = 1e+300;
         int64_t t158 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->flow_coords_g4.len))))) / (uint64_t)((int64_t)(2)));
         for (int64_t n_g_8 = 0; n_g_8 < t158; n_g_8++) {
             int64_t t161 = n_g_8;
-            uint8_t *t162 = &((*(uint8_t *)(((GS_GL->flow_region_g4.base) + GS_IDX((int64_t)(t161), (GS_GL->flow_region_g4.len), gs_file0, 446) * 1))));
+            uint8_t *t162 = &((*(uint8_t *)(((GS_GL->flow_region_g4.base) + GS_IDX((int64_t)(t161), (GS_GL->flow_region_g4.len), gs_file0, 447) * 1))));
             (*t162) = 0;
             double d_g_3;
-            int64_t t163 = gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 447);
-            int64_t t164 = gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 447);
-            int64_t t165 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 447)), 1, gs_file0, 447);
-            int64_t t166 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 447)), 1, gs_file0, 447);
-            double t167 = ((double)((double)(((double)((double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t163), (GS_GL->flow_coords_g4.len), gs_file0, 447)]))) - (double)(0.0)))) * (double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[t164]))) - (double)(0.0)))))) + (double)(((double)((double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t165), (GS_GL->flow_coords_g4.len), gs_file0, 447)]))) - (double)(0.0)))) * (double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[t166]))) - (double)(0.0))))));
+            int64_t t163 = gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 448);
+            int64_t t164 = gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 448);
+            int64_t t165 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 448)), 1, gs_file0, 448);
+            int64_t t166 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(2), n_g_8, gs_file0, 448)), 1, gs_file0, 448);
+            double t167 = ((double)((double)(((double)((double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t163), (GS_GL->flow_coords_g4.len), gs_file0, 448)]))) - (double)(0.0)))) * (double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[t164]))) - (double)(0.0)))))) + (double)(((double)((double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[GS_IDX((int64_t)(t165), (GS_GL->flow_coords_g4.len), gs_file0, 448)]))) - (double)(0.0)))) * (double)(((double)((double)((((double *)((GS_GL->flow_coords_g4.base)))[t166]))) - (double)(0.0))))));
             double t168 = gs_sqrt(t167);
             d_g_3 = t168;
             if (!((uint8_t)((int64_t)((int64_t)(n_g_8)) < (int64_t)(GS_GL->flow_vertex_count_g4)))) goto L169;
@@ -5753,7 +5754,7 @@ static void step_steady_g(int64_t gs_sp) {
             goto L151;
         }
         int64_t t170 = best_g;
-        uint8_t *t171 = &((*(uint8_t *)(((GS_GL->flow_region_g4.base) + GS_IDX((int64_t)(t170), (GS_GL->flow_region_g4.len), gs_file0, 454) * 1))));
+        uint8_t *t171 = &((*(uint8_t *)(((GS_GL->flow_region_g4.base) + GS_IDX((int64_t)(t170), (GS_GL->flow_region_g4.len), gs_file0, 455) * 1))));
         (*t171) = 1;
         found_g_5 = 1;
         goto L151;
