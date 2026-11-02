@@ -32,6 +32,11 @@ struct Target {
     g: i64,
     size: f64,
     surface: bool,
+    axis: i64,       // the coordinate of the planes that clip the target, or -1 for none
+    planes: f64[2],
+    plane_count: i64,
+    round: bool,     // the target is also clipped to the circle of radius ring about (ring[0], ring[1]), in x and y
+    ring: f64[3],
 }
 
 var targets: Target[>..] = [];
@@ -54,7 +59,19 @@ fn set_grade(g: f64) {
 // Wants the cells of edge `size` at the surface of g (surface) or in g.
 fn add_refine(g: i64, size: f64, surface: bool) {
     guard g >= 0 && g < shapes.len && size > 0.0 else { abort("add_refine: a shape and a size > 0"); }
-    targets.push(Target { g: g, size: size, surface: surface });
+    targets.push(Target { g: g, size: size, surface: surface, axis: -1, planes: [0.0; 2], plane_count: 0, round: false, ring: [0.0; 3] });
+}
+
+// The same, clipped: the target is where the surface of g meets one of the
+// `count` planes `axis` = planes[i] (the edge of a boundary by a plane
+// condition), and with `round` the circle of radius ring[2] about
+// (ring[0], ring[1]) too (the rim of a spot on a face). The wanted size
+// grows with the distance to that set, which is sqrt(d0^2 + d1^2 + d2^2)
+// of the distances to the surface, the plane and the circle: exact where the
+// three meet at right angles, and not less than the distance anywhere.
+fn add_refine_clip(g: i64, size: f64, surface: bool, axis: i64, planes: f64[2], count: i64, round: bool, ring: f64[3]) {
+    guard g >= 0 && g < shapes.len && size > 0.0 && axis >= 0 && axis < 3 && count >= 1 && count <= 2 && (!round || ring[2] > 0.0) else { abort("add_refine_clip: a shape, a size > 0, an axis, 1 or 2 planes and a ring radius > 0"); }
+    targets.push(Target { g: g, size: size, surface: surface, axis: axis, planes: planes, plane_count: count, round: round, ring: ring });
 }
 
 // The wanted size at a point at most `reach` from (x, y, z). With no
@@ -64,7 +81,18 @@ fn wanted_size(x: f64, y: f64, z: f64, reach: f64, size: f64) -> f64 {
     var h = size;
     for t in targets {
         let f = phi(t.g, x, y, z);
-        let d = if t.surface { abs(f) } else { max(f, 0.0) };
+        var d = if t.surface { abs(f) } else { max(f, 0.0) };
+        if t.axis >= 0 {
+            let c: f64[3] = [x, y, z];
+            var near = 1.0e300;
+            for i in t.plane_count { near = min(near, abs(c[t.axis] - t.planes[i])); }
+            var sq = d * d + near * near;
+            if t.round {
+                let ring = sqrt((x - t.ring[0]) * (x - t.ring[0]) + (y - t.ring[1]) * (y - t.ring[1])) - t.ring[2];
+                sq += ring * ring;
+            }
+            d = sqrt(sq);
+        }
         h = min(h, t.size + slope * max(d - reach, 0.0));
     }
     return h;

@@ -11,6 +11,7 @@ import .shape;
 import .mesh;
 import .assemble;
 import .stages;
+import .field;
 import .edge;
 
 let FIELD_VALUE = 0;    // component comp of u, or T
@@ -119,6 +120,7 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     }
     var s = shear * (du[3 * i + j] + du[3 * j + i]);
     if i == j { s += lame * tr; }
+    if i == j && ft_kind.len > 0 { s -= strain_stress(c); }
     return s;
 }
 

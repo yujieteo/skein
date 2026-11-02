@@ -208,6 +208,8 @@ fn has_round(g: i64) -> bool {
 // middle z (sweep_tets) sizes it. A target on an end face does not.
 fn targets_span_z(z0: f64, z1: f64) -> bool {
     for t in targets {
+        // A clip to planes or a ring is not the same at each z.
+        if t.axis >= 0 { return false; }
         let tb = bounds(t.g);
         if tb[2] > z0 || tb[5] < z1 { return false; }
     }
