@@ -1121,6 +1121,8 @@ fn chains_in_mesh() -> bool {
 
 fn mesh_3d(g: i64, size: f64) -> bool {
     clear_mesh(3);
+    curves_found = 0;       // the counters are those of this mesh, also when it has no lattice
+    curves_missed = 0;
     if shell_tets(g, size) { return true; }
     let b = bounds(g);
     if has_round(g) && targets_span_z(b[2], b[5]) {
