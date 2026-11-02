@@ -3239,7 +3239,7 @@ static void main_g(int64_t gs_sp) {
             gs_memcpy(t212, (const uint8_t *)(((uint8_t *)gs_str9)), (size_t)t50);
             t212 += t50;
             GS_GL->solves_g.len += t50;
-            GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file1, 110);
+            GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file1, 129);
             if ((uint8_t)(!GS_GL->converged_g)) {
                 GS_GL->failed_g = 1;
             }
@@ -38493,7 +38493,7 @@ static void mode_g(void *path_g_data, int64_t path_g_len, void *field_g_data, in
     gs_memcpy(t68, (const uint8_t *)(((uint8_t *)gs_str9)), (size_t)t67);
     t68 += t67;
     GS_GL->results_g.len += t67;
-    GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 121);
+    GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file1, 140);
     (&GS_GL->gs_gstk_results_g)->top = t68;
     return;
 }

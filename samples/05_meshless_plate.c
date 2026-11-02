@@ -4955,10 +4955,10 @@ static void rk_start_g(double support_g, double E_g, double nu_g, uint8_t stress
     int64_t t0 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
     uint8_t *t39 = GS(gs_sp + 0)->top;
     for (int64_t n_g = 0; n_g < t0; n_g++) {
-        int64_t t5 = gs_mul_i64((int64_t)(3), n_g, gs_file0, 184);
-        t4.e[0] = (((double *)((GS_GL->elements_coords_g8.base)))[GS_IDX((int64_t)(t5), (GS_GL->elements_coords_g8.len), gs_file0, 184)]);
-        int64_t t6 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), n_g, gs_file0, 184)), 1, gs_file0, 184);
-        t4.e[1] = (((double *)((GS_GL->elements_coords_g8.base)))[GS_IDX((int64_t)(t6), (GS_GL->elements_coords_g8.len), gs_file0, 184)]);
+        int64_t t5 = gs_mul_i64((int64_t)(3), n_g, gs_file0, 203);
+        t4.e[0] = (((double *)((GS_GL->elements_coords_g8.base)))[GS_IDX((int64_t)(t5), (GS_GL->elements_coords_g8.len), gs_file0, 203)]);
+        int64_t t6 = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(3), n_g, gs_file0, 203)), 1, gs_file0, 203);
+        t4.e[1] = (((double *)((GS_GL->elements_coords_g8.base)))[GS_IDX((int64_t)(t6), (GS_GL->elements_coords_g8.len), gs_file0, 203)]);
         t3 = t4;
         int64_t t7 = 2;
         int64_t t8 = t7;
@@ -12408,7 +12408,7 @@ static void step_pull_g(int64_t gs_sp) {
         gs_memcpy(t156, (const uint8_t *)(((uint8_t *)gs_str24)), (size_t)t134);
         t156 += t134;
         GS_GL->results_g.len += t134;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file0, 157);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file0, 176);
         (&GS_GL->gs_gstk_results_g)->top = t156;
     }
     L118:;
@@ -14242,7 +14242,7 @@ static void rk_fix_g(int64_t comp_g, double v_g, int64_t gs_sp) {
     t13 += 8;
     t14++;
     int64_t comp_g_2 = comp_g;
-    int64_t k_g = gs_sub_i64((int64_t)(((t14))), 1, gs_file0, 208);
+    int64_t k_g = gs_sub_i64((int64_t)(((t14))), 1, gs_file0, 227);
     {
         if (!((uint8_t)((int64_t)((int64_t)(k_g)) >= (int64_t)(0)))) goto L4;
         if (!((uint8_t)((int64_t)((int64_t)(comp_g_2)) >= (int64_t)(0)))) goto L4;
@@ -14480,7 +14480,7 @@ static uint8_t rk_solve_g(int64_t gs_sp) {
     uint8_t t1 = meshless_solve_static_g8(gs_sp + 0);
     t0 = t1;
     return t0;
-    GS_UNREACHABLE(gs_file0, 223);
+    GS_UNREACHABLE(gs_file0, 242);
     uint8_t t2 = {0};
     return t2;
 }
@@ -15257,7 +15257,7 @@ static void meshless_edge_terms_g8(int64_t r_g, int64_t gs_sp) {
         double t_g = GS_GL->meshless_time_g8;
         {
             int64_t t43 = k_g_3;
-            g_g = (((double *)((GS_GL->fixed_values_g.base)))[GS_IDX((int64_t)(t43), (GS_GL->fixed_values_g.len), gs_file0, 179)]);
+            g_g = (((double *)((GS_GL->fixed_values_g.base)))[GS_IDX((int64_t)(t43), (GS_GL->fixed_values_g.len), gs_file0, 198)]);
             goto L42;
         }
         L42:;
@@ -15458,7 +15458,7 @@ static void meshless_gfd_assemble_g8(int64_t gs_sp) {
             double t_g = GS_GL->meshless_time_g8;
             {
                 int64_t t39 = k_g;
-                (*t36) = (((double *)((GS_GL->fixed_values_g.base)))[GS_IDX((int64_t)(t39), (GS_GL->fixed_values_g.len), gs_file0, 179)]);
+                (*t36) = (((double *)((GS_GL->fixed_values_g.base)))[GS_IDX((int64_t)(t39), (GS_GL->fixed_values_g.len), gs_file0, 198)]);
                 goto L38;
             }
             L38:;
@@ -15834,7 +15834,7 @@ static GS_INLINE double rk_total_reaction_g(double *gs_r1, double *gs_r2, int64_
     t3 = 0.0;
     *gs_r2 = t3;
     return t1;
-    GS_UNREACHABLE(gs_file0, 232);
+    GS_UNREACHABLE(gs_file0, 251);
     double t4 = {0};
     return t4;
 }
@@ -16107,7 +16107,7 @@ static GS_INLINE double rk_applied_load_g(double *gs_r1, double *gs_r2, int64_t 
     t3 = 0.0;
     *gs_r2 = t3;
     return t1;
-    GS_UNREACHABLE(gs_file0, 237);
+    GS_UNREACHABLE(gs_file0, 256);
     double t4 = {0};
     return t4;
 }
@@ -16608,7 +16608,7 @@ static GS_INLINE double rk_stress_at_g(int64_t i_g, int64_t j_g, double x_g, dou
     double t2 = meshless_stress_at_g8(i_g, j_g, x_g, y_g, &t1, gs_sp + 0);
     *gs_r1 = t1;
     return t2;
-    GS_UNREACHABLE(gs_file0, 229);
+    GS_UNREACHABLE(gs_file0, 248);
     double t3 = {0};
     return t3;
 }

@@ -6150,7 +6150,7 @@ static void step_pull_g(int64_t gs_sp) {
         gs_memcpy(t488, (const uint8_t *)(((uint8_t *)gs_str20)), (size_t)t373);
         t488 += t373;
         GS_GL->results_g.len += t373;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file3, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file3, 175);
         (&GS_GL->gs_gstk_results_g)->top = t488;
     }
     L323:;

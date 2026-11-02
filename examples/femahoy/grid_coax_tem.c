@@ -28157,7 +28157,7 @@ static void step_tone_1_g(int64_t gs_sp) {
         gs_memcpy(t421, (const uint8_t *)(((uint8_t *)gs_str24)), (size_t)t318);
         t421 += t318;
         GS_GL->results_g.len += t318;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file18, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file18, 175);
         (&GS_GL->gs_gstk_results_g)->top = t421;
     }
     L268:;
@@ -55936,7 +55936,7 @@ static a2_f64 edge_segment_g(uint8_t curl_g, int64_t comp_g, double x0_g, double
     t2.e[1] = im_g;
     t1 = t2;
     return t1;
-    GS_UNREACHABLE(gs_file18, 212);
+    GS_UNREACHABLE(gs_file18, 231);
     t3 = (a2_f64){0};
     return t3;
 }
@@ -56677,7 +56677,7 @@ static a2_f64 cdiv_g(a2_f64 a_g, a2_f64 b_g) {
     t1.e[1] = ((double)((double)(((double)((double)(((double)((double)(a_g.e[1])) * (double)(b_g.e[0])))) - (double)(((double)((double)(a_g.e[0])) * (double)(b_g.e[1])))))) / (double)(d_g));
     t0 = t1;
     return t0;
-    GS_UNREACHABLE(gs_file18, 184);
+    GS_UNREACHABLE(gs_file18, 203);
     t2 = (a2_f64){0};
     return t2;
 }
@@ -57338,7 +57338,7 @@ static a2_f64 cpart_g(int64_t part_g, a2_f64 a_g) {
     t14.e[1] = (-a_g.e[1]);
     t13 = t14;
     return t13;
-    GS_UNREACHABLE(gs_file18, 190);
+    GS_UNREACHABLE(gs_file18, 209);
     t15 = (a2_f64){0};
     return t15;
 }

@@ -6067,7 +6067,7 @@ static void step_weight_g(int64_t gs_sp) {
         gs_memcpy(t485, (const uint8_t *)(((uint8_t *)gs_str26)), (size_t)t370);
         t485 += t370;
         GS_GL->results_g.len += t370;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file2, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file2, 175);
         (&GS_GL->gs_gstk_results_g)->top = t485;
     }
     L320:;

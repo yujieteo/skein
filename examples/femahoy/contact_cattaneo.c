@@ -45849,7 +45849,7 @@ static void nonlinear_g(void *step_g_data, int64_t step_g_len, uint8_t done_g, i
     gs_memcpy(t20, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t19);
     t20 += t19;
     GS_GL->solves_g.len += t19;
-    GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file32, 182);
+    GS_GL->solve_count_g = gs_add_i64(GS_GL->solve_count_g, 1, gs_file32, 201);
     if ((uint8_t)(!GS_GL->converged_g)) {
         GS_GL->failed_g = 1;
     }
@@ -48163,7 +48163,7 @@ static void step_slide_g(int64_t gs_sp) {
         gs_memcpy(t162, (const uint8_t *)(((uint8_t *)gs_str40)), (size_t)t155);
         t162 += t155;
         GS_GL->results_g.len += t155;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file32, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file32, 175);
         (&GS_GL->gs_gstk_results_g)->top = t162;
     }
     L105:;

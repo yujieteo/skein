@@ -34585,7 +34585,7 @@ static double wave_at_g(int64_t part_g, double x_g, double y_g, double z_g, uint
     t13 = found_g;
     *gs_r1 = t13;
     return t7;
-    GS_UNREACHABLE(gs_file6, 177);
+    GS_UNREACHABLE(gs_file6, 196);
     double t14 = {0};
     return t14;
 }

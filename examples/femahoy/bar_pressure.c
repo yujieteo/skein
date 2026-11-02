@@ -6012,7 +6012,7 @@ static void step_load_step_g(int64_t gs_sp) {
         gs_memcpy(t400, (const uint8_t *)(((uint8_t *)gs_str28)), (size_t)t346);
         t400 += t346;
         GS_GL->results_g.len += t346;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 175);
         (&GS_GL->gs_gstk_results_g)->top = t400;
     }
     L296:;

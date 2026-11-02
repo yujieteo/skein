@@ -12912,7 +12912,7 @@ static void step_steady_1_g(int64_t gs_sp) {
         gs_memcpy(t311, (const uint8_t *)(((uint8_t *)gs_str27)), (size_t)t225);
         t311 += t225;
         GS_GL->results_g.len += t225;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file10, 243);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file10, 262);
         (&GS_GL->gs_gstk_results_g)->top = t311;
     }
     L209:;

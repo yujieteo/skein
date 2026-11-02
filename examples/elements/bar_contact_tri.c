@@ -31408,7 +31408,7 @@ static void step_pulse_g(int64_t gs_sp) {
         gs_memcpy(t532, (const uint8_t *)(((uint8_t *)gs_str24)), (size_t)t412);
         t532 += t412;
         GS_GL->results_g.len += t412;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file20, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file20, 175);
         (&GS_GL->gs_gstk_results_g)->top = t532;
     }
     L362:;

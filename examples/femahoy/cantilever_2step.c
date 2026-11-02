@@ -36412,7 +36412,7 @@ static void output_g(void *path_g_data, int64_t path_g_len, void *field_g_data, 
     gs_memcpy(t50, (const uint8_t *)(((uint8_t *)gs_str14)), (size_t)t49);
     t50 += t49;
     GS_GL->results_g.len += t49;
-    GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 156);
+    GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file4, 175);
     (&GS_GL->gs_gstk_results_g)->top = t50;
     return;
 }

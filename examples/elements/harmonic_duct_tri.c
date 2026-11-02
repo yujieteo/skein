@@ -34508,7 +34508,7 @@ static double wave_at_g(int64_t part_g, double x_g, double y_g, double z_g, uint
     t13 = found_g;
     *gs_r1 = t13;
     return t7;
-    GS_UNREACHABLE(gs_file6, 177);
+    GS_UNREACHABLE(gs_file6, 196);
     double t14 = {0};
     return t14;
 }
@@ -35916,7 +35916,7 @@ static void step_tones_2_g(int64_t gs_sp) {
         gs_memcpy(t188, (const uint8_t *)(((uint8_t *)gs_str27)), (size_t)t179);
         t188 += t179;
         GS_GL->results_g.len += t179;
-        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file6, 156);
+        GS_GL->result_count_g = gs_add_i64(GS_GL->result_count_g, 1, gs_file6, 175);
         (&GS_GL->gs_gstk_results_g)->top = t188;
     }
     L129:;
