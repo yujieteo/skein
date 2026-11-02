@@ -909,8 +909,8 @@ fn shape_body(region: i64) {
 
 let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm or abs(x) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
-var in_and = false;
-var in_or = false;    // surf_parts reads the atoms of an ||   // surf_parts reads the atoms of an &&
+var in_and = false;   // surf_parts reads the atoms of an &&
+var in_or = false;    // surf_parts reads the atoms of an ||
 
 // A limit atom `v < c`, `v <= c`, `v > c` or `v >= c` of a coordinate v, or of the
 // radius sqrt(x^2 + y^2) or x^2 + y^2 (against R^2): the nodes of the
