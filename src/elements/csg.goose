@@ -61,6 +61,34 @@ fn build_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
     return true;
 }
 
+// Meshes shape g, a union of boxes, with the hexahedra of the grid of the
+// mesher (mesher::mesh_cells): a grid plane on each face of g and of each
+// box of `planes`, so that no hexahedron crosses a face of a region. False
+// if g is not a union of boxes, or the mesher does not finish.
+fn build_hex_shape(g: i64, size: f64, planes: i64[:]) -> bool {
+    guard mesher::mesh_cells(g, 3, size, planes) && runtime::cell_count() > 0 else { return false; };
+    guard runtime::cell_nodes.len == 8 * runtime::cell_count() else { return false; };
+    var vertices: i64[>..] = [];
+    vertices.append(runtime::cell_nodes);
+    start_mesh(3, 1, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
+    coords.append(runtime::coords);
+    conn.append(vertices);
+    hex_cells = true;
+    per_cell = 8;
+    for t in 3 {
+        bbox_lo[t] = coords[t];
+        bbox_hi[t] = coords[t];
+        for n in node_count() {
+            bbox_lo[t] = min(bbox_lo[t], coords[3 * n + t]);
+            bbox_hi[t] = max(bbox_hi[t], coords[3 * n + t]);
+        }
+    }
+    map_lo = bbox_lo;
+    map_hi = bbox_hi;
+    body_shape = g;
+    return true;
+}
+
 // Meshes each shape of `shapes` alone, as build_shape, so that two bodies
 // share no node: the bodies of a contact (contact.goose). Cell c is in
 // body cell_body[c]. g is the union of the shapes, the body of the

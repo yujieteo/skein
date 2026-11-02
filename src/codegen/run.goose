@@ -72,7 +72,14 @@ fn read_model(prog: i64) -> i64 {
     if grid_gen::claims(prog) { return if grid_gen::read(prog) { LANE_GRID } else { -1 }; }
     if optim_gen::claims(prog) { return if optim_gen::read(prog) { LANE_OPTIM } else { -1 }; }
     if elements_gen::claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
-    return if read(prog) { LANE_BOX } else { -1 };
+    if read(prog) { return LANE_BOX; }
+    // A model of hexahedra that the box lane cannot read (a patch of a face, a region of a union of
+    // boxes, a heat law) goes to the generator of the simplex and hexahedron cells.
+    if elements_gen::hex_claims(prog) {
+        syntax::errors.clear();
+        return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 };
+    }
+    return -1;
 }
 
 // The dofs of the mesh of the model that `read_model` read with generator
