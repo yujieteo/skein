@@ -32,9 +32,10 @@ material gas {
     gamma: Real = gam
 }
 
-// femahoy uses 2 blocks of quads. quad needs a rect, thus tri here.
+// femahoy uses 2 blocks of quads. quad needs a rect, thus tri here. 0.0125 m and 1.2 s keep the
+// run near 3 minutes on one thread, and the five expects still pass within 0.25 %.
 mesh m on fluid {
-    size: 0.01 m
+    size: 0.0125 m
     cell: tri
 }
 
@@ -57,7 +58,7 @@ method flow: fv {
     limiter: van_leer
 }
 
-step march: transient(end: 2 s, dt: 0.6 ms, scheme: ssprk3) {
+step march: transient(end: 1.2 s, dt: stable, scheme: ssprk3) {
     bc inlet: rho = rho1
     bc inlet: mom = (rho1*u1, 0)
     bc inlet: e_t = p1/(gam - 1) + 0.5*rho1*u1^2

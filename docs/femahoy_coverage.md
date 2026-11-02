@@ -210,11 +210,18 @@ gives the roadmap phase that closes the gap:
   affine in T, natural boundary fluxes, and the mean, the integral and the
   maximum of any field expression on a region. A banded LU solve
   (`src/solvers/band.goose`) replaces GMRES for the thin channel.
+- [wedge_oblique_shock.skn](../examples/femahoy/wedge_oblique_shock.skn) runs
+  with `skein run` on the conservation-law family `src/cons/`: any
+  `ddt(U) + div(F) = S` system of an `fv` method with more than one unknown
+  component, on triangles, with a MUSCL limiter, a Rusanov flux whose speed
+  comes from the Jacobian of the model flux, and SSPRK3. All five expects pass
+  within 0.25 % (the shock angle is 36.998 deg).
 - Not run yet in the flow batch, each needs a new solver family:
-  naca0012_ladson and naca23012_flap (the generator has no `nu`, no turbulence
-  model in a written-out physics), wedge_oblique_shock (compressible Euler
-  with a vector unknown in `fv`), dam_break_vof and dam_break_martin_moyce
-  (two-phase VOF).
+  naca0012_ladson and naca23012_flap (Spalart-Allmaras with a nuTilde unknown,
+  a wall-distance physics, a spline airfoil with a far field, boundary layer
+  cells and a second physics), dam_break_vof and dam_break_martin_moyce
+  (two-phase VOF with tables, surface tension and a Tait water; the flow
+  generator rejects the Newtonian stress `let`).
 - turek_hron_fsi1 runs in the flow lane (drag +0.02 %, lift -0.06 %, ux_a +0.1 %,
   uy_a -2.1 %). The flag is written out as St. Venant-Kirchhoff
   (`assume finite_strain`, `hooke` of `strain(u)`, `div(defgrad(u)*S) = 0`). It is solved by

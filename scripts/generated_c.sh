@@ -101,6 +101,7 @@ examples/femahoy/turek_hron_fsi1.skn
 examples/femahoy/taylor_bar_impact.skn
 examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn
+examples/femahoy/wedge_oblique_shock.skn
 examples/flow/cavity_coarse.skn
 examples/flow/channel_sst_tri.skn
 examples/flow/poiseuille_stokes.skn

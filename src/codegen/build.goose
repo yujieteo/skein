@@ -51,7 +51,7 @@ let BUILD_USAGE = "usage: skein build <file.skn> --target wasm\n";
 // the shell or flow generator, and of the grid generator only fv and dg,
 // not a scalar rkpm or gfd model.
 fn page_lane(prog: i64) -> bool {
-    guard !shells_gen::claims(prog) && !flow_gen::claims(prog) else { return false; };
+    guard !shells_gen::claims(prog) && !flow_gen::claims(prog) && !cons_gen::claims(prog) else { return false; };
     guard grid_gen::claims(prog) else { return true; };
     var c = syntax::nodes[prog].first;
     while c >= 0 {
