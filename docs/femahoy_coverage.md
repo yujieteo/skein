@@ -274,15 +274,44 @@ gives the roadmap phase that closes the gap:
   that `&&` (`plane_cut` in `src/elements/api.goose`). Deviations: the mesh
   sizes are 1.6 mm (te10, for the phase), 2 mm (step) and 2 mm (dielectric),
   because the tetrahedra of the mesher need the finer mesh of te10 to put the
-  phase of S21 within 0.1 deg, and the step and the dielectric guide at the
-  femahoy sizes (1.4 mm and 1.5 mm) do not finish in 25 minutes.
-- Not run yet in the electromagnetic batch: grid_cavity_te101 (the modal step
-  of an edge physics, with a wall impedance that depends on the eigenvalue),
-  line_wire_skin and line_bars_getdp (a scalar eddy-current physics with a
-  conductivity and a mu for each region, and `integral(J, r)` of a let),
-  team7_eddy_current (the `stadium` shape of the mesher, and a source in the
-  edge physics), dipole_king_middleton and optics_mie_cylinder (order 2 and a
-  PML in 3D and a scattering form with regions).
+  phase of S21 within 0.1 deg. The step and the dielectric guide also run
+  at the femahoy sizes (1.4 mm and 1.5 mm): the step takes 3 min 19 s and
+  4.1 GB (142,468 dofs, estimate 4.05 GB), and the dielectric guide takes
+  2 min 36 s and 2.7 GB (90,146 dofs, estimate 2.66 GB). Their four `expect`
+  lines pass. They are too long for `./build.sh test`, so the logs are in
+  `data/skein-fh-em2/` of the supervisor.
+- The wave and edge systems take a direct solve (`src/solvers/slu.goose`): LU
+  factors with no pivoting, on a nested dissection of the graph of the
+  matrix (a level set of a search for each separator), with a pivot that is
+  almost 0 replaced. The factor is also the preconditioner of GMRES. Reason:
+  GMRES with ILU(0) did not converge on the step at 1.4 mm in 5 minutes, and
+  its cap of 20,000 iterations was never reached. The plan counts the entries
+  of L and the multiplies before the factors are sized, so the memory check
+  and the time estimate come first. A system that needs more than
+  3e12 multiplies takes GMRES with ILU(0), which stops after 3e11 multiplies
+  with a message, so a run never hangs.
+- The batch of the eddy currents runs
+  [line_wire_skin.skn](../examples/femahoy/line_wire_skin.skn) (R within
+  0.1 % of the Bessel function answer) and
+  [line_bars_getdp.skn](../examples/femahoy/line_bars_getdp.skn) (R and L
+  within 0.3 % and 0.06 % of GetDP). The scalar wave physics takes the form
+  `eq -div(Hr) = J` with `let Hr = grad(Az)/mu` and `let J = sigma_e*(E - ddt(Az))`:
+  the generator takes c, s and 1/mu of each region from its material at the
+  omega of the step (`ddt(u)` is `im*omega*u`), and `integral(J, r)` of a let
+  over a region of cells is `a I + b A` with the material of the region. A
+  `refine` of `boundary(shape)` or of `boundary(a) | boundary(b)` refines the
+  surface of the shape.
+- Not run yet in the electromagnetic batch, each for a large missing piece:
+  grid_cavity_te101 needs the modal step of an edge physics and a wall
+  impedance that depends on the eigenvalue, and its `expect` is within 3e-4
+  of the frequency: the lowest order edge element needs a mesh of about 1
+  million cells for that, so it needs the second order element first.
+  team7_eddy_current needs the `stadium` shape of the mesher and a source in
+  the edge physics. dipole_king_middleton needs order 2 edge elements and a
+  PML in 3D. optics_mie_cylinder needs a source that varies in space in the
+  scalar wave physics (`e_inc`), a PML on a layer that is not a box, order 2,
+  the integral of a field on a curve inside the mesh, and the `study` of a
+  param.
 - Not run yet, each for a large missing piece:
   laminate_pagano needs the orthotropic written-out law on serendipity
   hexahedra with reduced integration, a per-region material on hexahedra and
