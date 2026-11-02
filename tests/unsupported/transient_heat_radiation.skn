@@ -1,0 +1,43 @@
+// femahoy: validation/cases/grid-cooling-slab/slab/grid.toml
+// A slab 20 mm thick at 100 degC. At time 0 both faces go to 0 degC, and the heat flows
+// along z only. The centre temperature at t = 20 s (Fo = 0.2) is checked against the
+// series of Carslaw and Jaeger (1959), section 3.3: 77.231160686 degC.
+
+model cooling_slab: 3d, SI
+
+let a: Length = 0.001 m
+let H: Length = 0.02 m
+
+scales H, 100 K, 1 W/(m*K), 1000 kg/m^3
+
+let slab: Solid = box((0, 0, 0) m, (a, a, H))
+let side: Surface = boundary(slab, x == 0 m)
+// The other faces are adiabatic: the default natural condition.
+let faces: Surface = boundary(slab, z == 0 m || z == H)
+
+material mat {
+    k: Conductivity = 1 W/(m*K)
+    rho: Density = 1000 kg/m^3
+    cp: SpecificHeat = 1000 J/(kg*K)
+}
+
+mesh m on slab {
+    size: 0.5 mm
+    cell: hex
+}
+
+physics thermal on slab solves T: Temperature = 100 degC {
+    material mat
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq rho*cp*ddt(T) + div(q) = 0
+}
+
+method thermal: cg { mesh: m, order: 1 }
+
+step cool: transient(end: 20 s, dt: 0.1 s, scheme: backward_euler) {
+    bc faces: T = 0 degC
+    bc side: dot(q, n) = 0.8*5.670374419e-8 W/(m^2*K^4)*(T^4 - (300 K)^4)
+    output T every 50
+}
+
+expect centre: T at (0.0005, 0.0005, 0.01) m == 77.231160686 degC within 0.06 K

@@ -1662,6 +1662,13 @@ fn step(n: i64) {
         c = next(c);
     }
     s.own_count = bcs.len - s.first_own;
+    if s.procedure == TRANSIENT && physics == HEAT {
+        for b in bcs {
+            if b.kind == BC_AMBIENT {
+                unsupported(b.tok, "a transient heat step does not include radiation to the surroundings", "use a static step, or a film bc with h and T_inf");
+            }
+        }
+    }
     s.report_count = reports.len - s.first_report;
     s.change_count = changes.len - s.first_change;
     steps.push(s);
@@ -1758,6 +1765,7 @@ fn transient(proc: i64, s: Step&) {
     if physics == HEAT {
         if capacity_node < 0 { unsupported(tok(proc), "a transient heat step needs eq rho*cp*ddt(T) + div(q) = q_v", "write eq rho*cp*ddt(T) + div(q) = 0"); }
         if s.dt <= 0.0 { unsupported(tok(proc), "a transient heat step needs dt > 0", "write dt: 0.1 s"); }
+        if curve_node >= 0 { unsupported(tok(curve_node), "a transient heat step does not include k that depends on T", "give k as a constant, or use a static step"); }
         s.dt = max(s.dt, 0.0);
         return;
     }

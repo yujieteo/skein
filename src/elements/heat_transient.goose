@@ -75,7 +75,7 @@ fn capacity_matrix(m: f64[:]) {
 // start of the step. It gives the number of time steps, the least that has
 // a step of at most dt.
 fn transient_heat_begin(end: f64, dt: f64, theta: f64) -> i64 {
-    guard physics == HEAT && dofs_sized() && capacity > 0.0 && end > 0.0 && dt > 0.0 && theta >= 0.5 && theta <= 1.0 else { abort("transient_heat_begin: a heat physics with a capacity, end > 0, dt > 0 and 1/2 <= theta <= 1"); }
+    guard physics == HEAT && dofs_sized() && capacity > 0.0 && end > 0.0 && dt > 0.0 && theta >= 0.5 && theta <= 1.0 && curve_k.len == 0 && amb_cell.len == 0 else { abort("transient_heat_begin: a heat physics with a capacity, end > 0, dt > 0 and 1/2 <= theta <= 1, k constant, and no radiation to the surroundings"); }
     th_start = clock();
     assemble("simplex cg amg", 6 + 2 * mode_count());
     hold_dead_nodes();
