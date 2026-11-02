@@ -198,9 +198,26 @@ gives the roadmap phase that closes the gap:
   (`cut_interface` in `src/mesher/tet.goose`), so
   [grid_plate_hole_ccx.skn](../examples/femahoy/grid_plate_hole_ccx.skn) and
   [grid_plate_hole_stress_ccx.skn](../examples/femahoy/grid_plate_hole_stress_ccx.skn)
-  pass. Still open: the orthotropic law of
-  [grid_constrained_block.skn](../examples/femahoy/grid_constrained_block.skn)
-  (a general anisotropic stiffness).
+  pass.
+- A written-out linear elastic law runs with `skein run` in the elements
+  lane (`src/elements/gen_aniso.goose`): `let sigma` is any expression that
+  is linear in `strain(u)`, with `outer`, `tr`, `dev`, `sym`, `dot`, `ddot`,
+  `hooke`, the members `.xx` of a tensor, a thermal strain tensor and the
+  lets and the material properties of the physics. The generator evaluates it
+  at the 6 unit strains and at the zero strain, and checks that it is linear.
+  Each material then has one 6 x 6 stiffness and one stress of the zero strain
+  (`elements::anisotropic`, `anisotropic_in` for a region), which the cells of
+  each element, the incompatible modes of the hexahedron and the stress output
+  all use. The
+  rotation of a ply is a `let` of the law, so a layup of plies is one material
+  for each ply on a region. [grid_constrained_block.skn](../examples/femahoy/grid_constrained_block.skn)
+  passes its `expect` (the orthotropic block under a heating of 100 K: the
+  three stresses within 1e-6 MPa), and
+  [two_ply_block_hex.skn](../examples/elements/two_ply_block_hex.skn) checks
+  a region for each ply. A plane stress law is condensed to the strains xx, yy and xy.
+  A transient or buckling step, a contact, the method `rkpm`, a submodel
+  source and a plastic block with a written-out law are not in this generator,
+  and `skein run` says so.
 - The flow coupling runs two more models with `skein run`:
   [cavity_devahldavis.skn](../examples/femahoy/cavity_devahldavis.skn)
   (Boussinesq buoyancy, both Ra cases of the study) and
@@ -240,9 +257,15 @@ gives the roadmap phase that closes the gap:
 - The harmonic step of a `Complex` vector unknown runs with `skein run`
   (`src/elements/harmonic.goose`): it is the complex lift of the real
   assembly of a physics, with the matrix `(1 + 2 im zeta) K - omega^2 M` and
-  a complex skyline LDLT. Any physics with a `K` and an `M` in the elements
-  lane can use it. The elastic physics uses it now, and the heat physics
-  does not. [random_vibration_cantilever.skn](../examples/femahoy/random_vibration_cantilever.skn)
+  a complex skyline LDLT. The elastic physics uses it. The heat physics has
+  the harmonic step in its natural form: `solves T: Complex<Temperature>`
+  with `let q = -k*grad(T)` and `eq rho*cp*ddt(T) + div(q) = q_v`, where `ddt`
+  is `im*omega`. It takes the route of the scalar wave physics with the
+  diffusion `k`, `c = -im*omega*rho*cp/k` and the source `-q_v/k`, so a
+  fixed temperature, a source and the direct sparse LU are the same.
+  [harmonic_heat_bar_tri.skn](../examples/elements/harmonic_heat_bar_tri.skn)
+  matches the closed form `cosh(m (L - x))/cosh(m L)` of a bar at two
+  frequencies within 1e-6. [random_vibration_cantilever.skn](../examples/femahoy/random_vibration_cantilever.skn)
   passes its `expect`: the RMS tip acceleration is 402270 mm/s^2 (+0.34 %,
   Blevins 1979: 400925.4 mm/s^2). A report or an `expect` of a harmonic step
   takes a `Complex` expression of constants, `omega`, `mean(u.c, region)`,
@@ -316,12 +339,19 @@ gives the roadmap phase that closes the gap:
   the integral of a field on a curve inside the mesh, and the `study` of a
   param.
 - Not run yet, each for a large missing piece:
-  laminate_pagano needs the orthotropic written-out law on serendipity
-  hexahedra with reduced integration, a per-region material on hexahedra and
-  a composite `reissner_mindlin` shell on quad cells of a flat plate (the
-  shell lane takes only a part of a cylinder). warpage_2p5d_frame needs a
-  hexahedron grid on boxes cut by a turned box and by the CSG of boxes (the
-  hex lane takes a box).
+  laminate_pagano and warpage_2p5d_frame do not run in this batch, and each
+  needs more than one new piece. The written-out orthotropic law and the
+  material of each ply on a region, which both need, run now
+  (`two_ply_block_hex.skn`). laminate_pagano also needs: second order
+  serendipity hexahedra with reduced integration (the hexahedra of the
+  elements lane have order 1); a traction that varies with `x` and `y` on a
+  face of the hexahedra (`sin(pi*x/a)`); a composite `reissner_mindlin`
+  shell on quad cells of a flat plate (the shell lane takes only a part of a
+  cylinder, and its `layup` table works there); and one model with two
+  physics that run in two lanes (the elements lane for the 3D plate, the shell
+  lane for the thin plate). warpage_2p5d_frame also needs: the second order
+  serendipity hexahedra, and a hexahedron grid on boxes that a turned box cuts
+  (the sloped fillet; the hex mesher takes a union of boxes).
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.

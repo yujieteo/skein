@@ -317,3 +317,11 @@ fn condense_plane_stress(c: f64[36]&, s0: f64[6]&) {
     c = d;
     s0 = t;
 }
+
+// The parts of this generator that read lame and shear, and so not the written-out law.
+fn aniso_limits() {
+    if contacts.len > 0 { unsupported(tok(aniso_node), "a contact of a written-out elastic law is not in this generator", "use hooke(E, nu, strain(u))"); }
+    if rkpm_support > 0.0 { unsupported(tok(aniso_node), "the method rkpm of a written-out elastic law is not in this generator", "use method cg"); }
+    if cut_source >= 0 { unsupported(tok(aniso_node), "a submodel source of a written-out elastic law is not in this generator", "use hooke(E, nu, strain(u))"); }
+    if solid_law != 0 { unsupported(tok(aniso_node), "a nonlinear solid with a written-out elastic law is not in this generator", "use hooke(E, nu, strain(u) - eps_p)"); }
+}

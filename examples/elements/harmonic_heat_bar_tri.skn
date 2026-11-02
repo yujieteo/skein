@@ -1,0 +1,44 @@
+// A steel bar of 50 mm with the temperature 1 K*exp(im*omega*t) at x = 0 and
+// no flux at x = L, at two frequencies, on P2 triangles. The heat equation
+// rho*cp*ddt(T) = div(k*grad(T)) has ddt = im*omega in a harmonic step. The closed
+// form is T = cosh(m*(L - x))/cosh(m*L) K with m = sqrt(im*omega*rho*cp/k).
+// At 3 mHz, m*L = 1.356*(1 + im), and at x = 25 mm T = 0.372070 - 0.452523 im K.
+// At 6 mHz, m*L = 1.917*(1 + im), and T = 0.164035 - 0.336461 im K.
+
+model harmonic_heat_bar_tri: 2d, SI
+
+let L: Length = 50 mm
+let T0: Temperature = 1 K
+
+scales L, T0, 1 s
+
+let bar: Surface = rect((0, 0) m, (L, 5 mm))
+let hot: Curve = boundary(bar, x == 0 m)
+
+material steel {
+    k: Conductivity = 50 W/(m*K)
+    rho: Density = 7800 kg/m^3
+    cp: SpecificHeat = 500 J/(kg*K)
+}
+
+mesh m on bar {
+    size: 1 mm
+    cell: tri
+}
+
+physics thermal on bar solves T: Complex<Temperature> {
+    material steel
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq rho*cp*ddt(T) + div(q) = 0
+}
+
+method thermal: cg { mesh: m, order: 2 }
+
+bc hot: T = T0
+
+step waves: harmonic(freq: [0.003, 0.006] Hz) {
+    output T
+    report re(T at (25, 2.5) mm), imag(T at (25, 2.5) mm)
+    expect real_part: re(T at (25, 2.5) mm) == 0.372070 K within 0.2%
+    expect imag_part: imag(T at (25, 2.5) mm) == -0.452523 K within 0.2%
+}

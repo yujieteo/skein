@@ -568,6 +568,8 @@ var wave_eddy = false;          // the eq is -div(grad(u)/mu) = R(u), as in the 
 var eddy_mu_node = -1;          // mu of div(grad(u)/mu)
 var eddy_rhs_node = -1;         // R, the right side of the eq
 var eddy_sign = 1.0;            // -1 for -div(...) = R
+var eddy_k_node = -1;           // k of the heat form rho*cp*ddt(T) + div(q) = q_v with q = -k*grad(T), else -1
+var eddy_heat_node = -1;        // rho*cp*ddt(T) of the heat form
 var eddy_on = false;            // cval reads the unknown as eddy_u and ddt(x) as im*omega*x
 var eddy_u: f64[2] = [0.0, 0.0];
 var omega_now = 0.0;            // omega of the frequency that the generator writes
@@ -670,6 +672,8 @@ fn reset() {
     eddy_mu_node = -1;
     eddy_rhs_node = -1;
     eddy_sign = 1.0;
+    eddy_k_node = -1;
+    eddy_heat_node = -1;
     eddy_on = false;
     omega_now = 0.0;
     freqs.clear();
@@ -1312,7 +1316,10 @@ fn read_material() {
     }
     material_node = base;
     read_law();
-    if aniso_node >= 0 { aniso_law(law_c, law_s0); }
+    if aniso_node >= 0 {
+        aniso_law(law_c, law_s0);
+        aniso_limits();
+    }
 }
 
 // Reads the material `material_node` into young and poisson, or
@@ -1711,6 +1718,41 @@ fn wave_eq(n: i64) {
     if source_of(child(n, 1)) != "0" { wave_s_node = child(n, 1); }
 }
 
+let HEAT_HARMONIC_FIX = "write let q: Vector<HeatFlux> = -k*grad(T) and eq rho*cp*ddt(T) + div(q) = q_v, with T: Complex<Temperature>";
+
+// `eq A + div(q) = q_v` with `let q = -k*grad(T)` or `fourier(k, T)` and A a
+// linear function of ddt(T) and T, for a Complex T: the heat equation of a
+// harmonic step, where ddt is im*omega. It is the eddy form with the
+// diffusion k, c = -A/T and the source q_v: div(k grad(T)) = A - q_v.
+fn heat_form_eq(n: i64) -> bool {
+    let left = child(n, 0);
+    guard kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "+" else { return false; }
+    var a = child(left, 0);
+    var d = child(left, 1);
+    if is_call(a, "div") { a = child(left, 1); d = child(left, 0); }
+    guard is_call(d, "div") && syntax::child_count(d) == 2 else { return false; }
+    var q = arg(d, 0);
+    if kind(q) == syntax::N_NAME && physics_let(name(q)) >= 0 { q = physics_let(name(q)); }
+    // The parser reads -k*grad(T) as (-k)*grad(T).
+    var k = -1;
+    if is_call(q, "fourier") && syntax::child_count(q) == 3 && source_of(arg(q, 1)) == unknown_name {
+        k = arg(q, 0);
+    } else if kind(q) == syntax::N_BINARY && syntax::text(tok(q)) == "*" && source_of(child(q, 1)) == str("grad(", unknown_name, ")") &&
+              kind(child(q, 0)) == syntax::N_UNARY && syntax::text(tok(child(q, 0))) == "-" {
+        k = first(child(q, 0));
+    }
+    guard k >= 0 else {
+        unsupported(tok(n), "the flux of the eq is not -k*grad(T)", HEAT_HARMONIC_FIX);
+        return true;
+    }
+    wave_eddy = true;
+    eddy_k_node = k;
+    eddy_heat_node = a;
+    eddy_rhs_node = child(n, 1);
+    eddy_sign = 1.0;
+    return true;
+}
+
 let EDDY_FIX = "write eq -div(Hr) = J, with let Hr = grad(Az)/mu and let J = sigma_e*(E - ddt(Az))";
 
 // `eq -div(H) = R` or `eq div(H) = R` with `let H = grad(u)/mu` and R a
@@ -1718,6 +1760,7 @@ let EDDY_FIX = "write eq -div(Hr) = J, with let Hr = grad(Az)/mu and let J = sig
 // eddy currents, with c, s and the diffusion 1/mu of each region (eddy_terms).
 // False if the eq is not of this form.
 fn eddy_eq(n: i64) -> bool {
+    if heat_form_eq(n) { return true; }
     let left = child(n, 0);
     let minus = kind(left) == syntax::N_UNARY && syntax::text(tok(left)) == "-";
     let d = if minus { first(left) } else { left };
@@ -1735,22 +1778,32 @@ fn eddy_eq(n: i64) -> bool {
     return true;
 }
 
+// R(u) of the eddy form at eddy_u: the right side, or in the heat form
+// the capacity term less the source.
+fn eddy_rhs() -> f64[2] {
+    guard eddy_k_node >= 0 else { return cval(eddy_rhs_node); }
+    let a = cval(eddy_heat_node);
+    let q = cval(eddy_rhs_node);
+    return [a[0] - q[0], a[1] - q[1]];
+}
+
 // nu = 1/mu, c and s of div(nu grad(u)) + c u = s for the material now, at
 // omega_now: R(u) = a u + b gives c = -sign a and s = sign b.
 fn eddy_terms() -> f64, f64[2], f64[2] {
     eddy_on = true;
     eddy_u = [0.0, 0.0];
-    let b = cval(eddy_rhs_node);
+    let b = eddy_rhs();
     eddy_u = [1.0, 0.0];
-    let r1 = cval(eddy_rhs_node);
+    let r1 = eddy_rhs();
     eddy_u = [2.0, 0.0];
-    let r2 = cval(eddy_rhs_node);
-    let mu = cval(eddy_mu_node);
+    let r2 = eddy_rhs();
+    // The heat form has the diffusion k, so its mu is 1/k.
+    let mu = if eddy_k_node >= 0 { cdiv([1.0, 0.0], cval(eddy_k_node)) } else { cval(eddy_mu_node) };
     eddy_on = false;
     if abs(r2[0] - 2.0 * r1[0] + b[0]) > 1.0e-9 * (abs(r2[0]) + abs(b[0]) + 1.0e-300) || abs(r2[1] - 2.0 * r1[1] + b[1]) > 1.0e-9 * (abs(r2[1]) + abs(b[1]) + 1.0e-300) {
         unsupported(tok(eddy_rhs_node), "the right side is not affine in the unknown", EDDY_FIX);
     }
-    if !(mu[0] > 0.0) || mu[1] != 0.0 { unsupported(tok(eddy_mu_node), "mu is not a positive real value", EDDY_FIX); return 1.0, [0.0, 0.0], [0.0, 0.0]; }
+    if !(mu[0] > 0.0) || mu[1] != 0.0 { unsupported(tok(if eddy_k_node >= 0 { eddy_k_node } else { eddy_mu_node }), "mu is not a positive real value", EDDY_FIX); return 1.0, [0.0, 0.0], [0.0, 0.0]; }
     let a = [r1[0] - b[0], r1[1] - b[1]];
     return 1.0 / mu[0], [-eddy_sign * a[0], -eddy_sign * a[1]], [eddy_sign * b[0], eddy_sign * b[1]];
 }
@@ -2151,6 +2204,11 @@ let REPORT_FIX = "write report reaction(root), reaction(root).x, mean(u.x, top),
 // with count, on an elastic model, or harmonic on a wave physics.
 fn procedure(proc: i64, s: Step&) {
     let p = name(proc);
+    if aniso_node >= 0 && (p == "buckling" || p == "transient") {
+        unsupported(tok(proc), str("a ", p, " step of a written-out elastic law is not in this generator"),
+                    "use hooke(E, nu, strain(u)) for this step, or a static, modal or harmonic step");
+        return;
+    }
     if p == "harmonic" || physics == WAVE {
         harmonic(proc, s);
         return;
