@@ -922,6 +922,106 @@ fn improved_case(what: u8[:], g: i64, size: f64) {
     if q.max_aspect > 1.0 / 0.35 { fail(str(what, ": a cell with gamma ", 1.0 / q.max_aspect, ", below 0.35")); }
 }
 
+// The circle of centre (cx, cy, z) and radius r is a closed chain of edges
+// of the mesh: the nodes on it, in the order of their angle, each joined to
+// the next. Then the sharp edge is exact, and not cut off by faces.
+fn circle_in_edges(what: u8[:], cx: f64, cy: f64, z: f64, r: f64, size: f64) {
+    let n = mesher::point_count();
+    var edges = dictionary<i64, i64> {};
+    for c in mesher::cell_count() {
+        for i in 4 {
+            for j in i + 1..4 {
+                let a = mesher::cell_node(c, i);
+                let b = mesher::cell_node(c, j);
+                edges.update(min(a, b) * n + max(a, b), 0) { it += 1; };
+            }
+        }
+    }
+    var angle: f64[>..] = [];
+    var ids: i64[>..] = [];
+    for v in n {
+        let p = mesher::vertex(v);
+        if abs(sqrt((p[0] - cx) * (p[0] - cx) + (p[1] - cy) * (p[1] - cy)) - r) < 1.0e-9 * size && abs(p[2] - z) < 1.0e-9 * size {
+            angle.push(atan2(p[1] - cy, p[0] - cx));
+            ids.push(v);
+        }
+    }
+    let m = ids.len;
+    print(what, ": ", m, " nodes on the circle");
+    if m < 8 { fail(str(what, ": ", m, " nodes on the sharp circle")); return; }
+    for i in m {
+        for j in i + 1..m {
+            if angle[j] < angle[i] {
+                let ta = angle[i];
+                angle[i] = angle[j];
+                angle[j] = ta;
+                let ti = ids[i];
+                ids[i] = ids[j];
+                ids[j] = ti;
+            }
+        }
+    }
+    var gap = 0.0;
+    for i in m {
+        let a = ids[i];
+        let b = ids[(i + 1) % m];
+        if !edges.get(min(a, b) * n + max(a, b)) { fail(str(what, ": no edge from the circle node ", i, " to the next")); return; }
+        gap = max(gap, mesher::norm3(mesher::sub3(mesher::vertex(a), mesher::vertex(b))));
+    }
+    // A chord of the circle is within gap^2 / (8 r) of it.
+    print("  longest edge on the circle ", gap, ", chord error ", gap * gap / (8.0 * r) / size, " h");
+    if gap > 1.6 * size { fail(str(what, ": an edge of ", gap, " on the circle, over 1.6 * size")); }
+}
+
+// The sharp edge of a 3D shape (spec 9.2, mesh_3d protect_edges): the
+// curve is on edges of the mesh, and the mesh is within the limits of the
+// stuffed mesh: dihedral angles 5 to 175 deg, 1.5 times the cells, 3 times
+// the time.
+fn edge_case(what: u8[:], g: i64, size: f64, cx: f64, cy: f64, z: f64, r: f64, must_find: bool, gate_time: bool) {
+    mesher::keep_edges = false;
+    let t0 = clock();
+    let plain_ok = mesher::mesh_3d(g, size);
+    let t1 = clock();
+    let plain = mesher::mesh_quality();
+    mesher::keep_edges = true;
+    let t2 = clock();
+    let ok = mesher::mesh_3d(g, size);
+    let t3 = clock();
+    let q = mesher::mesh_quality();
+    if !plain_ok || !ok { fail(str(what, ": the mesher did not finish")); return; }
+    print(what, ": ", q.cells, " cells (", plain.cells, " stuffed)");
+    print("  time ", t3 - t2, " (", t1 - t0, " stuffed)");
+    print("  dihedral ", q.min_angle, " to ", q.max_angle, ", curves ", mesher::curves_found, ", missed ", mesher::curves_missed);
+    if must_find && (mesher::curves_found < 1 || mesher::curves_missed > 0) {
+        fail(str(what, ": ", mesher::curves_found, " curves, ", mesher::curves_missed, " not on a chain"));
+    }
+    if q.min_angle < 5.0 || q.max_angle > 175.0 { fail(str(what, ": dihedral angles outside 5 to 175 deg")); }
+    if q.cells > 1.5 * plain.cells { fail(str(what, ": ", q.cells, " cells, over 1.5 times ", plain.cells)); }
+    if gate_time && (t3 - t2) > 3.0 * (t1 - t0) { fail(str(what, ": time ", t3 - t2, ", over 3 times ", t1 - t0)); }
+    if mesher::curves_missed == 0 { circle_in_edges(what, cx, cy, z, r, size); }
+}
+
+fn test_edges() {
+    let box = mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+    let dimple = mesher::subtract(box, mesher::sphere(0.5, 0.5, 1.0, 0.3));
+    edge_case("dimple rim", dimple, 0.1, 0.5, 0.5, 1.0, 0.3, true, true);
+    // 2 curved surfaces meet at the circle of 2 spheres, at an oblique angle.
+    let z0 = 0.5 + (0.25 + 0.45 * 0.45 - 0.09) / (2.0 * 0.5);
+    let r0 = sqrt(0.45 * 0.45 - (z0 - 0.5) * (z0 - 0.5));
+    let cup = mesher::subtract(mesher::sphere(0.5, 0.5, 0.5, 0.45), mesher::sphere(0.5, 0.5, 1.0, 0.3));
+    edge_case("cup rim", cup, 0.06, 0.5, 0.5, z0, r0, true, false);
+    // Sizes at which the first lattice has no chain.
+    for size in [0.08, 0.13] {
+        edge_case(str("dimple rim, size ", size), dimple, size, 0.5, 0.5, 1.0, 0.3, false, false);
+    }
+    // Axis-aligned edges are on the lattice already, and no curve is found.
+    let lblock = mesher::subtract(box, mesher::box(0.43, 0.43, -1.0, 2.0, 2.0, 2.0));
+    mesher::keep_edges = true;
+    if !mesher::mesh_3d(lblock, 0.1) { fail("lblock: the mesher did not finish"); }
+    print("lblock: curves ", mesher::curves_found, ", missed ", mesher::curves_missed);
+    if mesher::curves_missed > 0 { fail("lblock: a curve not on a chain"); }
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -1077,6 +1177,7 @@ fn main() {
     test_refine();
     test_refine_clip();
     test_stuffing();
+    test_edges();
 
     test_grid();
     test_cells();
