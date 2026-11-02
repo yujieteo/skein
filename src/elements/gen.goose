@@ -884,7 +884,13 @@ fn limit_atom(cond: i64, s: Surf&) -> bool {
 // Adds the planes of condition `cond` to `s`.
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "||" {
-        return surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
+        let before = s.lims.len;
+        let done = surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
+        if done && s.lims.len > before {
+            unsupported(tok(cond), "a limit inside an || would cut the planes of the other side", "make two boundaries, one for each side of the ||");
+            return false;
+        }
+        return done;
     }
     // a && b: the nodes of a plane, or of the surface, that the limits keep.
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "&&" {
