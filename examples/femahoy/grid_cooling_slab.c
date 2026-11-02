@@ -1426,7 +1426,7 @@ static const uint8_t gs_str67[4] = ".vtu";
 static const uint8_t gs_str68[1] = ",";
 static const uint8_t gs_str69[3] = "yes";
 static const uint8_t gs_str70[2] = "no";
-static const uint8_t gs_str71[91] = "transient_heat_begin: a heat physics with a capacity, end > 0, dt > 0 and 1/2 <= theta <= 1";
+static const uint8_t gs_str71[141] = "transient_heat_begin: a heat physics with a capacity, end > 0, dt > 0 and 1/2 <= theta <= 1, k constant, and no radiation to the surroundings";
 static const uint8_t gs_str72[14] = "simplex cg amg";
 static const uint8_t gs_str73[37] = "entry: r and c are rows of the matrix";
 static const uint8_t gs_str74[38] = "thin_axis: 3 coordinates for each node";
@@ -7756,10 +7756,12 @@ static int64_t elements_transient_heat_begin_g8(double end_g, double dt_g, doubl
     if (!((uint8_t)((double)((double)(end_g)) > (double)(0.0)))) goto L1;
     if (!((uint8_t)((double)((double)(dt_g)) > (double)(0.0)))) goto L1;
     if (!((uint8_t)((double)((double)(theta_g)) >= (double)(0.5)))) goto L1;
-    if ((uint8_t)((double)((double)(theta_g)) <= (double)(1.0))) goto L0;
+    if (!((uint8_t)((double)((double)(theta_g)) <= (double)(1.0)))) goto L1;
+    if (!((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_curve_k_g8.len)))) == (int64_t)(0)))) goto L1;
+    if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_amb_cell_g8.len)))) == (int64_t)(0))) goto L0;
     L1:;
     {
-        t3.data = ((uint8_t *)gs_str71); t3.len = 91;
+        t3.data = ((uint8_t *)gs_str71); t3.len = 141;
         t4 = t3;
         gs_abort_msg(t4.data, t4.len, gs_file8, 78);
     }
