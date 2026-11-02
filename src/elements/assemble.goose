@@ -108,6 +108,8 @@ fn set_elastic(E: f64, nu: f64, assumption: i64, t: f64) {
 fn set_heat(k: f64, q: f64, t: f64) {
     guard k > 0.0 && t > 0.0 else { abort("set_heat: k > 0 and t > 0"); }
     start_physics(HEAT, 1);
+    state_valid = false;
+    curve_k.clear();
     thickness = if dim == 3 { 1.0 } else { t };
     conductivity = k;
     source = q;
