@@ -1946,6 +1946,7 @@ typedef struct {
     double mesher_grade_g6;
     uint8_t mesher_grade_given_g6;
     double mesher_section_z_g6;
+    uint8_t mesher_sweeping_g6;
     double mesher_MIN_ANGLE_g6;
     int64_t mesher_LINE_g6;
     int64_t mesher_ARC_g6;
@@ -40619,6 +40620,7 @@ static void gs_init_globals(void) {
     GS_GL->mesher_grade_g6 = 1.3;
     GS_GL->mesher_grade_given_g6 = 0;
     GS_GL->mesher_section_z_g6 = 0.0;
+    GS_GL->mesher_sweeping_g6 = 0;
     GS_GL->mesher_MIN_ANGLE_g6 = 25.0;
     GS_GL->mesher_LINE_g6 = 0;
     GS_GL->mesher_ARC_g6 = 1;

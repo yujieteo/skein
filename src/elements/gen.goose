@@ -402,7 +402,7 @@ var sources: Source[>..];
 var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
-var mesh_grade = 1.3;   // the mesh setting grade of the mesher (spec §9.1)
+var mesh_grade = 0.0;   // the mesh setting grade (spec §9.1), or 0 if not given
 var mesh_tok = -1;
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
@@ -472,7 +472,7 @@ fn reset() {
     cut_source = -1;
     mesh_size = 0.0;
     mesh_fine = 0.0;
-    mesh_grade = 1.3;
+    mesh_grade = 0.0;
     mesh_tok = -1;
     order = 2;
     rkpm_support = 0.0;
@@ -2981,7 +2981,7 @@ fn emit_shapes(out: u8[>..]&) {
         }
         out.append("]);\n");
     }
-    if mesh_grade != 1.3 && mesh_grade > 1.0 {
+    if mesh_grade > 1.0 {
         out.append("    mesher::set_grade(");
         lit(out, mesh_grade);
         out.append(");\n");
