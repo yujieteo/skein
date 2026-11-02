@@ -498,6 +498,11 @@ fn test_warm_start() {
 // test` builds build/skein first. The runs write .skein under build/.
 let MODELS = [
     "examples/femahoy/grid_kirsch_hole.skn",
+    "examples/femahoy/birth_death_column.skn",
+    "examples/femahoy/buckling_column.skn",
+    "examples/femahoy/fracture_centre_crack.skn",
+    "examples/femahoy/submodel_kirsch_hole_global.skn",
+    "examples/femahoy/submodel_kirsch_hole.skn",
     "examples/elements/kirsch_plate_tri.skn",
     "examples/elements/heated_bar_tet.skn",
     "examples/elements/heated_bar_template_tet.skn",
@@ -634,6 +639,67 @@ fn test_stages() {
     if !elements::material_in(right, E2, 0.0, 0.0, 0.0, 0.0) { failures++; print("FAIL stages: material_in finds no cell"); }
     stretch();
     top_force("two materials", 0.1 * (E + E2));
+}
+
+// A node that a birth made shows the change since its birth (stages.goose,
+// shown). The right block of test_stages is born on the stretched shape, so
+// its far nodes (x = 2) hold u.y = 0.1 y in sol, and show 0 after the birth.
+fn test_birth_origin() {
+    mesher::clear_shapes();
+    let right = mesher::rect(1.0, 0.0, 2.0, 1.0);
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 4, 2, 1);
+    elements::elastic_plane_strain(1000.0, 0.0, 1.0);
+    elements::kill(right);
+    elements::plane(elements::Y, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    elements::plane(elements::Y, 1.0);
+    elements::fix(elements::Y, 0.1);
+    if !elements::solve() { failures++; print("FAIL birth origin: no solve"); return; }
+    elements::clear_bcs();
+    elements::plane(elements::Y, 0.0);
+    elements::fix(elements::ALL, 0.0);
+    elements::plane(elements::Y, 1.0);
+    elements::fix(elements::Y, 0.1);
+    elements::birth(right);
+    if !elements::solve() { failures++; print("FAIL birth origin: no solve after the birth"); return; }
+    let near, found_n = elements::value_at(elements::Y, 1.0, 1.0, 0.0);
+    let far, found_f = elements::value_at(elements::Y, 2.0, 1.0, 0.0);
+    print("birth origin: u.y ", near, " at the old face, ", far, " at the new face");
+    if abs(near - 0.1) > 1.0e-9 || abs(far) > 1.0e-9 {
+        failures++;
+        print("FAIL birth origin: a born node shows the change since its birth: 0.1 and 0 expected");
+    }
+}
+
+// quarter_point (csg.goose) and the point location on a curved cell: P2 triangles
+// with a vertex at the tip. The field sqrt(r) is exact on a quarter-point edge,
+// so it is reproduced at each node by u = sqrt(r) at the nodes.
+fn test_quarter_point() {
+    elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2, 2, 1);
+    elements::elastic_plane_strain(1000.0, 0.3, 1.0);
+    let moved = elements::quarter_point(0.0, 0.0);
+    if moved < 2 { failures++; print("FAIL quarter point: ", moved, " edges moved"); return; }
+    for n in elements::node_count() {
+        let r = sqrt(elements::node_x(n, 0) * elements::node_x(n, 0) + elements::node_x(n, 1) * elements::node_x(n, 1));
+        elements::sol[2 * n] = sqrt(r);
+        elements::sol[2 * n + 1] = 0.0;
+    }
+    var worst = 0.0;
+    for n in elements::node_count() {
+        let x = elements::node_x(n, 0);
+        let y = elements::node_x(n, 1);
+        let r = sqrt(x * x + y * y);
+        let v, found = elements::value_at(elements::X, x, y, 0.0);
+        worst = max(worst, abs(v - sqrt(r)));
+        if !found { failures++; print("FAIL quarter point: node ", n, " is not found"); }
+    }
+    // A point on the edge from the tip at a quarter of its length: sqrt(r) is linear in the reference coordinate there.
+    let on_edge, found_e = elements::value_at(elements::X, 0.125, 0.0, 0.0);
+    print("quarter point: ", moved, " edges moved, largest error at the nodes ", worst, ", at r = 0.125: ", on_edge, " (", sqrt(0.125), ")");
+    if worst > 1.0e-9 || abs(on_edge - sqrt(0.125)) > 1.0e-9 {
+        failures++;
+        print("FAIL quarter point: a node does not show its value");
+    }
 }
 
 // LOBPCG (eigen.goose). A steel cantilever of 100 x 10 x 5 mm, clamped
@@ -1300,6 +1366,8 @@ fn main() {
     test_direct_fallback();
     test_submodel();
     test_stages();
+    test_birth_origin();
+    test_quarter_point();
     test_eigen();
     test_hex();
     test_harmonic();
