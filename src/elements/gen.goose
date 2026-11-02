@@ -3680,8 +3680,8 @@ fn emit_source(out: u8[>..]&) {
     if src.set.len > 0 { sets.push(src.set); }
     let dir = codegen::results_path(src.model, sets);
     var inner: u8[>..] = [];
-    format(inner, "test -e ", codegen::shell_quoted(str(dir, "/", src.step, ".state_sol")), " || exec ",
-           codegen::shell_quoted(str(resource_dir(), "skein")), " run ", codegen::shell_quoted(src.path));
+    format(inner, "test -e ", codegen::shell_quoted(str(dir, "/", src.step, ".state_sol")), " || ",
+           codegen::skein_run_command(src.path));
     if src.set.len > 0 { format(inner, " --set ", codegen::shell_quoted(src.set)); }
     inner.append(" 1>&2");
     var command: u8[>..] = [];
@@ -3694,7 +3694,7 @@ fn emit_source(out: u8[>..]&) {
     out.append(", ");
     quoted(out, src.step);
     out.append(", ");
-    quoted(out, src.path);
+    quoted(out, codegen::project_path(src.path));
     out.append(", ");
     quoted(out, command);
     out.append(", [");

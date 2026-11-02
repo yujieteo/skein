@@ -16,10 +16,12 @@
 # path cannot skip the model, if a model here runs it.
 #
 # Goose writes the absolute path of each imported file into the C. This
-# script removes the repository directory from these paths. That is the only
-# change to the C. The C is then the same on each machine with the Goose
-# version in goose_version. After you change Goose, set goose_version to the
-# output of `goose --version` and write the C again.
+# script removes the repository directory from these paths, and the
+# directory of the Goose stdlib, so the C is the same in each checkout and
+# with each Goose install. That is the only change to the C. The C is then
+# the same on each machine with the Goose version in goose_version. After you
+# change Goose, set goose_version to the output of `goose --version` and
+# write the C again.
 #
 # Needs build/skein (./build.sh), and goose on PATH or in $GOOSE.
 set -eu
@@ -133,6 +135,10 @@ fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+# The work directory is the project root of each run: it has the model
+# directories, so the generated C names a model file as examples/<..>.skn,
+# the same in each checkout.
+for d in examples samples; do ln -s "$root/$d" "$work/$d"; done
 
 status=0
 programs=""
@@ -140,7 +146,7 @@ for model in $models; do
     # skein run names the build directory after the `model <name>:` line.
     name=$(sed -n 's/^model \([A-Za-z0-9_]*\):.*/\1/p' "$root/$model" | head -n 1)
     committed="$root/${model%.skn}.c"
-    if ! (cd "$work" && "$root/build/skein" run "$root/$model" >"$work/run.toon" 2>"$work/run.err"); then
+    if ! (cd "$work" && "$root/build/skein" run "$model" >"$work/run.toon" 2>"$work/run.err"); then
         cat "$work/run.err"
         echo "FAIL $model: skein run fails"
         status=1
@@ -154,7 +160,7 @@ for model in $models; do
     fi
     programs="$programs $work/.skein/build/$name/main.goose"
     (cd "$work" && "$goose" -q -o "$work/$name.c" ".skein/build/$name/main.goose")
-    sed "s|\"$root/|\"|" "$work/$name.c" > "$work/$name.normal.c"
+    sed -e "s|\"$root/|\"|" -e 's|"[^"]*/stdlib/|"stdlib/|' "$work/$name.c" > "$work/$name.normal.c"
     if [ "$mode" = write ]; then
         cp "$work/$name.normal.c" "$committed"
         echo "wrote ${model%.skn}.c"
