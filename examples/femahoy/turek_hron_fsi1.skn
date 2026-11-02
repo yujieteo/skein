@@ -14,16 +14,16 @@ scales D, U_mean, rho_f
 
 let chan: Surface = rect((0, 0) m, (2.5 m, H))
 let cyl: Surface = circle((0.2, 0.2) m, D/2)
-let flag: Surface = rect((0.2, 0.19) m, (0.6, 0.21) m)
-let bar: Surface = flag - cyl
-let fluid_dom: Surface = chan - cyl - flag
+let flag_rect: Surface = rect((0.2, 0.19) m, (0.6, 0.21) m)
+let bar: Surface = flag_rect - cyl
+let fluid_dom: Surface = chan - cyl - flag_rect
 let inlet: Curve = boundary(fluid_dom, x == 0 m)
 let walls: Curve = boundary(fluid_dom, y == 0 m || y == H)
 let cyl_wall: Curve = boundary(fluid_dom, cyl)
-let wet_fluid: Curve = boundary(fluid_dom, flag)
+let wet_fluid: Curve = boundary(fluid_dom, flag_rect)
 let root: Curve = boundary(bar, cyl)
 let body: Curve = cyl_wall | wet_fluid
-let wet_solid: Curve = boundary(bar, flag)
+let wet_solid: Curve = boundary(bar, flag_rect)
 
 material water {
     rho: Density = rho_f
