@@ -48,6 +48,7 @@ var port_sign: f64[>..];
 var port_zbc: i64[>..];             // the token of a bc with a term z*(u - dot(u, n)*n), and the node of its z
 
 var gauge_tree = false;
+var edge_rhs = -1;                  // the source s of eq curl(h) + c*u = s, or -1 for 0
 var edge_order = 1;                 // the order of the elements: 1, or 2 with `order: 2` (the mesh stays P1)
 var port_zsign: f64[>..];           // the sign of the term z*u of each bc of port_zbc
 var port_zf_bc: i64[>..];           // the factors of z: the token of the bc, the node and 1 for a divisor
@@ -85,6 +86,7 @@ fn edge_reset() {
     port_sign.clear();
     port_zbc.clear();
     gauge_tree = false;
+    edge_rhs = -1;
     edge_order = 1;
     port_zsign.clear();
     port_zf_bc.clear();
@@ -217,7 +219,7 @@ fn curl_let(c: i64) {
 fn curl_eq(c: i64) {
     var left = child(c, 0);
     let fix = EDGE_FIX;
-    if source_of(child(c, 1)) != "0" { unsupported(tok(child(c, 1)), "the edge physics has no source in this generator", fix); }
+    if source_of(child(c, 1)) != "0" { edge_rhs = child(c, 1); }
     while kind(left) == syntax::N_BINARY && (syntax::text(tok(left)) == "+" || syntax::text(tok(left)) == "-") {
         let t = child(left, 1);
         let ddt2 = kind(t) == syntax::N_BINARY && syntax::text(tok(t)) == "*" && source_of(child(t, 1)) == str("ddt2(", unknown_name, ")");
@@ -1051,6 +1053,10 @@ recursive fn emit_space(out: u8[>..]&, n: i64, j: i64) {
         codegen::depth++;
         emit_space(out, codegen::find_value(name(n)), j);
         codegen::depth--;
+    } else if k == syntax::N_NAME && property(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        emit_space(out, property(name(n)), j);
+        codegen::depth--;
     } else if k == syntax::N_VECTOR && j >= 0 {
         var i = 0;
         var c = first(n);
@@ -1070,6 +1076,12 @@ recursive fn emit_space(out: u8[>..]&, n: i64, j: i64) {
         format(out, " ", op, " ");
         emit_space(out, child(n, 1), if j >= 0 && is_vector(child(n, 1)) { j } else { -1 });
         out.push(')');
+    } else if (is_call(n, "min") || is_call(n, "max") || is_call(n, "atan2")) && syntax::child_count(n) == 3 {
+        format(out, name(child(n, 0)), "(");
+        emit_space(out, arg(n, 0), -1);
+        out.append(", ");
+        emit_space(out, arg(n, 1), -1);
+        out.push(')');
     } else if op == "^" {
         out.append("pow(");
         emit_space(out, child(n, 0), -1);
@@ -1087,7 +1099,7 @@ recursive fn emit_space(out: u8[>..]&, n: i64, j: i64) {
         out.push(')');
     } else {
         unsupported(tok(n), str("the expression '", source_of(n), "' is not in this generator"),
-                    "write + - * / ^ of numbers, lets, x, y, z, and sin, cos, tan, exp, ln, sqrt or abs");
+                    "write + - * / ^ of numbers, lets, x, y, z, and sin, cos, tan, exp, ln, sqrt, abs, min, max or atan2");
     }
 }
 
@@ -1096,6 +1108,12 @@ recursive fn mentions_xyz(n: i64) -> bool {
     if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
         codegen::depth++;
         let r = mentions_xyz(codegen::find_value(name(n)));
+        codegen::depth--;
+        return r;
+    }
+    if kind(n) == syntax::N_NAME && property(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let r = mentions_xyz(property(name(n)));
         codegen::depth--;
         return r;
     }
@@ -1264,6 +1282,34 @@ fn emit_edge_expect(out: u8[>..]&, x: EdgeExpect) {
     out.append(");\n    }\n");
 }
 
+// The source s of eq curl(h) + c*u = s: for the base material and for each
+// material on a region, the cells of that material get the integral of s
+// with the properties of that material (the vector js of a coil, 0 in the
+// air). s is a real vector function of x, y and z.
+fn emit_edge_sources(out: u8[>..]&) {
+    guard edge_rhs >= 0 else { return; }
+    let base = material_node;
+    emit_edge_source_in(out, -1);
+    for w in region_laws {
+        material_node = w.item;
+        emit_edge_source_in(out, w.g);
+    }
+    material_node = base;
+}
+
+fn emit_edge_source_in(out: u8[>..]&, g: i64) {
+    if !mentions_xyz(edge_rhs) {
+        let v = value(edge_rhs);
+        if v.v[0] == 0.0 && v.v[1] == 0.0 && v.v[2] == 0.0 { return; }
+    }
+    format(out, "    elements::current_in(", g, ") { p => [");
+    for j in 3 {
+        if j < dim { emit_space(out, edge_rhs, j); } else { out.append("0.0"); }
+        out.append(", ");
+    }
+    out.append("0.0, 0.0, 0.0] };\n");
+}
+
 // A step of the edge physics or of the Darcy flow: a function for each
 // frequency of a harmonic step, or one for a static step (omega 0).
 fn emit_edge_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
@@ -1352,6 +1398,7 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
                 out.append(");\n");
             }
             material_node = base;
+            emit_edge_sources(out);
         }
     }
     // The fixed values first, then the gauge, which keeps them.
@@ -1453,6 +1500,7 @@ fn emit_edge_modal(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     omega_now = 0.0;
     format(out, "fn step_", s.name, "() {\n");
     if edge_order == 2 { out.append("    elements::edge_order(2);\n"); }
+    if edge_rhs >= 0 { unsupported(tok(edge_rhs), "a modal step has no source", "write eq curl(h) + c*ddt2(u) = 0"); }
     let nu, c = edge_terms();
     let m = edge_mass_terms();
     out.append("    elements::edge(");

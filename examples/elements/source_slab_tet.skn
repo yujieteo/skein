@@ -1,0 +1,63 @@
+// A source of the edge physics with a material on a region. In a box with no spatial
+// gradient, the field is uniform and curl(h) = 0, so ef = js/(-omega^2*eps) in each material.
+// The slab has twice the eps and twice the js of the rest of the box, so ef is the same
+// in the box and in the slab, and the box wall can hold it. It tests that the source of each
+// material is on the cells of that material only (a source on all cells gives 3 times js).
+// The time factor is exp(im*omega*t).
+
+model source_slab_tet: 3d, SI
+
+let L: Length = 250 mm
+let f0: Frequency = 299.792458 MHz
+let c0: Velocity = 299792458 m/s
+let mu0: Mass*Length/(Time^2*Current^2) = 1.25663706212e-6 V*s/(A*m)
+let eps0: Current^2*Time^4/(Mass*Length^3) = 1/(mu0*c0^2)
+let js0: Current/(Time*Area) = 1 A/(s*m^2)
+
+scales L, c0, 1 V/m, 1 A
+
+let cell: Solid = box((-100, -100, 0) mm, (100, 100, 250) mm)
+let slab: Solid = box((-100, -100, 100) mm, (100, 100, 150) mm)
+let rest: Solid = cell - slab
+let wall: Surface = boundary(
+    cell,
+    abs(x) == 100 mm || abs(y) == 100 mm || abs(z - 125 mm) == 125 mm,
+)
+// The field in the box: js0/(-omega^2*eps0), along y.
+let ey: Mass*Length/(Time^3*Current) = -js0/((2*pi*f0)^2*eps0)
+let e_box: Vector<Mass*Length/(Time^3*Current)> = (0 V/m, ey, 0 V/m)
+
+material plain {
+    eps: Current^2*Time^4/(Mass*Length^3) = eps0
+    mu: Mass*Length/(Time^2*Current^2) = mu0
+    js: Vector<Current/(Time*Area)> = (0 A/(s*m^2), js0, 0 A/(s*m^2))
+}
+
+material dense {
+    eps: Current^2*Time^4/(Mass*Length^3) = 2*eps0
+    mu: Mass*Length/(Time^2*Current^2) = mu0
+    js: Vector<Current/(Time*Area)> = 2*(0 A/(s*m^2), js0, 0 A/(s*m^2))
+}
+
+mesh m on cell {
+    size: 50 mm
+    cell: tet
+}
+
+physics em on cell solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
+    material plain on rest, dense on slab
+    let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu
+    eq curl(hc) - omega^2*eps*ef = js
+}
+
+method em: cg { mesh: m, order: 1, family: nedelec }
+
+step tone: harmonic(freq: [f0]) {
+    bc wall: cross(n, ef) = cross(n, e_box)
+    report in_box = ef.y at (0, 0, 40) mm
+    report in_slab = ef.y at (0, 0, 125) mm
+}
+
+expect in_box: re(ef.y at (0, 0, 40) mm) == ey within 1e-10 V/m
+
+expect in_slab: re(ef.y at (0, 0, 125) mm) == ey within 1e-10 V/m

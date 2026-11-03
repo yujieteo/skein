@@ -40,6 +40,7 @@ var cell_edge: i64[>..] = [];   // the edge of each local edge of each cell
 var cell_sign: f64[>..] = [];   // +1 if the local edge runs from the lower vertex, else -1
 var edge_nu: f64[>..] = [];     // ν of each cell
 var edge_c: f64[>..] = [];      // c of each cell, as re and im
+var edge_mark: i64[>..] = [];   // the shape of the last material that gave the cell its coefficients, or -1 for the base material
 var gauge_count = 0;            // the edges of the tree of the last gauge
 var edge_p = 1;                 // the polynomial order of the elements: 1 or 2 (edge_order)
 var cell_dof: i64[>..] = [];    // the dof of each local function of each cell
@@ -91,9 +92,11 @@ fn set_edge(nu: f64, c: f64[2], t: f64) {
     clear_matrix();
     edge_nu.clear();
     edge_c.clear();
+    edge_mark.clear();
     for e in cell_count() {
         edge_nu.push(nu);
         edge_c.append(c);
+        edge_mark.push(-1);
     }
     gauge_count = 0;
     clear_impedance();
@@ -170,6 +173,7 @@ fn edge_material(g: i64, nu: f64, c: f64[2]) -> i64 {
     for e in cell_count() {
         if !cell_in(e, g) { continue; }
         edge_nu[e] = nu;
+        edge_mark[e] = g;
         edge_c[2 * e] = c[0];
         edge_c[2 * e + 1] = c[1];
         count++;
@@ -344,14 +348,16 @@ fn add_cells(mass: bool) {
 
 // --- the source and the conditions ---------------------------------------------
 
-// Adds ∫ s · v dV to the load, with s = S(p) at each point p: the real
-// parts of the components, then the imaginary parts.
-fn edge_source<S>() {
+// Adds ∫ s · v dV to the load over the cells of the material of the shape
+// `mark` (-1: the base material, -2: all cells), with s = S(p) at each point
+// p: the real parts of the components, then the imaginary parts.
+fn edge_source<S>(mark: i64) {
     guard physics == EDGE && dofs_sized() else { abort("edge_source: an edge physics and the arrays of the dofs"); }
     let le = local_dofs();
     var w: f64[60] = [0.0; 60];
     var cw: f64[60] = [0.0; 60];
     for c in cell_count() {
+        if mark != -2 && edge_mark[c] != mark { continue; }
         for q in volume_points() {
             let xi, wt = volume_point(q);
             var l: f64[4] = [1.0, 0.0, 0.0, 0.0];

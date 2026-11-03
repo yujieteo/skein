@@ -302,7 +302,11 @@ fn edge_in(g: i64, nu: f64, c_re: f64, c_im: f64) -> bool { return edge_material
 // Adds the source s of the edge physics, with s = S(p) at each point p
 // (f64[3]): the real parts of its 3 components, then the imaginary parts
 // (f64[6]).
-fn current<S>() { edge_source() { p => S(p) }; }
+fn current<S>() { edge_source(-2) { p => S(p) }; }
+
+// The same over the cells of the material of the shape g (-1: of the base
+// material), as set by edge_in.
+fn current_in<S>(g: i64) { edge_source(g) { p => S(p) }; }
 
 // The essential condition cross(n, u) = cross(n, g) of the edge physics
 // on the region, with g = G(p) as in `current`. False if the region holds
