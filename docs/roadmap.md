@@ -1,7 +1,10 @@
 # Skein roadmap
 
 Each phase ends with a gate: a result that a person can measure. The next
-phase starts only after the gate passes.
+phase starts only after the gate passes. Phases 0 to 6 are done. Phases 7 and
+later, and the Deferred list, start in [Direction after phase 6](#direction-after-phase-6). The
+"does not run yet" notes in the status sections below are open items. Each
+one is in phases 8 to 10 or in the Deferred list.
 
 | Phase | Contents | Gate |
 |---|---|---|
@@ -13,6 +16,50 @@ phase starts only after the gate passes.
 | 4.5 | WebGPU in the page of `skein build --target wasm`. The explicit step `central_difference` of `linear_elastic` with a lumped mass, natively and in the page. The `ssprk3` steps of `fv` and `dg` and `central_difference` on the GPU when the page has WebGPU, else on the CPU. An implicit path (CG) on the GPU, off by default, with a control in the page. The page shows the device of each step. | an explicit transient example and an `ssprk3` example run in the page on the GPU and on the CPU, and the results agree within the tolerance of `tests/gpu/gpu.test.mjs`. An implicit solve with the GPU control on matches the CPU solve. With no GPU adapter the GPU test skips, and `SKEIN_GPU=1` makes that a failure. |
 | 5 | plasticity, hyperelasticity, finite strain, contact, FSI, turbulence, NURBS geometry, the shell, beam and turbulence templates, radiation with view factors, Nédélec and Raviart-Thomas elements, `minimize` with adjoint gradients. The tessellated STEP export of phase 4 is done, so it is no longer a cut candidate. The next cut if the schedule is late is not decided, and the captain decides it ([tradeoffs §0](tradeoffs.md#0-the-goals-in-priority-order)). | the benchmarks of [implementation.md §10](implementation.md#10-testing-and-the-verification-suite) pass. The femahoy gaps G1, G3, G4, G13, G22, G23 and G27 are closed, and their `// blocked-by:` marks are removed. |
 | 6 | the 3D mesher: `grade` in 3D, lattice planes on the box planes of the CSG tree, the improvement of the bad tetrahedra. Ideas from Gmsh and from published papers, no code or text from them (implementation.md §7). Curved and oblique sharp edges as chains of lattice edges (implementation.md §7). | on the scout models of `src/mesher/test.goose`: the cell count falls as `grade` rises, and 90 % of the edges are within 0.5 to 1.5 times the wanted size. The sharp edges of an axis-aligned box are on edges of the mesh. No cell has γ < 0.35 (`max_aspect` > 2.857), the worst cell is never worse than the stuffed one, the mesh time at most doubles (3 times with the chains of sharp edges, 1.5 times the cells), and each surface node stays on φ = 0. Each `cell: tet` example passes `mesh_quality` and its `expect`. |
+
+## Direction after phase 6
+
+The language comes first. After the current work, `physics` becomes a core
+part of the language. A person writes arbitrary code with the `physics`
+keyword, and Skein builds a custom solver from it that is highly optimized.
+Reason: the captain stated this as the aim of the project.
+
+Option A comes first. The `physics` block defines the equations, and the
+compiler makes the solver. The built-in families (heat, elastic, flow, edge,
+shells and the others) move into the standard library as ordinary `physics`
+blocks. The compiler keeps no code that is specific to one physics. The
+stage after A is user-written solver algorithms (phase 11).
+
+Rule for the generated solver in A: it does only the work that the
+equations need, on the CPU and on the GPU. It has no repeated assembly, no
+needless copy, no allocation in a loop and no extra pass over the data. The
+generated code stays simple. A does no tuning. Reason: the captain wants a
+non-pessimizing solver that is simple to generate. Speed work comes later
+(phase 10).
+
+Phases 7 and later mature the physics language and its standard library.
+Phases 1 to 6 below stay as the record of the work that is done.
+
+| Phase | Contents | Gate |
+|---|---|---|
+| 7 (option A) | The `physics` block defines the equations, and the compiler generates the solver. Each built-in family moves to the standard library as a `physics` block: heat, elastic (solid, contact, modal, buckling), flow (Stokes, Navier-Stokes, turbulence, FSI), edge and wave (Nédélec, `harmonic`, PML), mixed (Raviart-Thomas), shells and beams, the grid methods (`fv`, `dg`, the Euler system), the meshless methods, and the coupled physics on one mesh. The compiler keeps no physics-specific code. The generated solver does only the work that the equations need (see above). | Before the work starts, record the time and the memory of each benchmark. Each family is a standard-library `physics` block, and it passes its current benchmarks and `expect` lines (the examples in `examples/`, the 787 models, the samples and the tests of each `src/` package). No benchmark is slower than the recorded time. A test fails if the compiler source names a family. For each benchmark, a counter shows one assembly for each matrix that the equations need, and no copy, allocation or pass that the equations do not need, on the CPU and on the GPU. |
+| 8 | Solver gaps in features that are marked done, closed as `physics` blocks of the standard library. Solid: the nonlinear solid on hex and quad cells, the 20-node hexahedron (`frequency_cantilever.skn`), higher-order Nédélec elements. Shells: modes and buckling. Contact: large sliding, `nitsche`, `mortar`, and a static step with contact off the CPU. Heat: radiation in 3D and in transient steps, transient heat with k(T) or radiation. Flow: transient FSI, `pv_coupling`, inlet values of k and w. EM: PML in 3D and the integral of a field on a curve (`dipole_king_middleton.skn`). Meshless: `basis: quadratic`, `integrate: gauss`, `gfd` elasticity, Poisson disk points. Study: `bobyqa`, params of the geometry, and the order of a `report` in `verify convergence`. | Each item has an example with an `expect` that passes, and a test in the package of its physics. The `// blocked-by:` marks that name these items are removed. The benchmarks of phase 7 still pass, with no time slower than the record of phase 7. |
+| 9 | Mesher and geometry. Hexahedra on cut boxes and on regions. The `stadium` shape. Boundary-layer cells and the far field of a spline airfoil. NURBS surfaces and NURBS curves in 3D. A smooth solid and its STEP file from the topology result. Tetrahedra of the quality that the femahoy sizes need, with the meshes that are finer than the femahoy sizes. | Each item has a test in `src/mesher/test.goose` or an example with an `expect` that passes. The mesh quality tests of phase 6 still pass. |
+| 10 | Speed, after A. The waveguide models at the femahoy sizes. A shape study builds one program for all cases (now one for each case: 51 cases in 23 min). The implicit GPU path on a stiff 3D model (sample 01: 319,320 dofs, no end in 15 min, CPU 50 s). The explicit nonlinear solid on the CPU with all threads (now one thread). | The waveguide models run at the femahoy sizes and pass their `expect`. The shape study of `shape_hole_biaxial.skn` takes less time than the 23 min of now, with the same result. Sample 01 on the GPU ends and matches the CPU result, in a time that is not more than the CPU time. The benchmarks of phase 7 are not slower. |
+| 11 (later) | Solver algorithms that the user writes in Skein: the Newton loop, time stepping and preconditioners. | Idea of the gate: a physics that no part of the compiler knows (a new PDE that the user writes) builds and runs at a speed that is comparable to a built-in family. The captain decides the final gate before the phase starts. |
+
+### Deferred
+
+These items do not serve the direction now. They stay on the list.
+
+| Item | What it needs now |
+|---|---|
+| `naca0012_ladson.skn` | misses cd at 4.04 deg and cd and cl at 10.12 deg: blocked on accuracy ([femahoy_coverage.md](femahoy_coverage.md)). Revisit after phases 7 and 9. |
+| `dam_break_vof.skn` | a transient two-phase solver on quads with a variable rho and mu |
+| `dam_break_martin_moyce.skn` | a generator and a CLI lane for the meshless package |
+| `laminate_pagano.skn` and `warpage_2p5d_frame.skn` | second-order serendipity hexahedra and more ([femahoy_coverage.md](femahoy_coverage.md)); the 20-node hexahedron is in phase 8 |
+| the interposer warpage `expect` | `interposer_warpage.skn` keeps the order of Figure 7, but 3 of 9 cases are within 25 %, so its `expect` fails |
+| a step other than `harmonic` with a `Complex` unknown | does not run yet |
 
 The build order of the methods is `cg`, `fv`, `dg`, then meshless
 (decision 5 in [decisions.md](decisions.md)).
