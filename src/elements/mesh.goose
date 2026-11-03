@@ -69,6 +69,7 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     dim = d;
     order = ord;
     hex_cells = false;
+    cube_gauss = 2;
     per_cell = node_count_of(d, ord);
     coords.clear();
     conn.clear();
@@ -236,6 +237,35 @@ fn build_hex_box(lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
     on_lattice = true;
 }
 
+// Turns the hexahedra of order 1 of the mesh (any grid of 8-node cells) into the
+// 20-node serendipity hexahedra of order 2: it adds the node at the midpoint of each
+// edge, once for the cells that share the edge. The edges stay straight.
+fn promote_hex() {
+    guard hex_cells && per_cell == 8 && order == 1 else { abort("promote_hex: a mesh of 8-node hexahedra"); }
+    let nv = node_count();
+    let old = conn.len / 8;
+    var next: i64[>..] = [];
+    var mid = dictionary<i64, i64> {};
+    for c in old {
+        for l in 8 { next.push(conn[8 * c + l]); }
+        for e in 12 {
+            let a = conn[8 * c + HEX_EDGES[2 * e]];
+            let b = conn[8 * c + HEX_EDGES[2 * e + 1]];
+            let m = mid.get_or_insert(min(a, b) * nv + max(a, b), node_count());
+            if m == node_count() {
+                for t in 3 { coords.push(0.5 * (coords[3 * a + t] + coords[3 * b + t])); }
+                if node_body.len > 0 { node_body.push(node_body[a]); }
+            }
+            next.push(m);
+        }
+    }
+    conn.clear();
+    conn.append(next);
+    order = 2;
+    per_cell = 20;
+    on_lattice = false;
+}
+
 // The radial parameter of each vertex row: cells that grow from `fine` at
 // the hole by a factor `GRADE` up to `size`, then stay at `size`, scaled
 // to fill the length `span`.
@@ -353,7 +383,7 @@ fn load_mesh(dir: const u8[:]) -> bool {
     order = sizes[1];
     per_cell = sizes[2];
     body_shape = sizes[3];
-    hex_cells = dim == 3 && per_cell == 8;
+    hex_cells = dim == 3 && (per_cell == 8 || per_cell == 20);
     for t in 3 {
         bbox_lo[t] = bbox[t];
         bbox_hi[t] = bbox[3 + t];

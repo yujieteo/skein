@@ -196,8 +196,8 @@ fn source_value(comp: i64, p: f64[3]) -> f64, bool {
     guard comp >= 0 && comp < src_ncomp else { abort("source_value: a component of the source"); }
     let c, xi, inside = source_cell(p);
     guard c >= 0 else { return 0.0, false; }
-    var n: f64[10] = [0.0; 10];
-    var dn: f64[30] = [0.0; 30];
+    var n: f64[20] = [0.0; 20];
+    var dn: f64[60] = [0.0; 60];
     shape(src_dim, src_order, xi, n, dn);
     var v = 0.0;
     for l in src_per_cell { v += n[l] * src_sol[src_ncomp * source_node(c, l) + comp]; }
@@ -211,8 +211,8 @@ fn source_stress(p: f64[3]) -> f64[9], bool {
     var s: f64[9] = [0.0; 9];
     let c, xi, inside = source_cell(p);
     guard c >= 0 else { return s, false; }
-    var n: f64[10] = [0.0; 10];
-    var dn: f64[30] = [0.0; 30];
+    var n: f64[20] = [0.0; 20];
+    var dn: f64[60] = [0.0; 60];
     shape(src_dim, src_order, xi, n, dn);
     // jac[3 r + t] = dx_t / dxi_r, and du[3 a + r] = du_a / dxi_r.
     var jac: f64[9] = [0.0; 9];
@@ -280,8 +280,8 @@ fn part_resultants(k: i64) -> f64[3], f64[3] {
     var other: f64[3] = [0.0; 3];
     let fd = dim - 1;
     let fnodes = node_count_of(fd, order);
-    var fs: f64[10] = [0.0; 10];
-    var fdn: f64[30] = [0.0; 30];
+    var fs: f64[20] = [0.0; 20];
+    var fdn: f64[60] = [0.0; 60];
     for c in cell_count() {
         for f in facet_count(dim) {
             var all = true;

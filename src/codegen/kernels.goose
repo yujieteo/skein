@@ -259,13 +259,13 @@ let SIMPLEX_NAMES = ["tri3", "tri6", "tet4", "tet10"];
 
 fn elements_kernels() -> u8[>..] {
     var out: u8[>..] = [];
-    file_header(out, "The cell kernels of the simplex cells", "elements", "import .shape;\nimport .mesh;\nimport .assemble;\n");
+    file_header(out, "The cell kernels of the simplex cells", "elements", "import .shape;\nimport .mesh;\nimport .assemble;\nimport .cube;\n");
     out.append("// The stiffness or the conductivity of cell c, and its source vector:\n");
     out.append("// elastic K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV,\n");
     out.append("// f(i p) = ∫ b_p Ni dV, heat K(i, j) = ∫ k ∇Ni · ∇Nj dV and f(i) = ∫ q_v Ni dV.\n");
     out.append("fn cell_matrix(c: i64) {\n");
     out.append("    guard c >= 0 && c < cell_count() && (physics == ELASTIC || physics == HEAT) && (dim == 2 || dim == 3) && (order == 1 || order == 2) else { abort(\"cell_matrix: c < cell_count(), a physics, dim 2 or 3 and order 1 or 2\"); }\n");
-    out.append("    if hex_cells {\n        if physics == ELASTIC { elastic_hex8(c); } else { heat_hex8(c); }\n        return;\n    }\n");
+    out.append("    if hex_cells {\n        if per_cell != 8 {\n            if physics == ELASTIC { elastic_cube(c); } else { heat_cube(c); }\n            return;\n        }\n        if physics == ELASTIC { elastic_hex8(c); } else { heat_hex8(c); }\n        return;\n    }\n");
     for physics in 2 {
         let word = if physics == 0 { "ELASTIC" } else { "HEAT" };
         for dim in 2..4 {
