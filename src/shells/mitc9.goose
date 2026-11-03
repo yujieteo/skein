@@ -281,6 +281,22 @@ fn shell_load9(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {
     }
 }
 
+// shell_load_with on 9-node cell c.
+fn shell_load9_with<Q>(c: i64) {
+    load_cell9(c);
+    for gp in 9 {
+        covariant9(GAUSS3[gp % 3], GAUSS3[gp / 3]);
+        let da = norm(cross(a1, a2)) * GAUSS3_W[gp % 3] * GAUSS3_W[gp / 3];
+        var p: f64[3] = [0.0; 3];
+        for l in 9 { for k in 3 { p[k] += shape9[l] * xn9[3 * l + k]; } }
+        let q: f64[3] = Q(p);
+        for l in 9 {
+            let node = shells[c].n[l];
+            for k in 3 { load[6 * node + k] += shape9[l] * q[k] * da; }
+        }
+    }
+}
+
 // The membrane strain and the curvature of 9-node cell c at (xi, eta), as
 // shell_strains.
 fn shell_strains9(c: i64, xi: f64, eta: f64) -> f64[3], f64[3] {

@@ -108,7 +108,8 @@ gives the roadmap phase that closes the gap:
   gives its 6 elastic modes within 0.7 % of CalculiX, after 6 rigid modes at 0 Hz.
   [frequency_cantilever.skn](../examples/femahoy/frequency_cantilever.skn)
   needs `family: serendipity` with `quadrature: reduced`, the 20-node
-  hexahedron. It does not run yet.
+  hexahedron. The 20-node hexahedron runs now (laminate_pagano uses it), but
+  this model also needs a mesh of a shape that is not a box. It does not run yet.
 - Phase 2 runs the hex8 heat cells in the elements lane (`cell: hex` on a
   `box`, `order: 1`): [grid_heated_bar.skn](../examples/femahoy/grid_heated_bar.skn),
   [grid_conductivity_slab.skn](../examples/femahoy/grid_conductivity_slab.skn)
@@ -369,27 +370,55 @@ gives the roadmap phase that closes the gap:
   is for order 1 only.
 - Not run yet in the electromagnetic batch, each for a large missing piece
   (follow-up pull requests):
-  team7_eddy_current needs the `stadium` shape of the mesher, a source in
-  the edge physics and a material for each region of the edge physics.
+  team7_eddy_current: the source of the edge physics now runs
+  (`eq curl(h) + c*u = js`, with `js` a vector of x, y and z that each
+  material sets for its own cells, with `min`, `max` and `atan2` in it), the
+  material of each region of the edge physics ran before, and the `stadium`
+  of the mesher (a union of boxes and a `pattern` of cylinders) meshes. It
+  stays blocked: a 3D mesh that fits the direct solve limit of 15 minutes has
+  68066 dofs and plate cells of 19 mm. On it, Bz at x = 36, 126 and 162 mm
+  is -19.7, 70.3 and 39.0 G against -22.13, 78.11 and 60.44 G (misses of
+  11 %, 10 % and 36 %), and GMRES does not converge in 200 iterations. The
+  expect needs 6 %. A mesh of 9 mm has 646k dofs and needs about 16 hours of
+  direct solve. It needs a faster solve of the 3D edge physics (a better
+  ordering of the factor, or a multigrid for edge elements), and the PML in
+  3D. The tree gauge is not the limit.
   dipole_king_middleton needs a PML in 3D for the edge physics and the
   integral of a field on a curve. The order 2 element it needs runs now.
   optics_mie_cylinder needs a source that varies in space in the scalar wave
   physics (`e_inc`), a PML on a layer that is not a box, the integral of a
   field on a curve inside the mesh, and the `study` of a param.
 - Not run yet, each for a large missing piece:
-  laminate_pagano and warpage_2p5d_frame do not run in this batch, and each
-  needs more than one new piece. The written-out orthotropic law and the
-  material of each ply on a region, which both need, run now
-  (`two_ply_block_hex.skn`). laminate_pagano also needs: second order
-  serendipity hexahedra with reduced integration (the hexahedra of the
-  elements lane have order 1); a traction that varies with `x` and `y` on a
-  face of the hexahedra (`sin(pi*x/a)`); a composite `reissner_mindlin`
-  shell on quad cells of a flat plate (the shell lane takes only a part of a
-  cylinder, and its `layup` table works there); and one model with two
-  physics that run in two lanes (the elements lane for the 3D plate, the shell
-  lane for the thin plate). warpage_2p5d_frame also needs: the second order
-  serendipity hexahedra, and a hexahedron grid on boxes that a turned box cuts
-  (the sloped fillet; the hex mesher takes a union of boxes).
+  warpage_2p5d_frame does not run. The pieces that it shares with
+  laminate_pagano run now, for every physics (see the next item): the second
+  order serendipity hexahedra with reduced integration (`family: serendipity`,
+  `quadrature: reduced`, `elements::promote_hexahedra`), the written-out
+  orthotropic law and the material of each ply on a region. It needs one more
+  piece: a hexahedron grid on a body that a turned box cuts (the sloped fillet
+  of the package; the hex mesher takes a tensor grid of boxes, with `move` and
+  `rotate` not read). The `// blocked-by:` mark of the model says so.
+- laminate_pagano runs and passes its five `expect` (within 0.5 %). The thick
+  plate has 2916 cells of 20-node hexahedra (w -0.018338 mm, sigma.xx 10.357
+  MPa, the mean of sigma.xz on the edge cell -1.0102 MPa). The thin plate has a
+  20 x 20 grid of 9-node MITC9 shell cells (w -0.06195 mm, sigma.xx at the bottom
+  face 5.395). The mechanisms are shared. Any hexahedron physics takes
+  `family: serendipity` (a model of the order 2 runs `promote_hexahedra` on the
+  mesh), a traction that depends on the point (`traction_with`), and the mean
+  of a field over a box (`mean(sigma.ij, box)`). The shell lane meshes a flat
+  plate, `boundary(box, z == z0)`, with any `layup`, a load `q` that varies with
+  the point, and the field `kappa` in a shell `let`. A shell `let` also takes
+  `ddot(Q_ply, ...)`, but only when the bottom ply is at 0 deg: `Q_ply` is the
+  reduced stiffness of a 0 deg ply in the section axis, and the generator
+  rejects it for a bottom ply at a different angle.
+  A model of two physics that no one lane reads (here a solid and a shell)
+  becomes one model for each physics (`src/codegen/lanes.goose`): each keeps its
+  physics, method, mesh, the lines of a step that name its unknowns and the
+  lets that these use. Each `expect` must name the unknowns or the lets of
+  exactly one physics, else `skein run` stops with an error. The split occurs
+  only when each lane reads and each goes to a different generator. Else
+  `skein run` writes the errors of the model. `skein run` runs each in its own lane and merges the
+  TOON (the tables join, `memory_checks` add, the estimates are the largest).
+  The results of lane k are in `.skein/results/<model>/lane<k>/`.
 
 The `// blocked-by:` mark of a model names the gaps of the model that stay
 open after phase 1.

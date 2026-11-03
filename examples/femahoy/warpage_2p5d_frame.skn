@@ -1,4 +1,5 @@
 // femahoy: validation/cases/warpage-2p5d-frame/job.inp
+// blocked-by: the hexahedron grid of a turned box: "the region of the physics is not a solid that a let names" (the package solid uses move and rotate for the sloped fillet; the hex mesher takes a tensor grid of boxes). The 20-node hexahedra, the thermal strain and the orthotropic law run (femahoy_coverage.md)
 // 1/4 of a 2.5D package with a metal frame (Tsai, Wang and Liu 2021). It
 // cools from the stress-free 140 degC to 60 degC. Linear thermoelastic, 3D,
 // serendipity hexahedra. The reference is the moire warpage of the substrate

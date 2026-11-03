@@ -24,8 +24,8 @@ let FIELD_FLUX = 2;     // the heat flux -k grad(T) at comp
 // when the smallest of l is >= 0, as for a simplex.
 fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
     var xi: f64[3] = [0.5; 3];
-    var n: f64[10] = [0.0; 10];
-    var dn: f64[30] = [0.0; 30];
+    var n: f64[20] = [0.0; 20];
+    var dn: f64[60] = [0.0; 60];
     for it in 8 {
         shape(3, 1, xi, n, dn);
         var r: f64[3] = [0.0; 3];
@@ -54,8 +54,8 @@ fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
 fn newton_refine(c: i64, p: f64[3], guess: f64[3]) -> f64[3] {
     var xi = guess;
     let affine = xi;
-    var n: f64[10] = [0.0; 10];
-    var dn: f64[30] = [0.0; 30];
+    var n: f64[20] = [0.0; 20];
+    var dn: f64[60] = [0.0; 60];
     for it in 6 {
         shape(dim, 2, xi, n, dn);
         var r: f64[3] = [0.0; 3];
@@ -247,7 +247,7 @@ fn region_integral(code: i64[:], consts: f64[:]) -> f64 {
     guard physics >= 0 && sol.len == dof_total() && ncomp <= 3 else { abort("region_integral: a physics and its solution"); }
     let fd = dim - 1;
     let fnodes = node_count_of(fd, order);
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     var total = 0.0;
     var any = false;
     for c in cell_count() {
@@ -319,7 +319,7 @@ fn region_max_stress(i: i64, j: i64, sign: f64) -> f64 {
 // quadratic tetrahedron and the hexahedron. Their node sequence is the one of shape.goose.
 fn vtk_type() -> i64 {
     if dim == 2 { return if order == 1 { 5 } else { 22 }; }
-    if hex_cells { return 12; }
+    if hex_cells { return if order == 2 { 25 } else { 12 }; }
     return if order == 1 { 10 } else { 24 };
 }
 

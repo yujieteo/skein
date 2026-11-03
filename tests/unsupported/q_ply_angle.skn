@@ -1,0 +1,61 @@
+// Q_ply is the reduced stiffness of a 0 deg ply in the section axis: skein run must refuse
+// ddot(Q_ply, ...) when the bottom ply is at 90 deg, and not give the stress of a 0 deg ply.
+
+model q_ply_angle: 3d, mm_N_MPa_s
+
+let a: Length = 100 mm
+let h_thin: Length = 1 mm
+let q_thin: Pressure = 1.0e-3 MPa
+
+let thin_box: Solid = box((0 mm, 0 mm, -h_thin), (a/2, a/2, 0 mm))
+let thin: Surface = boundary(thin_box, z == 0 mm)
+let thin_ss_x: Curve = boundary(thin, x == 0 mm)
+let thin_ss_y: Curve = boundary(thin, y == 0 mm)
+let thin_sym_x: Curve = boundary(thin, x == a/2)
+let thin_sym_y: Curve = boundary(thin, y == a/2)
+
+// The plies from the top face. The bottom ply is at 90 deg.
+table plies{angle: Angle in deg}:
+    0
+    0
+    90
+
+material thin_ply {
+    E1: Pressure = 175000 MPa
+    E2: Pressure = 7000 MPa
+    G12: Pressure = 3500 MPa
+    nu12: Real = 0.25
+    t_ply: Length = h_thin/3
+    h: Length = h_thin
+}
+
+mesh m_thin on thin {
+    size: 2.5 mm
+    cell: quad
+}
+
+physics plate_shell on thin: reissner_mindlin(
+    layup: plies.angle,
+    top: (0, 0, 1),
+    q: (0 MPa, 0 MPa, -q_thin*sin(pi*x/a)*sin(pi*y/a)),
+) solves w: Vector<Length>,
+    theta: Vector<Angle> {
+    material thin_ply
+    let s_bot: Tensor2<Pressure> = ddot(Q_ply, eps_m - h_thin/2*kappa)
+}
+
+method plate_shell: cg { mesh: m_thin, order: 2 }
+
+step load: static {
+    bc thin_ss_x: w.y = 0
+    bc thin_ss_x: w.z = 0
+    bc thin_ss_y: w.x = 0
+    bc thin_ss_y: w.z = 0
+    bc thin_sym_x: w.x = 0
+    bc thin_sym_x: theta.y = 0
+    bc thin_sym_y: w.y = 0
+    bc thin_sym_y: theta.x = 0
+    output w, s_bot
+}
+
+expect sx_thin: s_bot.xx at (a/2, a/2, 0 mm) == 5.393 MPa within 0.5%

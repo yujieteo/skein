@@ -480,12 +480,16 @@ let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PART
 let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
 let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
 let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
+let FIELD_BOX_MEAN = 14; // mean(sigma.xz, r) over the box r of a Solid let: comp is 3 i + j, the box is box_lo and box_hi
 let FIELD_VON_MISES = 12; // max(von_mises(sigma), r) on the boundary r
 let FIELD_CONSTANT = 11; // a number, a param or a let: scale is its value
 let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
 let FIELD_EXTREME = 10; // max(u.z, r), min(u.z, r) or their difference on the boundary r: comp is the component + 10 for min, + 20 for the range
 let FIELD_WAVE_Z = 13;  // a part of an expression of samples of the wave unknown: comp is the node of the part call
 let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
+
+var box_lo: f64[3] = [0.0; 3];   // the box of the last region_field of a FIELD_BOX_MEAN
+var box_hi: f64[3] = [0.0; 3];
 
 struct Expect {
     name: u8[..64],
@@ -502,6 +506,8 @@ struct Expect {
     scale: f64,     // the factor of the value: -1 for a minus sign or for the heat out of the body
     inverse: bool,  // the value is scale / the field, as -V0/integral(dot(J, n), spot)
     unit: u8[..64], // the unit of the value, for a reaction of a heat physics with no k; else ""
+    lo: f64[3],     // the corners of the box of FIELD_BOX_MEAN
+    hi: f64[3],
 }
 
 var geometry_names: u8[..64][>..];
@@ -546,7 +552,8 @@ var hex_regions = false;         // a region of cells on the hexahedra of a unio
 var has_regions = false;         // the physics has a `material m on r`
 var quad_mesh = false;           // cell: quad of a 2D mesh, meshed as triangles
 var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
-var hex_mesh = false;           // the mesh has cell: hex (a 3D box of hexahedra of order 1)
+var hex_mesh = false;           // the mesh has cell: hex (hexahedra of order 1, or the 20-node serendipity hexahedra of order 2)
+var reduced_quadrature = false; // method solid: cg { quadrature: reduced }: 2 Gauss points along each axis of a hexahedron of order 2, else 3
 var order = 2;
 var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
 var physics = -1;
@@ -651,6 +658,7 @@ fn reset() {
     hex_regions = false;
     has_regions = false;
     hex_mesh = false;
+    reduced_quadrature = false;
     curve_node = -1;
     capacity_node = -1;
     capacity = 0.0;
@@ -1917,9 +1925,10 @@ fn method(n: i64) {
             pml_setting(first(s));
         } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
             incompatible_family = true;
-        } else if kind(s) == syntax::N_SETTING && quad_mesh && ((name(s) == "family" && source_of(first(s)) == "serendipity") ||
+        } else if kind(s) == syntax::N_SETTING && (quad_mesh || hex_mesh) && ((name(s) == "family" && source_of(first(s)) == "serendipity") ||
                   (name(s) == "quadrature" && source_of(first(s)) == "reduced")) {
-            // The quad8 of the quad cells: see quad_mesh.
+            // The quad8 of the quad cells: see quad_mesh. The 20 nodes of the hexahedra of order 2, and their 2 x 2 x 2 rule.
+            if name(s) == "quadrature" { reduced_quadrature = true; }
         } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
             // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
@@ -1941,8 +1950,8 @@ fn method(n: i64) {
         unsupported(tok(n), "the family incompatible is for hexahedra", "write cell: hex in the mesh");
     }
     if crack_tips.len > 0 && order != 2 { unsupported(tok(n), "a crack_tip moves the mid-side nodes: it needs order 2", "write order: 2"); }
-    if hex_mesh && order != 1 {
-        unsupported(tok(n), "the hexahedra of this generator have order 1", "write order: 1");
+    if hex_mesh && order == 2 && incompatible_family {
+        unsupported(tok(n), "the incompatible modes are for the hexahedra of order 1", "write order: 1, or family: serendipity");
     }
 }
 
@@ -2084,6 +2093,10 @@ fn bc(n: i64) -> i64 {
     } else if physics == ELASTIC && t == traction_target() && pressure_of(v) == pressure_of(v) {
         b.kind = BC_PRESSURE;
         b.v[0] = pressure_of(v);
+    } else if physics == ELASTIC && t == traction_target() && mentions_xyz(v) && kind(v) == syntax::N_VECTOR {
+        // A traction that varies with the point p of the facet.
+        b.kind = BC_LOAD;
+        b.node = v;
     } else if physics == ELASTIC && t == traction_target() {
         let x = value(v);
         if x.n != dim { unsupported(tok(v), "the traction is a vector", BC_FIX_TEXT); }
@@ -2594,7 +2607,7 @@ fn composite_expect(n: i64) {
     format(label, source_of(right), " within ", source_of(within));
     var x = Expect { name: [], what: FIELD_COMPOSITE, comp: left, at: [0.0; 3], want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: -1,
-                     modal: false, surf: -1, scale: 1.0, inverse: false, unit: [] };
+                     modal: false, surf: -1, scale: 1.0, inverse: false, unit: [], lo: [0.0; 3], hi: [0.0; 3] };
     let unit = if kind(right) == syntax::N_NUMBER { syntax::child_of_kind(right, syntax::N_UNIT) } else { -1 };
     if unit >= 0 { set64(x.unit, source_of(unit)); }
     set64(x.name, name(n));
@@ -2666,11 +2679,11 @@ fn expect(n: i64, step: i64) {
         return;
     }
     let point = if what == FIELD_WAVE { arg(left, 0) } else { left };
-    let no_point = what == FIELD_WAVE_Z || what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN || what == FIELD_CONSTANT;
+    let no_point = what == FIELD_WAVE_Z || what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN || what == FIELD_BOX_MEAN || what == FIELD_CONSTANT;
     var x = Expect { name: [], what: what, comp: comp, at: if no_point { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale,
-                     inverse: inverse, unit: [] };
+                     inverse: inverse, unit: [], lo: box_lo, hi: box_hi };
     // A reaction of -eps*grad(phi) is no heat: the value takes the unit of
     // the expected value.
     let unit = if kind(right) == syntax::N_NUMBER { syntax::child_of_kind(right, syntax::N_UNIT) } else { -1 };
@@ -2772,6 +2785,22 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
         let j = if m.len == 2 { axis_of(m[1..]) } else { -1 };
         guard i >= 0 && j >= 0 else { return -1, -1, -1, 1.0; }
         return FIELD_BODY_MEAN, 3 * i + j, -1, scale;
+    }
+    // The mean of a stress over the box of a Solid let.
+    if is_call(f, "mean") && syntax::child_count(f) == 3 && kind(arg(f, 1)) == syntax::N_NAME && physics == ELASTIC && find_surf(name(arg(f, 1))) < 0 {
+        let v = arg(f, 0);
+        let m = if kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME && name(first(v)) == flux_name { name(v) } else { "" };
+        let i = if m.len == 2 { axis_of(m[..1]) } else { -1 };
+        let j = if m.len == 2 { axis_of(m[1..]) } else { -1 };
+        let r = mesher::eval_value(arg(f, 1));
+        var boxes: f64[>..] = [];
+        if i >= 0 && j >= 0 && ok() && r.n == 0 && mesher::box_union(r.g, boxes) && boxes.len == 6 {
+            for t in 3 {
+                box_lo[t] = boxes[t];
+                box_hi[t] = boxes[3 + t];
+            }
+            return FIELD_BOX_MEAN, 3 * i + j, -1, scale;
+        }
     }
     let mode, ext_comp, ext_surf = extreme_parts(f);
     if mode >= 0 { return FIELD_EXTREME, 10 * mode + ext_comp, ext_surf, scale; }
@@ -3633,7 +3662,7 @@ fn reaction_unit() -> const u8[:] {
 
 fn field_unit(what: i64) -> const u8[:] {
     if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_WAVE_Z || what == FIELD_MEAN || what == FIELD_EXTREME { return value_unit(); }
-    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX || what == FIELD_VON_MISES { return codegen::system.pressure; }
+    if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_BOX_MEAN || what == FIELD_MAX || what == FIELD_VON_MISES { return codegen::system.pressure; }
     if what == FIELD_REACTION { return reaction_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
     if codegen::system.pressure == "MPa" { return "mW/mm^2"; }
@@ -4146,6 +4175,13 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         out.append("    elements::pressure_load(");
         lit(out, b.v[0]);
         out.append(");\n");
+    } else if b.kind == BC_LOAD && b.node >= 0 {
+        format(out, "    ", api(), "traction_with() { p => [");
+        for j in 3 {
+            if j > 0 { out.append(", "); }
+            if j < dim { emit_space(out, b.node, j); } else { out.append("0.0"); }
+        }
+        out.append("] };\n");
     } else if b.kind == BC_LOAD {
         format(out, "    ", api(), "traction(");
         lits(out, b.v);
@@ -4605,6 +4641,14 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
         out.append("        let v = ");
         lit(out, x.scale);
         format(out, " * elements::mean_stress(", x.comp / 3, ", ", x.comp % 3, ");\n        let found_v = true;\n");
+    } else if x.what == FIELD_BOX_MEAN {
+        out.append("        let v = ");
+        lit(out, x.scale);
+        format(out, " * elements::mean_stress_box(", x.comp / 3, ", ", x.comp % 3, ", ");
+        lits(out, x.lo);
+        out.append(", ");
+        lits(out, x.hi);
+        out.append(");\n        let found_v = true;\n");
     } else if x.what == FIELD_MAX || x.what == FIELD_EXTREME {
         emit_sample(out, "m", x.what, x.comp, [x.surf * 1.0, 0.0, 0.0]);
         out.append("        let v = ");
@@ -4908,8 +4952,10 @@ fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
             }
             out.append(");\n");
         }
+        if hex_mesh && order == 2 { out.append("    elements::promote_hexahedra();\n"); }
         if share.stages >= 1 { codegen::emit_share(out, "", "elements::write_mesh", share, ""); }
     }
+    if hex_mesh && order == 2 { format(out, "    elements::set_cube_gauss(", if reduced_quadrature { 2 } else { 3 }, ");\n"); }
 }
 
 // The written-out law as the arguments of the call: the 36 and the 6 values.

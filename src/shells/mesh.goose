@@ -21,7 +21,9 @@ struct Grid {
     nt: i64,            // the cells along θ
     order: i64,         // 1 or 2
     x_fast: bool,       // the node number runs along x first
-    r: f64,
+    r: f64,             // the radius, or 1 for a flat plate (the lines in y are then lengths)
+    flat: bool,         // a plate in the plane z = z0 with the lines of x and of y
+    z0: f64,
     lines: i64,         // the x lines at grid_lines[lines..lines + nx + 1], then the θ lines
     cells: i64,         // the cell (i, j) is grid_cells[cells + i + nx j]
 }
@@ -89,16 +91,19 @@ fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, 
     let t0 = grid_line(g, 1, 0);
     let span = grid_line(g, 1, gr.nt) - t0;
     // θ from t0, in [0, 2π), or a little below 0 near t0.
-    var d = atan2(y, z) - t0;
-    d -= 2.0 * PI * floor(d / (2.0 * PI));
-    if d > span && 2.0 * PI - d < d - span { d -= 2.0 * PI; }
+    var d = y - t0;
+    if !gr.flat {
+        d = atan2(y, z) - t0;
+        d -= 2.0 * PI * floor(d / (2.0 * PI));
+        if d > span && 2.0 * PI - d < d - span { d -= 2.0 * PI; }
+    }
     let i = line_cell(g, 0, x);
     let j = line_cell(g, 1, t0 + d);
     let fx = (x - grid_line(g, 0, i)) / (grid_line(g, 0, i + 1) - grid_line(g, 0, i));
     let ft = (t0 + d - grid_line(g, 1, j)) / (grid_line(g, 1, j + 1) - grid_line(g, 1, j));
     let off_x = max(max(x0 - x, x - x1), 0.0);
     let off_t = gr.r * max(max(-d, d - span), 0.0);
-    let off_r = abs(sqrt(y * y + z * z) - gr.r);
+    let off_r = if gr.flat { abs(z - gr.z0) } else { abs(sqrt(y * y + z * z) - gr.r) };
     return i, j, fx, ft, off_x <= tol && off_t <= tol && off_r <= tol;
 }
 
@@ -117,6 +122,18 @@ fn lattice_value(v: f64[:], k: i64, order: i64) -> f64 {
 // the shorter side of the lattice first, for a small profile.
 fn mesh_cylinder_lines(r: f64, xs: f64[:], ts: f64[:], order: i64, cell_sections: i64[:],
                        ax: f64, ay: f64, az: f64) -> i64 {
+    return mesh_lines(r, false, 0.0, xs, ts, order, cell_sections, ax, ay, az);
+}
+
+// Makes the flat plate in the plane z = z0 on the x lines xs and the y lines ys, as
+// mesh_cylinder_lines. The director of each node is +z.
+fn mesh_plate_lines(z0: f64, xs: f64[:], ys: f64[:], order: i64, cell_sections: i64[:],
+                    ax: f64, ay: f64, az: f64) -> i64 {
+    return mesh_lines(1.0, true, z0, xs, ys, order, cell_sections, ax, ay, az);
+}
+
+fn mesh_lines(r: f64, flat: bool, z0: f64, xs: f64[:], ts: f64[:], order: i64, cell_sections: i64[:],
+              ax: f64, ay: f64, az: f64) -> i64 {
     let nx = xs.len - 1;
     let nt = ts.len - 1;
     guard r > 0.0 && nx > 0 && nt > 0 && (order == 1 || order == 2) && cell_sections.len == nx * nt else { abort("mesh_cylinder_lines: r > 0, 2 lines or more on each axis, order 1 or 2, and a section for each cell"); }
@@ -125,7 +142,7 @@ fn mesh_cylinder_lines(r: f64, xs: f64[:], ts: f64[:], order: i64, cell_sections
     for s in cell_sections { guard s >= -1 && s < sections.len else { abort("mesh_cylinder_lines: each section -1 or < sections.len"); }; }
     let la = order * nx + 1;
     let lb = order * nt + 1;
-    grids.push(Grid { first_node: node_count(), nx: nx, nt: nt, order: order, x_fast: la <= lb, r: r,
+    grids.push(Grid { first_node: node_count(), nx: nx, nt: nt, order: order, x_fast: la <= lb, r: r, flat: flat, z0: z0,
                       lines: grid_lines.len, cells: grid_cells.len });
     let g = grids.len - 1;
     for x in xs { grid_lines.push(x); }
@@ -135,8 +152,8 @@ fn mesh_cylinder_lines(r: f64, xs: f64[:], ts: f64[:], order: i64, cell_sections
             let a = if la <= lb { inner } else { outer };
             let b = if la <= lb { outer } else { inner };
             let t = lattice_value(ts, b, order);
-            let n = add_node(lattice_value(xs, a, order), r * sin(t), r * cos(t));
-            set_director(n, 0.0, sin(t), cos(t));
+            let n = add_node(lattice_value(xs, a, order), if flat { t } else { r * sin(t) }, if flat { z0 } else { r * cos(t) });
+            if flat { set_director(n, 0.0, 0.0, 1.0); } else { set_director(n, 0.0, sin(t), cos(t)); }
         }
     }
     for j in nt {
