@@ -236,8 +236,8 @@ gives the roadmap phase that closes the gap:
   Spalart-Allmaras model of `src/flow/sa.goose`: the unknown nt, the wall distance of a
   `physics walldist` (`wall_distance_region`, the exact distance to the wall segments), a spline
   airfoil in a far field of 500 chords, and boundary layer cells (`layers`, `mesh_2d_layers` in
-  `src/mesher/layers.goose`). The study `flaps` passes at -10, 0 and 10 deg (cl_f 0.1223 against
-  0.1200, cm_f -0.00853 against -0.008 at 0 deg). Deviations: `method flow: fv` runs as P1 cells
+  `src/mesher/layers.goose`). The study `flaps` passes at -10, 0 and 10 deg (cl_f 0.1280 against
+  0.1200, cm_f -0.00992 against -0.008 at 0 deg). Deviations: `method flow: fv` runs as P1 cells
   with SUPG and PSPG, in place of the finite volume method, and the mesh has 10 um, ratio 1.25
   and 40 layers with 8 mm on the wall (28 thousand cells), in place of the C-grid of 4 um and
   64 layers. The solve ends at `rtol: 1e-5`: the pseudo-time iteration stops in a limit cycle of
