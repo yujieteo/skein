@@ -29,6 +29,7 @@ import syntax from "../syntax";
 import codegen.codegen;
 import .gen;
 import .gen_contact;
+import .gen_aniso;
 
 let SOLID_J2 = 1;           // as in src/elements/solid.goose
 let SOLID_J2_FINITE = 2;
@@ -73,6 +74,7 @@ fn solid_reset() {
     velocity_name = [];
     velocity_start = -1;
     dynamic_eq = false;
+    aniso_reset();
 }
 
 let DYNAMIC_FIX = "write solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0), with eq ddt(u) - v = 0 and eq rho*ddt(v) - div(defgrad(u)*S) = 0";
@@ -254,7 +256,7 @@ fn solid_finish(n: i64) {
     if solid_law == SOLID_ENERGY { energy_calls(energy_node); }
     // The lets that W does not use are not in this generator.
     for l in solid_lets {
-        if solid_law != SOLID_ENERGY {
+        if solid_law != SOLID_ENERGY && aniso_node < 0 {
             unsupported(tok(l), str("the let '", name(l), "' is not a flux of this generator"),
                         "write let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u)), or let q: Vector<HeatFlux> = -k*grad(T)");
         }

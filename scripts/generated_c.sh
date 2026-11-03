@@ -40,6 +40,7 @@ examples/elements/darcy_annulus_tri.skn
 examples/elements/far_field_box_tet.skn
 examples/elements/frequency_cantilever_tet.skn
 examples/elements/harmonic_duct_tri.skn
+examples/elements/harmonic_heat_bar_tri.skn
 examples/elements/heated_bar_study_tet.skn
 examples/elements/heated_bar_tet.skn
 examples/elements/heated_bar_template_tet.skn
@@ -48,6 +49,7 @@ examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
 examples/elements/taylor_bar_tet.skn
+examples/elements/two_ply_block_hex.skn
 examples/elements/uniform_temperature_tet.skn
 examples/femahoy/acoustics_pulsating_sphere.skn
 examples/femahoy/bar_pressure.skn
@@ -65,7 +67,9 @@ examples/femahoy/grid_bimetal_strip.skn
 examples/femahoy/grid_conductivity_slab.skn
 examples/femahoy/grid_cooling_slab.skn
 examples/femahoy/grid_coax_capacitor.skn
+examples/femahoy/grid_cavity_te101.skn
 examples/femahoy/grid_coax_tem.skn
+examples/femahoy/grid_constrained_block.skn
 examples/femahoy/grid_free_block_modes_ccx.skn
 examples/femahoy/grid_heated_block_ccx.skn
 examples/femahoy/grid_heated_block_stress_ccx.skn

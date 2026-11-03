@@ -15324,224 +15324,290 @@ static uint8_t flow_ptc_step_g4(double dt_g, void *f_g_data, int64_t f_g_len, vo
     sl_f64 du_g; du_g.data = du_g_data; du_g.len = du_g_len;
     sl_f64 t0;
     sl_f64 t1;
-    sl_i64 t21;
-    sl_i32 t22;
     sl_i64 t40;
     sl_i32 t41;
-    sl_f64 t42;
-    gs_rref t43;
-    gs_rref t44;
-    sl_i64 t58;
-    sl_i32 t59;
-    sl_f64 t60;
-    sl_i64 t61;
-    sl_i32 t62;
-    sl_f64 t63;
-    a0_f64 t69;
-    sl_f64 t70;
+    sl_i64 t52;
+    sl_i32 t53;
+    sl_f64 t54;
+    gs_rref t55;
+    gs_rref t56;
+    sl_i64 t70;
+    sl_i32 t71;
+    sl_f64 t72;
+    sl_i64 t73;
+    sl_i32 t74;
+    sl_f64 t75;
+    a0_f64 t81;
+    sl_f64 t82;
     sl_f64 x_g;
     t0.data = (double *)((GS_GL->flow_sol_g4.base)); t0.len = (GS_GL->flow_sol_g4.len);
     t1.data = (double *)((GS_GL->flow_val_g4.base)); t1.len = (GS_GL->flow_val_g4.len);
     flow_jacobian_g4(t0.data, t0.len, t1.data, t1.len, gs_sp + 0);
     double mean_g = 0.0;
     double count_g = 0.0;
+    double least_g = 1e+300;
     int64_t t2 = ((GS_GL->flow_sol_g4.len));
     for (int64_t d_g = 0; d_g < t2; d_g++) {
         int64_t t5 = d_g;
-        if ((uint8_t)((double)((double)((((double *)((GS_GL->flow_lumped_g4.base)))[GS_IDX((int64_t)(t5), (GS_GL->flow_lumped_g4.len), gs_file1, 548)]))) > (double)(0.0))) {
+        if ((uint8_t)((double)((double)((((double *)((GS_GL->flow_lumped_g4.base)))[GS_IDX((int64_t)(t5), (GS_GL->flow_lumped_g4.len), gs_file1, 552)]))) > (double)(0.0))) {
             double t6 = mean_g;
             int64_t t7 = d_g;
             double t8 = (((double *)((GS_GL->flow_lumped_g4.base)))[t7]);
             double t9 = gs_sqrt(t8);
             mean_g = (t6 + (t9));
             count_g = (count_g + (1.0));
+            double a_g = least_g;
+            double b_g;
+            int64_t t10 = d_g;
+            double t11 = (((double *)((GS_GL->flow_lumped_g4.base)))[t10]);
+            double t12 = gs_sqrt(t11);
+            b_g = t12;
+            {
+                if ((uint8_t)((double)((double)(b_g)) < (double)(a_g))) {
+                    least_g = b_g;
+                    goto L13;
+                }
+                least_g = a_g;
+                goto L13;
+            }
+            L13:;
         }
     }
-    double t10 = mean_g;
-    double t11;
-    double a_g = count_g;
+    double t14 = mean_g;
+    double t15;
+    double a_g_2 = count_g;
     {
-        if ((uint8_t)((double)((double)(a_g)) < (double)(1.0))) {
-            t11 = 1.0;
-            goto L12;
+        if ((uint8_t)((double)((double)(a_g_2)) < (double)(1.0))) {
+            t15 = 1.0;
+            goto L16;
         }
-        t11 = a_g;
-        goto L12;
+        t15 = a_g_2;
+        goto L16;
     }
-    L12:;
-    mean_g = ((double)(t10) / (double)(t11));
-    int64_t t13 = ((GS_GL->flow_sol_g4.len));
-    for (int64_t d_g_2 = 0; d_g_2 < t13; d_g_2++) {
-        int64_t t17 = d_g_2;
-        if (!((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->flow_fixed_g4.base) + GS_IDX((int64_t)(t17), (GS_GL->flow_fixed_g4.len), gs_file1, 552) * 1))))) == (uint8_t)(0)))) goto L16;
-        int64_t t18 = d_g_2;
-        if (!((uint8_t)((double)((double)((((double *)((GS_GL->flow_lumped_g4.base)))[GS_IDX((int64_t)(t18), (GS_GL->flow_lumped_g4.len), gs_file1, 552)]))) > (double)(0.0)))) goto L16;
+    L16:;
+    mean_g = ((double)(t14) / (double)(t15));
+    uint8_t local_g = (uint8_t)((double)((double)(least_g)) < (double)(((double)((double)(0.0001)) * (double)(mean_g))));
+    int64_t t17 = ((GS_GL->flow_sol_g4.len));
+    for (int64_t d_g_2 = 0; d_g_2 < t17; d_g_2++) {
+        int64_t t21 = d_g_2;
+        if (!((uint8_t)((uint8_t)((uint8_t)((*(uint8_t *)(((GS_GL->flow_fixed_g4.base) + GS_IDX((int64_t)(t21), (GS_GL->flow_fixed_g4.len), gs_file1, 557) * 1))))) == (uint8_t)(0)))) goto L20;
+        int64_t t22 = d_g_2;
+        if (!((uint8_t)((double)((double)((((double *)((GS_GL->flow_lumped_g4.base)))[GS_IDX((int64_t)(t22), (GS_GL->flow_lumped_g4.len), gs_file1, 557)]))) > (double)(0.0)))) goto L20;
         {
-            uint8_t *t19 = (GS_GL->flow_val_g4.base);
-            int64_t t20 = (GS_GL->flow_val_g4.len);
-            t21.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t21.len = (GS_GL->flow_row_start_g4.len);
-            t22.data = (int32_t *)((GS_GL->flow_col_g4.base)); t22.len = (GS_GL->flow_col_g4.len);
-            int64_t t23 = solvers_entry_g7(t21.data, t21.len, t22.data, t22.len, d_g_2, d_g_2);
-            int64_t t24 = t23;
-            double *t25 = &((((double *)(t19))[GS_IDX((int64_t)(t24), t20, gs_file1, 552)]));
-            double t26 = (*t25);
-            int64_t t27 = d_g_2;
-            double t28 = (((double *)((GS_GL->flow_lumped_g4.base)))[GS_IDX((int64_t)(t27), (GS_GL->flow_lumped_g4.len), gs_file1, 552)]);
-            double t29 = dt_g;
-            int64_t t30 = d_g_2;
-            double t31 = (((double *)((GS_GL->flow_lumped_g4.base)))[t30]);
-            double t32 = gs_sqrt(t31);
-            double t33 = ((double)(t29) * (double)(t32));
-            (*t25) = (t26 + (((double)(t28) / (double)(((double)(t33) / (double)(mean_g))))));
+            uint8_t t23 = (uint8_t)((uint8_t)(!GS_GL->flow_spalart_on_g4) != 0);
+            if (t23) {
+                t23 = (uint8_t)(GS_GL->flow_turbulent_g4 != 0);
+            }
+            uint8_t t24 = (uint8_t)(t23 != 0);
+            if (t24) {
+                int64_t t25 = d_g_2;
+                int64_t t26 = GS_GL->flow_vertex_count_g4;
+                int64_t t27;
+                if (GS_GL->flow_turbulent_g4) {
+                    if (GS_GL->flow_spalart_on_g4) {
+                        t27 = 4;
+                    } else {
+                        t27 = 5;
+                    }
+                } else {
+                    t27 = 3;
+                }
+                t24 = (uint8_t)((uint8_t)((int64_t)(t25) < (int64_t)(gs_mul_i64(t26, t27, gs_file1, 559))) != 0);
+            }
+            uint8_t t28 = (uint8_t)(t24 != 0);
+            if (t28) {
+                int64_t t29 = d_g_2;
+                int64_t t30;
+                if (GS_GL->flow_turbulent_g4) {
+                    if (GS_GL->flow_spalart_on_g4) {
+                        t30 = 4;
+                    } else {
+                        t30 = 5;
+                    }
+                } else {
+                    t30 = 3;
+                }
+                int64_t t31;
+                int64_t t32 = gs_mod_i64(t31, t29, t30, gs_file1, 559);
+                t28 = (uint8_t)((uint8_t)((int64_t)(t32) == (int64_t)(4)) != 0);
+            }
+            uint8_t omega_row_g = t28;
+            double size_g;
+            int64_t t33 = d_g_2;
+            double t34 = (((double *)((GS_GL->flow_lumped_g4.base)))[GS_IDX((int64_t)(t33), (GS_GL->flow_lumped_g4.len), gs_file1, 560)]);
+            double t35;
+            if (omega_row_g) {
+                t35 = GS_GL->flow_omega_scale_g4;
+            } else {
+                t35 = 1.0;
+            }
+            double t36 = ((double)(t34) * (double)(t35));
+            double t37 = gs_sqrt(t36);
+            size_g = t37;
+            double local_dt_g;
+            if (local_g) {
+                local_dt_g = ((double)((double)(((double)((double)(dt_g)) * (double)(size_g)))) / (double)(mean_g));
+            } else {
+                local_dt_g = dt_g;
+            }
+            uint8_t *t38 = (GS_GL->flow_val_g4.base);
+            int64_t t39 = (GS_GL->flow_val_g4.len);
+            t40.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t40.len = (GS_GL->flow_row_start_g4.len);
+            t41.data = (int32_t *)((GS_GL->flow_col_g4.base)); t41.len = (GS_GL->flow_col_g4.len);
+            int64_t t42 = solvers_entry_g7(t40.data, t40.len, t41.data, t41.len, d_g_2, d_g_2);
+            int64_t t43 = t42;
+            double *t44 = &((((double *)(t38))[GS_IDX((int64_t)(t43), t39, gs_file1, 562)]));
+            int64_t t45 = d_g_2;
+            (*t44) = ((*t44) + (((double)((double)((((double *)((GS_GL->flow_lumped_g4.base)))[t45]))) / (double)(local_dt_g))));
         }
-        L16:;
+        L20:;
     }
-    int64_t t34 = ((GS_GL->flow_val_g4.len));
-    for (int64_t e_g = 0; e_g < t34; e_g++) {
-        int64_t t37 = e_g;
-        double *t38 = &((((double *)((GS_GL->flow_pre_g4.base)))[GS_IDX((int64_t)(t37), (GS_GL->flow_pre_g4.len), gs_file1, 554)]));
-        int64_t t39 = e_g;
-        (*t38) = (((double *)((GS_GL->flow_val_g4.base)))[t39]);
+    int64_t t46 = ((GS_GL->flow_val_g4.len));
+    for (int64_t e_g = 0; e_g < t46; e_g++) {
+        int64_t t49 = e_g;
+        double *t50 = &((((double *)((GS_GL->flow_pre_g4.base)))[GS_IDX((int64_t)(t49), (GS_GL->flow_pre_g4.len), gs_file1, 565)]));
+        int64_t t51 = e_g;
+        (*t50) = (((double *)((GS_GL->flow_val_g4.base)))[t51]);
     }
-    t40.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t40.len = (GS_GL->flow_row_start_g4.len);
-    t41.data = (int32_t *)((GS_GL->flow_col_g4.base)); t41.len = (GS_GL->flow_col_g4.len);
-    t42.data = (double *)((GS_GL->flow_pre_g4.base)); t42.len = (GS_GL->flow_pre_g4.len);
-    t43.hdr = (gs_rhdr *)&GS_GL->flow_lu_g4; t43.stk = (&GS_GL->gs_gstk_flow_lu_g4);
-    t44.hdr = (gs_rhdr *)&GS_GL->flow_diag_g4; t44.stk = (&GS_GL->gs_gstk_flow_diag_g4);
-    uint8_t t45 = solvers_ilu0_g7(t40.data, t40.len, t41.data, t41.len, t42.data, t42.len, t43.hdr, t43.stk, t44.hdr, t44.stk, gs_sp + 0);
-    if ((uint8_t)(!t45)) {
-        uint8_t t46;
-        t46 = 0;
-        return t46;
+    t52.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t52.len = (GS_GL->flow_row_start_g4.len);
+    t53.data = (int32_t *)((GS_GL->flow_col_g4.base)); t53.len = (GS_GL->flow_col_g4.len);
+    t54.data = (double *)((GS_GL->flow_pre_g4.base)); t54.len = (GS_GL->flow_pre_g4.len);
+    t55.hdr = (gs_rhdr *)&GS_GL->flow_lu_g4; t55.stk = (&GS_GL->gs_gstk_flow_lu_g4);
+    t56.hdr = (gs_rhdr *)&GS_GL->flow_diag_g4; t56.stk = (&GS_GL->gs_gstk_flow_diag_g4);
+    uint8_t t57 = solvers_ilu0_g7(t52.data, t52.len, t53.data, t53.len, t54.data, t54.len, t55.hdr, t55.stk, t56.hdr, t56.stk, gs_sp + 0);
+    if ((uint8_t)(!t57)) {
+        uint8_t t58;
+        t58 = 0;
+        return t58;
     }
-    int64_t t47 = (f_g.len);
-    for (int64_t d_g_3 = 0; d_g_3 < t47; d_g_3++) {
-        int64_t t50 = d_g_3;
-        double *t51 = f_g.data;
-        double *t52 = &(t51[t50]);
-        int64_t t53 = d_g_3;
-        double *t54 = f_g.data;
-        (*t52) = (-t54[t53]);
-        int64_t t55 = d_g_3;
-        double *t56 = du_g.data;
-        double *t57 = &(t56[GS_IDX((int64_t)(t55), du_g.len, gs_file1, 558)]);
-        (*t57) = 0.0;
+    int64_t t59 = (f_g.len);
+    for (int64_t d_g_3 = 0; d_g_3 < t59; d_g_3++) {
+        int64_t t62 = d_g_3;
+        double *t63 = f_g.data;
+        double *t64 = &(t63[t62]);
+        int64_t t65 = d_g_3;
+        double *t66 = f_g.data;
+        (*t64) = (-t66[t65]);
+        int64_t t67 = d_g_3;
+        double *t68 = du_g.data;
+        double *t69 = &(t68[GS_IDX((int64_t)(t67), du_g.len, gs_file1, 569)]);
+        (*t69) = 0.0;
     }
-    t58.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t58.len = (GS_GL->flow_row_start_g4.len);
-    t59.data = (int32_t *)((GS_GL->flow_col_g4.base)); t59.len = (GS_GL->flow_col_g4.len);
-    t60.data = (double *)((GS_GL->flow_val_g4.base)); t60.len = (GS_GL->flow_val_g4.len);
-    solvers_rows_start_g7(t58.data, t58.len, t59.data, t59.len, t60.data, t60.len, gs_sp + 0);
+    t70.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t70.len = (GS_GL->flow_row_start_g4.len);
+    t71.data = (int32_t *)((GS_GL->flow_col_g4.base)); t71.len = (GS_GL->flow_col_g4.len);
+    t72.data = (double *)((GS_GL->flow_val_g4.base)); t72.len = (GS_GL->flow_val_g4.len);
+    solvers_rows_start_g7(t70.data, t70.len, t71.data, t71.len, t72.data, t72.len, gs_sp + 0);
     int64_t its_g;
     uint8_t solved_g;
-    t61.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t61.len = (GS_GL->flow_row_start_g4.len);
-    t62.data = (int32_t *)((GS_GL->flow_col_g4.base)); t62.len = (GS_GL->flow_col_g4.len);
-    t63.data = (double *)((GS_GL->flow_val_g4.base)); t63.len = (GS_GL->flow_val_g4.len);
-    int64_t t64 = solvers_gmres_g7_201(t61.data, t61.len, t62.data, t62.len, t63.data, t63.len, f_g.data, f_g.len, du_g.data, du_g.len, 1e-06, 150, 5000, &solved_g, gs_sp + 0);
-    its_g = t64;
+    t73.data = (int64_t *)((GS_GL->flow_row_start_g4.base)); t73.len = (GS_GL->flow_row_start_g4.len);
+    t74.data = (int32_t *)((GS_GL->flow_col_g4.base)); t74.len = (GS_GL->flow_col_g4.len);
+    t75.data = (double *)((GS_GL->flow_val_g4.base)); t75.len = (GS_GL->flow_val_g4.len);
+    int64_t t76 = solvers_gmres_g7_201(t73.data, t73.len, t74.data, t74.len, t75.data, t75.len, f_g.data, f_g.len, du_g.data, du_g.len, 1e-06, 150, 5000, &solved_g, gs_sp + 0);
+    its_g = t76;
     {
-        uint8_t *t111 = (&GS_GL->gs_gstk_solvers_rows_ids_g7)->top;
-        int64_t t112 = GS_GL->solvers_rows_ids_g7.len;
-        int64_t t66 = ((t112));
-        uint8_t *t113 = GS(gs_sp + 0)->top;
-        for (int64_t w_g = 0; w_g < t66; w_g++) {
-            t69 = (a0_f64){0};
-            t70.data = t69.e; t70.len = 0;
-            x_g = t70;
+        uint8_t *t123 = (&GS_GL->gs_gstk_solvers_rows_ids_g7)->top;
+        int64_t t124 = GS_GL->solvers_rows_ids_g7.len;
+        int64_t t78 = ((t124));
+        uint8_t *t125 = GS(gs_sp + 0)->top;
+        for (int64_t w_g = 0; w_g < t78; w_g++) {
+            t81 = (a0_f64){0};
+            t82.data = t81.e; t82.len = 0;
+            x_g = t82;
             {
-                int64_t t72 = (int64_t)(GS_GL->solvers_rows_products_g7);
-                int64_t t73;
-                if ((uint8_t)((int64_t)((int64_t)(gs_mod_i64(t73, t72, 2, gs_file9, 165))) == (int64_t)(0))) {
-                    uint8_t *t75 = t113;
-                    *(uint8_t *)t113 = 1;
-                    t113 += 1;
-                    int64_t t76 = x_g.len;
-                    if ((uint64_t)(t76) > 4294967295ull) gs_panic("array length exceeds storage range");
-                    *(uint32_t *)t113 = (uint32_t)(t76);
-                    t113 += 4;
-                    gs_memcpy(t113, x_g.data, (size_t)((t76) * 8));
-                    t113 += (t76) * 8;
-                    uint8_t t74 = gs_qput(&gs_q_solvers_XEven_g7, t75, gs_size_solvers_XEven_g7(t75));
-                    t113 = t75;
+                int64_t t84 = (int64_t)(GS_GL->solvers_rows_products_g7);
+                int64_t t85;
+                if ((uint8_t)((int64_t)((int64_t)(gs_mod_i64(t85, t84, 2, gs_file9, 165))) == (int64_t)(0))) {
+                    uint8_t *t87 = t125;
+                    *(uint8_t *)t125 = 1;
+                    t125 += 1;
+                    int64_t t88 = x_g.len;
+                    if ((uint64_t)(t88) > 4294967295ull) gs_panic("array length exceeds storage range");
+                    *(uint32_t *)t125 = (uint32_t)(t88);
+                    t125 += 4;
+                    gs_memcpy(t125, x_g.data, (size_t)((t88) * 8));
+                    t125 += (t88) * 8;
+                    uint8_t t86 = gs_qput(&gs_q_solvers_XEven_g7, t87, gs_size_solvers_XEven_g7(t87));
+                    t125 = t87;
                 } else {
-                    uint8_t *t78 = t113;
-                    *(uint8_t *)t113 = 1;
-                    t113 += 1;
-                    int64_t t79 = x_g.len;
-                    if ((uint64_t)(t79) > 4294967295ull) gs_panic("array length exceeds storage range");
-                    *(uint32_t *)t113 = (uint32_t)(t79);
-                    t113 += 4;
-                    gs_memcpy(t113, x_g.data, (size_t)((t79) * 8));
-                    t113 += (t79) * 8;
-                    uint8_t t77 = gs_qput(&gs_q_solvers_XOdd_g7, t78, gs_size_solvers_XOdd_g7(t78));
-                    t113 = t78;
+                    uint8_t *t90 = t125;
+                    *(uint8_t *)t125 = 1;
+                    t125 += 1;
+                    int64_t t91 = x_g.len;
+                    if ((uint64_t)(t91) > 4294967295ull) gs_panic("array length exceeds storage range");
+                    *(uint32_t *)t125 = (uint32_t)(t91);
+                    t125 += 4;
+                    gs_memcpy(t125, x_g.data, (size_t)((t91) * 8));
+                    t125 += (t91) * 8;
+                    uint8_t t89 = gs_qput(&gs_q_solvers_XOdd_g7, t90, gs_size_solvers_XOdd_g7(t90));
+                    t125 = t90;
                 }
             }
         }
-        GS(gs_sp + 0)->top = t113;
-        int64_t t80 = (t112);
-        uint8_t *t81 = (uint8_t *)((GS_GL->solvers_rows_ids_g7.base));
-        for (int64_t t82 = 0; t82 < (t80); t82++) {
-            int64_t id_g = (*(int64_t *)((t81) + t82 * 8));
-            uint8_t t85 = gs_thread_wait(id_g, NULL, NULL, gs_file9, 160);
+        GS(gs_sp + 0)->top = t125;
+        int64_t t92 = (t124);
+        uint8_t *t93 = (uint8_t *)((GS_GL->solvers_rows_ids_g7.base));
+        for (int64_t t94 = 0; t94 < (t92); t94++) {
+            int64_t id_g = (*(int64_t *)((t93) + t94 * 8));
+            uint8_t t97 = gs_thread_wait(id_g, NULL, NULL, gs_file9, 160);
         }
-        t111 = (uint8_t *)((GS_GL->solvers_rows_ids_g7.base));
-        t112 = 0;
-        (&GS_GL->gs_gstk_solvers_rows_ids_g7)->top = t111;
-        GS_GL->solvers_rows_ids_g7.len = t112;
+        t123 = (uint8_t *)((GS_GL->solvers_rows_ids_g7.base));
+        t124 = 0;
+        (&GS_GL->gs_gstk_solvers_rows_ids_g7)->top = t123;
+        GS_GL->solvers_rows_ids_g7.len = t124;
     }
-    GS_GL->flow_linear_iterations_g4 = gs_add_i64(GS_GL->flow_linear_iterations_g4, its_g, gs_file1, 565);
+    GS_GL->flow_linear_iterations_g4 = gs_add_i64(GS_GL->flow_linear_iterations_g4, its_g, gs_file1, 576);
     if ((uint8_t)(!solved_g)) {
-        uint8_t t86;
-        t86 = 0;
-        return t86;
+        uint8_t t98;
+        t98 = 0;
+        return t98;
     }
-    int64_t t87 = GS_GL->flow_vertex_count_g4;
-    for (int64_t n_g = 0; n_g < t87; n_g++) {
-        int64_t t90;
+    int64_t t99 = GS_GL->flow_vertex_count_g4;
+    for (int64_t n_g = 0; n_g < t99; n_g++) {
+        int64_t t102;
         if (GS_GL->flow_spalart_on_g4) {
-            t90 = 1;
+            t102 = 1;
         } else {
-            t90 = 2;
+            t102 = 2;
         }
-        int64_t t91 = t90;
-        for (int64_t which_g = 0; which_g < t91; which_g++) {
+        int64_t t103 = t102;
+        for (int64_t which_g = 0; which_g < t103; which_g++) {
             int64_t d_g_4;
-            int64_t t94 = flow_turbulence_dof_g4(n_g, which_g, gs_sp + 0);
-            d_g_4 = t94;
-            int64_t t95 = d_g_4;
-            double *t96 = du_g.data;
-            double *t97 = &(t96[GS_IDX((int64_t)(t95), du_g.len, gs_file1, 570)]);
-            int64_t t98 = d_g_4;
-            double *t99 = du_g.data;
-            double a_g_2 = t99[t98];
-            int64_t t100 = d_g_4;
-            double b_g = ((double)((double)(-0.5)) * (double)((((double *)((GS_GL->flow_sol_g4.base)))[GS_IDX((int64_t)(t100), (GS_GL->flow_sol_g4.len), gs_file1, 570)])));
+            int64_t t106 = flow_turbulence_dof_g4(n_g, which_g, gs_sp + 0);
+            d_g_4 = t106;
+            int64_t t107 = d_g_4;
+            double *t108 = du_g.data;
+            double *t109 = &(t108[GS_IDX((int64_t)(t107), du_g.len, gs_file1, 581)]);
+            int64_t t110 = d_g_4;
+            double *t111 = du_g.data;
+            double a_g_3 = t111[t110];
+            int64_t t112 = d_g_4;
+            double b_g_2 = ((double)((double)(-0.5)) * (double)((((double *)((GS_GL->flow_sol_g4.base)))[GS_IDX((int64_t)(t112), (GS_GL->flow_sol_g4.len), gs_file1, 581)])));
             {
-                if ((uint8_t)((double)((double)(a_g_2)) < (double)(b_g))) {
-                    (*t97) = b_g;
-                    goto L101;
+                if ((uint8_t)((double)((double)(a_g_3)) < (double)(b_g_2))) {
+                    (*t109) = b_g_2;
+                    goto L113;
                 }
-                (*t97) = a_g_2;
-                goto L101;
+                (*t109) = a_g_3;
+                goto L113;
             }
-            L101:;
+            L113:;
         }
     }
-    int64_t t102 = ((GS_GL->flow_sol_g4.len));
-    for (int64_t d_g_5 = 0; d_g_5 < t102; d_g_5++) {
-        int64_t t105 = d_g_5;
-        double *t106 = &((((double *)((GS_GL->flow_sol_g4.base)))[t105]));
-        int64_t t107 = d_g_5;
-        double *t108 = du_g.data;
-        (*t106) = ((*t106) + (t108[GS_IDX((int64_t)(t107), du_g.len, gs_file1, 573)]));
+    int64_t t114 = ((GS_GL->flow_sol_g4.len));
+    for (int64_t d_g_5 = 0; d_g_5 < t114; d_g_5++) {
+        int64_t t117 = d_g_5;
+        double *t118 = &((((double *)((GS_GL->flow_sol_g4.base)))[t117]));
+        int64_t t119 = d_g_5;
+        double *t120 = du_g.data;
+        (*t118) = ((*t118) + (t120[GS_IDX((int64_t)(t119), du_g.len, gs_file1, 584)]));
     }
-    GS_GL->flow_newton_steps_g4 = gs_add_i64(GS_GL->flow_newton_steps_g4, 1, gs_file1, 574);
-    uint8_t t109;
-    t109 = 1;
-    return t109;
+    GS_GL->flow_newton_steps_g4 = gs_add_i64(GS_GL->flow_newton_steps_g4, 1, gs_file1, 585);
+    uint8_t t121;
+    t121 = 1;
+    return t121;
     GS_UNREACHABLE(gs_file1, 539);
-    uint8_t t110 = {0};
-    return t110;
+    uint8_t t122 = {0};
+    return t122;
 }
 
 static int64_t solvers_gmres_g7_201(void *row_start_g_data, int64_t row_start_g_len, void *col_g_data, int64_t col_g_len, void *val_g_data, int64_t val_g_len, void *b_g_data, int64_t b_g_len, void *x_g_data, int64_t x_g_len, double rtol_g, int64_t m_g, int64_t max_iterations_g, uint8_t *gs_r1, int64_t gs_sp) {

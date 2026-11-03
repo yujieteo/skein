@@ -38,6 +38,10 @@ var shear = 0.0;        // mu
 var conductivity = 0.0;
 var source = 0.0;       // the heat source per volume
 var volume_force: f64[3] = [0.0; 3];   // the elastic body force per volume
+var aniso_on = false;               // the law is the written-out stiffness aniso_c and the stress aniso_s0, not lame and shear
+var aniso_c: f64[36] = [0.0; 36];   // the stress (xx, yy, zz, xy, yz, xz) for each strain component, with the tensor shears
+var aniso_s0: f64[6] = [0.0; 6];    // the stress of the zero strain (a thermal strain gives -C eps_th)
+var aniso_t: f64[81] = [0.0; 81];   // the same law as C[p a][q b], at 27 (p a) + 3 q + b
 
 // A conductivity that depends on the temperature: k(T) on a uniform grid of
 // temperatures from curve_lo, with curve_step between the values, linear in
@@ -81,6 +85,7 @@ fn start_physics(kind: i64, comps: i64) {
     guard per_cell > 0 && (kind == ELASTIC || kind == HEAT || kind == WAVE) && comps >= 1 && comps <= 3 else { abort("start_physics: a mesh, a physics and 1 to 3 components"); }
     physics = kind;
     ncomp = comps;
+    aniso_on = false;
     harmonic_omega = 0.0;
     clear_stages();
     clear_field_terms();
@@ -362,6 +367,13 @@ let NODE_DOFS = 24;
 // The block (p, q) of the stiffness between two points with the gradients
 // a and b of their scalar functions.
 fn pair_block(a: f64[3], b: f64[3], p: i64, q: i64) -> f64 {
+    if aniso_on {
+        var w = 0.0;
+        for r in 3 {
+            for t in 3 { w += a[r] * b[t] * aniso_t[27 * p + 9 * r + 3 * q + t]; }
+        }
+        return w;
+    }
     var v = lame * a[p] * b[q] + shear * a[q] * b[p];
     if p == q { v += shear * (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]); }
     return v;
@@ -428,12 +440,73 @@ fn condense_incompatible(c: i64) {
     }
 }
 
+// The matrix and the source of cell c with the written-out law: the
+// stress is C : strain + s0, so K(i p, j q) = ∫ ∂a Ni C[p a][q b] ∂b Nj dV
+// and f(i p) = ∫ b_p Ni dV - ∫ s0[p a] ∂a Ni dV.
+fn aniso_cell(c: i64) {
+    let m = per_cell * ncomp;
+    for &v in ke { v = 0.0; }
+    for &v in fe { v = 0.0; }
+    for qp in quad_count(dim) {
+        let xi, w = quad_point(dim, qp);
+        let dv = w * cell_geometry(c, xi) * thickness;
+        for i in per_cell {
+            let gi: f64[3] = [grad[3 * i], grad[3 * i + 1], grad[3 * i + 2]];
+            for p in ncomp {
+                fe[ncomp * i + p] += volume_force[p] * shp[i] * dv;
+                for a in 3 { fe[ncomp * i + p] -= aniso_s0_tensor(p, a) * gi[a] * dv; }
+            }
+            for j in per_cell {
+                let gj: f64[3] = [grad[3 * j], grad[3 * j + 1], grad[3 * j + 2]];
+                for p in ncomp {
+                    for q in ncomp { ke[m * (ncomp * i + p) + ncomp * j + q] += pair_block(gi, gj, p, q) * dv; }
+                }
+            }
+        }
+    }
+}
+
+// The component (p, a) of the stress s0 of the zero strain.
+fn aniso_s0_tensor(p: i64, a: i64) -> f64 { return aniso_s0[voigt_of(p, a)]; }
+
+// The place of the symmetric component (i, j) in the order xx, yy, zz, xy, yz, xz.
+fn voigt_of(i: i64, j: i64) -> i64 { return if i == j { i } else if i + j == 1 { 3 } else if i + j == 3 { 4 } else { 5 }; }
+
+// Sets the written-out law c (the stress for each of the strains xx, yy, zz,
+// xy, yz, xz, with the tensor shear: eps_xy = eps_yx = 1) and the stress s0
+// of the zero strain.
+fn set_aniso(c: f64[36], s0: f64[6]) {
+    aniso_on = true;
+    aniso_c = c;
+    aniso_s0 = s0;
+    for p in 3 {
+        for a in 3 {
+            for q in 3 {
+                for b in 3 {
+                    let v = voigt_of(p, a);
+                    let w = voigt_of(q, b);
+                    aniso_t[27 * p + 9 * a + 3 * q + b] = c[6 * v + w] * (if q == b { 1.0 } else { 0.5 });
+                }
+            }
+        }
+    }
+}
+
+// The stress component (i, j) of the strain with the displacement gradient du[3 a + t].
+fn aniso_stress(du: f64[9], i: i64, j: i64) -> f64 {
+    let v = voigt_of(i, j);
+    let e: f64[6] = [du[0], du[4], du[8], 0.5 * (du[1] + du[3]), 0.5 * (du[5] + du[7]), 0.5 * (du[2] + du[6])];
+    var s = aniso_s0[v];
+    for w in 6 { s += aniso_c[6 * v + w] * e[w]; }
+    return s;
+}
+
 // The matrix ke and the source fe of cell c, with the law of its region.
 // A born cell adds K_e u_b on its nodes (stages.goose).
 fn cell_terms(c: i64) {
     let m = per_cell * ncomp;
     use_law(c);
-    cell_matrix(c);
+    if aniso_on { aniso_cell(c); } else { cell_matrix(c); }
     if incompatible_modes && physics == ELASTIC && hex_cells && dim == 3 { condense_incompatible(c); }
     if ft_kind.len > 0 { add_field_terms(c); }
     if born.len > 0 && born[c] != 0 {

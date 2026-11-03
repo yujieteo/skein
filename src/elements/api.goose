@@ -37,6 +37,7 @@ import .harmonic;
 import .radiation;
 import .explicit;
 import .edge;
+import .edge_modal;
 import .mixed;
 import .material;
 import .solid;
@@ -163,6 +164,13 @@ fn cells_for(length: f64, size: f64) -> i64 {
 // Linear isotropic elasticity with Young's modulus E and Poisson's ratio
 // nu: 3D, or in 2D plane stress or plane strain with thickness t.
 fn elastic(E: f64, nu: f64) { set_elastic(E, nu, SOLID_3D, 1.0); }
+// The written-out law of every cell: the stress of each strain component
+// xx, yy, zz, xy, yz, xz (with eps_xy = eps_yx = 1) in rows, and the stress of
+// the zero strain.
+fn anisotropic(c: f64[36], s0: f64[6]) { set_aniso(c, s0); }
+
+fn anisotropic_in(g: i64, c: f64[36], s0: f64[6], bx: f64, by: f64, bz: f64) -> bool { return add_aniso_law(g, c, s0, [bx, by, bz]) > 0; }
+
 fn elastic_plane_stress(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRESS, t); }
 fn elastic_plane_strain(E: f64, nu: f64, t: f64) { set_elastic(E, nu, PLANE_STRAIN, t); }
 
@@ -258,6 +266,34 @@ fn bloch(px: f64, py: f64, pz: f64, theta: f64) -> bool { return tie_high([px, p
 // c u = s for a vector u on the edges of a P1 mesh, with ν = nu and
 // c = c_re + i c_im on each cell. In 2D, t is the thickness.
 fn edge(nu: f64, c_re: f64, c_im: f64, t: f64) { set_edge(nu, [c_re, c_im], t); }
+
+// The order of the elements of the next `edge` call: 1 (the Whitney
+// function of each edge) or 2 (the hierarchical elements of the first
+// kind of degree 2: the gradient of each edge and 2 functions of each face).
+fn edge_order(p: i64) { set_edge_order(p); }
+
+// The term m u of the eigenvalue problem of `edge_modal`, for the cells in
+// the shape g (or all cells with g < 0): K u + C u + B u = ω² M u with M the
+// matrix of m. False if g holds no cell.
+fn edge_mass_in(g: i64, m_re: f64, m_im: f64) -> bool { return edge_mass(g, [m_re, m_im]) > 0; }
+
+// The natural condition cross(n, h) = z(ω) u of a modal step on the region,
+// z from the function of edge_modal called with the group.
+fn impedance_group(group: i64) -> bool { return edge_impedance_in([0.0, 0.0], group) > 0; }
+
+// The `count` resonances of the edge physics nearest to the angular
+// frequency `shift`, with the impedance of the group g at ω as Z(g, ω)
+// (f64[2]). False if one does not converge.
+fn resonance<Z>(count: i64, shift: f64) -> bool { return edge_modal(count, shift) { g, w => Z(g, w) }; }
+
+// The frequency ω / (2 π) of mode k (from 1): its real and imaginary part.
+fn modal_frequency(k: i64) -> f64, f64 {
+    let f = edge_frequency(k);
+    return f[0], f[1];
+}
+
+// Writes mode k of the last `resonance` as the unknown.
+fn write_modal_mode(path: const u8[:], field: const u8[:], k: i64) -> bool { return edge_write_mode(path, field, k); }
 
 // Gives the cells in the shape g of src/mesher/ the coefficients ν and c
 // of the edge physics. False if g holds no cell.

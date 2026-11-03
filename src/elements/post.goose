@@ -176,11 +176,13 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     var tr = 0.0;
     for a in dim { tr += du[4 * a]; }
     if i >= dim || j >= dim {
+        if aniso_on && plane == PLANE_STRAIN { return aniso_stress(du, i, j); }
         if i == j && plane == PLANE_STRAIN { return lame_3d * tr; }
         return 0.0;
     }
     var s = shear * (du[3 * i + j] + du[3 * j + i]);
     if i == j { s += lame * tr; }
+    if aniso_on { return aniso_stress(du, i, j); }
     if i == j && ft_kind.len > 0 { s -= strain_stress(c); }
     return s;
 }

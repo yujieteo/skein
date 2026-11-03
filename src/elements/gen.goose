@@ -30,6 +30,7 @@ import syntax from "../syntax";
 import codegen.codegen;
 import mesher from "../mesher";   // the reader of the geometry, and its shapes
 import .gen_edge;                  // the edge physics and the Darcy flow
+import .gen_aniso;                // a written-out linear elastic law
 import .gen_solid;                 // plasticity, finite strain and hyperelastic energies
 import .gen_contact;               // contact and the rigid face
 
@@ -299,6 +300,13 @@ recursive fn cval(n: i64) -> f64[2] {
         let a = cval(first(n));
         return [-a[0], -a[1]];
     }
+    // sqrt of a Complex value that has omega: the root with Re >= 0.
+    if is_call(n, "sqrt") && syntax::child_count(n) == 2 && mentions_omega(arg(n, 0)) {
+        let a = cval(arg(n, 0));
+        let r = sqrt(a[0] * a[0] + a[1] * a[1]);
+        let im = sqrt(max((r - a[0]) / 2.0, 0.0));
+        return [sqrt(max((r + a[0]) / 2.0, 0.0)), if a[1] < 0.0 { -im } else { im }];
+    }
     if op == "+" || op == "-" || op == "*" || op == "/" {
         let a = cval(child(n, 0));
         let b = cval(child(n, 1));
@@ -417,6 +425,8 @@ struct Law {
     young: f64,
     poisson: f64,
     force: f64[3],
+    cm: f64[36],    // the written-out elastic law of gen_aniso.goose
+    s0: f64[6],
     label: u8[..256],
 }
 
@@ -553,6 +563,8 @@ var material_items: i64[>..];   // each material item
 var region_laws: Law[>..];      // the other materials, on regions
 var changes: Change[>..];       // the birth and death statements of the steps
 var interfaces: i64[>..];       // the shapes whose boundary the mesh keeps
+var law_c: f64[36] = [0.0; 36];   // the written-out law of law 0 (gen_aniso.goose) and its stress at zero strain
+var law_s0: f64[6] = [0.0; 6];
 var young = 0.0;
 var poisson = -1.0;
 var conductivity = 0.0;
@@ -568,6 +580,8 @@ var wave_eddy = false;          // the eq is -div(grad(u)/mu) = R(u), as in the 
 var eddy_mu_node = -1;          // mu of div(grad(u)/mu)
 var eddy_rhs_node = -1;         // R, the right side of the eq
 var eddy_sign = 1.0;            // -1 for -div(...) = R
+var eddy_k_node = -1;           // k of the heat form rho*cp*ddt(T) + div(q) = q_v with q = -k*grad(T), else -1
+var eddy_heat_node = -1;        // rho*cp*ddt(T) of the heat form
 var eddy_on = false;            // cval reads the unknown as eddy_u and ddt(x) as im*omega*x
 var eddy_u: f64[2] = [0.0, 0.0];
 var omega_now = 0.0;            // omega of the frequency that the generator writes
@@ -670,6 +684,8 @@ fn reset() {
     eddy_mu_node = -1;
     eddy_rhs_node = -1;
     eddy_sign = 1.0;
+    eddy_k_node = -1;
+    eddy_heat_node = -1;
     eddy_on = false;
     omega_now = 0.0;
     freqs.clear();
@@ -1191,15 +1207,17 @@ fn surface(n: i64) {
     // The boundary of another shape of the model serves a `refine` only, which the mesher reads from the let.
     let whole = if syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { of };
     if whole != body_name && find_body(whole) < 0 && whole.len > 0 && find_geometry(whole) >= 0 { return; }
-    if of != body_name && k < 0 {
+    // boundary(body): all faces of the body.
+    let all = syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == body_name;
+    if of != body_name && k < 0 && !all {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
     var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: -1, body: k };
     set64(s.name, name(n));
-    if !surf_parts(arg(v, 1), s) { return; }
-    // Only limits: the whole boundary of the body.
-    if s.lims.len > 0 && s.axes.len == 0 && s.shapes.len == 0 && !s.hole {
+    if !all && !surf_parts(arg(v, 1), s) { return; }
+    // Only limits, or no part: the whole boundary of the body.
+    if (s.lims.len > 0 || all) && s.axes.len == 0 && s.shapes.len == 0 && !s.hole {
         if geo == GEO_SHAPE {
             s.shapes.push(body_shape);
         } else if geo == GEO_BOX && 2 * dim <= s.axes.cap {
@@ -1305,12 +1323,17 @@ fn read_material() {
         w.young = young;
         w.poisson = poisson;
         w.cond = conductivity;
+        if aniso_node >= 0 { aniso_law(w.cm, w.s0); }
         if physics == HEAT && curve_node >= 0 {
             unsupported(tok(base), "a conductivity k(T) with a material on a region is not in this generator", "use a constant k in each material");
         }
     }
     material_node = base;
     read_law();
+    if aniso_node >= 0 {
+        aniso_law(law_c, law_s0);
+        aniso_limits();
+    }
 }
 
 // Reads the material `material_node` into young and poisson, or
@@ -1321,7 +1344,7 @@ fn read_law() {
         let w = name(p);
         // The eq of the wave physics names its properties.
         // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
-        let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
+        let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" || aniso_node >= 0 } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
         // With several physics, a property of the material that this one does not read belongs to another.
         if !known && w != "rho" && !solid_property(w) && !multi() {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
@@ -1336,7 +1359,12 @@ fn read_law() {
         if e >= 0 { young = scalar_value(e); }
         if nu >= 0 { poisson = scalar_value(nu); }
         if rho >= 0 { density = scalar_value(rho); }
-        if solid_law != SOLID_ENERGY && (young <= 0.0 || poisson <= -1.0 || poisson >= 0.5) {
+        // The written-out law gives the moduli: the cells use it, and the others see the unit law.
+        if aniso_node >= 0 {
+            young = 1.0;
+            poisson = 0.0;
+        }
+        if solid_law != SOLID_ENERGY && aniso_node < 0 && (young <= 0.0 || poisson <= -1.0 || poisson >= 0.5) {
             unsupported(tok(material_node), "the material needs E > 0 and -1 < nu < 0.5",
                         "give E: Pressure = 210 GPa and nu: Real = 0.3");
         }
@@ -1598,7 +1626,8 @@ fn physics_item(n: i64) {
             eq_count++;
             let left = child(c, 0);
             let right = child(c, 1);
-            let div = is_call(left, "div") && flux_name.len > 0 && (source_of(arg(left, 0)) == flux_name || solid_eq(arg(left, 0)));
+            let general = general_flux(left, right);
+            let div = general || is_call(left, "div") && flux_name.len > 0 && (source_of(arg(left, 0)) == flux_name || solid_eq(arg(left, 0)));
             if !div || physics == ELASTIC && source_of(right) != "0" {
                 unsupported(tok(c), "this generator solves eq div(sigma) = 0 or eq div(q) = q_v", PHYSICS_FIX);
             } else if physics == HEAT {
@@ -1617,6 +1646,24 @@ fn physics_item(n: i64) {
     if dim == 2 && physics == ELASTIC && plane == SOLID_3D {
         unsupported(tok(n), "a 2d elastic physics needs plane_stress(t) or plane_strain", "add assume plane_stress(1 mm)");
     }
+}
+
+// `eq div(sigma) = 0` of a let sigma that is a written-out linear elastic law:
+// the generator takes the let as the flux (gen_aniso.goose).
+fn general_flux(left: i64, right: i64) -> bool {
+    guard is_call(left, "div") && flux_name.len == 0 && physics < 0 && solid_law == 0 && source_of(right) == "0" else { return false; }
+    guard kind(arg(left, 0)) == syntax::N_NAME else { return false; }
+    let l = aniso_let(name(arg(left, 0)));
+    guard l >= 0 else { return false; }
+    var strain_lets = false;
+    for m in solid_lets {
+        if find(source_of(child(m, 1)), str("strain(", unknown_name, ")")) >= 0 { strain_lets = true; }
+    }
+    guard strain_lets else { return false; }
+    aniso_node = child(l, 1);
+    physics = ELASTIC;
+    set64(flux_name, name(l));
+    return true;
 }
 
 // `eq rho*cp*ddt(T) + div(q) = q_v` of the transient heat: the capacity and the
@@ -1658,7 +1705,7 @@ fn materials_of(c: i64) {
         } else if first(m) < 0 {
             unsupported(tok(m), "a second material needs a region", str("write ", name(m), " on <region>"));
         } else {
-            var w = Law { g: region_shape(first(m)), item: item, cond: 0.0, src: 0.0, young: 0.0, poisson: 0.0, force: [0.0; 3], label: [] };
+            var w = Law { g: region_shape(first(m)), item: item, cond: 0.0, src: 0.0, young: 0.0, poisson: 0.0, force: [0.0; 3], cm: [0.0; 36], s0: [0.0; 6], label: [] };
             codegen::set256(w.label, str(name(m), " on ", source_of(first(m))));
             region_laws.push(w);
         }
@@ -1685,6 +1732,41 @@ fn wave_eq(n: i64) {
     if source_of(child(n, 1)) != "0" { wave_s_node = child(n, 1); }
 }
 
+let HEAT_HARMONIC_FIX = "write let q: Vector<HeatFlux> = -k*grad(T) and eq rho*cp*ddt(T) + div(q) = q_v, with T: Complex<Temperature>";
+
+// `eq A + div(q) = q_v` with `let q = -k*grad(T)` or `fourier(k, T)` and A a
+// linear function of ddt(T) and T, for a Complex T: the heat equation of a
+// harmonic step, where ddt is im*omega. It is the eddy form with the
+// diffusion k, c = -A/T and the source q_v: div(k grad(T)) = A - q_v.
+fn heat_form_eq(n: i64) -> bool {
+    let left = child(n, 0);
+    guard kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "+" else { return false; }
+    var a = child(left, 0);
+    var d = child(left, 1);
+    if is_call(a, "div") { a = child(left, 1); d = child(left, 0); }
+    guard is_call(d, "div") && syntax::child_count(d) == 2 else { return false; }
+    var q = arg(d, 0);
+    if kind(q) == syntax::N_NAME && physics_let(name(q)) >= 0 { q = physics_let(name(q)); }
+    // The parser reads -k*grad(T) as (-k)*grad(T).
+    var k = -1;
+    if is_call(q, "fourier") && syntax::child_count(q) == 3 && source_of(arg(q, 1)) == unknown_name {
+        k = arg(q, 0);
+    } else if kind(q) == syntax::N_BINARY && syntax::text(tok(q)) == "*" && source_of(child(q, 1)) == str("grad(", unknown_name, ")") &&
+              kind(child(q, 0)) == syntax::N_UNARY && syntax::text(tok(child(q, 0))) == "-" {
+        k = first(child(q, 0));
+    }
+    guard k >= 0 else {
+        unsupported(tok(n), "the flux of the eq is not -k*grad(T)", HEAT_HARMONIC_FIX);
+        return true;
+    }
+    wave_eddy = true;
+    eddy_k_node = k;
+    eddy_heat_node = a;
+    eddy_rhs_node = child(n, 1);
+    eddy_sign = 1.0;
+    return true;
+}
+
 let EDDY_FIX = "write eq -div(Hr) = J, with let Hr = grad(Az)/mu and let J = sigma_e*(E - ddt(Az))";
 
 // `eq -div(H) = R` or `eq div(H) = R` with `let H = grad(u)/mu` and R a
@@ -1692,6 +1774,7 @@ let EDDY_FIX = "write eq -div(Hr) = J, with let Hr = grad(Az)/mu and let J = sig
 // eddy currents, with c, s and the diffusion 1/mu of each region (eddy_terms).
 // False if the eq is not of this form.
 fn eddy_eq(n: i64) -> bool {
+    if heat_form_eq(n) { return true; }
     let left = child(n, 0);
     let minus = kind(left) == syntax::N_UNARY && syntax::text(tok(left)) == "-";
     let d = if minus { first(left) } else { left };
@@ -1709,22 +1792,32 @@ fn eddy_eq(n: i64) -> bool {
     return true;
 }
 
+// R(u) of the eddy form at eddy_u: the right side, or in the heat form
+// the capacity term less the source.
+fn eddy_rhs() -> f64[2] {
+    guard eddy_k_node >= 0 else { return cval(eddy_rhs_node); }
+    let a = cval(eddy_heat_node);
+    let q = cval(eddy_rhs_node);
+    return [a[0] - q[0], a[1] - q[1]];
+}
+
 // nu = 1/mu, c and s of div(nu grad(u)) + c u = s for the material now, at
 // omega_now: R(u) = a u + b gives c = -sign a and s = sign b.
 fn eddy_terms() -> f64, f64[2], f64[2] {
     eddy_on = true;
     eddy_u = [0.0, 0.0];
-    let b = cval(eddy_rhs_node);
+    let b = eddy_rhs();
     eddy_u = [1.0, 0.0];
-    let r1 = cval(eddy_rhs_node);
+    let r1 = eddy_rhs();
     eddy_u = [2.0, 0.0];
-    let r2 = cval(eddy_rhs_node);
-    let mu = cval(eddy_mu_node);
+    let r2 = eddy_rhs();
+    // The heat form has the diffusion k, so its mu is 1/k.
+    let mu = if eddy_k_node >= 0 { cdiv([1.0, 0.0], cval(eddy_k_node)) } else { cval(eddy_mu_node) };
     eddy_on = false;
     if abs(r2[0] - 2.0 * r1[0] + b[0]) > 1.0e-9 * (abs(r2[0]) + abs(b[0]) + 1.0e-300) || abs(r2[1] - 2.0 * r1[1] + b[1]) > 1.0e-9 * (abs(r2[1]) + abs(b[1]) + 1.0e-300) {
         unsupported(tok(eddy_rhs_node), "the right side is not affine in the unknown", EDDY_FIX);
     }
-    if !(mu[0] > 0.0) || mu[1] != 0.0 { unsupported(tok(eddy_mu_node), "mu is not a positive real value", EDDY_FIX); return 1.0, [0.0, 0.0], [0.0, 0.0]; }
+    if !(mu[0] > 0.0) || mu[1] != 0.0 { unsupported(tok(if eddy_k_node >= 0 { eddy_k_node } else { eddy_mu_node }), "mu is not a positive real value", EDDY_FIX); return 1.0, [0.0, 0.0], [0.0, 0.0]; }
     let a = [r1[0] - b[0], r1[1] - b[1]];
     return 1.0 / mu[0], [-eddy_sign * a[0], -eddy_sign * a[1]], [eddy_sign * b[0], eddy_sign * b[1]];
 }
@@ -1834,6 +1927,12 @@ fn method(n: i64) {
                         "use only mesh, order, the pml of a wave physics, and the family and gauge: tree of edge elements");
         }
         s = next(s);
+    }
+    // The elements of an edge physics have order 1 or 2 on the P1 cells of the mesh.
+    if physics == EDGE && order == 2 {
+        edge_order = 2;
+        order = 1;
+        if gauge_tree { unsupported(tok(n), "the tree gauge has order 1 in this generator", "write order: 1, or remove gauge: tree"); }
     }
     if (physics == EDGE || physics == DARCY) && order != 1 {
         unsupported(tok(n), str("the family ", family_word, " has order 1 in this generator"), "write order: 1");
@@ -2129,6 +2228,15 @@ let REPORT_FIX = "write report reaction(root), reaction(root).x, mean(u.x, top),
 // with count, on an elastic model, or harmonic on a wave physics.
 fn procedure(proc: i64, s: Step&) {
     let p = name(proc);
+    if aniso_node >= 0 && (p == "buckling" || p == "transient") {
+        unsupported(tok(proc), str("a ", p, " step of a written-out elastic law is not in this generator"),
+                    "use hooke(E, nu, strain(u)) for this step, or a static, modal or harmonic step");
+        return;
+    }
+    if physics == EDGE && p == "modal" {
+        edge_modal_proc(proc, s);
+        return;
+    }
     if p == "harmonic" || physics == WAVE {
         harmonic(proc, s);
         return;
@@ -4804,6 +4912,23 @@ fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
     }
 }
 
+// The written-out law as the arguments of the call: the 36 and the 6 values.
+fn emit_aniso(out: u8[>..]&, head: u8[:], c: f64[36], s0: f64[6], tail: u8[:]) {
+    out.append(head);
+    out.append("[");
+    for i in 36 {
+        if i > 0 { out.append(", "); }
+        lit(out, c[i]);
+    }
+    out.append("], [");
+    for i in 6 {
+        if i > 0 { out.append(", "); }
+        lit(out, s0[i]);
+    }
+    out.append("]");
+    out.append(tail);
+}
+
 // The physics of the pass now, in main.
 fn emit_setup(out: u8[>..]&) {
     let sys = codegen::system;
@@ -4850,6 +4975,7 @@ fn emit_setup(out: u8[>..]&) {
             lit(out, thickness);
         }
         out.append(");\n");
+        if aniso_node >= 0 { emit_aniso(out, "    elements::anisotropic(", law_c, law_s0, ");\n"); }
         if rkpm_support > 0.0 {
             format(out, "    // method rkpm: support ", rkpm_support, " times the spacing, on the nodes of the mesh\n    rk_start(");
             lit(out, rkpm_support);
@@ -4874,6 +5000,15 @@ fn emit_setup(out: u8[>..]&) {
             out.append(");\n");
         }
         for w in region_laws {
+            if aniso_node >= 0 {
+                format(out, "    cells(elements::anisotropic_in(", w.g, ", ");
+                emit_aniso(out, "", w.cm, w.s0, ", ");
+                lits(out, w.force);
+                out.append("), ");
+                quoted(out, w.label);
+                out.append(");\n");
+                continue;
+            }
             format(out, "    cells(elements::material_in(", w.g, ", ");
             lit(out, w.young);
             out.append(", ");
