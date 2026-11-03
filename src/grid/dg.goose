@@ -26,7 +26,6 @@ namespace grid;
 import .mesh;
 import .solve;
 
-let MAX_BASIS = 16;    // (MAX_ORDER + 1)²
 let MAX_POINTS = 5;    // the Gauss points on each axis: p + 2
 
 // The Gauss-Legendre points and weights on [-1, 1], n = 1 to 5 points:

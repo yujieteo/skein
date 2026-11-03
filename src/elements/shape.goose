@@ -14,7 +14,6 @@ import std;
 import math;
 namespace elements;
 
-let MAX_NODES = 10;     // a 10-node tetrahedron
 
 // Whether the cells of dimension 3 are hexahedra of order 1 and their
 // facets quadrilaterals (mesh.goose sets it when it builds a mesh).

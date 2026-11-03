@@ -72,6 +72,7 @@ fn jcos(a: f64[5]) -> f64[5] {
     return c;
 }
 
+
 // exp(a): e' = a' e.
 fn jexp(a: f64[5]) -> f64[5] {
     var e: f64[5] = [exp(a[0]), 0.0, 0.0, 0.0, 0.0];

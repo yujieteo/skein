@@ -279,7 +279,6 @@ fn holds(cond: i64, p: f64[3], tol: f64) -> bool {
 
 // --- curves on the shell ----------------------------------------------------------
 
-let SHELL_CURVE_FIX = "write boundary(s, x == c), boundary(s, solid), and & or - of a solid, with s a Surface of the shell";
 
 // Whether v is a curve on the shell (a boundary of a Surface, or & - | of
 // these), and not a beam line.

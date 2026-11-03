@@ -343,12 +343,6 @@ fn contact_rows(rate: f64[:]) {
     }
 }
 
-// The largest contact pressure of the points.
-fn max_contact_pressure() -> f64 {
-    var p = 0.0;
-    for x in ct_p { p = max(p, x); }
-    return p;
-}
 
 // --- the rigid face ---------------------------------------------------------------
 

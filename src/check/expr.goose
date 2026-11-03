@@ -33,10 +33,7 @@ let BUILTIN_FNS = [
 let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "omega"];
 
 fn tok_text(t: i64) -> const u8[:] { syntax::text(t) }
-fn node_tok(n: i64) -> i64 { syntax::nodes[n].tok }
 fn node_kind(n: i64) -> i64 { syntax::nodes[n].kind }
-fn first_child(n: i64) -> i64 { syntax::nodes[n].first }
-fn next_sib(n: i64) -> i64 { syntax::nodes[n].next }
 
 // The first token of the expression `n`, where an error about it goes.
 recursive fn first_tok(n: i64) -> i64 {

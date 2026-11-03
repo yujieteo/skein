@@ -8,7 +8,13 @@
 #                       (scripts/generated_c.sh). That script runs each
 #                       model, whose solves check rule 3, and skein run
 #                       checks rule 7. Then scripts/power_of_ten.sh checks
-#                       rules 1, 4 and 5.
+#                       rules 1, 4 and 5. Then the guardrails:
+#                       scripts/strict.sh (warnings are errors, goose format,
+#                       pyright strict), scripts/guardrails/goose_source.py
+#                       (comments, file and function size, dead code),
+#                       scripts/sanitize.sh (the tests with ASan and UBSan),
+#                       scripts/replay.sh (the generated C and the results of
+#                       the models against origin/main).
 #   ./build.sh gpu      build, then check the GPU path of the page of
 #                       `skein build --target wasm` against its CPU path
 #                       in Node (tests/gpu/gpu.test.mjs). Needs emcc, Node
@@ -58,6 +64,18 @@ run_tests() {
         status=1
     fi
     if ! "$root/scripts/unsupported.sh"; then
+        status=1
+    fi
+    if ! "$root/scripts/strict.sh"; then
+        status=1
+    fi
+    if ! python3 -I "$root/scripts/guardrails/goose_source.py" check; then
+        status=1
+    fi
+    if ! "$root/scripts/sanitize.sh"; then
+        status=1
+    fi
+    if ! "$root/scripts/replay.sh"; then
         status=1
     fi
     return $status

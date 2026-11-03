@@ -361,21 +361,12 @@ fn far_field(dx: f64, dy: f64, dz: f64, k: f64, eta: f64, hf_re: f64, hf_im: f64
     return far_intensity([dx, dy, dz], k, eta);
 }
 
-// The power out of the closed surface of the region, ∮ ½ Re(E × H*) · n dA,
-// with E and H as in far_field.
-fn radiated_power(hf_re: f64, hf_im: f64) -> f64 {
-    surface_samples([hf_re, hf_im]);
-    return surface_power();
-}
 
 // The mixed Darcy flow of `family: raviart_thomas` (mixed.goose):
 // q + k grad(p) = 0 and div(q) = f, with q on the facets and p on the
 // cells of a P1 mesh. In 2D, t is the thickness.
 fn darcy(k: f64, f: f64, t: f64) { set_mixed(k, f, t); }
 
-// Gives the cells in the shape g of src/mesher/ the coefficients k and f
-// of the Darcy flow. False if g holds no cell.
-fn darcy_in(g: i64, k: f64, f: f64) -> bool { return mixed_material(g, k, f) > 0; }
 
 // Sets f of each cell to its mean of F(p) (p: f64[3], F gives an f64).
 fn darcy_source<F>() { mixed_source() { p => F(p) }; }
@@ -645,8 +636,6 @@ fn rigid_moment(mx: f64, my: f64, mz: f64) { add_rigid_moment([mx, my, mz]); }
 // increment does not converge.
 fn solve_contact(ramp: i64) -> bool { return solve_solid(ramp, no_energy); }
 
-// The largest contact pressure of the last solve.
-fn contact_pressure() -> f64 { return max_contact_pressure(); }
 
 // --- the nonlinear solid (solid.goose, spec §10.6) ----------------------------
 

@@ -40,7 +40,6 @@ var comps = 0;                    // N: the components of the unknowns
 var sol: f64[>..] = [];           // comps for each cell
 var time = 0.0;
 var limiter = VAN_LEER;
-var gradient_kind = 0;
 
 fn cell_count() -> i64 { return cell_total; }
 fn dof_count() -> i64 { return cell_total * comps; }

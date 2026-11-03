@@ -67,7 +67,6 @@ var nd_flops = 0.0;             // the multiplies and adds of the factorization
 var nd_singular = -1;           // the dof of the last pivot with no stiffness, or -1
 
 fn nested_entries() -> i64 { return nd_entries; }
-fn nested_flops() -> f64 { return nd_flops; }
 fn nested_singular() -> i64 { return nd_singular; }
 
 // Whether a solve takes the direct path on the plan of nested_plan: its

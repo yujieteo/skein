@@ -25,6 +25,7 @@ fn test_jets() {
     // t -> 2 + 0.5 t at t = 0: [2, 0.5, 0, 0, 0].
     let a: f64[5] = [2.0, 0.5, 0.0, 0.0, 0.0];
     near("sin'", ode::jsin(a)[1], 0.5 * cos(2.0), 1.0e-12);
+    near("cos'", ode::jcos(a)[1], -0.5 * sin(2.0), 1.0e-12);
     near("sin''/2", ode::jsin(a)[2], -0.25 * sin(2.0) / 2.0, 1.0e-12);
     near("exp'''/6", ode::jexp(a)[3], 0.125 * exp(2.0) / 6.0, 1.0e-12);
     near("sqrt'", ode::jsqrt(a)[1], 0.25 / sqrt(2.0), 1.0e-12);

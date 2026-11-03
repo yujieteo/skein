@@ -6,8 +6,6 @@ import .dims;
 import .types;
 import .state;
 
-let TYPE_NAMES = ["Real", "Int", "Angle", "Bool", "Solid", "Surface", "Curve", "Point",
-                  "Mesh", "Points", "Results"];
 
 // The type of the type node `n`. With `report`, an unknown name is an error.
 recursive fn type_of(n: i64, report: bool) -> Ty {

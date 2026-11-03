@@ -34,7 +34,6 @@ let OP_COORD = 3;
 let OP_ADD = 10;
 let OP_SUB = 11;
 let OP_MUL = 12;
-let OP_DIV = 13;
 let OP_NEG = 14;
 let OP_SQRT = 15;
 

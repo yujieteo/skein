@@ -159,7 +159,6 @@ var axi = false;
 var nondim = false;
 var has_scales = false;
 var thickness = false;    // 2D with a thickness (plane stress or strain), or `axi`
-var model_file = 0;
 var model_prog = -1;      // the N_PROGRAM of the model file
 var header_tok = 0;
 var cur_phys = -1;        // the physics that the checker is in, or -1

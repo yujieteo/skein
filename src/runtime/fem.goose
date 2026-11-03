@@ -24,9 +24,7 @@ import .lane_shells;
 
 // The node order of each cell type is the order of its registry entry.
 let TRI3 = 0;
-let TRI6 = 1;
 let TET4 = 2;
-let TET10 = 3;
 let HEX8 = 4;
 let HEX27 = 5;
 let QUAD4_SHELL = 6;

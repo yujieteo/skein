@@ -224,9 +224,9 @@ fn test_modes() {
     var cube: f64[>..] = [];
     var plate: f64[>..] = [];
     for k in 8 {
-        for t in 3 { cube.push(((k >> t) & 1) as f64); }
-        plate.push((k & 1) as f64);
-        plate.push(((k >> 1) & 1) as f64);
+        for t in 3 { cube.push((k >> t) & 1); }
+        plate.push(k & 1);
+        plate.push((k >> 1) & 1);
         plate.push(0.05 * ((k >> 2) & 1));
     }
     var fixed: u8[>..] = [];
@@ -418,7 +418,7 @@ fn test_band() {
     if kl != 1 || ku != 1 { fail("band_widths"); }
     if !solvers::band_solve(rs[..], cols[..], vals[..], b[..], x[..], kl, ku, work[..]) { fail("band_solve: singular"); return; }
     for i in 4 {
-        if abs(x[i] - (i + 1) as f64) > 1.0e-12 { fail("band_solve: wrong x"); }
+        if abs(x[i] - (i + 1)) > 1.0e-12 { fail("band_solve: wrong x"); }
     }
 }
 

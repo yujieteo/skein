@@ -33,7 +33,6 @@ fn aniso_reset() {
 
 fn t_scalar(x: f64) -> Ten { return Ten { rank: 0, v: [x, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }; }
 
-fn t_size(r: i64) -> i64 { return if r == 0 { 1 } else if r == 1 { 3 } else { 9 }; }
 
 fn t_eye() -> Ten { return Ten { rank: 2, v: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0] }; }
 
