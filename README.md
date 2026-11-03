@@ -92,6 +92,10 @@ golden files again and read the diff:
 ./build/skein md examples/femahoy/heat_fin.skn > tests/md/heat_fin.md
 ```
 
+<img src="docs/figures/pipeline.svg" width="560" alt="Diagram: model.skn goes to the front end (src/syntax parses, src/check checks types and units), then to the code generator (src/codegen), which writes main.goose. Goose reads main.goose and the library parts in src/ that it imports, and writes C. The C becomes a native executable (skein run: TOON tables, VTU files) or, compiled by emcc, an HTML page (skein build --target wasm).">
+
+The path of a model through the compiler, with the parts of `src/` that do each step.
+
 | Path | Purpose |
 |---|---|
 | `src/skein.goose` | command dispatch |
