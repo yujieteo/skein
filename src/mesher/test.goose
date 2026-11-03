@@ -1064,6 +1064,118 @@ fn test_edges() {
     if mesher::curves_missed > 0 { fail("lblock: a curve not on a chain"); }
 }
 
+// The boundary-layer mesh (layers.goose): no hanging node (each edge is in
+// 2 triangles, or in 1 on the wall or on the outer boundary), a positive
+// area for each triangle, the area of the mesh the area enclosed by its
+// boundary edges, and the first layer at the height `first` over the wall.
+fn expect_layers(what: u8[:], g: i64, wall: i64, first: f64, outer_area: f64) {
+    let n = mesher::point_count();
+    var edges = dictionary<i64, i64> {};
+    var total = 0.0;
+    for c in mesher::cell_count() {
+        let p = mesher::vertex(mesher::cell_node(c, 0));
+        let q = mesher::vertex(mesher::cell_node(c, 1));
+        let r = mesher::vertex(mesher::cell_node(c, 2));
+        let a2 = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+        if a2 <= 0.0 { fail(str(what, ": triangle ", c, " has the area ", 0.5 * a2)); }
+        total += 0.5 * a2;
+        for i in 3 {
+            let a = mesher::cell_node(c, i);
+            let b = mesher::cell_node(c, (i + 1) % 3);
+            edges.update(min(a, b) * n + max(a, b), 0) { it += 1; };
+        }
+    }
+    var boundary = 0.0;
+    var bad = 0;
+    for c in mesher::cell_count() {
+        for i in 3 {
+            let a = mesher::cell_node(c, i);
+            let b = mesher::cell_node(c, (i + 1) % 3);
+            let have = edges.get(min(a, b) * n + max(a, b));
+            var count = 0;
+            if have { count = have; }
+            let p = mesher::vertex(a);
+            let q = mesher::vertex(b);
+            if count > 2 { bad++; }
+            if count == 1 {
+                boundary += 0.5 * (p[0] * q[1] - q[0] * p[1]);
+                if abs(mesher::phi(g, p[0], p[1], 0.0)) > 1.0e-6 || abs(mesher::phi(g, q[0], q[1], 0.0)) > 1.0e-6 { bad++; }
+            }
+        }
+    }
+    if bad > 0 { fail(str(what, ": ", bad, " edges are hanging or off the boundary")); }
+    if abs(total - boundary) > 1.0e-9 * total { fail(str(what, ": the area ", total, " is not the enclosed area ", boundary)); }
+    if abs(total - outer_area) > 5.0e-4 * outer_area { fail(str(what, ": the area ", total, " is not ", outer_area)); }
+    var wrong = 0;
+    var walls = 0;
+    for v in n {
+        let p = mesher::vertex(v);
+        if abs(mesher::phi(wall, p[0], p[1], 0.0)) > 1.0e-9 { continue; }
+        walls++;
+        var near = 1.0e300;
+        for u in n {
+            if u == v { continue; }
+            let q = mesher::vertex(u);
+            near = min(near, sqrt((q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1])));
+        }
+        if abs(near - first) > 1.0e-9 * first { wrong++; }
+    }
+    print(what, ": ", n, " nodes, ", mesher::cell_count(), " cells, ", walls, " wall nodes, ", wrong, " with a first layer not ", first);
+    if wrong > 0 { fail(str(what, ": the first layer is not ", first, " at ", wrong, " wall nodes")); }
+}
+
+// A NACA 0012 section of chord 1 (a cosine-spaced spline of 41 points) in a
+// circle of radius 50, and a cylinder of radius 0.5 in a circle of radius 20.
+fn test_layers() {
+    var xy: f64[>..] = [];
+    for s in 41 {
+        let k = if s <= 20 { s } else { 40 - s };
+        let x = 0.5 * (1.0 + cos(PI * (1.0 - k / 20.0)));
+        let y = 0.6 * (0.2969 * sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x);
+        xy.push(x);
+        xy.push(if s == 0 || s == 40 { 0.0 } else if s <= 20 { y } else { -y });
+    }
+    mesher::clear_shapes();
+    mesher::clear_refines();
+    let foil = mesher::fill(xy[..]);
+    let far = mesher::circle(0.5, 0.0, 50.0);
+    let g = mesher::subtract(far, foil);
+    mesher::refine_segment(0.0, 0.0, 1.0, 0.0, 0.05);
+    mesher::refine_circle(0.5, 0.0, 50.0, 2.0);
+    let t0 = clock();
+    if !mesher::mesh_2d_layers(g, foil, 5.0, 1.0e-4, 1.2, 30) { fail("layers on a foil: the mesher did not finish"); }
+    print("layers on a foil: ", clock() - t0, " s, ", mesher::bl_lk, " layers");
+    let q = mesher::mesh_quality();
+    print(q);
+    expect_layers("layers on a foil", g, foil, 1.0e-4, PI * 2500.0 - 0.0817);
+
+    // The sharp tips on y = 0 (the leading and the trailing edge), where the
+    // ray of the sign of phi runs through 2 knots: a point 1e-5 outside is
+    // outside, and a layer fits there. A rect is the domain.
+    for y in [0.0, -1.7e-18, 1.0e-18] {
+        if mesher::phi(foil, -1.0e-5, y, 0.0) <= 0.0 { fail(str("sharp tip: (-1e-5, ", y, ") is inside the foil")); }
+        if mesher::phi(foil, 1.00001, y, 0.0) <= 0.0 { fail(str("sharp tip: (1.00001, ", y, ") is inside the foil")); }
+        if mesher::phi(foil, 0.5, y, 0.0) >= 0.0 { fail(str("sharp tip: (0.5, ", y, ") is outside the foil")); }
+    }
+    mesher::clear_refines();
+    mesher::refine_segment(0.0, 0.0, 1.0, 0.0, 0.05);
+    let box_g = mesher::subtract(mesher::rect(-2.0, -2.0, 3.0, 2.0), foil);
+    if !mesher::mesh_2d_layers(box_g, foil, 1.0, 1.0e-5, 1.25, 40) { fail("layers on a sharp tip: the mesher did not finish"); }
+    print("layers on a sharp tip: ", mesher::bl_lk, " layers");
+    expect_layers("layers on a sharp tip", box_g, foil, 1.0e-5, 20.0 - 0.0817);
+
+    mesher::clear_shapes();
+    mesher::clear_refines();
+    let cyl = mesher::circle(0.0, 0.0, 0.5);
+    let tube = mesher::subtract(mesher::circle(0.0, 0.0, 20.0), cyl);
+    mesher::refine_circle(0.0, 0.0, 0.5, 0.05);
+    mesher::refine_circle(0.0, 0.0, 20.0, 1.0);
+    if !mesher::mesh_2d_layers(tube, cyl, 2.0, 1.0e-3, 1.15, 40) { fail("layers on a cylinder: the mesher did not finish"); }
+    print("layers on a cylinder: ", mesher::bl_lk, " layers");
+    expect_layers("layers on a cylinder", tube, cyl, 1.0e-3, PI * (400.0 - 0.25));
+    mesher::clear_refines();
+}
+
 fn main() {
     // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
     // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
@@ -1214,6 +1326,7 @@ fn main() {
               (TAU / 25.0) * (TAU / 25.0) / 6.0 * 4.0 * PI * 4.0 / holes_area);
 
     test_fill();
+    test_layers();
     test_nurbs();
     test_interfaces();
     test_interfaces_3d();

@@ -86,7 +86,7 @@ fn poiseuille(what: u8[:], order: i64, navier_stokes: bool, stab: i64, tolerance
 // channel and its mirror, so that the nodes of the ends match. The DNS of
 // Moser, Kim and Mansour (1999) gives U_b+ = 17.55 and U_c+ = 20.1. SST
 // gives about 6% more on this mesh, and 5% more on a mesh of half the size.
-fn channel() {
+fn channel(sa: bool) {
     let len = 0.1;
     let hw = 1.0 / 395.0;
     mesher::clear_shapes();
@@ -113,7 +113,7 @@ fn channel() {
         for k in 3 { tri.push(mesher::cell_node(c, k)); }
         for k in 3 { tri.push(image[mesher::cell_node(c, k)]); }
     }
-    flow::set_turbulent(true);
+    if sa { flow::set_spalart(true); } else { flow::set_turbulent(true); }
     flow::mesh_from_arrays(xy, tri, 1);
     flow::fluid(1.0, 1.0 / 395.0, true, flow::SUPG_PSPG);
     flow::body_force(1.0, 0.0);
@@ -124,6 +124,11 @@ fn channel() {
     assert(flow::select_boundary() { x, y => abs(y) <= tol || abs(y - 2.0) <= tol });
     flow::fix_velocity(0, 0.0);
     flow::fix_velocity(1, 0.0);
+    if sa {
+        flow::wall_distance_region();
+        flow::fix_spalart(0.0);
+        flow::spalart_start(0.0, 0.0, 3.0 / 395.0);
+    }
     if !flow::solve_steady(1.0e-8) { fail("channel: the solve does not converge"); }
     var bulk = 0.0;
     for i in 200 {
@@ -131,7 +136,7 @@ fn channel() {
         bulk += u / 200.0;
     }
     let centre, found = flow::value_at(flow::VALUE_VX, 0.5 * len, 1.0);
-    print("channel, k-omega SST: ", flow::cell_count(), " cells, ", flow::dof_count(), " dofs, ", flow::newton_steps, " steps, ",
+    print("channel, ", if sa { "Spalart-Allmaras" } else { "k-omega SST" }, ": ", flow::cell_count(), " cells, ", flow::dof_count(), " dofs, ", flow::newton_steps, " steps, ",
           flow::linear_iterations, " GMRES iterations; U_b+ ", bulk, " (DNS 17.55), U_c+ ", centre, " (DNS 20.1)");
     if abs(bulk - 17.55) > 0.07 * 17.55 { fail(str("channel: U_b+ is ", bulk, ", not within 7% of 17.55")); }
     if abs(centre - 20.1) > 0.07 * 20.1 { fail(str("channel: U_c+ is ", centre, ", not within 7% of 20.1")); }
@@ -190,7 +195,8 @@ fn main() {
     poiseuille("Navier-Stokes, P2/P1, supg", 2, true, flow::SUPG, 1.0e-6);
     poiseuille("Navier-Stokes, P2/P1, supg_pspg_lsic", 2, true, flow::SUPG_PSPG_LSIC, 1.0e-6);
     poiseuille("Navier-Stokes, P1/P1, supg_pspg", 1, true, flow::SUPG_PSPG, 0.03);
-    channel();
+    channel(false);
+    channel(true);
     cantilever();
     if failures > 0 { exit(1); }
     print("flow: all tests pass");

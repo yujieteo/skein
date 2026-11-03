@@ -1,4 +1,5 @@
 // femahoy: validation/cases/naca0012-ladson/a4.04/system/controlDict
+// blocked-by: accuracy of P1 SUPG Spalart-Allmaras: cd 0.01059 at 4.04 deg (want 0.00823 +- 0.0018) and cd 0.0198, cl 1.008 at 10.12 deg (want 0.01201 +- 0.002, 1.0707 +- 0.0443), no convergence in 600 steps (femahoy_coverage.md)
 // NACA 0012 at Re = 6 million, incompressible and steady, fully turbulent with the
 // Spalart-Allmaras model, at 3 angles of attack. Reference: Ladson (1988), NASA TM-4074,
 // Table IX: cl 0.4316, cd 0.00823 at 4.04 deg. cd 0.00809 at -0.05 deg.
@@ -126,12 +127,14 @@ material air {
     nu: KinViscosity = nu_f
 }
 
-// The femahoy C-grid has a first cell height of 4 um and 64 cells across 1 chord.
+// The femahoy C-grid has a first cell height of 4 um and 64 cells across 1 chord. This mesh
+// has 10 um and 40 layers, and 8 mm on the wall: 28 thousand cells. It does not meet the
+// expects at 4.04 and 10.12 deg (see the blocked-by mark).
 mesh m on fluid {
     size: 20*chord
     cell: tri
-    refine wall: 2 mm
-    layers wall: { first: 4 um, ratio: 1.18, count: 64 }
+    refine wall: 8 mm
+    layers wall: { first: 10 um, ratio: 1.25, count: 40 }
 }
 
 // The wall distance d, from the eikonal equation.
@@ -181,7 +184,9 @@ step steady: static {
     // natural conditions: sigma*n = 0 and dot(q_nt, n) = 0.
     bc farfield: v = U*e_d
     bc farfield: nt = 3*nu_f
-    solve { nonlinear: newton }
+    // rtol 1e-5: the pseudo-time iteration of the turbulent solve ends in a
+    // limit cycle of the nt rows at 3e-6, with cl and cm steady to 1e-9.
+    solve { nonlinear: newton, rtol: 1e-5 }
     output v, p, nt, d
     // n points out of the fluid, so the force on the airfoil is -sigma*n.
     report cl = -integral(dot(sigma*n, e_l), wall)/(0.5*rho_f*U^2*chord)

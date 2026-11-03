@@ -128,10 +128,48 @@ fn refine_distance(k: i64, x: f64, y: f64) -> f64 {
     return sqrt(dx * dx + dy * dy);
 }
 
+// The refines in groups of RGROUP consecutive ones, each with the box that
+// holds them and the least size. local_size skips a group whose box is so
+// far that no refine of it can lower the size, so a model with a refine on
+// each segment of a spline costs a few boxes for a point, not all
+// segments. Reason: the airfoil of examples/femahoy/naca23012_flap.skn
+// has 178 refines and 300 thousand cells.
+let RGROUP = 8;
+var rg_box: f64[>..] = [];
+var rg_h: f64[>..] = [];
+
+fn prepare_sizes() {
+    rg_box.clear();
+    rg_h.clear();
+    for q in (refines.len + RGROUP - 1) / RGROUP {
+        var box: f64[4] = [1.0e300, 1.0e300, -1.0e300, -1.0e300];
+        var least = 1.0e300;
+        for k in q * RGROUP..min(q * RGROUP + RGROUP, refines.len) {
+            let p = refines[k].p;
+            let arc = refines[k].kind == ARC;
+            let x0 = if arc { p[0] - p[2] } else { min(p[0], p[2]) };
+            let x1 = if arc { p[0] + p[2] } else { max(p[0], p[2]) };
+            let y0 = if arc { p[1] - p[2] } else { min(p[1], p[3]) };
+            let y1 = if arc { p[1] + p[2] } else { max(p[1], p[3]) };
+            box = [min(box[0], x0), min(box[1], y0), max(box[2], x1), max(box[3], y1)];
+            least = min(least, refines[k].h);
+        }
+        for t in 4 { rg_box.push(box[t]); }
+        rg_h.push(least);
+    }
+}
+
 // The target edge length at (x, y).
 fn local_size(size: f64, x: f64, y: f64) -> f64 {
     var h = size;
-    for k in refines.len { h = min(h, refines[k].h + (grade - 1.0) * refine_distance(k, x, y)); }
+    for q in rg_h.len {
+        let dx = max(max(rg_box[4 * q] - x, x - rg_box[4 * q + 2]), 0.0);
+        let dy = max(max(rg_box[4 * q + 1] - y, y - rg_box[4 * q + 3]), 0.0);
+        if rg_h[q] + (grade - 1.0) * sqrt(dx * dx + dy * dy) >= h { continue; }
+        for k in q * RGROUP..min(q * RGROUP + RGROUP, refines.len) {
+            h = min(h, refines[k].h + (grade - 1.0) * refine_distance(k, x, y));
+        }
+    }
     return h;
 }
 
@@ -148,6 +186,27 @@ fn cell_estimate(b: f64[6], size: f64) -> f64 {
         }
     }
     return sum * w * h / 40000.0;
+}
+
+// The cells of the bands round the refines, in closed form: the integral
+// of 1 / h² over the band at the distance d of a refine of the length L (a
+// segment, or the circumference of a circle) and the size h0, where the size
+// is h = h0 + slope d, from h0 up to size: (1 / slope) times the integral
+// over h of (2 L + 2 pi (h - h0) / slope) / h². The lattice of
+// cell_estimate is too coarse for a refine much smaller than its step. The
+// bands overlap, so this is not less than the cells.
+fn band_estimate(size: f64) -> f64 {
+    let slope = if grade_given { grade - 1.0 } else { 0.4 };
+    var sum = 0.0;
+    for k in refines.len {
+        let p = refines[k].p;
+        let h0 = refines[k].h;
+        guard h0 < size else { continue; }
+        let len = if refines[k].kind == ARC { TAU * p[2] } else { sqrt((p[2] - p[0]) * (p[2] - p[0]) + (p[3] - p[1]) * (p[3] - p[1])) };
+        let a = 1.0 / h0 - 1.0 / size;
+        sum += (2.0 * len * a + TAU / slope * (log(size / h0) - h0 * a)) / slope;
+    }
+    return sum;
 }
 
 // --- the boundary ----------------------------------------------------------------
@@ -431,7 +490,15 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64, inner: bool) {
         let part = if steps[k + 1] > steps[k] { clamp((want - steps[k]) / (steps[k + 1] - steps[k]), 0.0, 1.0) } else { 0.0 };
         let t = if i == n { tb } else { ta + (tb - ta) * (k + part) / m };
         let x, y = curve_point(c, t);
-        let v = boundary_point(x, y, tol);
+        // The end of a piece from the bisection is only near the corner of
+        // two curves, so it merges within tol. The end of a curve, and a
+        // point between, are exact, so they merge only within 1e-3 tol or
+        // a hundredth of a segment. Reason: tol is 1e-5 of the diameter,
+        // which is above the 2 mm segments of the outer polygon of
+        // mesh_2d_layers round an airfoil in a far field of 500 chords: the
+        // vertices of the polygon merged.
+        let bisected = i == 0 && ta != 0.0 || i == n && tb != 1.0;
+        let v = boundary_point(x, y, if bisected { tol } else { min(1.0e-3 * tol, 0.01 * length / n) });
         if i > 0 && v != prev {
             segments.push(Segment { a: prev, b: v, curve: c, t0: tprev, t1: t, alive: true, inner: inner });
         }
@@ -464,7 +531,12 @@ fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
     let tol = 100.0 * eps;
     let reach = 10.0 * sqrt(eps * diameter);
     for c in curves.len {
-        let m = max(512, ceil(16.0 * curve_length(c) / size) as i64);
+        // A line shorter than 1e-3 of the diameter has 16 samples: the polygon
+        // of the outer layer of mesh_2d_layers has a line for each wall node
+        // (1000 for an airfoil at 2 mm), and each sample costs a phi over all
+        // of them.
+        let short = curves[c].kind == LINE && curve_length(c) < 1.0e-3 * diameter;
+        let m = if short { 16 } else { max(512, ceil(16.0 * curve_length(c) / size) as i64) };
         var on: i64[>..] = [];
         for i in m { on.push(piece_state(g, c, (i + 0.5) / m, eps, inner)); }
         // The parameter between sample i and sample i + 1 where the state changes.
@@ -887,6 +959,7 @@ fn circumcentre(t: i64) -> f64, f64, f64, f64, i64 {
 // budget of points; the mesh is then the last triangulation.
 fn mesh_2d(g: i64, size: f64) -> bool {
     clear_triangulation();
+    prepare_sizes();
     guard collect_curves(g, 0.0, 0.0) else { return false; }
     for h in interfaces { guard collect_curves(h, 0.0, 0.0) else { return false; }; }
     let b = bounds(g);
@@ -911,7 +984,7 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     // A budget of points: 20 times the points of a uniform mesh of the box,
     // or of the cells of the box with the refines.
     let uniform = (ceil(w / size) + 2.0) * (ceil(h / size) + 2.0);
-    let estimate = if refines.len > 0 { max(uniform, cell_estimate(b, size)) } else { uniform };
+    let estimate = if refines.len > 0 { max(max(uniform, cell_estimate(b, size)), band_estimate(size)) } else { uniform };
     let budget = 20 * (estimate as! i64) + 100 * px.len;
     var done = recover_segments(budget);
     let ratio = 1.0 / (2.0 * sin(radians(MIN_ANGLE)));

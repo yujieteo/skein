@@ -13,6 +13,7 @@ import solvers from "../solvers";
 import .mesh;
 import .cell;
 import .rans;
+import .sa;
 import .heat;
 
 let NEWTON_MAX = 30;            // the most Newton steps
@@ -151,6 +152,16 @@ fn fix_velocity_at<F>(comp: i64) {
     }
 }
 
+// Fixes nt of a Spalart-Allmaras flow on the vertices of the region.
+fn fix_spalart(value: f64) {
+    guard spalart_on && fixed.len == dof_count() && region.len == node_count() else { abort("fix_spalart: a Spalart-Allmaras flow after clear_bcs"); }
+    for n in vertex_count {
+        if region[n] == 0 { continue; }
+        fixed[turbulence_dof(n, 0)] = 1;
+        prescribed[turbulence_dof(n, 0)] = value;
+    }
+}
+
 // Fixes the pressure on the vertices of the region.
 fn fix_pressure(value: f64) {
     guard cell_count() > 0 && fixed.len == dof_count() && region.len == node_count() else { abort("fix_pressure: clear_bcs on a mesh"); }
@@ -245,11 +256,11 @@ fn cell_values(c: i64, u: f64[:], jac: bool, d: f64[>..]&) {
     cell_dofs(c, dofs);
     for a in k { ul[a] = u[dofs[a]]; }
     if !jac {
-        if turbulent { rans_residual(c, ul, rl); } else { cell_residual(c, ul, rl); }
+        if spalart_on { sa_residual(c, ul, rl); } else if turbulent { rans_residual(c, ul, rl); } else { cell_residual(c, ul, rl); }
         d.append(rl[..k]);
         return;
     }
-    if turbulent { rans_jacobian(c, ul, rl, kl); } else { cell_jacobian(c, ul, rl, kl); }
+    if spalart_on { sa_jacobian(c, ul, rl, kl); } else if turbulent { rans_jacobian(c, ul, rl, kl); } else { cell_jacobian(c, ul, rl, kl); }
     for a in k { d.append(kl[15 * a..15 * a + k]); }
 }
 
@@ -410,13 +421,27 @@ fn region_force(comp: i64) -> f64 {
     return s;
 }
 
+// The moment of the reactions of velocity on the region about (x0, y0):
+// ∮ ((x - x0) (σ n)_y - (y - y0) (σ n)_x), scaled. The nodal reactions of
+// P1 shape functions give the moment of the traction exactly on a polygon.
+fn region_moment(x0: f64, y0: f64) -> f64 {
+    guard raw.len == dof_count() && region.len == node_count() else { abort("region_moment: a solve"); }
+    var s = 0.0;
+    for n in node_count() {
+        if region[n] != 0 && (twin[n] < 0 || region[twin[n]] == 0) {
+            s += (coords[2 * n] - x0) * raw[vdof(n, 1)] - (coords[2 * n + 1] - y0) * raw[vdof(n, 0)];
+        }
+    }
+    return s;
+}
+
 // The turbulent solve: pseudo-transient continuation (Kelley and Keyes
 // 1998). Each step solves (M/Δτ + J) du = -F(u) with the lumped mass M of
 // the rows of v, k and w, and Δτ grows as the norm of F falls (switched
 // evolution relaxation, Mulder and van Leer 1985). Reason: on the channel
 // at Re_τ = 395 from v = 0, Newton's method (Δτ = ∞) failed in GMRES at
 // step 12, with U_b+ near 3600.
-let PTC_MAX = 300;
+let PTC_MAX = 600;
 let PTC_GROWTH = 2.0;   // the most that Δτ grows in one step
 let TURBULENCE_DROP = 0.5;
 let PTC_DT = 0.1;       // Δτ of the first step, scaled
@@ -431,7 +456,8 @@ fn solve_rans(rtol: f64) -> bool {
     solvers::zeros(omega_wall, vertex_count);
     guard find_walls(fixed, prescribed, omega_wall) else { abort("solve_rans: a turbulent flow needs a wall, a boundary with v = 0"); }
     for n in vertex_count {
-        if on_wall[n] == 0 { continue; }
+        // Spalart-Allmaras: the program fixes nt on the walls (fix_spalart)
+        if on_wall[n] == 0 || spalart_on { continue; }
         fixed[turbulence_dof(n, 0)] = 1;
         prescribed[turbulence_dof(n, 0)] = 0.0;
         fixed[turbulence_dof(n, 1)] = 1;
@@ -477,6 +503,12 @@ fn ptc_solve(rtol: f64) -> bool {
 fn rans_start() {
     for d in sol.len { sol[d] = 0.0; }
     for n in vertex_count {
+        if spalart_on {
+            sol[vdof(n, 0)] = sa_start_v[0];
+            sol[vdof(n, 1)] = sa_start_v[1];
+            sol[turbulence_dof(n, 0)] = sa_start_nt;
+            continue;
+        }
         sol[turbulence_dof(n, 0)] = K_START;
         // the larger of the viscous sublayer, ω = 6 ν / (β1 d²), and the
         // log layer, ω = √k / (C_μ^¼ κ d) with C_μ^¼ κ = 0.2245
@@ -491,7 +523,7 @@ fn rans_start() {
     for c in cell_count() {
         cell_dofs(c, dofs);
         let m = geometry(c).area / 3.0;
-        for a in 15 {
+        for a in cell_dof_count() {
             // the ω rows are divided by omega_scale (rans.goose)
             if a < 6 || (a >= 9 && a < 12) { lumped[dofs[a]] += m; }
             if a >= 12 { lumped[dofs[a]] += m / omega_scale; }
@@ -504,10 +536,41 @@ fn rans_start() {
 // vertex, so k and w stay positive. Reason: with a clip at k = 0, the k
 // of the channel at Re_τ = 395 fell to 0 below y+ = 10, and k = 0 is a
 // root of its own equation. False if GMRES fails.
+// The cell size of the row of dof d: the sqrt of its lumped mass. The rows of
+// w are scaled (omega_scale), so that scale is undone.
+fn row_size(d: i64) -> f64 {
+    let omega_row = !spalart_on && turbulent && d < vertex_count * vertex_dofs() && d % vertex_dofs() == 4;
+    return sqrt(lumped[d] * (if omega_row { omega_scale } else { 1.0 }));
+}
+
 fn ptc_step(dt: f64, f: f64[:], du: f64[:]) -> bool {
     jacobian(sol, val);
+    // Local time step. When the smallest cell of a mesh is under 1/10000 of the
+    // mean cell size (a boundary layer mesh), Δτ of a dof is dt times its cell
+    // size over the mean cell size, the sqrt of the lumped mass. Reason: on the
+    // boundary layer mesh of the airfoil the thin cells had a mass term of 1e-6
+    // of the stiff rows, the first step was a full Newton step, and GMRES
+    // failed. A mesh with a smaller range keeps Δτ = dt: the cell size alone
+    // took channel_sst_tri from 20 to 600 steps.
+    var mean = 0.0;
+    var count = 0.0;
+    var least = 1.0e300;
     for d in sol.len {
-        if fixed[d] == 0 && lumped[d] > 0.0 { val[solvers::entry(row_start, col, d, d)] += lumped[d] / dt; }
+        if lumped[d] > 0.0 {
+            let size = row_size(d);
+            mean += size;
+            count += 1.0;
+            least = min(least, size);
+        }
+    }
+    mean = mean / max(count, 1.0);
+    let local = least < 0.0001 * mean;
+    for d in sol.len {
+        if fixed[d] == 0 && lumped[d] > 0.0 {
+            let size = row_size(d);
+            let local_dt = if local { dt * size / mean } else { dt };
+            val[solvers::entry(row_start, col, d, d)] += lumped[d] / local_dt;
+        }
     }
     for e in val.len { pre[e] = val[e]; }
     if !solvers::ilu0(row_start, col, pre, lu, diag) { return false; }
@@ -523,7 +586,7 @@ fn ptc_step(dt: f64, f: f64[:], du: f64[:]) -> bool {
     linear_iterations += its;
     if !solved { return false; }
     for n in vertex_count {
-        for which in 2 {
+        for which in (if spalart_on { 1 } else { 2 }) {
             let d = turbulence_dof(n, which);
             du[d] = max(du[d], -TURBULENCE_DROP * sol[d]);
         }

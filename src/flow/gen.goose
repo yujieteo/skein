@@ -149,12 +149,103 @@ recursive fn quantity(n: i64) -> Q {
         return q;
     }
     if k == syntax::N_BINARY { return binary_quantity(n); }
+    if k == syntax::N_CALL { return call_quantity(n); }
     unsupported(tok(n), str("the expression '", source_of(n), "' is not a value of this generator"),
                 "write a number with a unit, a name, a vector (x, y), or + - * / ^ of these");
     return real(0.0);
 }
 
+// The parameters of the user functions that are being evaluated: a stack.
+var fn_names: u8[..64][>..];
+var fn_nodes: i64[>..];
+
+fn find_fn(word: u8[:]) -> i64 {
+    for w, i in fn_names { if w == word { return fn_nodes[i]; } }
+    return -1;
+}
+
+var bind_names: u8[..64][>..];
+var bind_vals: Q[>..];
+
+// sin, cos, tan, sqrt, exp, ln and abs of a scalar, and a call of a `fn` of
+// the model (spec §5.4): its body, with each parameter the value of its
+// argument. Reason: the flap of naca23012_flap turns the points of the
+// spline by `turn(x, y, w)`.
+recursive fn call_quantity(n: i64) -> Q {
+    let callee = child(n, 0);
+    if kind(callee) != syntax::N_NAME {
+        unsupported(tok(n), "the call is not of a name", "call a function by its name");
+        return real(0.0);
+    }
+    let fi = position(["sin", "cos", "tan", "sqrt", "exp", "ln", "abs"], name(callee));
+    if fi >= 0 && syntax::child_count(n) == 2 {
+        let a = quantity(arg(n, 0));
+        if a.n != 1 { unsupported(tok(n), "a function of a vector", "write a scalar"); return real(0.0); }
+        let x = a.v[0];
+        // Reason: abs(-0.3 m) was a dimensionless 0.3, which scaled() does not
+        // divide by the length reference, and sqrt of an odd exponent lost it.
+        if fi == 6 { return Q { n: 1, v: [abs(x), 0.0], d: [a.d[0], a.d[1], a.d[2]] }; }
+        if fi == 3 {
+            if a.d[0] % 2 != 0 || a.d[1] % 2 != 0 || a.d[2] % 2 != 0 {
+                unsupported(tok(n), "sqrt of a quantity with an odd dimension exponent", "take the square root of a quantity with even exponents, or divide by a unit first");
+                return real(0.0);
+            }
+            return Q { n: 1, v: [sqrt(x), 0.0], d: [a.d[0] / 2, a.d[1] / 2, a.d[2] / 2] };
+        }
+        if a.d[0] != 0 || a.d[1] != 0 || a.d[2] != 0 {
+            unsupported(tok(n), str(name(callee), " of a quantity with a dimension"), "divide the argument by a unit to make it dimensionless");
+            return real(0.0);
+        }
+        return real(if fi == 0 { sin(x) } else if fi == 1 { cos(x) } else if fi == 2 { tan(x) } else if fi == 4 { exp(x) } else if fi == 5 { log(x) } else { abs(x) });
+    }
+    var f = find_fn(name(callee));
+    if f < 0 || codegen::depth > 100 {
+        unsupported(tok(n), str("the function '", name(callee), "' is not a fn of the model"), "call sin, cos, sqrt, or a fn that the model declares");
+        return real(0.0);
+    }
+    var count = 0;
+    var body = -1;
+    var c = first(f);
+    while c >= 0 {
+        if kind(c) == syntax::N_FNPARAM { count++; }
+        body = c;
+        c = next(c);
+    }
+    if count != syntax::child_count(n) - 1 || count > 8 {
+        unsupported(tok(n), "the call does not give one value for each parameter", "give each parameter of the function");
+        return real(0.0);
+    }
+    var vals = default<Q[8]>();
+    for k in count { vals[k] = quantity(arg(n, k)); }
+    let base_len = bind_names.len;
+    var k = 0;
+    c = first(f);
+    while c >= 0 {
+        if kind(c) == syntax::N_FNPARAM {
+            var w: u8[..64] = [];
+            set64(w, name(c));
+            bind_names.push(w);
+            bind_vals.push(vals[k]);
+            k++;
+        }
+        c = next(c);
+    }
+    codegen::depth++;
+    let q = quantity(body);
+    codegen::depth--;
+    while bind_names.len > base_len {
+        bind_names.pop();
+        bind_vals.pop();
+    }
+    return q;
+}
+
 recursive fn name_quantity(n: i64) -> Q {
+    var b = bind_names.len;
+    while b > 0 {
+        b--;
+        if bind_names[b] == name(n) { return bind_vals[b]; }
+    }
     if probe_on && thermal && name(n) == temp { return real(probe_value); }
     var v = codegen::find_value(name(n));
     if v < 0 { v = property(name(n)); }
@@ -368,6 +459,8 @@ let BC_P = 1;
 let BC_U = 2;       // the displacement of the solid at 0
 let BC_T = 3;       // the temperature
 let BC_FLUX = 4;    // the outward heat flux dot(q, n)
+let BC_NT = 5;      // nt of Spalart-Allmaras
+let BC_D = 6;       // d = 0: the wall of the wall distance
 
 // A `bc`: the region (an index in `named`), the target and the scaled value.
 struct Bc {
@@ -422,6 +515,19 @@ var pressure: u8[..64];
 var stress: u8[..64];       // the let of the stress: sigma
 var convective = true;
 var turbulent = false;      // k_omega_sst: the unknowns k and w too
+var spalart = false;        // Spalart-Allmaras: the working viscosity nt too
+var sa_nt: u8[..64];
+var sa_d: u8[..64];         // the wall distance of the physics walldist
+var sa_d_name: u8[..64];    // the name of that physics
+var sa_d_tok = -1;
+var sa_lets = 0;            // the lets and eqs of the model that match the template
+var sa_eqs = 0;
+var v_start: f64[2] = [0.0, 0.0];
+var nt_start = 0.0;
+var layer_region = -1;      // `layers r: { first, ratio, count }`: an index in `named`, or -1
+var layer_first = 0.0;
+var layer_ratio = 0.0;
+var layer_count = 0;
 var turb_k: u8[..64];
 var turb_w: u8[..64];
 var period: f64[2] = [0.0, 0.0];
@@ -469,6 +575,10 @@ let STABILIZE_NAMES = ["none", "supg", "supg_pspg", "supg_pspg_lsic"];
 fn reset() {
     codegen::reset();
     named.clear();
+    fn_names.clear();
+    fn_nodes.clear();
+    bind_names.clear();
+    bind_vals.clear();
     tables.clear();
     refines.clear();
     bcs.clear();
@@ -487,6 +597,19 @@ fn reset() {
     set64(stress, "sigma");
     convective = true;
     turbulent = false;
+    spalart = false;
+    sa_nt = [];
+    sa_d = [];
+    sa_d_name = [];
+    sa_d_tok = -1;
+    sa_lets = 0;
+    sa_eqs = 0;
+    v_start = [0.0, 0.0];
+    nt_start = 0.0;
+    layer_region = -1;
+    layer_first = 0.0;
+    layer_ratio = 0.0;
+    layer_count = 0;
     turb_k = [];
     turb_w = [];
     period = [0.0, 0.0];
@@ -574,8 +697,11 @@ fn header(n: i64) {
     codegen::system = codegen::SYSTEMS[0];
 }
 
+// fill(spline(p0, p1, ...)): the region inside a closed spline (spec §8.1).
+fn is_fill(n: i64) -> bool { return is_call(n, "fill") && syntax::child_count(n) == 2 && is_call(arg(n, 0), "spline"); }
+
 recursive fn is_shape(n: i64) -> bool {
-    if is_call(n, "rect") || is_call(n, "circle") { return true; }
+    if is_call(n, "rect") || is_call(n, "circle") || is_fill(n) { return true; }
     if kind(n) == syntax::N_NAME { return named_of(n, SHAPE) >= 0; }
     let op = if kind(n) == syntax::N_BINARY { syntax::text(tok(n)) } else { "" };
     return (op == "-" || op == "|" || op == "&") && is_shape(child(n, 0)) && is_shape(child(n, 1));
@@ -626,8 +752,8 @@ fn material(n: i64) {
     set64(material_name, name(n));
     var p = first(n);
     while p >= 0 {
-        if name(p) != "rho" && name(p) != "mu" && name(p) != "cp" && name(p) != "k" {
-            unsupported(tok(p), str("the property '", name(p), "' is not in the flow generator"), "give the fluid rho and mu, and cp and k for a temperature");
+        if name(p) != "rho" && name(p) != "mu" && name(p) != "nu" && name(p) != "cp" && name(p) != "k" {
+            unsupported(tok(p), str("the property '", name(p), "' is not in the flow generator"), "give the fluid rho and mu or nu, and cp and k for a temperature");
         }
         p = next(p);
     }
@@ -648,6 +774,97 @@ fn solid_materials(n: i64) {
     if property_of(n, "nu") < 0 { unsupported(tok(n), "the solid needs nu", "add nu: Real = 0.3"); }
 }
 
+let SA_FIX = "write the Spalart-Allmaras model with the lets chi, fv1, fv2, nut, omg, s_t, r_sa, g_sa, fw, sigma and q_nt and the 3 eqs, as in examples/femahoy/naca0012_ladson.skn";
+
+// The right side of the let `word` of the Spalart-Allmaras template (Spalart
+// and Allmaras 1992), with the names of the unknowns v, p, nt and d.
+fn spalart_let_text(word: u8[:]) -> u8[>..] {
+    let v = velocity;
+    let nt = sa_nt;
+    let d = sa_d;
+    if word == "chi" { return str(nt, "/nu"); }
+    if word == "fv1" { return "chi^3/(chi^3+cv1^3)"; }
+    if word == "fv2" { return "1-chi/(1+chi*fv1)"; }
+    if word == "nut" { return str(nt, "*fv1"); }
+    if word == "omg" { return str("sqrt(2*ddot(skew(grad(", v, ")),skew(grad(", v, "))))"); }
+    if word == "s_t" { return str("max(omg+fv2*", nt, "/(kap^2*", d, "^2),c_s*omg)"); }
+    if word == "r_sa" { return str("min(", nt, "/(s_t*kap^2*", d, "^2),10)"); }
+    if word == "g_sa" { return "r_sa+cw2*(r_sa^6-r_sa)"; }
+    if word == "fw" { return "g_sa*exp(ln((1+cw3^6)/(g_sa^6+cw3^6))/6)"; }
+    if word == "sigma" { return str("-", pressure, "*I+2*rho*(nu+nut)*sym(grad(", v, "))"); }
+    if word == "q_nt" { return str("-(nu+", nt, ")/sig_sa*grad(", nt, ")"); }
+    return "";
+}
+
+// A let or an eq of a Spalart-Allmaras physics: it must be the text of the
+// template, so that the cell residual of sa.goose is the model. Reason: the
+// generator runs a fixed residual, and a different law would run silently
+// as this one.
+fn spalart_statement(c: i64) {
+    let v = velocity;
+    let nt = sa_nt;
+    if kind(c) == syntax::N_LET {
+        let want = spalart_let_text(name(c));
+        if want.len == 0 || compact(child(c, 1)) != want {
+            unsupported(tok(c), str("the let '", name(c), "' is not in the Spalart-Allmaras template"), SA_FIX);
+            return;
+        }
+        if name(c) == "sigma" { set64(stress, name(c)); }
+        sa_lets++;
+        return;
+    }
+    let left = compact(child(c, 0));
+    let right = compact(child(c, 1));
+    sa_eqs++;
+    if left == str("rho*grad(", v, ")*", v, "-div(sigma)") && right == "0" { return; }
+    if left == str("div(", v, ")") && right == "0" { return; }
+    if left == str("dot(", v, ",grad(", nt, "))+div(q_nt)-cb2/sig_sa*dot(grad(", nt, "),grad(", nt, "))") &&
+       right == str("cb1*s_t*", nt, "-cw1*fw*(", nt, "/", sa_d, ")^2") {
+        return;
+    }
+    unsupported(tok(c), "the eq is not in the Spalart-Allmaras template", SA_FIX);
+}
+
+// A physics that solves only a wall distance d: Length with
+// `eq norm(grad(d)) = 1` (the eikonal equation).
+fn is_walldist(n: i64) -> bool {
+    var found = false;
+    var c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_UNKNOWN {
+            let t = child(c, 0);
+            if kind(t) == syntax::N_TYPE_NAME && name(t) == "Length" { found = true; } else { return false; }
+        }
+        c = next(c);
+    }
+    return found;
+}
+
+fn walldist_item(n: i64) {
+    if sa_d_tok >= 0 {
+        unsupported(tok(n), "a second wall distance: the flow generator has one", "remove the second physics");
+        return;
+    }
+    sa_d_tok = tok(n);
+    set64(sa_d_name, name(n));
+    var c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_UNKNOWN { set64(sa_d, name(c)); }
+        c = next(c);
+    }
+    c = first(n);
+    while c >= 0 {
+        if kind(c) == syntax::N_EQN {
+            if compact(child(c, 0)) != str("norm(grad(", sa_d, "))") || compact(child(c, 1)) != "1" {
+                unsupported(tok(c), "the eq of the wall distance is not the eikonal equation", str("write eq norm(grad(", sa_d, ")) = 1"));
+            }
+        } else if kind(c) != syntax::N_UNKNOWN && kind(c) != syntax::N_ON && kind(c) != syntax::N_MATASSIGN {
+            unsupported(tok(c), "the physics of a wall distance has one eq", str("write eq norm(grad(", sa_d, ")) = 1"));
+        }
+        c = next(c);
+    }
+}
+
 let PHYSICS_FIX = "write physics flow on dom: navier_stokes solves v: Vector<Velocity>, p: Pressure { material fluid }";
 
 // The statements of a physics written out: `let sigma = -p*I + 2*mu*sym(grad(v))`,
@@ -656,6 +873,10 @@ fn written_out(c: i64, eqs: i64&) {
     let k = kind(c);
     let v = velocity;
     let p = pressure;
+    if spalart && (k == syntax::N_LET || k == syntax::N_EQN) {
+        spalart_statement(c);
+        return;
+    }
     if k == syntax::N_LET && thermal && compact(child(c, 1)) == str("fourier(k,", temp, ")") {
         set64(flux, name(c));
         return;
@@ -761,8 +982,19 @@ fn physics_item(n: i64) {
                 thermal = true;
                 set64(temp, name(c));
                 if syntax::child_count(c) > 1 { temp_start = scaled_value(child(c, 1)); }
+            } else if kind(t) == syntax::N_TYPE_NAME && name(t) == "KinViscosity" && !spalart {
+                // the working viscosity nt of Spalart-Allmaras
+                spalart = true;
+                turbulent = true;
+                set64(sa_nt, name(c));
+                if syntax::child_count(c) > 1 { nt_start = scaled_value(child(c, 1)); }
             } else if kind(t) == syntax::N_TYPE_APPLY && velocity.len == 0 {
                 set64(velocity, name(c));
+                if syntax::child_count(c) > 1 {
+                    let q = scaled(quantity(child(c, 1)));
+                    if q.n != 2 { unsupported(tok(c), str(name(c), " starts at a vector"), "write v: Vector<Velocity> = U*e_d"); }
+                    v_start = q.v;
+                }
             } else if turbulent && turb_k.len == 0 {
                 set64(turb_k, name(c));
             } else if turbulent && turb_w.len == 0 {
@@ -782,6 +1014,10 @@ fn physics_item(n: i64) {
         c = next(c);
     }
     for s in statements { written_out(s, eqs); }
+    if spalart && ok() && (sa_lets != 11 || sa_eqs != 3) {
+        unsupported(tok(n), "the Spalart-Allmaras physics has the 11 lets and the 3 eqs of the template", SA_FIX);
+    }
+    if spalart { eqs = 2; }
     if !template && eqs != (if thermal { 3 } else { 2 }) { unsupported(tok(n), str("a written-out flow physics needs ", if thermal { "three" } else { "two" }, " eqs"), PHYSICS_FIX); }
     if thermal && ok() && !energy_seen {
         unsupported(tok(n), "the temperature has no energy equation", str("write let q: Vector<HeatFlux> = fourier(k, ", temp, ") and eq rho*cp*dot(", velocity, ", grad(", temp, ")) + div(q) = 0"));
@@ -1038,7 +1274,17 @@ fn assumptions(n: i64) {
 }
 
 fn method(n: i64) {
-    if name(n) != physics_name || syntax::text(syntax::nodes[n].aux) != "cg" {
+    let kind_name = syntax::text(syntax::nodes[n].aux);
+    if sa_d_tok >= 0 && name(n) == sa_d_name && kind_name == "cg" { return; }
+    // Spalart-Allmaras runs on P1 cells with SUPG and PSPG. The settings of the
+    // finite volume method (gradient, flux, limiter, pv_coupling) do not apply.
+    if spalart && name(n) == physics_name && kind_name == "fv" {
+        order = 1;
+        stabilize = 2;
+        stabilize_set = true;
+        return;
+    }
+    if name(n) != physics_name || kind_name != "cg" {
         unsupported(tok(n), "the flow generator has only the cg method of the physics", "write method flow: cg { order: { v: 2, p: 1 } }");
         return;
     }
@@ -1103,6 +1349,10 @@ recursive fn refine_parts(shape: i64, cond: i64, h: f64) {
         edge_refines(named[g].value, h, refines);
         return;
     }
+    if g >= 0 && is_fill(named[g].value) {
+        fill_refines(named[g].value, h, refines);
+        return;
+    }
     let side = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" && kind(child(cond, 0)) == syntax::N_NAME &&
         (name(child(cond, 0)) == "x" || name(child(cond, 0)) == "y");
     var rect = if kind(shape) == syntax::N_NAME && named_of(shape, SHAPE) >= 0 { named[named_of(shape, SHAPE)].value } else { shape };
@@ -1117,6 +1367,31 @@ recursive fn refine_parts(shape: i64, cond: i64, h: f64) {
         refines.push(Refine { circle: false, p: [c, min(a.v[1], b.v[1]), c, max(a.v[1], b.v[1])], h: h });
     } else {
         refines.push(Refine { circle: false, p: [min(a.v[0], b.v[0]), c, max(a.v[0], b.v[0]), c], h: h });
+    }
+}
+
+// The points of the spline of fill(spline(...)) n, scaled, x and y of each.
+fn fill_points(n: i64, xy: f64[>..]&) {
+    let sp = arg(n, 0);
+    var c = 1;
+    while c < syntax::child_count(sp) {
+        let q = scaled(quantity(arg(sp, c - 1)));
+        if q.n != 2 { unsupported(tok(sp), "a point of a spline is a vector (x, y)", "write (0.5, 0.1) m"); return; }
+        xy.push(q.v[0]);
+        xy.push(q.v[1]);
+        c++;
+    }
+}
+
+// The refines of the segments from point to point of a fill, closed by the
+// line from the last to the first: the size h along the curve.
+fn fill_refines(n: i64, h: f64, into: Refine[>..]&) {
+    var xy: f64[>..] = [];
+    fill_points(n, xy);
+    let m = xy.len / 2;
+    for i in m {
+        let j = (i + 1) % m;
+        into.push(Refine { circle: false, p: [xy[2 * i], xy[2 * i + 1], xy[2 * j], xy[2 * j + 1]], h: h });
     }
 }
 
@@ -1137,9 +1412,36 @@ recursive fn edge_refines(n: i64, h: f64, into: Refine[>..]&) {
             into.push(Refine { circle: false, p: [x[k], y[0], x[k], y[1]], h: h });
             into.push(Refine { circle: false, p: [x[0], y[k], x[1], y[k]], h: h });
         }
+    } else if is_fill(n) {
+        fill_refines(n, h, into);
     } else {
         edge_refines(child(n, 0), h, into);
         edge_refines(child(n, 1), h, into);
+    }
+}
+
+// `layers wall: { first: 4 um, ratio: 1.18, count: 64 }`: boundary layer
+// cells on a boundary(dom, shape) (spec §9.1, mesher::mesh_2d_layers).
+fn layers_item(s: i64) {
+    let v = child(s, 0);
+    let r = named_of(v, BOUNDARY);
+    if r < 0 || !is_call(named[r].value, "boundary") || syntax::child_count(named[r].value) != 3 || named_of(arg(named[r].value, 1), SHAPE) < 0 {
+        unsupported(tok(v), "the layers are not on a boundary(dom, shape) that a let names", "write layers wall: { first: 4 um, ratio: 1.2, count: 20 } with let wall: Curve = boundary(dom, hole)");
+        return;
+    }
+    if layer_region >= 0 { unsupported(tok(s), "a second layers: the flow generator has one", "remove it"); return; }
+    layer_region = r;
+    var a = first(child(s, 1));
+    while a >= 0 {
+        let w = syntax::text(syntax::nodes[a].aux);
+        if w == "first" { layer_first = scaled_value(first(a)); }
+        else if w == "ratio" { layer_ratio = scalar_value(first(a)); }
+        else if w == "count" { layer_count = scalar_value(first(a)) as! i64; }
+        else { unsupported(tok(a), "layers has first, ratio and count", "write layers wall: { first: 4 um, ratio: 1.2, count: 20 }"); }
+        a = next(a);
+    }
+    if layer_first <= 0.0 || layer_ratio < 1.0 || layer_count < 1 {
+        unsupported(tok(s), "layers needs first > 0, ratio >= 1 and count >= 1", "write layers wall: { first: 4 um, ratio: 1.2, count: 20 }");
     }
 }
 
@@ -1165,8 +1467,10 @@ fn mesh(n: i64) {
                 let b = named[r].value;
                 refine_parts(arg(b, 0), arg(b, 1), scaled_value(child(s, 1)));
             }
+        } else if kind(s) == syntax::N_LAYERS {
+            layers_item(s);
         } else if kind(s) != syntax::N_SETTING {
-            unsupported(tok(s), "layers and crack_tip are not in the flow generator", "remove the line");
+            unsupported(tok(s), "crack_tip is not in the flow generator", "remove the line");
         } else if name(s) == "size" {
             mesh_size = scaled_value(v);
         } else if name(s) == "grade" {
@@ -1198,6 +1502,14 @@ fn bc(n: i64) -> i64 {
     }
     var b = Bc { region: r, kind: BC_V, comp: -1, v: [0.0, 0.0], expr: -1 };
     let t = compact(target);
+    if (spalart && t == sa_nt) || (sa_d_tok >= 0 && t == sa_d) {
+        b.kind = if t == sa_d { BC_D } else { BC_NT };
+        b.v[0] = scaled_value(v);
+        if b.kind == BC_D && b.v[0] != 0.0 { unsupported(tok(v), "the wall distance is 0 on its wall", str("write bc ", named[r].name, ": ", sa_d, " = 0")); }
+        use_region(r);
+        bcs.push(b);
+        return bcs.len - 1;
+    }
     if thermal && is_temperature_target(t) { return temperature_bc(n, b, t); }
     if t == str(stress, "*n") && is_pressure_level(v) { return -1; }
     if solid_tok >= 0 && t == displacement { return solid_bc(n, b); }
@@ -1369,7 +1681,7 @@ fn output_fields(n: i64) -> bool {
             unsupported(tok(o), "a static step has no every", "remove it");
         } else if kind(o) == syntax::N_NAME && thermal && (name(o) == temp || (th_tok >= 0 && name(o) == th_temp)) {
             // T is always in the VTU file of a thermal flow
-        } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure && !(turbulent && (name(o) == turb_k || name(o) == turb_w))) {
+        } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure && !(turbulent && (name(o) == turb_k || name(o) == turb_w)) && !(spalart && (name(o) == sa_nt || name(o) == sa_d))) {
             unsupported(tok(o), "the flow generator writes the velocity and the pressure, and k and w of k_omega_sst", str("write output ", velocity, ", ", pressure));
         }
         o = next(o);
@@ -1428,12 +1740,53 @@ fn point_ok(e: i64) -> bool {
     return syntax::errors.len == before;
 }
 
-// `integral((sigma*n).x, wall)`: the component, or -1.
+// The last traction integral that traction_integral read: it is
+// a*Fx + b*Fy + m*M about (x0, y0), with F the force of the wall on the
+// fluid and M its moment, in the scaled units.
+var tf_a = 0.0;
+var tf_b = 0.0;
+var tf_m = 0.0;
+var tf_x0 = 0.0;
+var tf_y0 = 0.0;
+
+// `integral((sigma*n).x, wall)`, `integral(dot(sigma*n, e), wall)` with a
+// vector e of two numbers, and the moment `integral((x - x0)*(sigma*n).y -
+// (y - y0)*(sigma*n).x, wall)`: 0 for a force, 1 for a moment, or -1. It
+// sets tf_a to tf_x0.
 fn traction_integral(e: i64) -> i64 {
     guard is_call(e, "integral") && syntax::child_count(e) == 3 && named_of(arg(e, 1), BOUNDARY) >= 0 else { return -1; }
     let f = compact(arg(e, 0));
-    if f == str("(", stress, "*n).x") { return 0; }
-    if f == str("(", stress, "*n).y") { return 1; }
+    tf_a = 0.0;
+    tf_b = 0.0;
+    tf_m = 0.0;
+    if f == str("(", stress, "*n).x") { tf_a = 1.0; return 0; }
+    if f == str("(", stress, "*n).y") { tf_b = 1.0; return 0; }
+    let w = arg(e, 0);
+    if is_call(w, "dot") && syntax::child_count(w) == 3 && compact(arg(w, 0)) == str(stress, "*n") {
+        let q = quantity(arg(w, 1));
+        if q.n != 2 || !same_dim(q.d, [0, 0, 0]) {
+            unsupported(tok(w), "the vector of dot(sigma*n, e) is two numbers", "write dot(sigma*n, e_l) with let e_l: Vector<Real> = (-sin(aoa), cos(aoa))");
+            return -1;
+        }
+        tf_a = q.v[0];
+        tf_b = q.v[1];
+        return 0;
+    }
+    // (x - x0)*(sigma*n).y - (y - y0)*(sigma*n).x
+    if kind(w) == syntax::N_BINARY && syntax::text(tok(w)) == "-" {
+        let l = child(w, 0);
+        let r = child(w, 1);
+        let lx = if kind(l) == syntax::N_BINARY && syntax::text(tok(l)) == "*" { child(l, 0) } else { -1 };
+        let ry = if kind(r) == syntax::N_BINARY && syntax::text(tok(r)) == "*" { child(r, 0) } else { -1 };
+        if lx >= 0 && ry >= 0 && compact(l) != "" && compact(child(l, 1)) == str("(", stress, "*n).y") && compact(child(r, 1)) == str("(", stress, "*n).x") &&
+           kind(lx) == syntax::N_BINARY && syntax::text(tok(lx)) == "-" && compact(child(lx, 0)) == "x" &&
+           kind(ry) == syntax::N_BINARY && syntax::text(tok(ry)) == "-" && compact(child(ry, 0)) == "y" {
+            tf_m = 1.0;
+            tf_x0 = scaled_value(child(lx, 1));
+            tf_y0 = scaled_value(child(ry, 1));
+            return 1;
+        }
+    }
     return -1;
 }
 
@@ -1546,9 +1899,10 @@ recursive fn result_ok(e: i64) -> bool {
     if is_call(e, "integral") && traction_integral(e) < 0 && thermal { return region_ok(e); }
     if is_call(e, "mean") || (is_call(e, "max") && syntax::child_count(e) == 3) { return region_ok(e); }
     if is_call(e, "integral") {
-        if traction_integral(e) >= 0 { use_region(named_of(arg(e, 1), BOUNDARY)); }
-        if traction_integral(e) < 0 { unsupported(tok(e), "the flow generator integrates (sigma*n).x or (sigma*n).y on a boundary", REPORT_FIX); }
-        return traction_integral(e) >= 0;
+        let form = traction_integral(e);
+        if form >= 0 { use_region(named_of(arg(e, 1), BOUNDARY)); }
+        if form < 0 && ok() { unsupported(tok(e), "the flow generator integrates (sigma*n).x, dot(sigma*n, e) or the moment about a point on a boundary", REPORT_FIX); }
+        return form >= 0;
     }
     if k == syntax::N_BINARY && position(["+", "-", "*", "/"], syntax::text(tok(e))) >= 0 {
         return result_ok(child(e, 0)) && result_ok(child(e, 1));
@@ -1610,6 +1964,11 @@ fn read(prog: i64) -> bool {
             header(c);
         } else if k == syntax::N_LET || k == syntax::N_PARAM {
             value_item(c);
+        } else if k == syntax::N_FN {
+            var w: u8[..64] = [];
+            set64(w, name(c));
+            fn_names.push(w);
+            fn_nodes.push(c);
         } else if k == syntax::N_MATERIAL {
             material(c);
         } else if k == syntax::N_PHYSICS && is_thermal_solid(c) {
@@ -1643,7 +2002,9 @@ fn read(prog: i64) -> bool {
         if kind(c) == syntax::N_SCALES { scales(c); }
         c = next(c);
     }
-    for n in physics_nodes { physics_item(n); }
+    for n in physics_nodes {
+        if is_walldist(n) { walldist_item(n); } else { physics_item(n); }
+    }
     if physics_nodes.len == 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if !ok() { return false; }
     read_fluid(at);
@@ -1705,14 +2066,33 @@ fn symmetry(n: i64) {
 }
 
 // rho and mu of the material, and the body force f of the template.
+// The dynamic viscosity of the fluid, scaled: mu, or rho*nu.
+fn fluid_mu() -> f64 {
+    if property("mu") >= 0 { return scaled_value(property("mu")); }
+    return scaled_value(property("nu")) * scaled_value(property("rho"));
+}
+
+let SA_CONSTANTS = ["sig_sa", "kap", "cb1", "cb2", "cw1", "cw2", "cw3", "cv1", "c_s"];
+
+// The value of the dimensionless constant `word` of a model, or an error.
+fn constant(word: u8[:]) -> f64 {
+    let v = codegen::find_value(word);
+    if v < 0 {
+        unsupported(tok(material_node), str("the Spalart-Allmaras model needs the constant '", word, "'"), str("write let ", word, ": Real = ..."));
+        return 1.0;
+    }
+    return scalar_value(v);
+}
+
 fn read_fluid(at: i64) {
+    if spalart { for i in 9 { constant(SA_CONSTANTS[i]); } }
     let r = property("rho");
-    let m = property("mu");
+    let m = if property("mu") >= 0 { property("mu") } else { property("nu") };
     if material_node < 0 || r < 0 || m < 0 {
-        unsupported(at, "the flow needs a material with rho and mu", "add material fluid { rho: Density = 1000 kg/m^3, mu: DynViscosity = 1e-3 Pa*s }");
+        unsupported(at, "the flow needs a material with rho and mu or nu", "add material fluid { rho: Density = 1000 kg/m^3, mu: DynViscosity = 1e-3 Pa*s }");
         return;
     }
-    if scalar_value(r) <= 0.0 || scalar_value(m) <= 0.0 { unsupported(tok(material_node), "rho and mu are more than 0", "give rho > 0 and mu > 0"); }
+    if fluid_mu() <= 0.0 || scalar_value(r) <= 0.0 { unsupported(tok(material_node), "rho and mu are more than 0", "give rho > 0 and mu > 0"); }
     if force_node >= 0 {
         let f = scaled(quantity(force_node));
         if f.n != 2 && !(f.n == 1 && f.v[0] == 0.0) { unsupported(tok(force_node), "the body force f is a vector", "write navier_stokes((0, -9.81) m/s^2*rho)"); }
@@ -1779,6 +2159,11 @@ recursive fn mesher_shape(n: i64) -> i64 {
         let c = scaled(quantity(arg(n, 0)));
         return mesher::circle(c.v[0], c.v[1], scaled_value(arg(n, 1)));
     }
+    if is_fill(n) {
+        var xy: f64[>..] = [];
+        fill_points(n, xy);
+        return mesher::fill(xy[..]);
+    }
     let a = mesher_shape(child(n, 0));
     let b = mesher_shape(child(n, 1));
     let op = syntax::text(tok(n));
@@ -1821,7 +2206,13 @@ fn write_mesh(dir: u8[:]) -> bool {
         middle = 0.5 * (a.v[0] + b.v[0]);
         shape = mesher::rect(min(a.v[0], b.v[0]), a.v[1], middle, b.v[1]);
     }
-    let meshed = mesher::mesh_2d(shape, mesh_size);
+    var meshed = false;
+    if layer_region >= 0 {
+        let wall = mesher_shape(named[named_of(arg(named[layer_region].value, 1), SHAPE)].value);
+        meshed = mesher::mesh_2d_layers(shape, wall, mesh_size, layer_first, layer_ratio, layer_count);
+    } else {
+        meshed = mesher::mesh_2d(shape, mesh_size);
+    }
     mesher::clear_interfaces();
     if !meshed {
         write_stderr(str("skein run: the mesher cannot mesh '", named[domain].name, "' with the size and the refines of the mesh\n"));
@@ -1839,6 +2230,7 @@ fn write_mesh(dir: u8[:]) -> bool {
         for k in 3 { tri.push(mesher::cell_node(c, k)); }
     }
     if period_high >= 0 { mirror(xy, tri, middle); }
+    if !write_masks(dir, xy) { return false; }
     cells = tri.len / 3;
     vertices = xy.len / 2;
     if !write_file(str(dir, "/flow.xy"), to_bytes(xy[..])) || !write_file(str(dir, "/flow.tri"), to_bytes(tri[..])) {
@@ -1846,6 +2238,61 @@ fn write_mesh(dir: u8[:]) -> bool {
         return false;
     }
     return th_tok < 0 || write_parts(dir);
+}
+
+// Whether the boundary g needs a mask file: the shape of the boundary is
+// not the domain, a rect or a circle (a union, a spline), or its condition is
+// the name of a spline.
+fn needs_mask(g: i64) -> bool {
+    let b = named[g].value;
+    if named[g].kind != BOUNDARY || !is_call(b, "boundary") || is_union(b) { return false; }
+    return mask_shape(arg(b, 0)) >= 0 || (syntax::child_count(b) >= 3 && mask_shape(arg(b, 1)) >= 0);
+}
+
+// The index in `named` of the shape n when a boundary of it needs a mask: a
+// shape that is not the domain, a rect or a circle. Else -1.
+fn mask_shape(n: i64) -> i64 {
+    let s = named_of(n, SHAPE);
+    if s < 0 || s == domain || s == solid_domain || s == th_domain { return -1; }
+    let v = named[s].value;
+    if is_call(v, "rect") || is_call(v, "circle") { return -1; }
+    return s;
+}
+
+// Writes <region>.mask for the used regions that need one: 1 for each
+// vertex of the mesh on the boundary of the shape of the region and of the
+// shape of its condition (|phi| of the mesher at most a millionth of the
+// diameter), else 0. Reason: a condition of x and y cannot name a spline.
+fn write_masks(dir: u8[:], xy: f64[:]) -> bool {
+    for r in used_regions {
+        if !needs_mask(r) { continue; }
+        let b = named[r].value;
+        let a = mask_shape(arg(b, 0));
+        let c = if syntax::child_count(b) >= 3 { mask_shape(arg(b, 1)) } else { -1 };
+        var mask: u8[>..] = [];
+        let ha = if a >= 0 { mesher_shape(named[a].value) } else { -1 };
+        let hc = if c >= 0 { mesher_shape(named[c].value) } else { -1 };
+        let eps = 1.0e-6 * mesh_diameter();
+        for n in xy.len / 2 {
+            var on = true;
+            if ha >= 0 { on = on && abs(mesher::phi(ha, xy[2 * n], xy[2 * n + 1], 0.0)) <= eps; }
+            if hc >= 0 { on = on && abs(mesher::phi(hc, xy[2 * n], xy[2 * n + 1], 0.0)) <= eps; }
+            mask.push(if on { 1 } else { 0 });
+        }
+        if !write_file(str(dir, "/", named[r].name, ".mask"), mask) {
+            write_stderr(str("skein run: cannot write the mask of '", named[r].name, "' in '", dir, "'\n"));
+            return false;
+        }
+    }
+    return true;
+}
+
+// The diameter of the bounding box of the domain, scaled.
+fn mesh_diameter() -> f64 {
+    let b = mesher::bounds(mesher_shape(named[domain].value));
+    let w = b[3] - b[0];
+    let h = b[4] - b[1];
+    return sqrt(w * w + h * h);
 }
 
 // Writes flow.part: 1 for each cell of the mesh with the centre in the solid
@@ -1949,10 +2396,36 @@ fn dof_estimate() -> i64 {
         let band = (mesh_size - r.h) / (grade - 1.0);
         cell_count += length * band / (0.4330127 * r.h * mesh_size);
     }
+    if layer_region >= 0 {
+        // Boundary layers: two triangles for each wall node and layer, with a
+        // wall node at each smallest refine target along the wall. Reason: the
+        // flap mesh had 28 thousand cells, and the estimate without this term
+        // gave 12 thousand.
+        var h = mesh_size;
+        for r in refines { h = min(h, r.h); }
+        let perimeter = shape_perimeter(named[named_of(arg(named[layer_region].value, 1), SHAPE)].value);
+        cell_count += 2.0 * layer_count * perimeter / h;
+    }
     if th_tok >= 0 { cell_count += shape_area(named[th_domain].value) / (0.4330127 * th_size * th_size); }
     let vertex_count = 0.5 * cell_count;
     if thermal { return (4.0 * vertex_count + (if order == 2 { 3.0 * 1.5 * cell_count } else { 0.0 })) as! i64; }
     return (if turbulent { 5.0 * vertex_count } else if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
+}
+
+// The length of the closed polygon of a fill(spline) that a let names, else 0.
+fn shape_perimeter(n: i64) -> f64 {
+    var m = n;
+    if kind(m) == syntax::N_NAME { m = named[named_of(m, SHAPE)].value; }
+    if !is_fill(m) { return 0.0; }
+    var xy: f64[>..] = [];
+    fill_points(m, xy);
+    var total = 0.0;
+    let count = xy.len / 2;
+    for i in count {
+        let j = (i + 1) % count;
+        total += sqrt((xy[2 * j] - xy[2 * i]) * (xy[2 * j] - xy[2 * i]) + (xy[2 * j + 1] - xy[2 * i + 1]) * (xy[2 * j + 1] - xy[2 * i + 1]));
+    }
+    return total;
 }
 
 recursive fn shape_area(n: i64) -> f64 {
@@ -1963,6 +2436,17 @@ recursive fn shape_area(n: i64) -> f64 {
         return abs((b.v[0] - a.v[0]) * (b.v[1] - a.v[1]));
     }
     if is_call(n, "circle") { return PI * scaled_value(arg(n, 1)) * scaled_value(arg(n, 1)); }
+    if is_fill(n) {
+        var xy: f64[>..] = [];
+        fill_points(n, xy);
+        var twice = 0.0;
+        let m = xy.len / 2;
+        for i in m {
+            let j = (i + 1) % m;
+            twice += xy[2 * i] * xy[2 * j + 1] - xy[2 * j] * xy[2 * i + 1];
+        }
+        return abs(twice) / 2.0;
+    }
     let a = shape_area(child(n, 0));
     let b = shape_area(child(n, 1));
     let op = syntax::text(tok(n));
@@ -2029,11 +2513,33 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
     if is_call(e, "integral") {
         // The force of the wall on the fluid: p_ref L for each unit of depth.
         let r = named_of(arg(e, 1), BOUNDARY);
-        format(out, "wall_force(select_", named[r].name, "(), ", traction_integral(e), ", ");
-        quoted(out, named[r].name);
-        out.append(") * ");
-        lit(out, reference([0, 2, -4]));
-        return [0, 2, -4];
+        let form = traction_integral(e);
+        let d: i64[3] = if form == 1 { [2, 2, -4] } else { [0, 2, -4] };
+        if form == 1 {
+            out.append("wall_moment(select_");
+            format(out, named[r].name, "(), ");
+            lit(out, tf_x0);
+            out.append(", ");
+            lit(out, tf_y0);
+            out.append(", ");
+        } else {
+            out.append("(");
+            lit(out, tf_a);
+            format(out, " * wall_force(select_", named[r].name, "(), 0, ");
+            quoted(out, named[r].name);
+            out.append(") + ");
+            lit(out, tf_b);
+            format(out, " * wall_force(select_", named[r].name, "(), 1, ");
+            quoted(out, named[r].name);
+            out.append("))");
+        }
+        if form == 1 {
+            quoted(out, named[r].name);
+            out.append(")");
+        }
+        out.append(" * ");
+        lit(out, reference(d));
+        return d;
     }
     if k == syntax::N_BINARY && position(["+", "-", "*", "/"], syntax::text(tok(e))) >= 0 {
         let op = syntax::text(tok(e));
@@ -2312,6 +2818,12 @@ let PRELUDE = """
         return flow::region_force(comp);
     }
 
+    // The scaled moment of the force of the wall on the fluid about (x0, y0).
+    fn wall_moment(found: bool, x0: f64, y0: f64, name: u8[:]) -> f64 {
+        region(found, name);
+        return flow::region_moment(x0, y0);
+    }
+
     fn solve(step: u8[:], rtol: f64) {
         let converged = flow::solve_steady(rtol);
         format(solves, "  ", step, ",", flow::cell_count(), ",", flow::dof_count(), ",", flow::newton_steps, ",",
@@ -2380,6 +2892,13 @@ fn use_region(r: i64) { if position(used_regions, r) < 0 { used_regions.push(r);
 fn emit_selects(out: u8[>..]&) {
     for r in used_regions {
         let g = named[r];
+        if g.kind == BOUNDARY && needs_mask(r) {
+            let b = g.value;
+            format(out, "var mask_", g.name, ": u8[>..] = [];\n\nfn select_", g.name, "() -> bool {\n    return flow::select_masked(mask_", g.name, ") { x, y => ");
+            if syntax::child_count(b) >= 3 && mask_shape(arg(b, 1)) < 0 { emit_cond(out, arg(b, 1)); } else { out.append("true"); }
+            out.append(" };\n}\n\n");
+            continue;
+        }
         format(out, "fn select_", g.name, "() -> bool {\n    return ");
         if g.kind == POINT {
             let p = scaled(quantity(arg(g.value, 0)));
@@ -2416,6 +2935,16 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     }
     if b.kind == BC_T || b.kind == BC_FLUX {
         out.append(if b.kind == BC_T { "    flow::fix_temperature(" } else { "    flow::add_heat_flux(" });
+        lit(out, b.v[0]);
+        out.append(");\n");
+        return;
+    }
+    if b.kind == BC_D {
+        out.append("    flow::wall_distance_region();\n");
+        return;
+    }
+    if b.kind == BC_NT {
+        out.append("    flow::fix_spalart(");
         lit(out, b.v[0]);
         out.append(");\n");
         return;
@@ -2554,13 +3083,19 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     emit_selects(out);
     for si in 0..steps.len { emit_step(out, si, results_dir); }
     out.append("fn main() {\n");
-    if turbulent { out.append("    flow::set_turbulent(true);\n"); }
+    if spalart { out.append("    flow::set_spalart(true);\n"); } else if turbulent { out.append("    flow::set_turbulent(true);\n"); }
     if thermal { out.append("    flow::set_thermal(true);\n"); }
     format(out, "    // mesh on ", named[domain].name, ": P", order, "/P1 triangles, written by skein run\n    if !flow::read_mesh(");
     quoted(out, results_dir);
     format(out, ", ", order, ") {\n        write_stderr(\"skein run: cannot read the mesh in ");
     out.append(results_dir);
     out.append("\\n\");\n        exit(3);\n    }\n    tol = flow::tolerance();\n");
+    for r in used_regions {
+        if named[r].kind != BOUNDARY || !needs_mask(r) { continue; }
+        format(out, "    if !read_file(");
+        quoted(out, str(results_dir, "/", named[r].name, ".mask"));
+        format(out, ", mask_", named[r].name, ") {\n        write_stderr(\"skein run: cannot read the mask of ", named[r].name, "\\n\");\n        exit(3);\n    }\n");
+    }
     if solid_tok >= 0 {
         format(out, "    // mesh on ", named[solid_domain].name, ": P2 triangles that share the interface nodes\n    if !flow::read_solid(");
         quoted(out, results_dir);
@@ -2576,8 +3111,22 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "    // physics ", physics_name, ", material ", material_name, "\n    flow::fluid(");
     lit(out, scaled_value(property("rho")));
     out.append(", ");
-    lit(out, scaled_value(property("mu")));
+    lit(out, fluid_mu());
     format(out, ", ", if convective { "true" } else { "false" }, ", flow::", ["NONE", "SUPG", "SUPG_PSPG", "SUPG_PSPG_LSIC"][stabilize], ");\n");
+    if spalart {
+        out.append("    flow::spalart_constants(");
+        for i in 9 {
+            if i > 0 { out.append(", "); }
+            lit(out, constant(SA_CONSTANTS[i]));
+        }
+        out.append(");\n    flow::spalart_start(");
+        lit(out, v_start[0]);
+        out.append(", ");
+        lit(out, v_start[1]);
+        out.append(", ");
+        lit(out, nt_start);
+        out.append(");\n");
+    }
     if force[0] != 0.0 || force[1] != 0.0 {
         out.append("    flow::body_force(");
         lit(out, force[0]);

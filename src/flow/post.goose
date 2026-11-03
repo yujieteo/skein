@@ -7,6 +7,7 @@ import .mesh;
 import .cell;
 import .solve;
 import .fsi;
+import .rans;
 
 let VALUE_VX = 0;
 let VALUE_VY = 1;
@@ -96,7 +97,12 @@ fn write_vtu(path: const u8[:], x_ref: f64, v_ref: f64, p_ref: f64) -> bool {
         out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"T\" format=\"ascii\">\n");
         for n in nodes { format(out, sol[tdof(n)], "\n"); }
     }
-    if turbulent {
+    if spalart_on {
+        out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"nt\" format=\"ascii\">\n");
+        for n in nodes { format(out, v_ref * x_ref * sol[turbulence_dof(n, 0)], "\n"); }
+        out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"d\" format=\"ascii\">\n");
+        for n in nodes { format(out, x_ref * wall_d[n], "\n"); }
+    } else if turbulent {
         out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"k\" format=\"ascii\">\n");
         for n in nodes { format(out, v_ref * v_ref * sol[turbulence_dof(n, 0)], "\n"); }
         out.append("</DataArray>\n<DataArray type=\"Float64\" Name=\"w\" format=\"ascii\">\n");
