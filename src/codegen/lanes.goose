@@ -217,6 +217,8 @@ fn item_text(text: u8[:], it: Item, gone: u8[:][:]) -> u8[>..] {
 // The text of the model that keeps physics `k` of the physics items
 // `phys` and drops the others.
 fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
+    var kept: u8[:][>..] = [];
+    var dropped: u8[:][>..] = [];
     var gone: u8[:][>..] = [];
     var drop_methods: u8[:][>..] = [];
     var drop_meshes: u8[:][>..] = [];
@@ -232,8 +234,9 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
                 if j != k { drop_methods.push(mname); }
             }
         }
-        if j != k { physics_names(text, its[p], gone); }
+        if j == k { physics_names(text, its[p], kept); } else { physics_names(text, its[p], dropped); }
     }
+    for n in dropped { if !in_names(kept, n) { gone.push(n); } }
     for it in its.len {
         let kw, name = item_head(text, its[it]);
         var drop = false;
@@ -274,19 +277,34 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
 }
 
 // The text of each physics of the model, one after the other in `buf` (`ends` has the end
-// of each), or none when the model has fewer than two physics.
-fn lane_texts(text: u8[:], buf: u8[>..]&, ends: i64[>..]&) {
+// of each), or none when the model has fewer than two physics. It gives the name of the
+// first expect that does not name the unknowns or the lets of exactly one physics, or an
+// empty name.
+fn lane_texts(text: u8[:], buf: u8[>..]&, ends: i64[>..]&) -> u8[:] {
     var its = items_of(text);
     var phys: i64[>..] = [];
     for it, i in its {
         let kw, _ = item_head(text, it);
         if kw == "physics" { phys.push(i); }
     }
-    guard phys.len >= 2 else { return; };
+    guard phys.len >= 2 else { return text[0..0]; };
+    var bad: u8[:] = text[0..0];
+    for it in its {
+        let kw, name = item_head(text, it);
+        guard kw == "expect" && bad.len == 0 else { continue; };
+        var owners = 0;
+        for p in phys {
+            var names: u8[:][>..] = [];
+            physics_names(text, its[p], names);
+            if mentions_any(text[it.lo..it.hi], names) { owners++; }
+        }
+        if owners != 1 { bad = name; }
+    }
     for k in phys.len {
         buf.append(lane_text(text, its, phys, k));
         ends.push(buf.len);
     }
+    return bad;
 }
 
 // --- the merge of the TOON outputs -------------------------------------------

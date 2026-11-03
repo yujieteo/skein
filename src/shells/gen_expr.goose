@@ -418,8 +418,14 @@ recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
         return if f == "dot" { 1 } else { 3 };
     }
     if count == 2 && f == "ddot" && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == "Q_ply" {
-        // The stress of the ply with the strain: Q_ply is the reduced stiffness of the ply in the
-        // axes of the section (the layup angle is 0).
+        // The stress of the ply with the strain: Q_ply is the reduced stiffness of a 0 deg ply in
+        // the section axis.
+        for l in lams {
+            if angles[l.first + l.count - 1] != 0.0 {
+                unsupported(tok(v), "Q_ply is the reduced stiffness of a 0 deg ply in the section axis, and the bottom ply of the layup is not at 0 deg",
+                            "make the bottom ply of the layup 0 deg, or write the stress of the ply out");
+            }
+        }
         out.append("ply_ddot([");
         lits(out, axis);
         out.append("], radial(p), ");

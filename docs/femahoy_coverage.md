@@ -400,17 +400,23 @@ gives the roadmap phase that closes the gap:
 - laminate_pagano runs and passes its five `expect` (within 0.5 %). The thick
   plate has 2916 cells of 20-node hexahedra (w -0.018338 mm, sigma.xx 10.357
   MPa, the mean of sigma.xz on the edge cell -1.0102 MPa). The thin plate has a
-  20 x 20 grid of 8-node shell cells (w -0.06195 mm, sigma.xx at the bottom
+  20 x 20 grid of 9-node MITC9 shell cells (w -0.06195 mm, sigma.xx at the bottom
   face 5.395). The mechanisms are shared. Any hexahedron physics takes
   `family: serendipity` (a model of the order 2 runs `promote_hexahedra` on the
   mesh), a traction that depends on the point (`traction_with`), and the mean
   of a field over a box (`mean(sigma.ij, box)`). The shell lane meshes a flat
   plate, `boundary(box, z == z0)`, with any `layup`, a load `q` that varies with
-  the point, and the fields `kappa` and `ddot(Q_ply, ...)` in a shell `let`.
+  the point, and the field `kappa` in a shell `let`. A shell `let` also takes
+  `ddot(Q_ply, ...)`, but only when the bottom ply is at 0 deg: `Q_ply` is the
+  reduced stiffness of a 0 deg ply in the section axis, and the generator
+  rejects it for a bottom ply at a different angle.
   A model of two physics that no one lane reads (here a solid and a shell)
   becomes one model for each physics (`src/codegen/lanes.goose`): each keeps its
   physics, method, mesh, the lines of a step that name its unknowns and the
-  lets that these use. `skein run` runs each in its own lane and merges the
+  lets that these use. Each `expect` must name the unknowns or the lets of
+  exactly one physics, else `skein run` stops with an error. The split occurs
+  only when each lane reads and each goes to a different generator. Else
+  `skein run` writes the errors of the model. `skein run` runs each in its own lane and merges the
   TOON (the tables join, `memory_checks` add, the estimates are the largest).
   The results of lane k are in `.skein/results/<model>/lane<k>/`.
 

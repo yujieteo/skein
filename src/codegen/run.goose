@@ -228,8 +228,20 @@ fn run(args: const u8[:][:]) -> i64 {
         // Two physics that no one lane reads: one run for each physics.
         var buf: u8[>..] = [];
         var ends: i64[>..] = [];
-        lane_texts(text, buf, ends);
-        if ends.len >= 2 { return run_lanes(path, buf, ends, sets); }
+        let bad = lane_texts(text, buf, ends);
+        if ends.len >= 2 && own_lanes(path, buf, ends) {
+            if bad.len > 0 {
+                write_stderr(str("skein run: the expect '", bad, "' does not name the unknowns or the lets of exactly one physics. ",
+                                 "Each lane checks only the expects of its physics.\n"));
+                return 1;
+            }
+            return run_lanes(path, buf, ends, sets);
+        }
+        if ends.len >= 2 {
+            // The errors of the model, and not of its lanes.
+            let again = syntax::parse_model(path, text);
+            if again >= 0 { read_model(again); }
+        }
     }
     if lane < 0 {
         fmt::write_errors();
@@ -258,6 +270,18 @@ fn run(args: const u8[:][:]) -> i64 {
         return 3;
     }
     return shell(shell_quoted(str("./", exe)));
+}
+
+// True when each text of `buf` (lanes.goose) reads, and no two go to the same generator.
+fn own_lanes(path: u8[:], buf: u8[:], ends: i64[:]) -> bool {
+    var lanes: i64[>..] = [];
+    for e, k in ends {
+        let prog = syntax::parse_model(path, buf[(if k > 0 { ends[k - 1] } else { 0 })..e]);
+        let lane = if prog >= 0 { read_model(prog) } else { -1 };
+        if lane < 0 || position(lanes, lane) >= 0 { return false; }
+        lanes.push(lane);
+    }
+    return true;
 }
 
 // A model of two physics in two lanes (lanes.goose): each text has one
