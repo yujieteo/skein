@@ -47,15 +47,41 @@ linting, and the tests run under ASan and UBSan builds. Goose is
 experimental, so the lint rules grow with the language.
 
 Phases 7 and later mature the physics language and its standard library.
-Phases 1 to 6 below stay as the record of the work that is done.
+The phase table above and the status sections below stay as the record of phases 0 to 6.
 
 | Phase | Contents | Gate |
 |---|---|---|
 | 7 (option A) | Two start steps first. Step 1: `/guardrails` level lint on the Goose source. Step 2: ASan and UBSan builds of the tests, in the local check. Then the generic `physics` block: any keyed-in equation gives a solver, and the generic path never calls a built-in. Each built-in family (heat, elastic with solid, contact, modal and buckling, flow with Stokes, Navier-Stokes, turbulence and FSI, edge and wave, mixed, shells and beams, the grid methods, the meshless methods, the coupled physics) stays, and it also gets a standard-library `physics` port. The built-ins form the standard library, in their own package. Generated explicit steps also run on the GPU. Implicit GPU stays in phase 10. | Start gate: steps 1 and 2 have landed. Before the work starts, record the time and the memory of each benchmark. Each port matches its built-in within 1e-10. The built-ins pass their current benchmarks and `expect` lines (the examples in `examples/`, the 787 models, the samples and the tests of each `src/` package), with no time slower than the record. A test fails if the compiler source names a family (R1.3a, generic path only). An op-count test shows that the generated solver is at most 1.2 times the built-in (R1.3). A runtime work counter (R1.3b) shows one assembly for each matrix that the equations need, and no copy, allocation or pass that they do not need. It runs on the CPU and on the GPU. Generated explicit steps on the GPU agree with the CPU. |
-| 8 | Solver gaps in features that are marked done, closed as `physics` blocks of the standard library. Solid: the nonlinear solid on hex and quad cells, the 20-node hexahedron (`frequency_cantilever.skn`), higher-order Nédélec elements. Open cases that test the built-ins: `naca0012_ladson.skn`, `dam_break_vof.skn`, `dam_break_martin_moyce.skn`, `laminate_pagano.skn` and `warpage_2p5d_frame.skn`. Shells: modes and buckling. Contact: large sliding, `nitsche`, `mortar`, and a static step with contact off the CPU. Heat: radiation in 3D and in transient steps, transient heat with k(T) or radiation. Flow: transient FSI, `pv_coupling`, inlet values of k and w. EM: PML in 3D and the integral of a field on a curve (`dipole_king_middleton.skn`). Meshless: `basis: quadratic`, `integrate: gauss`, `gfd` elasticity, Poisson disk points. Study: `bobyqa`, params of the geometry, and the order of a `report` in `verify convergence`. | Each item has an example with an `expect` that passes, and a test in the package of its physics. The `// blocked-by:` marks that name these items are removed. The five open cases above pass their `expect` lines (`naca0012_ladson.skn` needs cd at 4.04 deg and cd and cl at 10.12 deg within the `expect`; `dam_break_vof.skn` needs a transient two-phase solver on quads with a variable rho and mu; `dam_break_martin_moyce.skn` needs a generator and a CLI lane for the meshless package; the other two need the second-order serendipity hexahedra). The benchmarks of phase 7 still pass, with no time slower than the record of phase 7. |
+| 8 | Solver gaps in features that are marked done, closed as `physics` blocks of the standard library. Solid: the nonlinear solid on hex and quad cells, the 20-node hexahedron (`frequency_cantilever.skn`), higher-order Nédélec elements. Open cases that test the built-ins: `naca0012_ladson.skn`, `dam_break_vof.skn`, `dam_break_martin_moyce.skn` and `warpage_2p5d_frame.skn`. `laminate_pagano.skn` is done: it runs with 20-node hexahedra and passes its `expect` lines ([PR #96](https://github.com/yujieteo/skein/pull/96)). Shells: modes and buckling. Contact: large sliding, `nitsche`, `mortar`, and a static step with contact off the CPU. Heat: radiation in 3D and in transient steps, transient heat with k(T) or radiation. Flow: transient FSI, `pv_coupling`, inlet values of k and w. EM: PML in 3D and the integral of a field on a curve (`dipole_king_middleton.skn`). Meshless: `basis: quadratic`, `integrate: gauss`, `gfd` elasticity, Poisson disk points. Study: `bobyqa`, params of the geometry, and the order of a `report` in `verify convergence`. | Each item has an example with an `expect` that passes, and a test in the package of its physics. The `// blocked-by:` marks that name these items are removed. The four open cases above pass their `expect` lines (`naca0012_ladson.skn` needs cd at 4.04 deg and cd and cl at 10.12 deg within the `expect`; `dam_break_vof.skn` needs a transient two-phase solver on quads with a variable rho and mu; `dam_break_martin_moyce.skn` needs a generator and a CLI lane for the meshless package; `warpage_2p5d_frame.skn` needs a hexahedron grid on a turned box, for the move and rotate of the sloped fillet, from the phase 9 item "Hexahedra on cut boxes and on regions"). The benchmarks of phase 7 still pass, with no time slower than the record of phase 7. |
 | 9 | Mesher and geometry. Hexahedra on cut boxes and on regions. The `stadium` shape. Boundary-layer cells and the far field of a spline airfoil. NURBS surfaces and NURBS curves in 3D. A smooth solid and its STEP file from the topology result. Tetrahedra of the quality that the femahoy sizes need, with the meshes that are finer than the femahoy sizes. | Each item has a test in `src/mesher/test.goose` or an example with an `expect` that passes. The mesh quality tests of phase 6 still pass. |
 | 10 | Speed, after A. The waveguide models at the femahoy sizes. A shape study builds one program for all cases (now one for each case: 51 cases in 23 min). The implicit GPU path on a stiff 3D model (sample 01: 319,320 dofs, no end in 15 min, CPU 50 s). The explicit nonlinear solid on the CPU with all threads (now one thread). | The waveguide models run at the femahoy sizes and pass their `expect`. The shape study of `shape_hole_biaxial.skn` takes less time than the 23 min of now, with the same result. Sample 01 on the GPU ends and matches the CPU result, in a time that is not more than the CPU time. The benchmarks of phase 7 are not slower. |
 | 11 (later) | Solver algorithms that the user writes in Skein: the Newton loop, time stepping and preconditioners. | A new PDE that is not in the standard library runs within 1.2 times the time of a hand-written Goose solver for the same PDE. |
+
+### Design task: language gaps
+
+Four gaps in the Skein language, in this order:
+
+1. Expected answers. A first-class `expect` or reference construct has a
+   value, a tolerance and a source. Reference values that are now in
+   comments become checked results. Examples: u_y = 10.5953 mm at corner A,
+   S11 = 0, and the Rayleigh value 1892 0.5829156886.
+2. Hidden defaults. The method of each block is visible in the program, or
+   `skein check` prints it. Examples: quadratic tetrahedra, the start value
+   of Newton.
+3. Conventions and roles. Sign and phase conventions, for example
+   exp(im*omega*t), and the roles of regions are declarations. The compiler
+   checks them.
+4. Names and sources. A model or a value has a `doc` or `source` field, for
+   example Table 1 of a paper.
+
+Gate: each gap has a design note and a spec section. Each `.skn` example
+that has a reference value in a comment has it as a checked `expect` with a
+source, and `skein run` passes it. `skein check` prints the method of each
+block that has no `method` line. A test shows that a wrong convention or a
+wrong region role is an error of `skein check`.
+
+Reason: the examples in `examples/` keep reference values, conventions and sources
+in comments, where no run checks them.
 
 ### Deferred
 
@@ -65,6 +91,7 @@ These items do not serve the direction now. They stay on the list.
 |---|---|
 | the interposer warpage `expect` | `interposer_warpage.skn` keeps the order of Figure 7, but 3 of 9 cases are within 25 %, so its `expect` fails |
 | a step other than `harmonic` with a `Complex` unknown | does not run yet |
+| `team7_eddy_current.skn` | the 3D direct solve limits the mesh to 68066 dofs, and Bz misses the `expect` by 10 % to 36 % |
 
 The build order of the methods is `cg`, `fv`, `dg`, then meshless
 (decision 5 in [decisions.md](decisions.md)).
