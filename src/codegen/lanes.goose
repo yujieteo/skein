@@ -161,8 +161,8 @@ fn mentions_any(s: u8[:], names: u8[:][:]) -> bool {
     return false;
 }
 
-// The line of a step that names none of `gone`: a bc, an output, or any line. It
-// writes the line to `out`.
+// The statement of a step that names none of `gone`: a bc, an output, or any other
+// statement but an expect. It writes the statement to `out`.
 fn step_line(line: u8[:], gone: u8[:][:], out: u8[>..]&) {
     let w, after = first_word(line, 0);
     if w == "bc" {
@@ -196,8 +196,27 @@ fn step_line(line: u8[:], gone: u8[:][:], out: u8[>..]&) {
     out.push('\n');
 }
 
-// The text of an item without the lines of a step that name `gone`.
-fn item_text(text: u8[:], it: Item, gone: u8[:][:]) -> u8[>..] {
+// The end of the statement of a step that starts at `at`: its line and the lines after it
+// that have more indent or start with ) or ]. A line with no indent (the head of the step)
+// is a statement of its own.
+fn statement_end(text: u8[:], at: i64, hi: i64) -> i64 {
+    var indent = 0;
+    while at + indent < hi && text[at + indent] == ' ' { indent++; }
+    var e = at;
+    while e < hi && text[e] != '\n' { e++; }
+    while indent > 0 && e + 1 < hi {
+        var c = e + 1;
+        while c < hi && text[c] == ' ' { c++; }
+        guard c < hi && text[c] != '\n' && (c - (e + 1) > indent || text[c] == ')' || text[c] == ']') else { break; };
+        e = c;
+        while e < hi && text[e] != '\n' { e++; }
+    }
+    return e;
+}
+
+// The text of an item without the statements of a step that name `gone`, and without the
+// expects of a step that do not have exactly one physics of `phys`.
+fn item_text(text: u8[:], its: Item[:], phys: i64[:], it: Item, gone: u8[:][:]) -> u8[>..] {
     var out: u8[>..] = [];
     let kw, _ = item_head(text, it);
     if kw != "step" {
@@ -206,12 +225,28 @@ fn item_text(text: u8[:], it: Item, gone: u8[:][:]) -> u8[>..] {
     }
     var at = it.lo;
     while at < it.hi {
-        var e = at;
-        while e < it.hi && text[e] != '\n' { e++; }
-        step_line(text[at..e], gone, out);
+        let e = statement_end(text, at, it.hi);
+        let w, _ = first_word(text[at..e], 0);
+        if w != "expect" {
+            step_line(text[at..e], gone, out);
+        } else if !mentions_any(text[at..e], gone) && owner_count(text, its, phys, text[at..e]) == 1 {
+            out.append(text[at..e]);
+            out.push('\n');
+        }
         at = e + 1;
     }
     return out;
+}
+
+// The number of the physics `phys` whose unknowns or lets the text `s` names.
+fn owner_count(text: u8[:], its: Item[:], phys: i64[:], s: u8[:]) -> i64 {
+    var owners = 0;
+    for p in phys {
+        var names: u8[:][>..] = [];
+        physics_names(text, its[p], names);
+        if mentions_any(s, names) { owners++; }
+    }
+    return owners;
 }
 
 // The text of the model that keeps physics `k` of the physics items
@@ -243,7 +278,8 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
         for p, j in phys { if p == it && j != k { drop = true; } }
         if kw == "method" && in_names(drop_methods, name) { drop = true; }
         if kw == "mesh" && in_names(drop_meshes, name) && name != keep_mesh { drop = true; }
-        if kw == "expect" && mentions_any(text[its[it].lo..its[it].hi], gone) { drop = true; }
+        if kw == "expect" && (mentions_any(text[its[it].lo..its[it].hi], gone) ||
+                              owner_count(text, its, phys, text[its[it].lo..its[it].hi]) != 1) { drop = true; }
         its[it].keep = !drop;
     }
     // The lets of geometry, the materials and the tables that no kept item uses.
@@ -261,7 +297,7 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
             guard geometry || kw == "material" || kw == "table" else { continue; };
             var used = false;
             for o in its.len {
-                if o != it && its[o].keep && has_name(item_text(text, its[o], gone), name) { used = true; }
+                if o != it && its[o].keep && has_name(item_text(text, its, phys, its[o], gone), name) { used = true; }
             }
             if !used {
                 its[it].keep = false;
@@ -271,7 +307,7 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
     }
     var out: u8[>..] = [];
     for it in its {
-        if it.keep { out.append(item_text(text, it, gone)); }
+        if it.keep { out.append(item_text(text, its, phys, it, gone)); }
     }
     return out;
 }
@@ -291,14 +327,18 @@ fn lane_texts(text: u8[:], buf: u8[>..]&, ends: i64[>..]&) -> u8[:] {
     var bad: u8[:] = text[0..0];
     for it in its {
         let kw, name = item_head(text, it);
-        guard kw == "expect" && bad.len == 0 else { continue; };
-        var owners = 0;
-        for p in phys {
-            var names: u8[:][>..] = [];
-            physics_names(text, its[p], names);
-            if mentions_any(text[it.lo..it.hi], names) { owners++; }
+        if kw == "expect" && bad.len == 0 && owner_count(text, its, phys, text[it.lo..it.hi]) != 1 { bad = name; }
+        guard kw == "step" else { continue; };
+        var at = it.lo;
+        while at < it.hi && bad.len == 0 {
+            let e = statement_end(text, at, it.hi);
+            let w, after = first_word(text[at..e], 0);
+            if w == "expect" && owner_count(text, its, phys, text[at..e]) != 1 {
+                let n, _ = first_word(text[at..e], after);
+                bad = n;
+            }
+            at = e + 1;
         }
-        if owners != 1 { bad = name; }
     }
     for k in phys.len {
         buf.append(lane_text(text, its, phys, k));
