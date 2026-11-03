@@ -396,6 +396,51 @@ longer than 60 lines, and one namespace per model?
 Recommended: **yes**. Reason: the kernels are straight-line code with no
 branches, from one template each. The namespace is G1.3.
 
+## Round 7: the physics language (2026-11-04)
+
+The captain answered in three rounds. The words of the captain are exact.
+
+**G7.1** Does `physics` replace the built-in families?
+
+- A. Yes. The built-ins move to the standard library as `physics` blocks and
+  the old code goes.
+- B. No. The built-ins stay and form the standard library. Each also gets a
+  `physics` port.
+
+Captain: "I also want built in versions, I am just talking about making
+physics flexible enough to accept arbitrary physics. Make both standard
+library ports and physics ports." Then: "Yes builtin is standard library, but
+physics should be a generic case where one keys in an equation and it does."
+Result: **B**. The port matches the built-in within 1e-10. The generic path
+never calls a built-in (R1.3a). The generated solver is at most 1.2 times the
+built-in (R1.3, op-count test), and a runtime work counter (R1.3b) runs on
+the CPU and the GPU.
+
+**G7.2** Static analysis and lint of the Goose code?
+
+Captain: "I also want the static analysis and /guardrails level linting
+somehow but I understand Goose is experimental." Then: "/guardrails on Goose
+source now. Is clang the best static analysis? Run steps 1 and 2 before phase
+3 starts." Then: "Agree with santizers. Before phase 7."
+Result: step 1 is `/guardrails` on the Goose source. Step 2 is ASan and
+UBSan builds of the tests in the local check. Both land before phase 7, and
+the phase 7 start gate includes both.
+
+**G7.3** What do the femahoy cases test?
+
+Captain: "Femahoy cases use build ins as they do today, they test the build
+ins, later these tests can test the physics { keyword."
+Result: they test the built-ins now. Later, the same cases also test the
+generic block. Ladson, the VOF dam break, the meshless dam break,
+`laminate_pagano` and `warpage_2p5d_frame` become open items of phase 8. Only
+the interposer warpage `expect` stays in Deferred.
+
+**G7.4** Phase order and gates, round 3: "Agree with all."
+Result: the phase order 7 to 11 stays. Phase 7 includes generated explicit
+steps on the GPU, which agree with the CPU. Implicit GPU stays in phase 10.
+The phase 11 gate: a new PDE that is not in the standard library runs within
+1.2 times a hand-written Goose solver for the same PDE.
+
 ---
 
 ## Answers
