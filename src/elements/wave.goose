@@ -81,7 +81,7 @@ fn clear_robin() {
 
 // The matrix of the Robin facets, on the masters.
 fn robin_assemble() {
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
     for c, i in robin_cell {
         let f = robin_facet[i];

@@ -59,6 +59,19 @@ fn mesh_box(d: i64, ord: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f
     physics = -1;
 }
 
+// Sets the Gauss points along each axis of a hexahedron: 2 or 3.
+fn set_cube_gauss(n: i64) {
+    guard n == 2 || n == 3 else { abort("set_cube_gauss: 2 or 3 points"); }
+    cube_gauss = n;
+}
+
+// Turns the 8-node hexahedra of the mesh into the 20-node serendipity hexahedra
+// of order 2 (any mesh_hex_box or mesh_hex_shape mesh).
+fn promote_hexahedra() {
+    promote_hex();
+    physics = -1;
+}
+
 // Meshes the box from (x0, y0, z0) to (x1, y1, z1) with nx × ny × nz
 // hexahedra of order 1.
 fn mesh_hex_box(x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, nx: i64, ny: i64, nz: i64) {
@@ -510,6 +523,10 @@ fn node_force(fx: f64, fy: f64, fz: f64) { add_node_force([fx, fy, fz]); }
 
 // The mean of the stress component (i, j) over the body.
 fn mean_stress(i: i64, j: i64) -> f64 { return body_mean(FIELD_STRESS, 3 * i + j); }
+// The mean of stress component (i, j) over the box from lo to hi, by the volume of the cells in it.
+fn mean_stress_box(i: i64, j: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> f64 {
+    return box_mean(FIELD_STRESS, 3 * i + j, [x0, y0, z0], [x1, y1, z1]);
+}
 // Removes the nodes of the plane from the region: for example the node
 // of a face on a symmetry plane, whose reaction also holds the force of
 // that plane. It gives false when the region holds no node.
@@ -558,6 +575,10 @@ fn fix_state() -> i64 { return fix_region_source(); }
 
 // Adds a uniform traction (force per area) on the region.
 fn traction(tx: f64, ty: f64, tz: f64) { add_region_load([tx, ty, tz]); }
+
+// Adds the traction (force per area) G(p) at the point p of each facet of the region, with G a
+// function of the program that gives f64[3].
+fn traction_with<G>() { add_region_traction_with(G); }
 
 // Adds the pressure p on the region: the traction -p n on its outward
 // normal n.

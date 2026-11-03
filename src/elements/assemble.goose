@@ -153,9 +153,9 @@ fn conductivity_at(c: i64) -> f64 {
 
 // --- the geometry of a cell at a point ---------------------------------------
 
-var shp: f64[10];
-var dref: f64[30];
-var grad: f64[30];      // dN_l / dx_t at grad[3 l + t]
+var shp: f64[20];
+var dref: f64[60];
+var grad: f64[60];      // dN_l / dx_t at grad[3 l + t]
 
 fn cell_node(c: i64, l: i64) -> i64 {
     guard c >= 0 && c < cell_count() && l >= 0 && l < per_cell else { abort("cell_node: c < cell_count() and l < per_cell"); }
@@ -220,8 +220,8 @@ fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
 // --- the cell matrix ---------------------------------------------------------
 
 // cell_matrix(c) of kernels.goose fills ke and fe for cell c.
-var ke: f64[900];       // (per_cell ncomp)², row ncomp l + p for component p of node l
-var fe: f64[30];
+var ke: f64[3600];       // (per_cell ncomp)², row ncomp l + p for component p of node l
+var fe: f64[60];
 
 // --- the sparsity pattern and the assembly -----------------------------------
 
@@ -690,8 +690,8 @@ fn add_facet_load(gv: f64[3], p: f64) {
     guard physics >= 0 && ncomp <= gv.len && dofs_sized() else { abort("add_region_load: a physics and the arrays of the dofs"); }
     let fd = dim - 1;
     let fnodes = node_count_of(fd, order);
-    var fn_shape: f64[10] = [0.0; 10];
-    var fn_dref: f64[30] = [0.0; 30];
+    var fn_shape: f64[20] = [0.0; 20];
+    var fn_dref: f64[60] = [0.0; 60];
     for c in cell_count() {
         for f in facet_count(dim) {
             if !region_facet(c, f) { continue; }
@@ -732,6 +732,48 @@ fn add_facet_load(gv: f64[3], p: f64) {
     }
 }
 
+// Adds the traction G(x) (force per area, a function of the program) at the point x
+// of each boundary facet of the region.
+fn add_region_traction_with<G>() {
+    guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("add_region_traction_with: a physics and the arrays of the dofs"); }
+    let fd = dim - 1;
+    let fnodes = node_count_of(fd, order);
+    var fn_shape: f64[20] = [0.0; 20];
+    var fn_dref: f64[60] = [0.0; 60];
+    for c in cell_count() {
+        for f in facet_count(dim) {
+            if !region_facet(c, f) { continue; }
+            for qp in quad_count(fd) {
+                let xi, w = quad_point(fd, qp);
+                shape(fd, order, xi, fn_shape, fn_dref);
+                var tan: f64[6] = [0.0; 6];
+                var x: f64[3] = [0.0; 3];
+                for l in fnodes {
+                    let n = cell_node(c, facet_node(dim, f, l));
+                    for t in 3 { x[t] += fn_shape[l] * node_x(n, t); }
+                    for r in fd {
+                        for t in 3 { tan[3 * r + t] += fn_dref[3 * l + r] * node_x(n, t); }
+                    }
+                }
+                var da = 0.0;
+                if fd == 1 {
+                    da = sqrt(tan[0] * tan[0] + tan[1] * tan[1]) * thickness;
+                } else {
+                    let nx = tan[1] * tan[5] - tan[2] * tan[4];
+                    let ny = tan[2] * tan[3] - tan[0] * tan[5];
+                    let nz = tan[0] * tan[4] - tan[1] * tan[3];
+                    da = sqrt(nx * nx + ny * ny + nz * nz);
+                }
+                let tv: f64[3] = G(x);
+                for l in fnodes {
+                    let n = cell_node(c, facet_node(dim, f, l));
+                    for k in ncomp { load[ncomp * n + k] += tv[k] * fn_shape[l] * w * da; }
+                }
+            }
+        }
+    }
+}
+
 // Whether facet f of cell c is on the region. A facet with its vertices
 // on two parts can cut a corner of the body, so all vertices must be on
 // one part, and in the body of the region.
@@ -747,9 +789,9 @@ fn region_facet(c: i64, f: i64) -> bool {
 
 // The shape functions of the nodes of facet f of cell c at its quadrature
 // point qp, in fn_shape, and the weight of the point times dA.
-fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[10]&) -> f64 {
+fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[20]&) -> f64 {
     let fd = dim - 1;
-    var fn_dref: f64[30] = [0.0; 30];
+    var fn_dref: f64[60] = [0.0; 60];
     let xi, w = quad_point(fd, qp);
     shape(fd, order, xi, fn_shape, fn_dref);
     // The tangents dx/dxi_r of the facet.
@@ -791,6 +833,34 @@ fn body_mean(what: i64, comp: i64) -> f64 {
         }
     }
     return if volume > 0.0 { sum / volume } else { 0.0 };
+}
+
+// The mean of the field `what`, component `comp`, over the box from lo to hi: the points of
+// 4 × 4 × 4 midpoints of each live cell that are in the box, weighted by the volume that
+// each stands for.
+fn box_mean(what: i64, comp: i64, lo: f64[3], hi: f64[3]) -> f64 {
+    var sum = 0.0;
+    var volume = 0.0;
+    let tol = geometry_tolerance();
+    for c in cell_count() {
+        if !is_live(c) { continue; }
+        for k in 4 {
+            for j in 4 {
+                for i in 4 {
+                    let xi: f64[3] = [(i + 0.5) / 4.0, (j + 0.5) / 4.0, (k + 0.5) / 4.0];
+                    let dv = cell_geometry(c, xi);
+                    var x: f64[3] = [0.0; 3];
+                    for l in per_cell { for t in 3 { x[t] += shp[l] * node_x(cell_node(c, l), t); } }
+                    var inside = true;
+                    for t in 3 { if x[t] < lo[t] - tol || x[t] > hi[t] + tol { inside = false; } }
+                    if !inside { continue; }
+                    sum += cell_field(c, xi, what, comp) * dv;
+                    volume += dv;
+                }
+            }
+        }
+    }
+    return if volume > 0.0 { sum / volume } else { 0.0 / 0.0 };
 }
 
 // The facets of the film conditions dot(q, n) = h (T - T_inf) of the step:
@@ -853,7 +923,7 @@ fn clear_ambient() {
 }
 
 // The temperature of `sol` at the quadrature point shape fn_shape of facet f of cell c.
-fn facet_temperature(c: i64, f: i64, fn_shape: f64[10]&) -> f64 {
+fn facet_temperature(c: i64, f: i64, fn_shape: f64[20]&) -> f64 {
     var t = 0.0;
     for a in node_count_of(dim - 1, order) { t += fn_shape[a] * sol[cell_node(c, facet_node(dim, f, a))]; }
     return t;
@@ -862,7 +932,7 @@ fn facet_temperature(c: i64, f: i64, fn_shape: f64[10]&) -> f64 {
 // Adds to r the heat ∫ c (T^4 - T_inf^4) Ni dA that each node radiates, at
 // the temperature in `sol`.
 fn ambient_residual(r: f64[:]) {
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
     for c, i in amb_cell {
         let f = amb_facet[i];
@@ -877,7 +947,7 @@ fn ambient_residual(r: f64[:]) {
 
 // Adds ∫ 4 c T^3 Ni Nj dA of each facet to the entries of `m`, an array with the pattern of the matrix.
 fn ambient_tangent(m: f64[:]) {
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
     for c, i in amb_cell {
         let f = amb_facet[i];
@@ -896,7 +966,7 @@ fn ambient_tangent(m: f64[:]) {
 // The heat ∫ c (T^4 - T_inf^4) dA that the radiation facets of the region
 // take out of the body.
 fn region_ambient_heat() -> f64 {
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     var heat = 0.0;
     for c, i in amb_cell {
         let f = amb_facet[i];
@@ -913,7 +983,7 @@ fn region_ambient_heat() -> f64 {
 // The heat ∫ h T dA that the film facets give, with T of the solution:
 // the part of a film condition that the load does not hold.
 fn film_heat() -> f64 {
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     var heat = 0.0;
     for c, i in film_cell {
         let f = film_facet[i];
@@ -927,7 +997,7 @@ fn film_heat() -> f64 {
 
 // Adds ∫ h Ni Nj dA of each film facet to the matrix.
 fn add_films() {
-    var fn_shape: f64[10] = [0.0; 10];
+    var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
     for c, i in film_cell {
         let f = film_facet[i];

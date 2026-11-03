@@ -174,6 +174,7 @@ recursive fn named(n: i64, word: u8[:]) -> Val {
     if at_point && axis_of(word) >= 0 { return scalar(px[axis_of(word)]); }
     if at_point && word == "n" && edge_mode { return vector(edge_n); }
     // n is the outward unit normal of the side of the cylinder.
+    if at_point && word == "n" && flat { return vector([0.0, 0.0, 1.0]); }
     if at_point && word == "n" && radius > 0.0 { return vector([0.0, px[1] / radius, px[2] / radius]); }
     if word == "pi" { return scalar(PI); }
     if axis_of(word) >= 0 {
@@ -424,6 +425,8 @@ var expects: Expect[>..];
 var shell_name: u8[..64];
 var shell_tok = -1;
 var radius = 0.0;
+var flat = false;       // the shell is the face z == flat_z of a box: a plate with the lines of x and of y, radius 1
+var flat_z = 0.0;
 var x0 = 0.0;
 var x1 = 0.0;
 var t0 = 0.0;
@@ -531,6 +534,9 @@ fn reset() {
     theta_name = [];
     args = [-1; 5];
     radius = 0.0;
+    flat = false;
+    flat_z = 0.0;
+    q_field = false;
     shell_mats.clear();
     shell_mat_g.clear();
     beam_mats.clear();
@@ -597,7 +603,10 @@ fn is_source(n: i64) -> bool { return source_name.len > 0 && kind(n) == syntax::
 fn source_member(n: i64) -> bool { return kind(n) == syntax::N_MEMBER && is_source(first(n)); }
 
 // The point of the shell at x and θ.
-fn shell_point(x: f64, t: f64) -> f64[3] { return [x, radius * sin(t), radius * cos(t)]; }
+fn shell_point(x: f64, t: f64) -> f64[3] {
+    if flat { return [x, t, flat_z]; }
+    return [x, radius * sin(t), radius * cos(t)];
+}
 
 let SHELL_FIX = "write the shell as boundary(c, y^2 + z^2 == R^2 && z >= 0 m), with c = cylinder((0, 0, 0) m, (1, 0, 0), R, L)";
 
@@ -660,8 +669,12 @@ fn shell(n: i64, v: i64) {
     }
     let si = find(solid_names, name(arg(v, 0)));
     let c = if si >= 0 { solid_nodes[si] } else { -1 };
+    if c >= 0 && is_call(c, "box") && syntax::child_count(c) == 3 {
+        flat_shell(n, v, c);
+        return;
+    }
     guard c >= 0 && is_call(c, "cylinder") && syntax::child_count(c) == 5 else {
-        unsupported(tok(arg(v, 0)), str("the shell '", name(n), "' is not on a cylinder that a let names"), SHELL_FIX);
+        unsupported(tok(arg(v, 0)), str("the shell '", name(n), "' is not on a cylinder or a box that a let names"), SHELL_FIX);
         return;
     }
     let centre = vec3(value(arg(c, 0)));
@@ -747,6 +760,38 @@ fn shell(n: i64, v: i64) {
     t0 = edge_of(cuts, ts - step, ts);
     let last = ts + step * (inside - 1);
     t1 = edge_of(cuts, last + step, last);
+    set64(shell_name, name(n));
+    shell_tok = tok(n);
+}
+
+let FLAT_FIX = "write the shell as boundary(b, z == z0), with b = box((x0, y0, z0 - h), (x1, y1, z0)) a box that a let names";
+
+// `let plate: Surface = boundary(b, z == z0)`: the face of a box in the plane z = z0 is a flat
+// plate, meshed on the lines of x and of y (radius 1, so that the y lines are lengths).
+fn flat_shell(n: i64, v: i64, c: i64) {
+    let lo = vec3(value(arg(c, 0)));
+    let hi = vec3(value(arg(c, 1)));
+    if !ok() { return; }
+    var parts: i64[>..] = [];
+    let cond = arg(v, 1);
+    guard terms(cond, parts) && parts.len == 1 && op(parts[0]) == "==" && kind(child(parts[0], 0)) == syntax::N_NAME && name(child(parts[0], 0)) == "z" else {
+        unsupported(tok(cond), "the condition of a flat shell is z == z0 only", FLAT_FIX);
+        return;
+    };
+    let z0 = scalar_value(child(parts[0], 1));
+    if !ok() { return; }
+    let tol = 1.0e-9 * (abs(hi[2]) + abs(lo[2]) + abs(hi[0] - lo[0]));
+    guard hi[0] > lo[0] && hi[1] > lo[1] && (abs(z0 - lo[2]) <= tol || abs(z0 - hi[2]) <= tol) else {
+        unsupported(tok(cond), "the plane z == z0 is not a face of the box", FLAT_FIX);
+        return;
+    };
+    flat = true;
+    flat_z = z0;
+    radius = 1.0;
+    x0 = lo[0];
+    x1 = hi[0];
+    t0 = lo[1];
+    t1 = hi[1];
     set64(shell_name, name(n));
     shell_tok = tok(n);
 }
@@ -1210,8 +1255,11 @@ fn method(n: i64) {
             }
             method_order = o as! i64;
             order = method_order;
+        } else if kind(s) == syntax::N_SETTING && ((name(s) == "family" && source_of(first(s)) == "serendipity") ||
+                  (name(s) == "quadrature" && source_of(first(s)) == "reduced")) {
+            // The cells of order 2 are the MITC9 cells, which tie the shear: no family or rule to choose.
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
-            unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order");
+            unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order, and family: serendipity and quadrature: reduced");
         }
         s = next(s);
     }
@@ -1519,6 +1567,7 @@ var axis: f64[3] = [1.0, 0.0, 0.0];
 // The load per area: a vector, or a pressure along the top normal.
 var q: f64[3] = [0.0, 0.0, 0.0];
 var q_normal = false;
+var q_field = false;      // the load per area varies with the point of a flat shell: args[4] is its code
 
 let MATERIAL_FIX = "give the material E1, E2, G12, nu12, t_ply and h";
 let LAM_PROPS = ["E1", "E2", "G12", "nu12", "t_ply", "h"];
@@ -1598,7 +1647,7 @@ fn read_loads() {
     if kind(top) != syntax::N_NAME || name(top) != "n" {
         for p in samples {
             let v = value_at(top, p);
-            if v.n != 3 || v.v[1] * p[1] + v.v[2] * p[2] <= 0.0 {
+            if v.n != 3 || (flat && v.v[2] <= 0.0) || (!flat && v.v[1] * p[1] + v.v[2] * p[2] <= 0.0) {
                 unsupported(tok(top), "this slice has the top face outward", "write top: n, or a vector outward");
                 return;
             }
@@ -1611,6 +1660,16 @@ fn read_loads() {
     var radial = true;
     let a = vec3(value_at(args[4], samples[0]));
     let s = (a[1] * samples[0][1] + a[2] * samples[0][2]) / radius;
+    if flat {
+        // A load per area that varies with the point: its code is in the program.
+        for p in samples {
+            let b = vec3(value_at(args[4], p));
+            for j in 3 { if abs(b[j] - a[j]) > 1.0e-12 * (abs(a[0]) + abs(a[1]) + abs(a[2])) { same = false; } }
+        }
+        if !ok() { return; }
+        if same { q = a; } else { q_field = true; }
+        return;
+    }
     for p in samples {
         let b = vec3(value_at(args[4], p));
         for j in 3 {

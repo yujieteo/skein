@@ -95,9 +95,9 @@ fn ct_quad_point(q: i64) -> f64[3], f64 {
 
 // The point x, the shape values sv of the facet nodes, the tangents and
 // the area factor of facet f of cell c at xi.
-fn facet_at(c: i64, f: i64, xi: f64[3], sv: f64[10]&, tan: f64[6]&) -> f64[3], f64 {
+fn facet_at(c: i64, f: i64, xi: f64[3], sv: f64[20]&, tan: f64[6]&) -> f64[3], f64 {
     let fd = dim - 1;
-    var dref: f64[30] = [0.0; 30];
+    var dref: f64[60] = [0.0; 60];
     shape(fd, order, xi, sv, dref);
     var x: f64[3] = [0.0; 3];
     for &t in tan { t = 0.0; }
@@ -165,9 +165,9 @@ fn add_slave(kn: f64, kt: f64, mu: f64) -> i64 {
     let first = contact_points();
     let fd = dim - 1;
     let fn_count = node_count_of(fd, order);
-    var sv: f64[10] = [0.0; 10];
-    var mv: f64[10] = [0.0; 10];
-    var dref: f64[30] = [0.0; 30];
+    var sv: f64[20] = [0.0; 20];
+    var mv: f64[20] = [0.0; 20];
+    var dref: f64[60] = [0.0; 60];
     var tan: f64[6] = [0.0; 6];
     for c in cell_count() {
         for f in facet_count(dim) {

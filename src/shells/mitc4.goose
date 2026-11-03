@@ -223,6 +223,30 @@ fn shell_load(c: i64, qx: f64, qy: f64, qz: f64, normal: bool) {
     }
 }
 
+// The load per area Q(p) (a function of the program that gives f64[3]) at the point p of
+// the cell, on cell c.
+fn shell_load_with<Q>(c: i64) {
+    guard c >= 0 && c < shells.len && load.len == dof_count() else { abort("shell_load_with: 0 <= c < shells.len, and a load for each dof"); }
+    if shells[c].count == 9 {
+        shell_load9_with(c, Q);
+        return;
+    }
+    load_cell(c);
+    for gp in 4 {
+        let xi = if gp % 2 == 0 { -GAUSS } else { GAUSS };
+        let eta = if gp < 2 { -GAUSS } else { GAUSS };
+        covariant(xi, eta);
+        let da = norm(cross(a1, a2));
+        var p: f64[3] = [0.0; 3];
+        for l in 4 { for k in 3 { p[k] += shape[l] * xn[3 * l + k]; } }
+        let q: f64[3] = Q(p);
+        for l in 4 {
+            let node = shells[c].n[l];
+            for k in 3 { load[6 * node + k] += shape[l] * q[k] * da; }
+        }
+    }
+}
+
 // The membrane strain and the curvature of cell c at (xi, eta) in the axes
 // of the section: (11, 22, engineering 12).
 fn shell_strains(c: i64, xi: f64, eta: f64) -> f64[3], f64[3] {
@@ -272,6 +296,19 @@ fn shell_resultants_at(c: i64, xi: f64, eta: f64) -> f64[9], f64[9] {
         }
     }
     return nt, et;
+}
+
+// The curvature tensor of cell c at (xi, eta) in the global axes.
+fn shell_curvature_at(c: i64, xi: f64, eta: f64) -> f64[9] {
+    guard c >= 0 && c < shells.len else { abort("shell_curvature_at: 0 <= c < shells.len"); }
+    let eps, kap = shell_strains(c, xi, eta);
+    var kt: f64[9] = [0.0; 9];
+    for i in 3 {
+        for j in 3 {
+            kt[3 * i + j] = kap[0] * e1[i] * e1[j] + kap[1] * e2[i] * e2[j] + 0.5 * kap[2] * (e1[i] * e2[j] + e2[i] * e1[j]);
+        }
+    }
+    return kt;
 }
 
 // The mean of shell_resultants over the shell cells at node n.

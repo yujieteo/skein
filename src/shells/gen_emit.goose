@@ -53,6 +53,8 @@ let PRELUDE = """
     var result_count = 0;
     var failed = false;
     var grid = -1;
+    var flat_z = 0.0;               // the z of a flat shell, or flat_on false
+    var flat_on = false;
     var secs: i64[>..] = [];        // the section of each material of the shell
     var run_first: i64[>..] = [];   // the beams of each run: a range of shells::beams
     var run_count: i64[>..] = [];
@@ -163,11 +165,39 @@ let PRELUDE = """
                 t[6] * v[0] + t[7] * v[1] + t[8] * v[2]];
     }
 
+    // The component k (3 i + j) of tensor t.
+    fn tcomp(t: f64[9], k: i64) -> f64 { return t[k]; }
+
+    // The stress of a ply of E1, E2, G12 and nu12 with the strain tensor t, in the section axes
+    // e1 (projected on the surface of normal nrm) and e2 = nrm × e1: plane stress, with the
+    // tensor shear.
+    fn ply_ddot(axis: f64[3], nrm: f64[3], e1v: f64, e2v: f64, g12: f64, nu12: f64, t: f64[9]) -> f64[9] {
+        let a = sub3(axis, scale3(dot3(axis, nrm), nrm));
+        let u = scale3(1.0 / norm3(a), a);
+        let v = cross3(nrm, u);
+        let tu = tdotv(t, u);
+        let tv = tdotv(t, v);
+        let nu21 = nu12 * e2v / e1v;
+        let den = 1.0 - nu12 * nu21;
+        let ea = dot3(u, tu);
+        let eb = dot3(v, tv);
+        let ec = dot3(u, tv);
+        let sa = (e1v * ea + nu12 * e2v * eb) / den;
+        let sb = (nu12 * e2v * ea + e2v * eb) / den;
+        let sc = 2.0 * g12 * ec;
+        var r: f64[9] = [0.0; 9];
+        for i in 3 {
+            for j in 3 { r[3 * i + j] = sa * u[i] * u[j] + sb * v[i] * v[j] + sc * (u[i] * v[j] + v[i] * u[j]); }
+        }
+        return r;
+    }
+
     // The value of material m: a property of the materials of the shell.
     fn pick(m: i64, values: f64[:]) -> f64 { return values[clamp(m, 0, values.len - 1)]; }
 
     // The outward unit normal of the cylinder at p.
     fn radial(p: f64[3]) -> f64[3] {
+        if flat_on { return [0.0, 0.0, 1.0]; }
         let r = sqrt(p[1] * p[1] + p[2] * p[2]);
         return [0.0, p[1] / r, p[2] / r];
     }
@@ -178,10 +208,10 @@ let PRELUDE = """
     // and for a submodel: view 0 is this model, view 1 the model of the
     // results value. It is [order, nx, nt, r, nodes, the x lines, the θ
     // lines, 1 or 0 for each cell (i + nx j) that is kept], then VIEW_SIZE values for each node: x, y and z, the 6 dofs,
-    // N, eps_m and the material. The nodes of a grid are its lattice
+    // N, eps_m, kappa and the material. The nodes of a grid are its lattice
     // points, a + (order nx + 1) b. A view of beams has order 0 and the
     // nodes of the model.
-    let VIEW_SIZE = 28;
+    let VIEW_SIZE = 37;
     var own: f64[>..] = [];
     var other: f64[>..] = [];
     var node_view: i64[>..] = [];   // the view node of each node of the model
@@ -201,11 +231,17 @@ let PRELUDE = """
     fn v_point(v: i64, k: i64) -> f64[3] { return [v_val(v, k, 0), v_val(v, k, 1), v_val(v, k, 2)]; }
     fn v_w(v: i64, k: i64) -> f64[3] { return [v_val(v, k, 3), v_val(v, k, 4), v_val(v, k, 5)]; }
     fn v_th(v: i64, k: i64) -> f64[3] { return [v_val(v, k, 6), v_val(v, k, 7), v_val(v, k, 8)]; }
-    fn v_mat(v: i64, k: i64) -> i64 { return v_val(v, k, 27) as! i64; }
+    fn v_mat(v: i64, k: i64) -> i64 { return v_val(v, k, 36) as! i64; }
 
     fn v_tn(v: i64, k: i64) -> f64[9] {
         var r: f64[9] = [0.0; 9];
         for c in 9 { r[c] = v_val(v, k, 9 + c); }
+        return r;
+    }
+
+    fn v_tk(v: i64, k: i64) -> f64[9] {
+        var r: f64[9] = [0.0; 9];
+        for c in 9 { r[c] = v_val(v, k, 27 + c); }
         return r;
     }
 
@@ -256,20 +292,22 @@ let PRELUDE = """
             let p = shells::node_point(n);
             for c in 3 { own.push(p[c]); }
             for d in 6 { own.push(shells::displacement(n, d)); }
-            for c in 19 { own.push(0.0); }
+            for c in 28 { own.push(0.0); }
             cells_at.push(0);
         }
         // The resultants at the 2 x 2 Gauss points of each cell, taken
         // bilinearly out to its nodes.
         let g = 1.0 / sqrt(3.0);
         let gauss = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
-        var at: f64[72] = [0.0; 72];
+        var at: f64[108] = [0.0; 108];
         for c, ci in shells::shells {
             for q in 4 {
                 let tn, te = shells::shell_resultants_at(ci, g * gauss[q][0], g * gauss[q][1]);
+                let tk = shells::shell_curvature_at(ci, g * gauss[q][0], g * gauss[q][1]);
                 for e in 9 {
-                    at[18 * q + e] = tn[e];
-                    at[18 * q + 9 + e] = te[e];
+                    at[27 * q + e] = tn[e];
+                    at[27 * q + 9 + e] = te[e];
+                    at[27 * q + 18 + e] = tk[e];
                 }
             }
             let m = position(secs[..], c.section);
@@ -279,15 +317,15 @@ let PRELUDE = """
                 let s = sqrt(3.0) * CELL_ETA[j];
                 for q in 4 {
                     let w = 0.25 * (1.0 + r * gauss[q][0]) * (1.0 + s * gauss[q][1]);
-                    for e in 18 { own[base + VIEW_SIZE * k + 9 + e] += w * at[18 * q + e]; }
+                    for e in 27 { own[base + VIEW_SIZE * k + 9 + e] += w * at[27 * q + e]; }
                 }
-                own[base + VIEW_SIZE * k + 27] = 1.0 * m;
+                own[base + VIEW_SIZE * k + 36] = 1.0 * m;
                 cells_at[k]++;
             }
         }
         for k in count {
             if cells_at[k] < 2 { continue; }
-            for e in 18 { own[base + VIEW_SIZE * k + 9 + e] /= cells_at[k]; }
+            for e in 27 { own[base + VIEW_SIZE * k + 9 + e] /= cells_at[k]; }
         }
     }
 
@@ -368,7 +406,7 @@ let PRELUDE = """
         let d = arc_of(p, tl[0], span);
         let off_x = max(max(xl[0] - p[0], p[0] - xl[nx]), 0.0);
         let off_t = r * max(max(-d, d - span), 0.0);
-        if off_x > tol || off_t > tol || abs(sqrt(p[1] * p[1] + p[2] * p[2]) - r) > tol {
+        if off_x > tol || off_t > tol || abs(if flat_on { p[2] - flat_z } else { sqrt(p[1] * p[1] + p[2] * p[2]) - r }) > tol {
             fault(label, "is not on the shell");
             return nodes, w, 0;
         }
@@ -424,6 +462,7 @@ let PRELUDE = """
 
     // The θ of p from t0, in [0, 2π), or a little below 0 near t0.
     fn arc_of(p: f64[3], t0: f64, span: f64) -> f64 {
+        if flat_on { return p[1] - t0; }
         var d = atan2(p[1], p[2]) - t0;
         d -= 2.0 * PI * floor(d / (2.0 * PI));
         if d > span && 2.0 * PI - d < d - span { d -= 2.0 * PI; }
@@ -596,6 +635,12 @@ let PRELUDE = """
         let n = lnode(k);
         let r = shells::grids[grid].r;
         shells::coords[3 * n] = x;
+        if shells::grids[grid].flat {
+            shells::coords[3 * n + 1] = t;
+            shells::coords[3 * n + 2] = shells::grids[grid].z0;
+            shells::set_director(n, 0.0, 0.0, 1.0);
+            return;
+        }
         shells::coords[3 * n + 1] = r * sin(t);
         shells::coords[3 * n + 2] = r * cos(t);
         shells::set_director(n, 0.0, sin(t), cos(t));
@@ -1036,6 +1081,11 @@ fn emit_shell(out: u8[>..]&) {
             rle.push(m);
         }
     }
+    if flat {
+        out.append("    flat_on = true;\n    flat_z = ");
+        lit(out, flat_z);
+        out.append(";\n");
+    }
     format(out, "    // mesh on ", physics_name, ": ", nx_cells(), " x ", nt_cells(), if order == 2 { " MITC9" } else { " MITC4" },
            " cells of at most ", mesh_size, " ", sys.length, "\n    {\n        let cells: i64[>..] = ");
     i64s(out, rle);
@@ -1045,8 +1095,13 @@ fn emit_shell(out: u8[>..]&) {
     f64s(out, xs);
     out.append(";\n        let ts: f64[>..] = ");
     f64s(out, ts);
-    out.append(";\n        grid = shells::mesh_cylinder_lines(");
-    lit(out, radius);
+    if flat {
+        out.append(";\n        grid = shells::mesh_plate_lines(");
+        lit(out, flat_z);
+    } else {
+        out.append(";\n        grid = shells::mesh_cylinder_lines(");
+        lit(out, radius);
+    }
     format(out, ", xs, ts, ", order, ", cs, ");
     lits(out, axis);
     out.append(");\n    }\n");
@@ -1174,7 +1229,13 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
         for i in s.first_own..s.first_own + s.own_count { own.push(i); }
         for i in own { if bcs[i].kind == BC_FIX { emit_bc(out, bcs[i]); } }
         if s.kind == STEP_STATIC {
-            if q_normal || q[0] != 0.0 || q[1] != 0.0 || q[2] != 0.0 {
+            if q_field {
+                format(out, "    // physics ", physics_name, ": q\n    for c in shells::shells.len { shells::shell_load_with(c) { p => ");
+                node_mode = true;
+                let r, d = emit_rt(args[4], out);
+                node_mode = false;
+                out.append(" }; }\n");
+            } else if q_normal || q[0] != 0.0 || q[1] != 0.0 || q[2] != 0.0 {
                 format(out, "    // physics ", physics_name, ": q\n    for c in shells::shells.len { shells::shell_load(c, ");
                 lits(out, q);
                 format(out, ", ", if q_normal { "true" } else { "false" }, "); }\n");
