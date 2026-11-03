@@ -158,8 +158,7 @@ gives the roadmap phase that closes the gap:
   region: a grid in r and θ on a quarter of a ring or a tube, Blossom-Quad
   on another `Surface`, a swept grid on a prism along z, and a mapped grid
   on another `Solid`. The ring of
-  [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn),
-  the flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn)
+  [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn)
   and the package of
   [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) use
   the cells of femahoy. The ring of
@@ -238,9 +237,18 @@ gives the roadmap phase that closes the gap:
   a wall-distance physics, a spline airfoil with a far field, boundary layer
   cells and a second physics), dam_break_vof and dam_break_martin_moyce
   (two-phase VOF with tables, surface tension and a Tait water; the flow
-  generator rejects the Newtonian stress `let`), turek_hron_fsi1 (a second physics in the flow generator),
-  slider_crank (a multibody first-order form) and acoustics_pulsating_sphere
-  (3D acoustic reports at a point and on a region).
+  generator rejects the Newtonian stress `let`).
+- turek_hron_fsi1 runs in the flow lane (drag +0.02 %, lift -0.06 %, ux_a +0.1 %,
+  uy_a -2.1 %). The flag is written out as St. Venant-Kirchhoff
+  (`assume finite_strain`, `hooke` of `strain(u)`, `div(defgrad(u)*S) = 0`). It is solved by
+  Newton in the total Lagrangian form (`src/flow/fsi.goose`). Deviations: the model uses
+  `method flow: cg` with `order: { v: 2, p: 1 }` in place of `fv`, and tri cells for the flag
+  in place of quads.
+- slider_crank runs in the `ode` lane (`src/ode`): exact Taylor series in time and Newton on the
+  history polynomial. `generalized_alpha(rho)` is mapped to 6-point backward differences, so the
+  numerical dissipation of the alpha method is not reproduced.
+- acoustics_pulsating_sphere runs in the wave lane: a Robin boundary term, complex sample
+  expressions, and a graded mesh of the octant shell (`shell_tets` in `src/mesher/sweep.goose`).
 
 - Structural models of phase 3 run with `skein run` and pass their `expect`:
   [buckling_column.skn](../examples/femahoy/buckling_column.skn),

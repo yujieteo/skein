@@ -268,11 +268,14 @@ fn cdiv(a: f64[2], b: f64[2]) -> f64[2] {
 // A Complex constant: `im`, and `omega` of the frequency that the
 // generator writes, with +, -, *, / and integer powers, over the real
 // values of value().
+var unknown_as_one = false;     // cval reads the unknown as 1: the z of z*p in a Robin condition
+
 recursive fn cval(n: i64) -> f64[2] {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
     if k == syntax::N_NAME && name(n) == "im" { return [0.0, 1.0]; }
     if k == syntax::N_NAME && name(n) == "omega" { return [omega_now, 0.0]; }
+    if k == syntax::N_NAME && unknown_as_one && name(n) == unknown_name { return [1.0, 0.0]; }
     if eddy_on && k == syntax::N_NAME && name(n) == unknown_name { return eddy_u; }
     if eddy_on && is_call(n, "ddt") && syntax::child_count(n) == 2 { return cmul([0.0, omega_now], cval(arg(n, 0))); }
     if eddy_on && k == syntax::N_NAME && physics_let(name(n)) >= 0 && codegen::depth < 100 {
@@ -342,6 +345,7 @@ let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
 let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosure of the step
 let BC_PRESSURE = 4; // `bc inner: sigma*n = -p*n`: v[0] holds p
 let BC_FILM = 5;    // `bc skin: dot(q, n) = h*(T - T_air)`: v holds h and T_air
+let BC_ROBIN = 9;   // `bc far: dot(grad(p), n) = z*p`: node holds z*p, with p read as 1
 let BC_AMBIENT = 8; // `bc skin: dot(q, n) = c*(T^4 - T_amb^4)`: v holds c = eps sigma and T_amb
 
 fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE || b.kind == BC_MOMENT; }
@@ -473,6 +477,7 @@ let FIELD_VON_MISES = 12; // max(von_mises(sigma), r) on the boundary r
 let FIELD_CONSTANT = 11; // a number, a param or a let: scale is its value
 let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
 let FIELD_EXTREME = 10; // max(u.z, r), min(u.z, r) or their difference on the boundary r: comp is the component + 10 for min, + 20 for the range
+let FIELD_WAVE_Z = 13;  // a part of an expression of samples of the wave unknown: comp is the node of the part call
 let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
 
 struct Expect {
@@ -2036,6 +2041,10 @@ fn bc(n: i64) -> i64 {
         cut_source = from;
         b.kind = BC_SOURCE;
         b.comp = from;
+    } else if physics == WAVE && t == str("dot(grad(", unknown_name, "), n)") && names_in(v, unknown_name) {
+        // The Robin condition z*p, with z constant.
+        b.kind = BC_ROBIN;
+        b.node = v;
     } else if physics == WAVE && (t == unknown_name || t == str("dot(grad(", unknown_name, "), n)")) {
         b.kind = if t == unknown_name { BC_FIX } else { BC_LOAD };
         b.node = v;
@@ -2370,10 +2379,38 @@ fn max_von_mises(e: i64) -> bool {
 let PARTS = ["re", "imag", "abs", "arg"];
 
 // The index in PARTS of `re(u at p)` and the others, or -1.
-fn wave_part(e: i64) -> i64 {
+fn wave_simple(e: i64) -> i64 {
     guard physics == WAVE && kind(e) == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME else { return -1; }
     let f = arg(e, 0);
     guard kind(f) == syntax::N_AT && kind(child(f, 0)) == syntax::N_NAME && name(child(f, 0)) == unknown_name else { return -1; }
+    for w, i in PARTS { if name(child(e, 0)) == w { return i; } }
+    return -1;
+}
+
+// The number of samples of the wave unknown in the expression e: `u at p` and
+// `mean(u, r)` on a boundary r, joined by + - * / and constants. 0 for a
+// constant, -1 for anything else (a power of a sample, the bare unknown).
+recursive fn wave_samples(e: i64) -> i64 {
+    let k = kind(e);
+    if k == syntax::N_AT { return if kind(child(e, 0)) == syntax::N_NAME && name(child(e, 0)) == unknown_name { 1 } else { -1 }; }
+    if is_call(e, "mean") && syntax::child_count(e) == 3 && kind(arg(e, 0)) == syntax::N_NAME && name(arg(e, 0)) == unknown_name {
+        return if kind(arg(e, 1)) == syntax::N_NAME && find_surf(name(arg(e, 1))) >= 0 { 1 } else { -1 };
+    }
+    let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(e)) } else { "" };
+    if k == syntax::N_UNARY && op == "-" { return wave_samples(first(e)); }
+    if k == syntax::N_BINARY && (op == "+" || op == "-" || op == "*" || op == "/") {
+        let a = wave_samples(child(e, 0));
+        let b = wave_samples(child(e, 1));
+        return if a < 0 || b < 0 { -1 } else { a + b };
+    }
+    return if names_in(e, unknown_name) || has_sample(e) || is_call(e, "mean") { -1 } else { 0 };
+}
+
+// The index in PARTS of `re(z)` and the others of an expression z of samples
+// of the wave unknown, or -1.
+fn wave_part(e: i64) -> i64 {
+    guard physics == WAVE && kind(e) == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME else { return -1; }
+    guard wave_samples(arg(e, 0)) >= 1 else { return -1; }
     for w, i in PARTS { if name(child(e, 0)) == w { return i; } }
     return -1;
 }
@@ -2387,9 +2424,18 @@ fn report(item: i64) {
         return;
     }
     if physics == WAVE {
-        if wave_part(e) < 0 {
+        if wave_part(e) < 0 && wave_samples(e) < 1 {
             unsupported(tok(e), str("the report '", source_of(e), "' is not in this generator"),
-                        str("write report re(", unknown_name, " at (1, 0) m), or imag, abs or arg of it"));
+                        str("write report re(", unknown_name, " at (1, 0) m), or imag, abs or arg of it, or ", unknown_name, " at (1, 0) m or mean(", unknown_name, ", r)"));
+            return;
+        }
+        if wave_part(e) < 0 {
+            // A Complex value: its real part and its imaginary part.
+            for part in 2 {
+                var r = Report { expr: e, label: [], row: part };
+                codegen::set256(r.label, str(source_of(item), if part == 0 { " (re)" } else { " (imag)" }));
+                reports.push(r);
+            }
             return;
         }
     } else if is_call(e, "reaction") && syntax::child_count(e) == 2 {
@@ -2489,6 +2535,18 @@ fn region_surf(r: i64) -> i64 {
 }
 
 // Whether the tree n has an `f at p` below it.
+// Whether the expression n names the identifier w.
+recursive fn names_in(n: i64, w: u8[:]) -> bool {
+    if n < 0 { return false; }
+    if kind(n) == syntax::N_NAME && name(n) == w { return true; }
+    var c = first(n);
+    while c >= 0 {
+        if names_in(c, w) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
 recursive fn has_sample(n: i64) -> bool {
     if n < 0 { return false; }
     if kind(n) == syntax::N_AT { return true; }
@@ -2553,9 +2611,12 @@ fn expect(n: i64, step: i64) {
     } else if is_call(left, "eigenvalue") {
         comp = eigen_index(left, step >= 0);
         what = if comp >= 0 { FIELD_EIGEN } else { -1 };
-    } else if wave_part(left) >= 0 {
-        comp = wave_part(left);
+    } else if wave_simple(left) >= 0 {
+        comp = wave_simple(left);
         what = FIELD_WAVE;
+    } else if wave_part(left) >= 0 {
+        comp = left;
+        what = FIELD_WAVE_Z;
     }
     var surf = -1;
     var scale = 1.0;
@@ -2586,7 +2647,7 @@ fn expect(n: i64, step: i64) {
         return;
     }
     let point = if what == FIELD_WAVE { arg(left, 0) } else { left };
-    let no_point = what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN || what == FIELD_CONSTANT;
+    let no_point = what == FIELD_WAVE_Z || what == FIELD_EIGEN || surf >= 0 || what == FIELD_BODY_MEAN || what == FIELD_CONSTANT;
     var x = Expect { name: [], what: what, comp: comp, at: if no_point { [0.0; 3] } else { value(child(point, 1)).v }, want: scalar_value(right),
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale,
@@ -3480,7 +3541,7 @@ fn harmonic_values() {
                 let nu, ce, se = eddy_terms();
                 c = ce;
             }
-            for b in active[s.first_bc..s.first_bc + s.bc_count] { if b.kind != BC_SOURCE { cval(b.node); } }
+            for b in active[s.first_bc..s.first_bc + s.bc_count] { unknown_as_one = b.kind == BC_ROBIN; if b.kind != BC_SOURCE { cval(b.node); } unknown_as_one = false; }
             if pml_g >= 0 && !(c[0] > 0.0) { unsupported(pml_tok, "the pml needs c > 0 in div(grad(u)) + c*u = s", PML_FIX); }
             if !ok() { return; }
         }
@@ -3552,7 +3613,7 @@ fn reaction_unit() -> const u8[:] {
 }
 
 fn field_unit(what: i64) -> const u8[:] {
-    if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_MEAN || what == FIELD_EXTREME { return value_unit(); }
+    if what == FIELD_VALUE || what == FIELD_WAVE || what == FIELD_WAVE_Z || what == FIELD_MEAN || what == FIELD_EXTREME { return value_unit(); }
     if what == FIELD_STRESS || what == FIELD_BODY_MEAN || what == FIELD_MAX || what == FIELD_VON_MISES { return codegen::system.pressure; }
     if what == FIELD_REACTION { return reaction_unit(); }
     if codegen::system.pressure == "Pa" { return "W/m^2"; }
@@ -3837,6 +3898,28 @@ let RKPM_CALLS = ["solve()", "element_count()", "dof_count()", "cg_iterations()"
 
 // The part of the program of a wave physics.
 let WAVE_PRELUDE = """
+    // The Complex unknown at a point.
+    fn wave_pair(x: f64, y: f64, z: f64) -> f64[2], bool {
+        let re, found_re = elements::value_at(0, x, y, z);
+        let im, found_im = elements::value_at(1, x, y, z);
+        return [re, im], found_re && found_im;
+    }
+
+    fn wadd(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] + b[0], a[1] + b[1]]; }
+    fn wsub(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] - b[0], a[1] - b[1]]; }
+    fn wmul(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
+    fn wdiv(a: f64[2], b: f64[2]) -> f64[2] {
+        let d = b[0] * b[0] + b[1] * b[1];
+        return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d];
+    }
+
+    // Part `part` of a Complex value: re, imag, abs or arg.
+    fn wave_pick(part: i64, z: f64[2]) -> f64 {
+        if part == 0 { return z[0]; }
+        if part == 1 { return z[1]; }
+        return if part == 2 { sqrt(z[0] * z[0] + z[1] * z[1]) } else { atan2(z[1], z[0]) };
+    }
+
     // Part `part` of the Complex unknown at a point: re, imag, abs or arg.
     fn wave_at(part: i64, x: f64, y: f64, z: f64) -> f64, bool {
         let re, found_re = elements::value_at(0, x, y, z);
@@ -3996,6 +4079,15 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         emit_rigid(out, b);
     } else if b.kind == BC_SOURCE {
         format(out, "    cut_outside(elements::fix_state(), \"", s.name, "\");\n");
+    } else if physics == WAVE && b.kind == BC_ROBIN {
+        unknown_as_one = true;
+        let z = cval(b.node);
+        unknown_as_one = false;
+        out.append("    elements::robin(");
+        lit(out, z[0]);
+        out.append(", ");
+        lit(out, z[1]);
+        out.append(");\n");
     } else if physics == WAVE {
         // The value at the omega of the frequency that the generator writes.
         let z = cval(b.node);
@@ -4289,14 +4381,76 @@ let EDDY_PRELUDE = """
 
 fn emit_wave_report(out: u8[>..]&, step_label: u8[:], r: Report) {
     format(out, "    // report ", r.label, "\n    {\n");
-    emit_sample(out, "v", FIELD_WAVE, wave_part(r.expr), value(child(arg(r.expr, 0), 1)).v);
+    let part = if wave_part(r.expr) >= 0 { wave_part(r.expr) } else { r.row };
+    if wave_simple(r.expr) >= 0 {
+        emit_sample(out, "v", FIELD_WAVE, part, value(child(arg(r.expr, 0), 1)).v);
+    } else {
+        emit_wave_z(out, "v", if wave_part(r.expr) >= 0 { arg(r.expr, 0) } else { r.expr }, part);
+    }
     out.append("        point(found_v, ");
     quoted(out, r.label);
     out.append(");\n        report(");
     quoted(out, step_label);
     out.append(", ");
     quoted(out, r.label);
-    format(out, ", quantity(v, \"", if wave_part(r.expr) == 3 { "rad" } else { value_unit() }, "\"));\n    }\n");
+    format(out, ", quantity(v, \"", if part == 3 { "rad" } else { value_unit() }, "\"));\n    }\n");
+}
+
+var wz_count = 0;
+var wz_found: u8[>..] = [];
+
+// The Goose expression of the Complex value of z in `out`, a pair of f64,
+// and the statements that sample the unknown in `pre`.
+recursive fn emit_wz(out: u8[>..]&, pre: u8[>..]&, z: i64) {
+    let k = kind(z);
+    if k == syntax::N_AT || is_call(z, "mean") {
+        let n = wz_count;
+        wz_count++;
+        if k == syntax::N_AT {
+            format(pre, "        let wz", n, ", wf", n, " = wave_pair(");
+            lits(pre, value(child(z, 1)).v);
+            pre.append(");\n");
+        } else {
+            pre.append("    ");
+            emit_region(pre, find_surf(name(arg(z, 1))));
+            format(pre, "        let wz", n, ": f64[2] = [elements::mean_value(0), elements::mean_value(1)];\n        let wf", n, " = wz", n, "[0] == wz", n, "[0];\n");
+        }
+        format(wz_found, " && wf", n);
+        format(out, "wz", n);
+        return;
+    }
+    if wave_samples(z) == 0 {
+        let c = cval(z);
+        out.append("[");
+        lit(out, c[0]);
+        out.append(", ");
+        lit(out, c[1]);
+        out.append("]");
+        return;
+    }
+    if k == syntax::N_UNARY {
+        out.append("wsub([0.0, 0.0], ");
+        emit_wz(out, pre, first(z));
+        out.append(")");
+        return;
+    }
+    let op = syntax::text(tok(z));
+    out.append(if op == "+" { "wadd(" } else if op == "-" { "wsub(" } else if op == "*" { "wmul(" } else { "wdiv(" });
+    emit_wz(out, pre, child(z, 0));
+    out.append(", ");
+    emit_wz(out, pre, child(z, 1));
+    out.append(")");
+}
+
+// `let v, found_v = <part of z>;`, with z an expression of samples.
+fn emit_wave_z(out: u8[>..]&, var_name: u8[:], z: i64, part: i64) {
+    var pre: u8[>..] = [];
+    var expr: u8[>..] = [];
+    wz_count = 0;
+    wz_found.clear();
+    emit_wz(expr, pre, z);
+    out.append(pre);
+    format(out, "        let ", var_name, " = wave_pick(", part, ", ", expr, ");\n        let found_", var_name, " = true", wz_found, ";\n");
 }
 
 // The ties of the bloch group: the high boundary to the low one.
@@ -4321,6 +4475,10 @@ fn emit_change(out: u8[>..]&, ch: Change) {
 
 // `let v, found = <sample at p>;`
 fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3]) {
+    if what == FIELD_WAVE_Z {
+        emit_wave_z(out, var_name, arg(comp, 0), wave_part(comp));
+        return;
+    }
     if what == FIELD_WAVE {
         format(out, "        let ", var_name, ", found_", var_name, " = wave_at(", comp, ", ");
         lits(out, at);
@@ -4457,7 +4615,7 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     lit(out, x.want);
     out.append(", ");
     lit(out, x.within);
-    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what == FIELD_CONSTANT { "" } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
+    let unit = if x.unit.len > 0 { x.unit[..] } else if x.what == FIELD_COMPOSITE { "" } else if x.what == FIELD_WAVE && x.comp == 3 || x.what == FIELD_WAVE_Z && wave_part(x.comp) == 3 { "rad" } else if x.what == FIELD_REACTION { reaction_unit() } else if x.what == FIELD_CONSTANT { "" } else if x.what != FIELD_EIGEN { field_unit(x.what) } else if x.modal { freq_unit() } else { "" };
     format(out, ", ", if x.relative { "true" } else { "false" }, ", \"", unit, "\", ");
     quoted(out, x.label);
     out.append(");\n    }\n");

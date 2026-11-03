@@ -501,6 +501,8 @@ fn reset() {
     has_scales = false;
     solid_tok = -1;
     solid_name = [];
+    solid_finite = false;
+    solid_stress = [];
     solid_domain = -1;
     displacement = [];
     solid_material = -1;
@@ -841,14 +843,36 @@ fn thermal_solid_item(n: i64) {
     if !th_energy_seen && ok() { unsupported(tok(n), "the solid has no energy equation", THERMAL_SOLID_FIX); }
 }
 
+// Whether the assume node c has finite_strain: the solid written out.
+fn assumes_finite(c: i64) -> bool {
+    var a = first(c);
+    while a >= 0 {
+        if name(a) == "finite_strain" { return true; }
+        a = next(a);
+    }
+    return false;
+}
+
 // Whether physics n uses the template linear_elastic: the solid.
 fn is_solid(n: i64) -> bool {
     var c = first(n);
     while c >= 0 {
         if kind(c) == syntax::N_USES && name(c) == "linear_elastic" { return true; }
+        if kind(c) == syntax::N_ASSUME && assumes_finite(c) { return true; }
         c = next(c);
     }
     return false;
+}
+
+let SVK_FIX = "write assume finite_strain, isotropic, plane_strain, let S = hooke(E, nu, strain(u)) and eq div(defgrad(u)*S) = 0";
+var solid_finite = false;   // St. Venant-Kirchhoff written out
+var solid_stress: u8[..64];
+
+// The let S = hooke(E, nu, strain(u)) of the finite-strain solid; it names S.
+fn solid_finite_text(c: i64) -> bool {
+    if compact(child(c, 1)) != str("hooke(E,nu,strain(", displacement, "))") { return false; }
+    set64(solid_stress, name(c));
+    return true;
 }
 
 // The solid physics: linear_elastic with no body force, in plane strain.
@@ -860,6 +884,8 @@ fn solid_item(n: i64) {
     solid_tok = tok(n);
     set64(solid_name, name(n));
     var plane = false;
+    var hooke_seen = false;
+    var balance_seen = false;
     var c = first(n);
     while c >= 0 {
         let k = kind(c);
@@ -874,15 +900,23 @@ fn solid_item(n: i64) {
             var a = first(c);
             while a >= 0 {
                 if name(a) == "plane_strain" { plane = true; }
-                if name(a) != "plane_strain" && name(a) != "small_strain" && name(a) != "isotropic" {
+                if name(a) == "finite_strain" { solid_finite = true; }
+                if name(a) != "plane_strain" && name(a) != "small_strain" && name(a) != "isotropic" && name(a) != "finite_strain" {
                     unsupported(tok(a), str("the assumption '", name(a), "' is not in the flow generator"), "use plane_strain");
                 }
                 a = next(a);
             }
+        } else if k == syntax::N_LET && solid_finite_text(c) {
+            hooke_seen = true;
+        } else if k == syntax::N_EQN && compact(child(c, 0)) == str("div(defgrad(", displacement, ")*", solid_stress, ")") && compact(child(c, 1)) == "0" {
+            balance_seen = true;
         } else if k != syntax::N_MATASSIGN {
-            unsupported(tok(c), "a physics with a template has no let or eq", "remove it");
+            unsupported(tok(c), "a physics with a template has no let or eq", SVK_FIX);
         }
         c = next(c);
+    }
+    if solid_finite && !(hooke_seen && balance_seen) {
+        unsupported(tok(n), "the finite-strain solid is St. Venant-Kirchhoff", SVK_FIX);
     }
     if !plane { unsupported(tok(n), "the 2d solid of the flow generator is in plane strain", "add assume plane_strain"); }
 }
@@ -2537,6 +2571,7 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
         out.append(", ");
         lit(out, scalar_value(property_of(solid_material, "nu")));
         out.append(");\n");
+        if solid_finite { out.append("    flow::solid_finite();\n"); }
     }
     format(out, "    // physics ", physics_name, ", material ", material_name, "\n    flow::fluid(");
     lit(out, scaled_value(property("rho")));

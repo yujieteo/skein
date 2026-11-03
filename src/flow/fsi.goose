@@ -71,6 +71,14 @@ var m_lu: f64[>..] = [];
 var m_diag: i64[>..] = [];
 var m_fixed: u8[>..] = [];
 
+// Finite strain: St. Venant-Kirchhoff in the total Lagrangian form, solved by Newton. The tangent
+// of each cell is a central difference of its internal force. Reason: the femahoy FSI1 model writes
+// the flag as S = hooke(E, nu, strain(u)) with eq div(defgrad(u)*S) = 0.
+var finite = false;
+var s_state: f64[>..] = [];   // the u at which the tangent is built
+
+fn solid_finite() { finite = true; }
+
 fn solid(e: f64, nu: f64) {
     guard e > 0.0 && nu > -1.0 && nu < 0.5 else { abort("solid: E > 0 and -1 < nu < 0.5"); }
     young = e;
@@ -298,6 +306,10 @@ fn p2_gradients(g: f64[6], l: f64[3]) -> f64[12] {
 // The stiffness of solid cell c in plane strain, with the 3-point rule,
 // which is exact for P2 on a straight triangle.
 fn solid_cell(c: i64, k: f64[144]&) {
+    if finite {
+        svk_tangent(c, k);
+        return;
+    }
     let g, area = solid_gradients(c);
     let lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
     let shear = young / (2.0 * (1.0 + poisson));
@@ -319,6 +331,72 @@ fn solid_cell(c: i64, k: f64[144]&) {
                 k[24 * a + 12 + 2 * b + 1] += w * ((lam + 2.0 * shear) * ay * by + shear * ax * bx);
             }
         }
+    }
+}
+
+// The internal force of solid cell c at the dofs ue (x and y of the 6 nodes): the integral of
+// P d_a with P = F S, F = I + grad u, S = lam tr(E) I + 2 mu E, E = (F^T F - I)/2.
+fn svk_force(c: i64, ue: f64[12], f: f64[12]&) {
+    let g, area = solid_gradients(c);
+    let lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    let shear = young / (2.0 * (1.0 + poisson));
+    for i in 12 { f[i] = 0.0; }
+    for q in 3 {
+        var l: f64[3] = [1.0 / 6.0; 3];
+        l[q] = 2.0 / 3.0;
+        let d = p2_gradients(g, l);
+        var h: f64[4] = [0.0; 4];
+        for a in 6 {
+            for i in 2 { for j in 2 { h[2 * i + j] += ue[2 * a + i] * d[2 * a + j]; } }
+        }
+        let fg: f64[4] = [1.0 + h[0], h[1], h[2], 1.0 + h[3]];
+        var e: f64[4] = [0.0; 4];
+        for i in 2 { for j in 2 {
+            var t = 0.0;
+            for m in 2 { t += fg[2 * m + i] * fg[2 * m + j]; }
+            let eye = if i == j { 1.0 } else { 0.0 };
+            e[2 * i + j] = 0.5 * (t - eye);
+        } }
+        let tr = e[0] + e[3];
+        var sg: f64[4] = [0.0; 4];
+        for i in 4 { sg[i] = 2.0 * shear * e[i]; }
+        sg[0] += lam * tr;
+        sg[3] += lam * tr;
+        for a in 6 {
+            for i in 2 { for j in 2 { for m in 2 {
+                f[2 * a + i] += area / 3.0 * fg[2 * i + m] * sg[2 * m + j] * d[2 * a + j];
+            } } }
+        }
+    }
+}
+
+// The tangent of cell c at s_state by central differences of svk_force.
+fn svk_tangent(c: i64, k: f64[144]&) {
+    var ue: f64[12] = [0.0; 12];
+    for a in 12 { ue[a] = s_state[2 * s_conn[6 * c + a / 2] + a % 2]; }
+    let step = 1.0e-7;
+    var fp: f64[12] = [0.0; 12];
+    var fm: f64[12] = [0.0; 12];
+    for j in 12 {
+        let keep = ue[j];
+        ue[j] = keep + step;
+        svk_force(c, ue, fp);
+        ue[j] = keep - step;
+        svk_force(c, ue, fm);
+        ue[j] = keep;
+        for i in 12 { k[12 * i + j] = (fp[i] - fm[i]) / (2.0 * step); }
+    }
+}
+
+// The internal force of the whole solid at u.
+fn svk_internal(u: f64[:], g: f64[:]) {
+    for d in g.len { g[d] = 0.0; }
+    var ue: f64[12] = [0.0; 12];
+    var f: f64[12] = [0.0; 12];
+    for c in solid_cells() {
+        for a in 12 { ue[a] = u[2 * s_conn[6 * c + a / 2] + a % 2]; }
+        svk_force(c, ue, f);
+        for a in 12 { g[2 * s_conn[6 * c + a / 2] + a % 2] += f[a]; }
     }
 }
 
@@ -360,8 +438,35 @@ fn factor_solid() -> bool {
     return true;
 }
 
-// Solves K u = load (factor_solid first) into u.
+// Solves the solid for the load into u. Finite strain: Newton from the u given, with a new tangent each step.
 fn solve_solid(load: f64[:], u: f64[:]) {
+    if !finite {
+        solve_linear_solid(load, u);
+        return;
+    }
+    let n = load.len;
+    var g: f64[>..] = [];
+    var r: f64[>..] = [];
+    var du: f64[>..] = [];
+    solvers::zeros(g, n);
+    solvers::zeros(r, n);
+    solvers::zeros(du, n);
+    s_state.clear();
+    s_state.append(u[..]);
+    for it in 20 {
+        for d in n { s_state[d] = u[d]; }
+        guard factor_solid() else { abort("solve_solid: the tangent is not positive definite"); }
+        svk_internal(u, g);
+        for d in n { r[d] = load[d] - g[d]; }
+        solve_linear_solid(r, du);
+        for d in n { u[d] += du[d]; }
+        if solvers::norm(du) <= 1.0e-10 * solvers::norm(u) + 1.0e-16 { return; }
+    }
+    abort("solve_solid: the Newton iteration did not converge in 20 steps");
+}
+
+// Solves K u = load (factor_solid first) into u.
+fn solve_linear_solid(load: f64[:], u: f64[:]) {
     guard load.len == s_fixed.len && u.len == s_fixed.len else { abort("solve_solid: a load and a u for each dof"); }
     let n = load.len;
     var y: f64[>..] = [];
@@ -489,6 +594,7 @@ fn solve_fsi(rtol: f64) -> bool {
     guard coupled && !turbulent && fixed.len == dof_count() && rtol > 0.0 else { abort("solve_fsi: a solid, a laminar flow, clear_bcs, and rtol > 0"); }
     let start = clock();
     guard link_interface() else { abort("solve_fsi: no node of the solid is on the fluid mesh"); }
+    solvers::zeros(s_state, s_fixed.len);
     if !factor_solid() || !motion_setup() { return false; }
     rest.clear();
     rest.append(coords[..]);
