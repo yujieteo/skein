@@ -47,15 +47,26 @@ let OMEGA_FLOOR = 1.0e-8;   // scaled; the clip of ω in the coefficients
 var omega_scale = 1.0;      // the ω rows are divided by it: the largest ω of a wall
 var wall_d: f64[>..] = [];  // the wall distance of each vertex
 var on_wall: u8[>..] = [];  // 1 for a wall vertex
+var wall_seed: u8[>..] = []; // 1 for a vertex of the region of wall_distance_region, else empty: the walls are the boundary vertices with v = 0
 
 // The sizes of wall_d and on_wall, before a solve.
 fn clear_walls() {
     wall_d.clear();
     on_wall.clear();
+    wall_seed.clear();
     for n in vertex_count {
         wall_d.push(0.0);
         on_wall.push(0);
     }
+}
+
+// The wall distance of a turbulence model is the distance to the vertices of
+// the region of the last select call (`physics walldist`, `bc wall: d = 0`),
+// in place of the boundary vertices with v = 0.
+fn wall_distance_region() {
+    guard turbulent && region.len == vertex_count && wall_d.len == vertex_count else { abort("wall_distance_region: a turbulent flow after clear_bcs and a select"); }
+    wall_seed.clear();
+    for n in vertex_count { wall_seed.push(region[n]); }
 }
 
 // Marks the walls from the fixed velocity dofs, sets wall_d, and gives
@@ -65,8 +76,8 @@ fn find_walls(fixed: u8[:], prescribed: f64[:], omega_wall: f64[:]) -> bool {
     guard wall_d.len == vertex_count && fixed.len == dof_count() && omega_wall.len == vertex_count else { abort("find_walls: clear_bcs on a turbulent flow"); }
     var any = false;
     for n in vertex_count {
-        let wall = on_boundary[n] != 0 && fixed[vdof(n, 0)] != 0 && fixed[vdof(n, 1)] != 0
-                   && prescribed[vdof(n, 0)] == 0.0 && prescribed[vdof(n, 1)] == 0.0;
+        let wall = if wall_seed.len > 0 { wall_seed[n] != 0 } else { on_boundary[n] != 0 && fixed[vdof(n, 0)] != 0 && fixed[vdof(n, 1)] != 0
+                   && prescribed[vdof(n, 0)] == 0.0 && prescribed[vdof(n, 1)] == 0.0 };
         on_wall[n] = if wall { 1 } else { 0 };
         if wall { any = true; }
     }
@@ -76,7 +87,10 @@ fn find_walls(fixed: u8[:], prescribed: f64[:], omega_wall: f64[:]) -> bool {
         for e in 3 {
             let a = cell_node(c, EDGES[2 * e]);
             let b = cell_node(c, EDGES[2 * e + 1]);
-            if on_wall[a] == 0 || on_wall[b] == 0 || a > b { continue; }
+            // A wall edge is a boundary edge of one cell, in either order. Reason:
+            // with a > b skipped, the edges of the wall that run from a higher
+            // to a lower vertex had no distance, and the d of the flap was 0.23.
+            if on_wall[a] == 0 || on_wall[b] == 0 { continue; }
             for n in vertex_count {
                 if on_wall[n] == 0 { wall_d[n] = min(wall_d[n], segment_distance(n, a, b)); }
             }

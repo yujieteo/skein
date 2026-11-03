@@ -452,11 +452,18 @@ fn fill_phi(g: i64, x: f64, y: f64) -> f64 {
     let ey = b[1] - a[1];
     let t = clamp(((x - a[0]) * ex + (y - a[1]) * ey) / max(ex * ex + ey * ey, 1.0e-300), 0.0, 1.0);
     var d2 = (x - a[0] - t * ex) * (x - a[0] - t * ex) + (y - a[1] - t * ey) * (y - a[1] - t * ey);
-    var inside = (a[1] > y) != (b[1] > y) && x < a[0] + (y - a[1]) * ex / ey;
+    // The ray runs at yq, a hair above y. A knot at the height of y (the
+    // leading and the trailing edge of an airfoil on y = 0) is the end of
+    // 2 spans, whose heights differ by the rounding of their polynomials,
+    // so a ray at y itself counts the 2 ends in 2 ways. Reason: the point
+    // 1e-5 ahead of the leading edge of examples/femahoy/naca0012_ladson.skn
+    // was inside the foil.
+    let yq = y + 1.0e-12 * max(1.0e-3, max(abs(y), max(abs(a[1]), abs(b[1]))));
+    var inside = (a[1] > yq) != (b[1] > yq) && x < a[0] + (yq - a[1]) * ex / ey;
     for i in s.b - 1 {
         let c = span(g, i);
         let box = span_box(c);
-        if y >= box[1] && y <= box[3] && x <= box[2] && span_crossings(c, x, y) % 2 == 1 { inside = !inside; }
+        if yq >= box[1] && yq <= box[3] && x <= box[2] && span_crossings(c, x, yq) % 2 == 1 { inside = !inside; }
         let ox = max(max(box[0] - x, x - box[2]), 0.0);
         let oy = max(max(box[1] - y, y - box[3]), 0.0);
         if ox * ox + oy * oy < d2 { d2 = min(d2, span_distance2(c, x, y)); }

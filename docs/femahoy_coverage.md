@@ -215,12 +215,33 @@ gives the roadmap phase that closes the gap:
   component, on triangles, with a MUSCL limiter, a Rusanov flux whose speed
   comes from the Jacobian of the model flux, and SSPRK3. All five expects pass
   within 0.25 % (the shock angle is 36.998 deg).
-- Not run yet in the flow batch, each needs a new solver family:
-  naca0012_ladson and naca23012_flap (Spalart-Allmaras with a nuTilde unknown,
-  a wall-distance physics, a spline airfoil with a far field, boundary layer
-  cells and a second physics), dam_break_vof and dam_break_martin_moyce
-  (two-phase VOF with tables, surface tension and a Tait water; the flow
-  generator rejects the Newtonian stress `let`).
+- [naca23012_flap.skn](../examples/femahoy/naca23012_flap.skn) runs with `skein run` on the
+  Spalart-Allmaras model of `src/flow/sa.goose`: the unknown nt, the wall distance of a
+  `physics walldist` (`wall_distance_region`, the exact distance to the wall segments), a spline
+  airfoil in a far field of 500 chords, and boundary layer cells (`layers`, `mesh_2d_layers` in
+  `src/mesher/layers.goose`). The study `flaps` passes at -10, 0 and 10 deg (cl_f 0.1223 against
+  0.1200, cm_f -0.00853 against -0.008 at 0 deg). Deviations: `method flow: fv` runs as P1 cells
+  with SUPG and PSPG, in place of the finite volume method, and the mesh has 10 um, ratio 1.25
+  and 40 layers with 8 mm on the wall (28 thousand cells), in place of the C-grid of 4 um and
+  64 layers. The solve ends at `rtol: 1e-5`: the pseudo-time iteration stops in a limit cycle of
+  3e-6 with cl and cm steady to 1e-9.
+- [naca0012_ladson.skn](../examples/femahoy/naca0012_ladson.skn) runs with the same mechanism, but
+  it does not meet all its expects, so it has a `// blocked-by:` mark and is not in `scripts/generated_c.sh`. On the mesh of the flap, cd at -0.05 deg passes (0.00951
+  against 0.00809). At 4.04 deg cd is 0.01059 (want 0.00823 +- 0.0018), and a mesh of 69 thousand
+  cells with 3 mm and 3 um gives 0.00987, which passes but takes 18 minutes and does not converge in
+  600 steps. At 10.12 deg cd is 0.0198 (want 0.01201 +- 0.002) and cl is 1.008 (want 1.0707 +- 0.0443),
+  and the solve does not converge in 600 steps, nor in 2500 steps in 58 minutes. Turbulence runs
+  on P1 cells only, and the next step is a P2 velocity or a finer nose.
+- Not run yet in the flow batch, each needs a new solver family and is left out of this batch:
+  - dam_break_martin_moyce: the meshless package (`src/meshless`) has no generator and no CLI lane
+    and runs static steps only. It needs a lane in `codegen/run.goose`, a `points` mesh read, a
+    total-Lagrangian explicit step (`central_difference`) with the Tait stress from a `let` chain,
+    SCNI internal force for a nonlinear P(F), a lumped mass, explicit wall conditions and the
+    `front` and `when` report. A free surface with SCNI can go unstable, and 7 % is not proven.
+  - dam_break_vof: it needs a transient two-phase solver on quads with a variable rho and mu, a
+    third unknown alpha with a compressive flux, CSF surface tension and Rhie-Chow, at dt 0.4 ms for
+    450 steps on 200 x 100 cells. The flow lane is P1/P2 finite elements on triangles, steady (plus
+    FSI), and the flow generator takes one Newtonian `sigma` let and one v, p pair.
 - turek_hron_fsi1 runs in the flow lane (drag +0.02 %, lift -0.06 %, ux_a +0.1 %,
   uy_a -2.1 %). The flag is written out as St. Venant-Kirchhoff
   (`assume finite_strain`, `hooke` of `strain(u)`, `div(defgrad(u)*S) = 0`). It is solved by

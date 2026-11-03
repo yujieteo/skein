@@ -1027,7 +1027,7 @@ licences are not compatible with Apache 2.0.
 | `quad` on another `Surface` | the triangles of the 2D case, then the merge of pairs of neighbour triangles into quads (Blossom-Quad, Remacle et al. 2012): a matching of the largest size (Edmonds 1965) on the pairs whose quad has an acceptable quality. A triangle stays where it has no such pair. |
 | `hex` on a prism along z | a `Solid` of `box`, `cylinder` along z and `extrude` regions that each hold its z range: the quads of Blossom-Quad on its section at twice the size, each cut into 4 quads and each remaining triangle into 3, swept through layers of equal height |
 | `hex` on another `Solid` | the grid of the planes of the `box` regions in the bounds of the region, with the cells whose centre is in the region. Each node on the boundary of the cells moves to the nearest point of the boundary of the region (Schneiders 1996). |
-| boundary layers | prisms or quads extruded along the normal of the surface, then the core mesh |
+| boundary layers | on a 2D `Surface`: triangles extruded along the normal of the wall, with the least wall spacing as the end of the layers (one count for all nodes), then the core mesh inside the last layer. Prisms or quads in 3D do not run yet. |
 
 On a union of boxes or rects, each face of each `box` or `rect` of the
 model is a grid plane: the faces of the region, and the faces of the boxes

@@ -31,7 +31,8 @@ namespace flow;
 let EDGES: i64[6] = [0, 1, 1, 2, 2, 0];
 
 var order = 1;          // the order of the velocity; the pressure has order 1
-var turbulent = false;  // the k-ω SST unknowns k and w at each vertex
+var turbulent = false;  // the k-ω SST unknowns k and w, or the unknown nt of Spalart-Allmaras, at each vertex
+var spalart_on = false; // turbulent with the one unknown nt (sa.goose)
 var thermal = false;    // the temperature T at each node (heat.goose)
 var per_cell = 3;
 var vertex_count = 0;
@@ -58,7 +59,16 @@ var col: i32[>..] = [];
 var region: u8[>..] = [];
 
 // A turbulent flow has the unknowns k and w. Call it before the mesh.
-fn set_turbulent(on: bool) { turbulent = on; }
+fn set_turbulent(on: bool) {
+    turbulent = on;
+    spalart_on = false;
+}
+
+// A turbulent flow with the Spalart-Allmaras unknown nt (sa.goose) in place of k and w.
+fn set_spalart(on: bool) {
+    turbulent = on;
+    spalart_on = on;
+}
 
 // A thermal flow has the unknown T. Call it before the mesh.
 fn set_thermal(on: bool) {
@@ -68,7 +78,7 @@ fn set_thermal(on: bool) {
 
 fn node_count() -> i64 { return coords.len / 2; }
 fn cell_count() -> i64 { return conn.len / per_cell; }
-fn vertex_dofs() -> i64 { return if turbulent { 5 } else if thermal { 4 } else { 3 }; }
+fn vertex_dofs() -> i64 { return if turbulent { if spalart_on { 4 } else { 5 } } else if thermal { 4 } else { 3 }; }
 fn edge_dofs() -> i64 { return if thermal { 3 } else { 2 }; }
 
 fn is_solid_cell(c: i64) -> bool { return part.len > 0 && part[c] != 0; }
@@ -92,7 +102,7 @@ fn pdof(n: i64) -> i64 {
 
 // The dof of k (which 0) or w (which 1) at vertex n of a turbulent flow.
 fn turbulence_dof(n: i64, which: i64) -> i64 {
-    guard turbulent && n >= 0 && n < vertex_count && n < first_dof.len && (which == 0 || which == 1) else { abort("turbulence_dof: a turbulent flow, n < vertex_count and which 0 or 1"); }
+    guard turbulent && n >= 0 && n < vertex_count && n < first_dof.len && (which == 0 || (which == 1 && !spalart_on)) else { abort("turbulence_dof: a turbulent flow, n < vertex_count and which 0 or 1"); }
     return first_dof[n] + 3 + which;
 }
 
@@ -118,11 +128,11 @@ fn cell_dofs(c: i64, dofs: i64[21]&) {
     guard turbulent else { return; }
     for k in 3 {
         dofs[2 * per_cell + 3 + k] = turbulence_dof(cell_node(c, k), 0);
-        dofs[2 * per_cell + 6 + k] = turbulence_dof(cell_node(c, k), 1);
+        if !spalart_on { dofs[2 * per_cell + 6 + k] = turbulence_dof(cell_node(c, k), 1); }
     }
 }
 
-fn cell_dof_count() -> i64 { return 2 * per_cell + (if turbulent { 9 } else if thermal { 3 + per_cell } else { 3 }); }
+fn cell_dof_count() -> i64 { return 2 * per_cell + (if turbulent { if spalart_on { 6 } else { 9 } } else if thermal { 3 + per_cell } else { 3 }); }
 
 // Takes the vertices `xy` (x and y of each) and the triangles `tri` (3
 // vertices each), turns each triangle to positive orientation, and adds
@@ -411,6 +421,29 @@ fn select_boundary<P>() -> bool {
     region_part = 0;
     for n in node_count() {
         region[n] = if on_boundary[n] != 0 && P(coords[2 * n], coords[2 * n + 1]) { 1 } else { 0 };
+    }
+    for c in cell_count() {
+        for e in per_cell - 3 {
+            let m = cell_node(c, 3 + e);
+            let a = cell_node(c, EDGES[2 * e]);
+            let b = cell_node(c, EDGES[2 * e + 1]);
+            if on_boundary[m] != 0 && region[a] != 0 && region[b] != 0 { region[m] = 1; }
+        }
+    }
+    for n in node_count() { if region[n] != 0 { found = true; } }
+    return found;
+}
+
+// Selects the boundary nodes with a mark in `mask` (1 for each vertex of
+// the mesh, written by skein run for the region of a boundary of a shape
+// that a condition of x and y cannot name, such as a spline) where
+// P(x, y) holds. False if it selects none.
+fn select_masked<P>(mask: u8[:]) -> bool {
+    guard region.len == node_count() && cell_count() > 0 && mask.len == vertex_count else { abort("select_masked: a mesh and a mask of its vertices"); }
+    var found = false;
+    region_part = 0;
+    for n in node_count() {
+        region[n] = if n < vertex_count && on_boundary[n] != 0 && mask[n] != 0 && P(coords[2 * n], coords[2 * n + 1]) { 1 } else { 0 };
     }
     for c in cell_count() {
         for e in per_cell - 3 {
