@@ -6,6 +6,7 @@ namespace elements;
 import .shape;
 import .mesh;
 import .assemble;
+import .cube;
 
 // The stiffness or the conductivity of cell c, and its source vector:
 // elastic K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV,
@@ -13,6 +14,10 @@ import .assemble;
 fn cell_matrix(c: i64) {
     guard c >= 0 && c < cell_count() && (physics == ELASTIC || physics == HEAT) && (dim == 2 || dim == 3) && (order == 1 || order == 2) else { abort("cell_matrix: c < cell_count(), a physics, dim 2 or 3 and order 1 or 2"); }
     if hex_cells {
+        if per_cell != 8 {
+            if physics == ELASTIC { elastic_cube(c); } else { heat_cube(c); }
+            return;
+        }
         if physics == ELASTIC { elastic_hex8(c); } else { heat_hex8(c); }
         return;
     }

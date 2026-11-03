@@ -91,6 +91,7 @@ examples/femahoy/grid_plate_hole_stress_ccx.skn
 examples/femahoy/grid_radiating_fin_ccx.skn
 examples/femahoy/grid_radiation_slab.skn
 examples/femahoy/grid_round_cantilever.skn
+examples/femahoy/laminate_pagano.skn
 examples/femahoy/line_bars_getdp.skn
 examples/femahoy/line_coax.skn
 examples/femahoy/line_stripline.skn
@@ -162,7 +163,6 @@ programs=""
 for model in $models; do
     # skein run names the build directory after the `model <name>:` line.
     name=$(sed -n 's/^model \([A-Za-z0-9_]*\):.*/\1/p' "$root/$model" | head -n 1)
-    committed="$root/${model%.skn}.c"
     if ! (cd "$work" && "$root/build/skein" run "$model" >"$work/run.toon" 2>"$work/run.err"); then
         cat "$work/run.err"
         echo "FAIL $model: skein run fails"
@@ -175,17 +175,31 @@ for model in $models; do
         echo "FAIL $model: ${solves:-0} solves, and ${checks:-no} memory checks (src/solvers/memory.goose)"
         status=1
     fi
-    programs="$programs $work/.skein/build/$name/main.goose"
-    (cd "$work" && "$goose" -q -o "$work/$name.c" ".skein/build/$name/main.goose")
-    sed -e "s|\"$root/|\"|" -e 's|"[^"]*/stdlib/|"stdlib/|' "$work/$name.c" > "$work/$name.normal.c"
-    if [ "$mode" = write ]; then
-        cp "$work/$name.normal.c" "$committed"
-        echo "wrote ${model%.skn}.c"
-    elif ! diff -u "$committed" "$work/$name.normal.c" > "$work/$name.diff"; then
-        head -n 40 "$work/$name.diff"
-        echo "FAIL $model: the committed C differs. Run scripts/generated_c.sh write."
-        status=1
+    # A model of two lanes has one program in each .skein/build/<name>/lane<k>/.
+    if [ -f "$work/.skein/build/$name/main.goose" ]; then
+        units="main.goose:"
+    else
+        units=""
+        for dir in "$work/.skein/build/$name"/lane*; do
+            units="$units lane${dir##*lane}/main.goose:.lane${dir##*lane}"
+        done
     fi
+    for unit in $units; do
+        src=${unit%%:*}
+        suffix=${unit#*:}
+        committed="$root/${model%.skn}$suffix.c"
+        programs="$programs $work/.skein/build/$name/$src"
+        (cd "$work" && "$goose" -q -o "$work/$name.c" ".skein/build/$name/$src")
+        sed -e "s|\"$root/|\"|" -e 's|"[^"]*/stdlib/|"stdlib/|' "$work/$name.c" > "$work/$name.normal.c"
+        if [ "$mode" = write ]; then
+            cp "$work/$name.normal.c" "$committed"
+            echo "wrote ${model%.skn}$suffix.c"
+        elif ! diff -u "$committed" "$work/$name.normal.c" > "$work/$name.diff"; then
+            head -n 40 "$work/$name.diff"
+            echo "FAIL $model: the committed C differs. Run scripts/generated_c.sh write."
+            status=1
+        fi
+    done
 done
 if ! "$root/scripts/power_of_ten.sh" $programs; then
     status=1

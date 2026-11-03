@@ -96,7 +96,7 @@ recursive fn varies(v: i64) -> bool {
     if k == syntax::N_NAME {
         let w = name(v);
         if bound(w) >= 0 { return false; }
-        if is_w(w) || is_theta(w) || w == "N" || w == "eps_m" || w == "Nx" || is_source(v) { return true; }
+        if is_w(w) || is_theta(w) || w == "N" || w == "eps_m" || w == "kappa" || w == "Nx" || is_source(v) { return true; }
         if find(let_names, w) >= 0 || prop_type(w) >= 0 { return true; }
         let i = find(value_names, w);
         if i >= 0 {
@@ -176,7 +176,7 @@ recursive fn rank_of(v: i64) -> i64 {
         let w = name(v);
         if axis_of(w) >= 0 { return 1; }
         if w == "n" || is_w(w) || is_theta(w) { return 3; }
-        if w == "N" || w == "eps_m" { return 9; }
+        if w == "N" || w == "eps_m" || w == "kappa" { return 9; }
         var node = -1;
         if find(let_names, w) >= 0 { node = let_nodes[find(let_names, w)]; }
         if node < 0 && find(value_names, w) >= 0 { node = value_nodes[find(value_names, w)]; }
@@ -204,6 +204,7 @@ recursive fn rank_of(v: i64) -> i64 {
         return rank_of(f);
     }
     if is_call(v, "reaction") || is_call(v, "cross") { return 3; }
+    if is_call(v, "ddot") { return 9; }
     return 1;
 }
 
@@ -249,11 +250,19 @@ recursive fn emit_rt(v: i64, out: u8[>..]&) -> i64, Dim {
         return r, d;
     }
     if k == syntax::N_MEMBER {
-        let a = axis_of(name(v));
-        out.append("comp(");
+        let m = name(v);
+        let start = out.len;
         let r, e = emit_rt(first(v), out);
-        format(out, ", ", a, ")");
-        if r != 3 || a < 0 { unsupported(tok(v), "a member .x, .y or .z of a value that is not a vector", RT_FIX); }
+        let inner = cut_tail(out, start);
+        if r == 3 && axis_of(m) >= 0 {
+            format(out, "comp(", inner, ", ", axis_of(m), ")");
+            return 1, d;
+        }
+        if r == 9 && m.len == 2 && axis_of(m[..1]) >= 0 && axis_of(m[1..]) >= 0 {
+            format(out, "tcomp(", inner, ", ", 3 * axis_of(m[..1]) + axis_of(m[1..]), ")");
+            return 1, d;
+        }
+        unsupported(tok(v), "a member .x, .y or .z of a value that is not a vector, or .xx of a value that is not a tensor", RT_FIX);
         return 1, d;
     }
     if k == syntax::N_VECTOR {
@@ -304,8 +313,8 @@ recursive fn emit_word(w: u8[:], at: i64, out: u8[>..]&) -> i64 {
         out.append("th");
         return 3;
     }
-    if node_mode && (w == "N" || w == "eps_m") {
-        out.append(if w == "N" { "tn" } else { "te" });
+    if node_mode && (w == "N" || w == "eps_m" || w == "kappa") {
+        out.append(if w == "N" { "tn" } else if w == "eps_m" { "te" } else { "tk" });
         return 9;
     }
     if node_mode && prop_type(w) >= 0 && find(let_names, w) < 0 { return emit_prop(w, at, out); }
@@ -380,6 +389,7 @@ recursive fn emit_binary(v: i64, out: u8[>..]&) -> i64 {
 }
 
 let SCALAR_FNS = ["sqrt", "abs", "sin", "cos"];
+let PLY_KEYS = ["E1", "E2", "G12", "nu12"];
 
 recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
     if kind(v) == syntax::N_AT || is_call(v, "reaction") || is_call(v, "max") || is_call(v, "eigenvalue") {
@@ -406,6 +416,31 @@ recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
         out.push(')');
         if ra != 3 || rb != 3 { unsupported(tok(v), str(f, " of values that are not vectors"), RT_FIX); }
         return if f == "dot" { 1 } else { 3 };
+    }
+    if count == 2 && f == "ddot" && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == "Q_ply" {
+        // The stress of the ply with the strain: Q_ply is the reduced stiffness of a 0 deg ply in
+        // the section axis.
+        for l in lams {
+            if angles[l.first + l.count - 1] != 0.0 {
+                unsupported(tok(v), "Q_ply is the reduced stiffness of a 0 deg ply in the section axis, and the bottom ply of the layup is not at 0 deg",
+                            "make the bottom ply of the layup 0 deg, or write the stress of the ply out");
+            }
+        }
+        out.append("ply_ddot([");
+        lits(out, axis);
+        out.append("], radial(p), ");
+        for ki in 4 {
+            out.append("pick(mat, [");
+            for m in shell_mats.len {
+                if m > 0 { out.append(", "); }
+                lit(out, prop_value(m, PLY_KEYS[ki], tok(v)).v[0]);
+            }
+            out.append("]), ");
+        }
+        let rb, db = emit_rt(arg(v, 1), out);
+        out.push(')');
+        if rb != 9 { unsupported(tok(v), "ddot(Q_ply, t) needs a tensor t", RT_FIX); }
+        return 9;
     }
     if count == 1 && f == "norm" {
         out.append("norm3(");
@@ -507,7 +542,7 @@ fn emit_field_fn(out: u8[>..]&, k: i64) {
     let rank, d = emit_rt(fields[k], code);
     format(out, "// field ", k, ": ", source_of(fields[k]), "\nfn field_", k, "(v: i64, k: i64) -> f64[9] {\n");
     out.append("    let p = v_point(v, k);\n    let w = v_w(v, k);\n    let th = v_th(v, k);\n");
-    out.append("    let tn = v_tn(v, k);\n    let te = v_te(v, k);\n    let mat = v_mat(v, k);\n");
+    out.append("    let tn = v_tn(v, k);\n    let te = v_te(v, k);\n    let tk = v_tk(v, k);\n    let mat = v_mat(v, k);\n");
     format(out, "    return pack", rank, "(", code, ");\n}\n\n");
 }
 
@@ -555,7 +590,7 @@ recursive fn dim_of(v: i64) -> Dim {
         if f == "eigenvalue" { return if eigen_modal { D_FREQUENCY } else { no_dim() }; }
         if f == "max" || f == "abs" || f == "norm" { return dim_of(arg(v, 0)); }
         if f == "sqrt" { return dim_scale(dim_of(arg(v, 0)), 0.5); }
-        if f == "dot" || f == "cross" { return dim_add(dim_of(arg(v, 0)), dim_of(arg(v, 1)), 1); }
+        if f == "dot" || f == "cross" || f == "ddot" { return dim_add(dim_of(arg(v, 0)), dim_of(arg(v, 1)), 1); }
     }
     return no_dim();
 }
@@ -565,6 +600,8 @@ fn name_dim(w: u8[:]) -> Dim {
     if w == "N" { return dim_add(D_FORCE, D_LENGTH, -1); }
     if w == "Nx" { return D_FORCE; }
     if w == "eps_m" || w == "n" || is_theta(w) { return no_dim(); }
+    if w == "kappa" { return dim_add(no_dim(), D_LENGTH, -1); }
+    if w == "Q_ply" { return D_PRESSURE; }
     let t = type_of_name(w);
     if t >= 0 { return type_dim(t); }
     return no_dim();
