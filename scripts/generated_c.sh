@@ -86,8 +86,10 @@ examples/femahoy/grid_plate_hole_stress_ccx.skn
 examples/femahoy/grid_radiating_fin_ccx.skn
 examples/femahoy/grid_radiation_slab.skn
 examples/femahoy/grid_round_cantilever.skn
+examples/femahoy/line_bars_getdp.skn
 examples/femahoy/line_coax.skn
 examples/femahoy/line_stripline.skn
+examples/femahoy/line_wire_skin.skn
 examples/femahoy/heat_fin.skn
 examples/femahoy/hyperelastic_tube.skn
 examples/femahoy/plasticity_sphere.skn

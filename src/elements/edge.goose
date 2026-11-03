@@ -35,8 +35,6 @@ import .post;
 import .eigen;
 import solvers from "../solvers";
 
-let EDGE_TOLERANCE = 1.0e-10;   // the GMRES residual relative to the right side
-let EDGE_ITERATIONS = 20000;
 
 var edge_v: i64[>..] = [];      // the two vertices of each edge, the lower index first
 var cell_edge: i64[>..] = [];   // the edge of each local edge of each cell
@@ -207,8 +205,7 @@ fn edge_pattern() {
 // natural conditions are in `load` already.
 fn edge_assemble() {
     edge_pattern();
-    let m = wave_restart(dof_total());
-    solvers::memory_check("simplex wave gmres ilu0", col.len, dof_total(), m + 9 + (m + 1) * m / max(dof_total(), 1), 0, "");
+    wave_choose_path();
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
     let le = local_edges();
@@ -758,19 +755,8 @@ fn edge_solve() -> bool {
     edge_assemble();
     let sizes = wave_sizes();
     let b = edge_rhs();
-    var lu: f64[>..] = [];
-    var diag: i64[>..] = [];
-    var converged = solvers::ilu0(row_start, col, val, lu, diag);
-    var its = 0;
-    let corrected = converged && gradient_setup();
-    if converged {
-        solvers::rows_start(row_start, col, val);
-        its, converged = solvers::gmres(row_start, col, val, b, sol, EDGE_TOLERANCE, wave_restart(b.len), EDGE_ITERATIONS) { r, z =>
-            solvers::ilu0_apply(row_start, col, lu, diag, r, z);
-            if corrected { gradient_apply(r, z); }
-        };
-        solvers::rows_stop();
-    }
+    let corrected = !wave_direct && gradient_setup();
+    let its, converged = wave_krylov(b, corrected) { r, z => gradient_apply(r, z); };
     guard wave_sizes() == sizes else { abort("edge_solve: a solve grows no array of the state (rule 3)"); }
     last_iterations = its;
     last_seconds = clock() - start;

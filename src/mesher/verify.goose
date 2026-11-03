@@ -397,6 +397,20 @@ recursive fn written_boxes(n: i64, out: i64[>..]&) {
     }
 }
 
+// The shape whose surface is the Curve boundary(a) | boundary(b) | ..., or -1.
+recursive fn boundary_union(v: i64) -> i64 {
+    if syntax::nodes[v].kind == syntax::N_CALL && node_text(syntax::child(v, 0)) == "boundary" && syntax::child_count(v) == 2 {
+        let b = eval_value(argument(v, 0));
+        return if b.n == 0 { b.g } else { -1 };
+    }
+    if syntax::nodes[v].kind == syntax::N_BINARY && node_text(v) == "|" {
+        let a = boundary_union(syntax::child(v, 0));
+        let b = boundary_union(syntax::child(v, 1));
+        return if a >= 0 && b >= 0 { union(a, b) } else { -1 };
+    }
+    return -1;
+}
+
 // The shape of the region `r` of a refine line, and whether the target is
 // its surface: the shape `b` of a let `boundary(a, b)`, or a shape. It
 // gives -1 on an error.
@@ -404,6 +418,20 @@ fn refine_target(r: i64) -> i64, bool {
     if syntax::nodes[r].kind == syntax::N_NAME {
         let v = let_node(node_text(r));
         let boundary = v >= 0 && syntax::nodes[v].kind == syntax::N_CALL && node_text(syntax::child(v, 0)) == "boundary";
+        let joined = v >= 0 && syntax::nodes[v].kind == syntax::N_BINARY && node_text(v) == "|";
+        if joined {
+            let g = boundary_union(v);
+            if g >= 0 { return g, true; }
+        }
+        if boundary && syntax::child_count(v) == 2 {
+            // boundary(shape): the whole surface of a shape.
+            let b = eval_value(argument(v, 0));
+            guard b.n == 0 else {
+                reader_fault(syntax::nodes[r].tok, "the refine region is not a shape", "refine a let shape");
+                return -1, false;
+            }
+            return b.g, true;
+        }
         if boundary && syntax::child_count(v) == 3 {
             let b = eval_value(argument(v, 1));
             guard b.n == 0 else {
