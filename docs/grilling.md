@@ -433,7 +433,9 @@ ins, later these tests can test the physics { keyword."
 Result: they test the built-ins now. Later, the same cases also test the
 generic block. Ladson, the VOF dam break, the meshless dam break,
 `laminate_pagano` and `warpage_2p5d_frame` become open items of phase 8. Only
-the interposer warpage `expect` stays in Deferred.
+the interposer warpage `expect` stays in Deferred. Later, `laminate_pagano`
+passed with 20-node hexahedra (PR #96), and the Deferred list grew. The
+[roadmap](roadmap.md#deferred) has the current list.
 
 **G7.4** Phase order and gates, round 3: "Agree with all."
 Result: the phase order 7 to 11 stays. Phase 7 includes generated explicit
