@@ -121,6 +121,8 @@ struct MemoryPath {
 //                         facets of an enclosure (src/elements/radiation.goose). No threads.
 //     q4 band cholesky    counted, not measured: the band of the Cholesky factor, 8 bytes
 //                         for each entry (src/optim/band.goose). No threads.
+//     ode backward differences  counted, not measured: the history of the unknowns, 8 bytes for each
+//                         unknown at each step (src/ode/ode.goose). No threads.
 let MEMORY_PATHS = [
     MemoryPath { name: "box cg jacobi", entry_bytes: 1.0, dof_bytes: 0.0, thread_bytes: 16.0 },
     MemoryPath { name: "box cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 1.0 },
@@ -146,6 +148,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "simplex mixed cg", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "radiation dense", entry_bytes: 32.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "q4 band cholesky", entry_bytes: 8.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "ode backward differences", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
 ];
 
 // The bytes of each worker thread of a case: its stacks. Measured: 16

@@ -20,6 +20,7 @@ import flow.gen;       // skein-flow: the flow models
 import grid.gen;       // skein-p4-grid: the fv and dg models
 import cons.gen;       // skein-fh-cfd: the systems of conservation laws with fv
 import optim.gen;      // skein-p5-optim: the quad models of linear_elastic, and topology
+import ode.gen;        // skein-ode: the physics of global unknowns (ODE and DAE)
 import check from "../check";
 import .study;
 import .split;
@@ -59,6 +60,7 @@ let LANE_FLOW = 3;
 let LANE_GRID = 4;
 let LANE_OPTIM = 5;
 let LANE_CONS = 6;
+let LANE_ODE = 7;
 
 // Reads program `prog` with the generator that claims it. It gives that
 // generator, or -1 on an error, and `syntax::errors` holds the errors.
@@ -68,7 +70,9 @@ let LANE_CONS = 6;
 // skein-fh-cfd: an fv model of a system of conservation laws goes to src/cons/gen.goose.
 // skein-p4-grid: an fv or dg model goes to src/grid/gen.goose.
 // skein-p5-optim: a quad model of linear_elastic goes to src/optim/gen.goose.
+// skein-ode: a physics of global unknowns goes to src/ode/gen.goose.
 fn read_model(prog: i64) -> i64 {
+    if ode_gen::claims(prog) { return if ode_gen::read(prog) { LANE_ODE } else { -1 }; }
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
     // Edge and face elements go to the simplex generator, before flow claims a q and a p.
     if elements_gen::family_claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
@@ -95,6 +99,7 @@ fn dof_estimate(lane: i64) -> i64 {
     if lane == LANE_GRID { return grid_gen::dof_estimate(); }
     if lane == LANE_CONS { return cons_gen::dof_estimate(); }
     if lane == LANE_OPTIM { return optim_gen::dof_estimate(); }
+    if lane == LANE_ODE { return ode_gen::dof_estimate(); }
     if lane == LANE_SIMPLEX { return elements_gen::dof_estimate(); }
     return codegen::dof_estimate();
 }
@@ -107,6 +112,7 @@ fn step_count(lane: i64) -> i64 {
     if lane == LANE_GRID { return grid_gen::steps.len; }
     if lane == LANE_CONS { return cons_gen::steps.len; }
     if lane == LANE_OPTIM { return optim_gen::steps.len; }
+    if lane == LANE_ODE { return ode_gen::steps.len; }
     if lane == LANE_SIMPLEX { return elements_gen::steps.len; }
     return steps.len;
 }
@@ -122,7 +128,7 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     // is in src/runtime beside it.
     let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" }
                                            else if lane == LANE_FLOW { "../src/flow" } else if lane == LANE_GRID { "../src/grid" } else if lane == LANE_CONS { "../src/cons" }
-                                           else if lane == LANE_OPTIM { "../src/optim" } else { "../src/runtime" });
+                                           else if lane == LANE_OPTIM { "../src/optim" } else if lane == LANE_ODE { "../src/ode" } else { "../src/runtime" });
     if lane == LANE_FLOW {
         guard flow_gen::write_mesh(results_dir) else { return false; }
         flow_gen::generate(runtime_path, results_dir, program);
@@ -133,6 +139,8 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
         grid_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_OPTIM {
         optim_gen::generate(runtime_path, results_dir, program);
+    } else if lane == LANE_ODE {
+        ode_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_SHELL {
         shells_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_SIMPLEX {
@@ -456,7 +464,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         };
         model.clear();
         model.append(model_name);
-        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW && lane != LANE_GRID && lane != LANE_CONS && lane != LANE_OPTIM {
+        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW && lane != LANE_GRID && lane != LANE_CONS && lane != LANE_OPTIM && lane != LANE_ODE {
             share.stages = check::STAGE_MESH - max(stage, check::STAGE_POST);
             format(share.dir, ".skein/studies/", model, "/", study, "/shared");
             shell(str("rm -rf ", shell_quoted(share.dir)));

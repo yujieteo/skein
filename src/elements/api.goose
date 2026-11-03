@@ -529,6 +529,10 @@ fn flux(g: f64) { add_region_load([-g, 0.0, 0.0]); }
 // The condition dot(q, n) = h (T - t_inf) on the region.
 fn film(h: f64, t_inf: f64) { add_film(h, t_inf); }
 
+// The condition dot(grad(u), n) = z u of a wave physics on the region, with
+// z = z_re + i z_im.
+fn robin(z_re: f64, z_im: f64) { add_robin([z_re, z_im]); }
+
 // The radiation to the surroundings at t_inf on the region: dot(q, n) = c
 // (T^4 - t_inf^4) with c = eps sigma in the units of the model.
 fn radiate_ambient(c: f64, t_inf: f64) { add_ambient(c, t_inf); }
@@ -563,6 +567,7 @@ fn clear_bcs() {
     clear_ambient();
     clear_radiation();
     clear_impedance();
+    clear_robin();
     if physics == MIXED { clear_pressure(); }
 }
 
