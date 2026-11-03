@@ -67,6 +67,7 @@ examples/femahoy/grid_bimetal_strip.skn
 examples/femahoy/grid_conductivity_slab.skn
 examples/femahoy/grid_cooling_slab.skn
 examples/femahoy/grid_coax_capacitor.skn
+examples/femahoy/grid_cavity_te101.skn
 examples/femahoy/grid_coax_tem.skn
 examples/femahoy/grid_constrained_block.skn
 examples/femahoy/grid_free_block_modes_ccx.skn

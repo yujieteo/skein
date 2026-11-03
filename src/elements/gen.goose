@@ -300,6 +300,13 @@ recursive fn cval(n: i64) -> f64[2] {
         let a = cval(first(n));
         return [-a[0], -a[1]];
     }
+    // sqrt of a Complex value that has omega: the root with Re >= 0.
+    if is_call(n, "sqrt") && syntax::child_count(n) == 2 && mentions_omega(arg(n, 0)) {
+        let a = cval(arg(n, 0));
+        let r = sqrt(a[0] * a[0] + a[1] * a[1]);
+        let im = sqrt(max((r - a[0]) / 2.0, 0.0));
+        return [sqrt(max((r + a[0]) / 2.0, 0.0)), if a[1] < 0.0 { -im } else { im }];
+    }
     if op == "+" || op == "-" || op == "*" || op == "/" {
         let a = cval(child(n, 0));
         let b = cval(child(n, 1));
@@ -1200,15 +1207,17 @@ fn surface(n: i64) {
     // The boundary of another shape of the model serves a `refine` only, which the mesher reads from the let.
     let whole = if syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { of };
     if whole != body_name && find_body(whole) < 0 && whole.len > 0 && find_geometry(whole) >= 0 { return; }
-    if of != body_name && k < 0 {
+    // boundary(body): all faces of the body.
+    let all = syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == body_name;
+    if of != body_name && k < 0 && !all {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
         return;
     }
     var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: -1, body: k };
     set64(s.name, name(n));
-    if !surf_parts(arg(v, 1), s) { return; }
-    // Only limits: the whole boundary of the body.
-    if s.lims.len > 0 && s.axes.len == 0 && s.shapes.len == 0 && !s.hole {
+    if !all && !surf_parts(arg(v, 1), s) { return; }
+    // Only limits, or no part: the whole boundary of the body.
+    if (s.lims.len > 0 || all) && s.axes.len == 0 && s.shapes.len == 0 && !s.hole {
         if geo == GEO_SHAPE {
             s.shapes.push(body_shape);
         } else if geo == GEO_BOX && 2 * dim <= s.axes.cap {
@@ -1919,6 +1928,12 @@ fn method(n: i64) {
         }
         s = next(s);
     }
+    // The elements of an edge physics have order 1 or 2 on the P1 cells of the mesh.
+    if physics == EDGE && order == 2 {
+        edge_order = 2;
+        order = 1;
+        if gauge_tree { unsupported(tok(n), "the tree gauge has order 1 in this generator", "write order: 1, or remove gauge: tree"); }
+    }
     if (physics == EDGE || physics == DARCY) && order != 1 {
         unsupported(tok(n), str("the family ", family_word, " has order 1 in this generator"), "write order: 1");
     }
@@ -2216,6 +2231,10 @@ fn procedure(proc: i64, s: Step&) {
     if aniso_node >= 0 && (p == "buckling" || p == "transient") {
         unsupported(tok(proc), str("a ", p, " step of a written-out elastic law is not in this generator"),
                     "use hooke(E, nu, strain(u)) for this step, or a static, modal or harmonic step");
+        return;
+    }
+    if physics == EDGE && p == "modal" {
+        edge_modal_proc(proc, s);
         return;
     }
     if p == "harmonic" || physics == WAVE {

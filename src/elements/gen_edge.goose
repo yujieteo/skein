@@ -6,7 +6,10 @@
 // `eq curl(h) + c*u = 0` for a vector u, Complex in `harmonic` steps. Its
 // bcs: `cross(n, u) = cross(n, g)` or `u = 0` (essential), and
 // `cross(n, h) = z*u` (natural). `gauge: tree` holds a spanning tree of the
-// cells with c = 0.
+// cells with c = 0. `order: 2` gives the elements of degree 2 on the P1 cells
+// (src/elements/edge.goose). A `modal(count:, shift:)` step gives the
+// resonances of the physics (src/elements/edge_modal.goose), with a z of the
+// bc that depends on omega.
 //
 // The Darcy flow: `eq q + k*grad(p) = 0` and `eq div(q) = f`, in `static`
 // steps. Its bcs: `p = v` (natural in the mixed form), and `dot(q, n) = g`
@@ -43,8 +46,13 @@ var port_node: i64[>..];            // its vector field
 var port_const: i64[>..];           // its constant factor, or -1
 var port_sign: f64[>..];
 var port_zbc: i64[>..];             // the token of a bc with a term z*(u - dot(u, n)*n), and the node of its z
-var port_znode: i64[>..];
+
 var gauge_tree = false;
+var edge_order = 1;                 // the order of the elements: 1, or 2 with `order: 2` (the mesh stays P1)
+var port_zsign: f64[>..];           // the sign of the term z*u of each bc of port_zbc
+var port_zf_bc: i64[>..];           // the factors of z: the token of the bc, the node and 1 for a divisor
+var port_zf_node: i64[>..];
+var port_zf_div: i64[>..];
 var darcy_k = -1;                   // k of q + k*grad(p) = 0
 var darcy_f = -1;                   // f of div(q) = f, or -1 for 0
 var physics_lets: i64[>..];         // the let items of the physics
@@ -76,8 +84,12 @@ fn edge_reset() {
     port_const.clear();
     port_sign.clear();
     port_zbc.clear();
-    port_znode.clear();
     gauge_tree = false;
+    edge_order = 1;
+    port_zsign.clear();
+    port_zf_bc.clear();
+    port_zf_node.clear();
+    port_zf_div.clear();
     darcy_k = -1;
     darcy_f = -1;
     physics_lets.clear();
@@ -317,32 +329,175 @@ recursive fn port_terms(b: Bc, n: i64, sign: f64) {
         return;
     }
     let tangential = compact(str(unknown_name, "-dot(", unknown_name, ", n)*n"));
+    // z*(u - dot(u, n)*n), z*u, or a product or a quotient with cross(n, cross(n, u)) = -(u - dot(u, n)*n):
+    // a product of factors that name no unknown and no x, y, z, and the tangent of u.
+    if k == syntax::N_BINARY && (op == "*" || op == "/") && position(port_zbc, b.tok) < 0 {
+        var nodes: i64[>..] = [];
+        var divs: i64[>..] = [];
+        flatten_product(n, 0, nodes, divs);
+        var at = -1;
+        var turn = 1.0;
+        var clean = true;
+        for m, i in nodes {
+            let c = compact(source_of(m));
+            let t = if divs[i] != 0 { 0.0 } else if c == tangential || c == compact(unknown_name) { 1.0 } else if c == compact(str("cross(n, cross(n, ", unknown_name, "))")) { -1.0 } else { 0.0 };
+            if t != 0.0 && at < 0 {
+                at = i;
+                turn = t;
+            } else if has_unknown(m) || mentions_xyz(m) {
+                clean = false;
+            }
+        }
+        if at >= 0 && clean && sign > 0.0 {
+            port_zbc.push(b.tok);
+            port_zsign.push(turn);
+            for m, i in nodes {
+                if i == at { continue; }
+                port_zf_bc.push(b.tok);
+                port_zf_node.push(m);
+                port_zf_div.push(divs[i]);
+            }
+            return;
+        }
+    }
     var constant = -1;
     var field = -1;
     if k == syntax::N_BINARY && op == "*" {
         if has_unknown(child(n, 1)) || mentions_xyz(child(n, 1)) { field = child(n, 1); constant = child(n, 0); }
         else if has_unknown(child(n, 0)) || mentions_xyz(child(n, 0)) { field = child(n, 0); constant = child(n, 1); }
     }
-    if field >= 0 && constant >= 0 && !has_unknown(constant) && !mentions_xyz(constant) &&
-       (compact(source_of(field)) == tangential || source_of(field) == unknown_name) && sign > 0.0 && position(port_zbc, b.tok) < 0 {
-        port_zbc.push(b.tok);
-        port_znode.push(constant);
-    } else if field >= 0 && constant >= 0 && !has_unknown(field) && !has_unknown(constant) && !mentions_xyz(constant) {
+    if field >= 0 && constant >= 0 && !has_unknown(field) && !has_unknown(constant) && !mentions_xyz(constant) {
         port_bc.push(b.tok);
         port_node.push(field);
         port_const.push(constant);
         port_sign.push(sign);
     } else {
         unsupported(tok(n), str("the term '", source_of(n), "' of Hs*n is not in this generator"),
-                    str("write c*(", unknown_name, " - dot(", unknown_name, ", n)*n) for the impedance and c*g for a source, with g a vector of x, y and z"));
+                    str("write c*(", unknown_name, " - dot(", unknown_name, ", n)*n) or c*cross(n, cross(n, ", unknown_name, "))/d for the impedance and c*g for a source, with g a vector of x, y and z"));
     }
+}
+
+// The factors of a product and a quotient of nodes, with 1 in divs for a divisor.
+recursive fn flatten_product(n: i64, div: i64, nodes: i64[>..]&, divs: i64[>..]&) {
+    if kind(n) == syntax::N_BINARY && (syntax::text(tok(n)) == "*" || syntax::text(tok(n)) == "/") {
+        flatten_product(child(n, 0), div, nodes, divs);
+        flatten_product(child(n, 1), if syntax::text(tok(n)) == "/" { 1 - div } else { div }, nodes, divs);
+        return;
+    }
+    nodes.push(n);
+    divs.push(div);
+}
+
+// The z of the bc with token t at omega_now, for the harmonic step and the
+// start value of the modal step: the product of its factors, with its sign.
+fn zcoef(t: i64) -> f64[2] {
+    var z: f64[2] = [1.0, 0.0];
+    let i = position(port_zbc, t);
+    if i < 0 { return [0.0, 0.0]; }
+    for b, j in port_zf_bc {
+        if b != t { continue; }
+        z = if port_zf_div[j] != 0 { cdiv(z, cval(port_zf_node[j])) } else { cmul(z, cval(port_zf_node[j])) };
+    }
+    return [port_zsign[i] * z[0], port_zsign[i] * z[1]];
+}
+
+// Whether n has omega, in itself or in a let.
+recursive fn mentions_omega(n: i64) -> bool {
+    if kind(n) == syntax::N_NAME && name(n) == "omega" { return true; }
+    if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let r = mentions_omega(codegen::find_value(name(n)));
+        codegen::depth--;
+        return r;
+    }
+    var c = first(n);
+    while c >= 0 {
+        if mentions_omega(c) { return true; }
+        c = next(c);
+    }
+    return false;
+}
+
+// The Goose expression of the Complex value of n as f64[2], with omega the
+// variable w.
+recursive fn emit_cz(out: u8[>..]&, n: i64) {
+    let k = kind(n);
+    let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
+    if !mentions_omega(n) {
+        let z = cval(n);
+        out.push('[');
+        lit(out, z[0]);
+        out.append(", ");
+        lit(out, z[1]);
+        out.push(']');
+    } else if k == syntax::N_NAME && name(n) == "omega" {
+        out.append("[w, 0.0]");
+    } else if k == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        emit_cz(out, codegen::find_value(name(n)));
+        codegen::depth--;
+    } else if k == syntax::N_BINARY && (op == "+" || op == "-" || op == "*" || op == "/") {
+        out.append(if op == "+" { "cadd(" } else if op == "-" { "csub(" } else if op == "*" { "cmul(" } else { "cdiv(" });
+        emit_cz(out, child(n, 0));
+        out.append(", ");
+        emit_cz(out, child(n, 1));
+        out.push(')');
+    } else if k == syntax::N_UNARY && op == "-" {
+        out.append("csub([0.0, 0.0], ");
+        emit_cz(out, first(n));
+        out.push(')');
+    } else if is_call(n, "sqrt") && syntax::child_count(n) == 2 {
+        out.append("csqrt(");
+        emit_cz(out, arg(n, 0));
+        out.push(')');
+    } else if op == "^" && (scalar_value(child(n, 1)) == 0.5 || scalar_value(child(n, 1)) == floor(scalar_value(child(n, 1))) && scalar_value(child(n, 1)) >= 1.0 && scalar_value(child(n, 1)) <= 8.0) {
+        let e = scalar_value(child(n, 1));
+        if e == 0.5 {
+            out.append("csqrt(");
+            emit_cz(out, child(n, 0));
+            out.push(')');
+        } else {
+            out.append("cpow(");
+            emit_cz(out, child(n, 0));
+            format(out, ", ", e as! i64, ")");
+        }
+    } else {
+        unsupported(tok(n), str("the expression '", source_of(n), "' of omega is not in this generator"),
+                    "write + - * / of numbers, lets, im and omega, sqrt, ^ 2 or ^ 0.5");
+    }
+}
+
+// The z of the bc b at the variable w (omega) of a modal step.
+fn emit_zcoef(out: u8[>..]&, b: Bc) {
+    let i = position(port_zbc, b.tok);
+    if i < 0 && b.node >= 0 {
+        // cross(n, h) = z*u
+        emit_cz(out, b.node);
+        return;
+    }
+    var acc: u8[>..] = [];
+    acc.append("[1.0, 0.0]");
+    for t, j in port_zf_bc {
+        if t != b.tok { continue; }
+        var next_acc: u8[>..] = [];
+        next_acc.append(if port_zf_div[j] != 0 { "cdiv(" } else { "cmul(" });
+        next_acc.append(acc);
+        next_acc.append(", ");
+        emit_cz(next_acc, port_zf_node[j]);
+        next_acc.push(')');
+        acc.clear();
+        acc.append(next_acc);
+    }
+    out.append("cmul([");
+    lit(out, if i >= 0 { port_zsign[i] } else { 0.0 });
+    format(out, ", 0.0], ", acc, ")");
 }
 
 // --- reports and expects ---------------------------------------------------------
 
 // Whether n holds a field: an `at`, an integral or far_field.
 recursive fn has_field(n: i64) -> bool {
-    if kind(n) == syntax::N_AT || is_call(n, "integral") || is_call(n, "far_field") || is_call(n, "rms") { return true; }
+    if kind(n) == syntax::N_AT || is_call(n, "integral") || is_call(n, "far_field") || is_call(n, "rms") || is_call(n, "eigenvalue") { return true; }
     if complex_solid && is_call(n, "mean") { return true; }
     var c = first(n);
     while c >= 0 {
@@ -374,6 +529,8 @@ recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         out.append(", ");
         lit(out, z[1]);
         out.push(']');
+    } else if is_call(n, "eigenvalue") && syntax::child_count(n) == 2 && physics == EDGE {
+        format(out, "modal_value(", scalar_value(arg(n, 0)) as! i64, ")");
     } else if k == syntax::N_BINARY && (op == "+" || op == "-" || op == "*" || op == "/") {
         out.append(if op == "+" { "cadd(" } else if op == "-" { "csub(" } else if op == "*" { "cmul(" } else { "cdiv(" });
         emit_cx(out, pre, child(n, 0));
@@ -791,6 +948,43 @@ let EDGE_PRELUDE = """
         return [a[0], -a[1]];
     }
 
+    fn csqrt(a: f64[2]) -> f64[2] {
+        let r = sqrt(a[0] * a[0] + a[1] * a[1]);
+        let im = sqrt(max((r - a[0]) / 2.0, 0.0));
+        return [sqrt(max((r + a[0]) / 2.0, 0.0)), if a[1] < 0.0 { -im } else { im }];
+    }
+
+    fn cpow(a: f64[2], n: i64) -> f64[2] {
+        var r: f64[2] = [1.0, 0.0];
+        for i in n { r = cmul(r, a); }
+        return r;
+    }
+
+    // The record of a modal step, which has no iterations of GMRES.
+    fn resonance_done(step: u8[:]) {
+        format(solves, "  ", step, ",", elements::element_count(), ",", elements::dof_count(), ",0,", elements::solve_seconds(), ",", if converged { "yes" } else { "no" }, "\n");
+        solve_count++;
+        if !converged { failed = true; }
+    }
+
+    // eigenvalue(k) of the last modal step: the frequency omega / (2 pi), as [re, im]. NaN if the step did not converge.
+    fn modal_value(k: i64) -> f64[2] {
+        if !converged { return [0.0 / 0.0, 0.0 / 0.0]; }
+        let re, im = elements::modal_frequency(k);
+        return [re, im];
+    }
+
+    fn output_resonance(path: u8[:], field: u8[:], k: i64) {
+        if !converged { return; }
+        if !elements::write_modal_mode(path, field, k) {
+            write_stderr(str("skein run: cannot write '", path, "'\n"));
+            failed = true;
+            return;
+        }
+        format(results, "  ", path, "\n");
+        result_count++;
+    }
+
     fn cquantity(v: f64[2]) -> u8[>..] {
         if v[1] == 0.0 { return str(v[0]); }
         return str(v[0], if v[1] < 0.0 { " - " } else { " + " }, abs(v[1]), "i");
@@ -954,7 +1148,7 @@ fn emit_edge_bc(out: u8[>..]&, b: Bc) {
     } else if b.kind == BC_LOAD && physics == EDGE && skew_form {
         // Hs*n = z*(u - dot(u, n)*n) + g: the impedance, then the source.
         let zi = position(port_zbc, b.tok);
-        let z = if zi >= 0 { cval(port_znode[zi]) } else { [0.0, 0.0] };
+        let z = if zi >= 0 { zcoef(b.tok) } else { [0.0, 0.0] };
         out.append("impedance(");
         lit(out, z[0]);
         out.append(", ");
@@ -1074,6 +1268,10 @@ fn emit_edge_expect(out: u8[>..]&, x: EdgeExpect) {
 // frequency of a harmonic step, or one for a static step (omega 0).
 fn emit_edge_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
+    if s.procedure == MODAL {
+        emit_edge_modal(out, si, results_dir);
+        return;
+    }
     let count = if s.procedure == HARMONIC { s.freq_count } else { 1 };
     format(out, "// step ", s.name, ": ", if s.procedure == HARMONIC { "harmonic" } else { "static" }, "\nfn step_", s.name, "() { step_", s.name, "_1(); }\n\n");
     for i in count { emit_edge_case(out, si, i, results_dir); }
@@ -1121,6 +1319,7 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
         out.append(");\n");
     } else if physics == EDGE {
         let nu, c = edge_terms();
+        if edge_order == 2 { out.append("    elements::edge_order(2);\n"); }
         out.append("    elements::edge(");
         lit(out, nu);
         out.append(", ");
@@ -1191,11 +1390,151 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
+// modal(count:, shift:) of the edge physics: the `count` resonances nearest
+// the shift (src/elements/edge_modal.goose). The shift is a frequency, kept
+// in freqs.
+fn edge_modal_proc(proc: i64, s: Step&) {
+    let fix = "write step resonance: modal(count: 1, shift: 8 GHz) { ... }, with a term c*ddt2(u) in the eq";
+    s.procedure = MODAL;
+    s.count = 0;
+    s.first_freq = freqs.len;
+    var a = first(proc);
+    while a >= 0 {
+        let named = syntax::nodes[a].aux;
+        let w = if named >= 0 { syntax::text(named) } else { "" };
+        if w == "count" {
+            s.count = scalar_value(first(a)) as! i64;
+        } else if w == "shift" {
+            freqs.push(scalar_value(first(a)));
+        } else {
+            unsupported(tok(a), "the argument of modal is not in this generator", fix);
+        }
+        a = next(a);
+    }
+    s.freq_count = freqs.len - s.first_freq;
+    var has_mass = false;
+    for d in mass_ddt2 { if d != 0 { has_mass = true; } }
+    if s.count < 1 { unsupported(tok(proc), "a modal step needs count >= 1", fix); }
+    if s.freq_count != 1 || !(freqs[s.first_freq] > 0.0) {
+        unsupported(tok(proc), "a modal step of an edge physics needs a shift > 0, above the null space of the curl", fix);
+    }
+    if !has_mass { unsupported(tok(proc), "a modal step needs a term c*ddt2(u) in the eq", fix); }
+}
+
+// The coefficient m (re and im) of the terms c*ddt2(u) at the material of
+// material_node: the matrix M of the eigenvalue problem.
+fn edge_mass_terms() -> f64[2] {
+    var m: f64[2] = [0.0, 0.0];
+    for t, i in mass_terms {
+        if mass_ddt2[i] == 0 { continue; }
+        let z = cval(t);
+        m[0] += mass_signs[i] * z[0];
+        m[1] += mass_signs[i] * z[1];
+    }
+    return m;
+}
+
+// A modal step: the matrices at omega 0 (c without the term of ddt2), the
+// mass m of ddt2 on the cells, the conditions, then the resonances.
+fn emit_edge_modal(out: u8[>..]&, si: i64, results_dir: u8[:]) {
+    let s = steps[si];
+    let step_bcs = active[s.first_bc..s.first_bc + s.bc_count];
+    // The z of each condition cross(n, h) = z*u as a function of omega.
+    format(out, "// step ", s.name, ": modal\nfn wall_z_", s.name, "(g: i64, w: f64) -> f64[2] {\n");
+    var group = 0;
+    for b in step_bcs {
+        if b.kind != BC_LOAD { continue; }
+        format(out, "    if g == ", group, " { return ");
+        emit_zcoef(out, b);
+        out.append("; }\n");
+        group++;
+    }
+    out.append("    return [0.0, 0.0];\n}\n\n");
+    omega_now = 0.0;
+    format(out, "fn step_", s.name, "() {\n");
+    if edge_order == 2 { out.append("    elements::edge_order(2);\n"); }
+    let nu, c = edge_terms();
+    let m = edge_mass_terms();
+    out.append("    elements::edge(");
+    lit(out, nu);
+    out.append(", ");
+    lit(out, c[0]);
+    out.append(", ");
+    lit(out, c[1]);
+    out.append(", ");
+    lit(out, thickness);
+    out.append(");\n    elements::edge_mass_in(-1, ");
+    lit(out, m[0]);
+    out.append(", ");
+    lit(out, m[1]);
+    out.append(");\n");
+    let base = material_node;
+    for w in region_laws {
+        material_node = w.item;
+        let wnu, wc = edge_terms();
+        let wm = edge_mass_terms();
+        format(out, "    cells(elements::edge_in(", w.g, ", ");
+        lit(out, wnu);
+        out.append(", ");
+        lit(out, wc[0]);
+        out.append(", ");
+        lit(out, wc[1]);
+        out.append("), ");
+        quoted(out, w.label);
+        format(out, ");\n    cells(elements::edge_mass_in(", w.g, ", ");
+        lit(out, wm[0]);
+        out.append(", ");
+        lit(out, wm[1]);
+        out.append("), ");
+        quoted(out, w.label);
+        out.append(");\n");
+    }
+    material_node = base;
+    for b, k in step_bcs {
+        if b.kind != BC_FIX { continue; }
+        if b.comp >= 0 && !tangent_pair(step_bcs, k) { continue; }
+        emit_edge_bc(out, b);
+    }
+    group = 0;
+    for b in step_bcs {
+        if b.kind != BC_LOAD { continue; }
+        for t in port_bc {
+            if t == b.tok { unsupported(b.tok, "a modal step has no source in a condition", "write the condition with the terms of z*(u - dot(u, n)*n) only"); }
+        }
+        format(out, "    // bc ", surfs[b.surf].name, "\n    {\n    ");
+        emit_region(out, b.surf);
+        format(out, "        let held = elements::impedance_group(", group, ");\n        region(held, ");
+        quoted(out, surfs[b.surf].name);
+        out.append(");\n    }\n");
+        group++;
+    }
+    var label: u8[>..] = [];
+    label.append(s.name);
+    format(out, "    converged = elements::resonance(", s.count, ", ");
+    lit(out, 2.0 * PI * freqs[s.first_freq]);
+    format(out, ") { g, w => wall_z_", s.name, "(g, w) };\n    resonance_done(");
+    quoted(out, label);
+    out.append(");\n");
+    for r in reports[s.first_report..s.first_report + s.report_count] { emit_edge_report(out, label, r); }
+    for x in probes { if x.step == si { emit_edge_expect(out, x); } }
+    if s.output {
+        for k in 1..s.count + 1 {
+            out.append("    output_resonance(");
+            quoted(out, str(results_dir, "/", s.name, "_mode", k, ".vtu"));
+            out.append(", ");
+            quoted(out, unknown_name);
+            format(out, ", ", k, ");\n");
+        }
+    }
+    out.append("}\n\n");
+}
+
 // The dofs of a mesh with `points` points: 2 for each edge of the edge
 // physics, and a facet and a cell of the Darcy flow. A mesh has about 7
 // edges, 12 facets and 6 cells for each point in 3d, and 3 edges and 2
 // cells in 2d.
 fn edge_dofs(points: i64) -> i64 {
+    if physics == EDGE && edge_order == 2 { return points * (if dim == 3 { 78 } else { 20 }); }
     if physics == EDGE { return points * (if dim == 3 { 14 } else { 6 }); }
     return points * (if dim == 3 { 18 } else { 5 });
 }

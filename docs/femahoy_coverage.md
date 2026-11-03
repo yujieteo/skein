@@ -335,17 +335,26 @@ gives the roadmap phase that closes the gap:
   over a region of cells is `a I + b A` with the material of the region. A
   `refine` of `boundary(shape)` or of `boundary(a) | boundary(b)` refines the
   surface of the shape.
-- Not run yet in the electromagnetic batch, each for a large missing piece:
-  grid_cavity_te101 needs the modal step of an edge physics and a wall
-  impedance that depends on the eigenvalue, and its `expect` is within 3e-4
-  of the frequency: the lowest order edge element needs a mesh of about 1
-  million cells for that, so it needs the second order element first.
-  team7_eddy_current needs the `stadium` shape of the mesher and a source in
-  the edge physics. dipole_king_middleton needs order 2 edge elements and a
-  PML in 3D. optics_mie_cylinder needs a source that varies in space in the
-  scalar wave physics (`e_inc`), a PML on a layer that is not a box, order 2,
-  the integral of a field on a curve inside the mesh, and the `study` of a
-  param.
+- grid_cavity_te101 runs. The method setting `order: 2` with `family: nedelec`
+  is a hierarchical Nedelec element of the first kind and degree 2 (20
+  functions on a tet, 8 on a triangle). The essential `bc` projects the
+  tangential trace on the edge and face functions. The modal step of an edge
+  physics finds the lowest modes of `K + C + B(omega) - omega^2 M` with a
+  shift-invert iteration on a direct sparse LU. A wall impedance that depends
+  on omega (the copper wall `zs = (1 + im)*sqrt(omega*mu0/(2*sigma))`) is a
+  fixed point on omega, and `eigenvalue(k)` is the complex frequency. The
+  model gives 8.88632 GHz against 8.88460 GHz (1.9e-4, bound 3e-4) on a 4 mm
+  mesh in about 45 s. The 5 mm mesh fails the bound (3.5e-4). The tree gauge
+  is for order 1 only.
+- Not run yet in the electromagnetic batch, each for a large missing piece
+  (follow-up pull requests):
+  team7_eddy_current needs the `stadium` shape of the mesher, a source in
+  the edge physics and a material for each region of the edge physics.
+  dipole_king_middleton needs a PML in 3D for the edge physics and the
+  integral of a field on a curve. The order 2 element it needs runs now.
+  optics_mie_cylinder needs a source that varies in space in the scalar wave
+  physics (`e_inc`), a PML on a layer that is not a box, the integral of a
+  field on a curve inside the mesh, and the `study` of a param.
 - Not run yet, each for a large missing piece:
   laminate_pagano and warpage_2p5d_frame do not run in this batch, and each
   needs more than one new piece. The written-out orthotropic law and the

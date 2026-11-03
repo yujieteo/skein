@@ -41,22 +41,43 @@ var cell_sign: f64[>..] = [];   // +1 if the local edge runs from the lower vert
 var edge_nu: f64[>..] = [];     // ν of each cell
 var edge_c: f64[>..] = [];      // c of each cell, as re and im
 var gauge_count = 0;            // the edges of the tree of the last gauge
+var edge_p = 1;                 // the polynomial order of the elements: 1 or 2 (edge_order)
+var cell_dof: i64[>..] = [];    // the dof of each local function of each cell
+var dof_total_c = 0;            // the complex dofs
+var face_total = 0;             // the faces of a 3D mesh, or the cells of a 2D mesh, with 2 dofs of order 2 each
+var edge_m: f64[>..] = [];      // the coefficient m of each cell, as re and im: the matrix of u is K + C - lambda M
+var edge_eps_set = false;
 var facet_open: u8[>..] = [];   // 1 for each facet of each cell on the boundary of the mesh
 
 fn edge_total() -> i64 { return edge_v.len / 2; }
 
 fn local_edges() -> i64 { return edge_count(dim); }
 
+fn local_faces() -> i64 { return if dim == 3 { 4 } else { 1 }; }
+
+// The functions of a cell: order 1 has the function of each edge. Order 2
+// (hierarchical) adds the gradient of lambda_i lambda_j of each edge and 2
+// functions on each face (in 2D, on the cell).
+fn local_dofs() -> i64 { return if edge_p == 1 { local_edges() } else { 2 * local_edges() + 2 * local_faces() }; }
+
+// The order of the elements of the next edge call: 1 or 2.
+fn set_edge_order(p: i64) {
+    guard p == 1 || p == 2 else { abort("set_edge_order: the order is 1 or 2"); }
+    edge_p = p;
+}
+
 // Starts the edge physics on the P1 mesh, with ν and c on each cell. In 2D,
 // t is the thickness.
 fn set_edge(nu: f64, c: f64[2], t: f64) {
     guard order == 1 && per_cell == dim + 1 && nu > 0.0 && t > 0.0 else { abort("set_edge: a P1 mesh, nu > 0 and t > 0"); }
+    edge_m.clear();
+    edge_eps_set = false;
     physics = EDGE;
     ncomp = 2;
     thickness = if dim == 3 { 1.0 } else { t };
     clear_stages();
     build_edges();
-    other_dofs = 2 * edge_total();
+    other_dofs = 2 * dof_total_c;
     fixed.clear();
     prescribed.clear();
     load.clear();
@@ -100,6 +121,45 @@ fn build_edges() {
         }
     }
     find_open_facets();
+    build_dofs();
+}
+
+// The dof of each function of each cell. The edges have the dofs 0 to E - 1
+// (the Whitney functions), the gradients E to 2E - 1, then 2 dofs for each
+// face (in 2D, for each cell). The face of a 3D cell is known by its
+// sorted vertices, so that both cells of a face share its dofs.
+fn build_dofs() {
+    let le = local_edges();
+    let lf = local_faces();
+    let ne = edge_total();
+    cell_dof.clear();
+    face_total = 0;
+    var at = dictionary<i64, i64> {};
+    let nv = node_count();
+    for c in cell_count() {
+        for e in le {
+            cell_dof.push(cell_edge[le * c + e]);
+        }
+        if edge_p == 1 { continue; }
+        for e in le {
+            cell_dof.push(ne + cell_edge[le * c + e]);
+        }
+        for f in lf {
+            var k = c;
+            if dim == 3 {
+                var v: i64[3] = [cell_node(c, facet_node(dim, f, 0)), cell_node(c, facet_node(dim, f, 1)), cell_node(c, facet_node(dim, f, 2))];
+                sort(v);
+                k = at.get_or_insert((v[0] * nv + v[1]) * nv + v[2], face_total);
+                if k == face_total { face_total++; }
+            } else {
+                face_total++;
+            }
+            for s in 2 {
+                cell_dof.push(2 * ne + 2 * k + s);
+            }
+        }
+    }
+    dof_total_c = if edge_p == 1 { ne } else { 2 * ne + 2 * face_total };
 }
 
 // Gives the cells in the shape g the coefficients ν and c. It gives the
@@ -117,40 +177,97 @@ fn edge_material(g: i64, nu: f64, c: f64[2]) -> i64 {
     return count;
 }
 
-// The basis of cell c at the barycentric coordinates l: w[3 e + t] of each
-// local edge e with its sign, and curl w[3 e + t] (in 2D, only t = 2). It
-// gives the determinant of the map of the cell.
-fn edge_basis(c: i64, l: f64[4], w: f64[18]&, cw: f64[18]&) -> f64 {
+// The basis of cell c at the barycentric coordinates l: w[3 a + t] of each
+// local function a with its sign, and curl w[3 a + t] (in 2D, only t = 2).
+// The functions of order 1 are of the edges, w = λi ∇λj - λj ∇λi. Order 2
+// adds ∇(λi λj) of each edge (curl 0), and on the face (a, b, c) with the
+// global vertices in the sequence a < b < c the functions λc w_ab and λa
+// w_bc: their tangent on the face is that of the face alone, and 0 on the
+// other faces. It gives the determinant of the map of the cell.
+fn edge_basis(c: i64, l: f64[4], w: f64[60]&, cw: f64[60]&) -> f64 {
     let det = cell_geometry(c, [0.0; 3]);
-    for e in local_edges() {
+    let ne = local_edges();
+    for e in ne {
         let i = edge_node(dim, e, 0);
         let j = edge_node(dim, e, 1);
-        let s = cell_sign[local_edges() * c + e];
+        let s = cell_sign[ne * c + e];
         for t in 3 { w[3 * e + t] = s * (l[i] * grad[3 * j + t] - l[j] * grad[3 * i + t]); }
         let gi: f64[3] = [grad[3 * i], grad[3 * i + 1], grad[3 * i + 2]];
         let gj: f64[3] = [grad[3 * j], grad[3 * j + 1], grad[3 * j + 2]];
-        cw[3 * e] = 2.0 * s * (gi[1] * gj[2] - gi[2] * gj[1]);
-        cw[3 * e + 1] = 2.0 * s * (gi[2] * gj[0] - gi[0] * gj[2]);
-        cw[3 * e + 2] = 2.0 * s * (gi[0] * gj[1] - gi[1] * gj[0]);
+        let cj = cross3(gi, gj);
+        for t in 3 { cw[3 * e + t] = 2.0 * s * cj[t]; }
+        if edge_p == 2 {
+            for t in 3 {
+                w[3 * (ne + e) + t] = l[i] * grad[3 * j + t] + l[j] * grad[3 * i + t];
+                cw[3 * (ne + e) + t] = 0.0;
+            }
+        }
+    }
+    if edge_p == 2 {
+        for f in local_faces() {
+            var v: i64[3] = [0, 1, 2];
+            if dim == 3 {
+                for q in 3 { v[q] = facet_node(dim, f, q); }
+                // The 3 vertices in the sequence of their global indices.
+                for pass in 2 {
+                    for q in 2 { if cell_node(c, v[q]) > cell_node(c, v[q + 1]) { let t = v[q]; v[q] = v[q + 1]; v[q + 1] = t; } }
+                }
+            }
+            for s in 2 {
+                // s = 0: λc w_ab. s = 1: λa w_bc.
+                let i = if s == 0 { v[0] } else { v[1] };
+                let j = if s == 0 { v[1] } else { v[2] };
+                let m = if s == 0 { v[2] } else { v[0] };
+                let gi: f64[3] = [grad[3 * i], grad[3 * i + 1], grad[3 * i + 2]];
+                let gj: f64[3] = [grad[3 * j], grad[3 * j + 1], grad[3 * j + 2]];
+                let gm: f64[3] = [grad[3 * m], grad[3 * m + 1], grad[3 * m + 2]];
+                var wij: f64[3] = [0.0; 3];
+                for t in 3 { wij[t] = l[i] * gj[t] - l[j] * gi[t]; }
+                let cm = cross3(gm, wij);
+                let cj = cross3(gi, gj);
+                let at = 3 * (2 * ne + 2 * f + s);
+                for t in 3 {
+                    w[at + t] = l[m] * wij[t];
+                    cw[at + t] = cm[t] + 2.0 * l[m] * cj[t];
+                }
+            }
+        }
     }
     return det;
 }
 
-// The complex matrix me of cell c, edge by edge: the curl term and the
-// term of c, by the rule of degree 2.
-fn edge_cell(c: i64, me: f64[:]) {
+fn cross3(a: f64[3], b: f64[3]) -> f64[3] {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+// The point q of the rule of the volume of a cell: degree 2 for order 1,
+// the conical product of 4 Gauss points for order 2.
+fn volume_points() -> i64 { return if edge_p == 1 { quad_count(dim) } else { rich_count() }; }
+
+fn volume_point(q: i64) -> f64[3], f64 {
+    if edge_p == 1 { return quad_point(dim, q); }
+    return rich_point(q);
+}
+
+// The complex matrix me of cell c, function by function: the curl term and
+// the term of c, by the rule of the volume. With `mass`, the matrix of the
+// term m u of edge_m alone, for the eigenvalue problem K + C - λ M.
+fn edge_cell(c: i64, me: f64[:], mass: bool) {
     for &v in me { v = 0.0; }
-    let ne = local_edges();
-    var w: f64[18] = [0.0; 18];
-    var cw: f64[18] = [0.0; 18];
-    for q in quad_count(dim) {
-        let xi, wt = quad_point(dim, q);
+    let ne = local_dofs();
+    var w: f64[60] = [0.0; 60];
+    var cw: f64[60] = [0.0; 60];
+    for q in volume_points() {
+        let xi, wt = volume_point(q);
         var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
         for r in dim {
             l[r + 1] = xi[r];
             l[0] -= xi[r];
         }
         let dv = wt * edge_basis(c, l, w, cw) * thickness;
+        let nu = if mass { 0.0 } else { edge_nu[c] };
+        let cr = if mass { edge_m[2 * c] } else { edge_c[2 * c] };
+        let ci = if mass { edge_m[2 * c + 1] } else { edge_c[2 * c + 1] };
         for a in ne {
             for b in ne {
                 var k = 0.0;
@@ -159,22 +276,22 @@ fn edge_cell(c: i64, me: f64[:]) {
                     k += cw[3 * a + t] * cw[3 * b + t];
                     m += w[3 * a + t] * w[3 * b + t];
                 }
-                me[2 * (ne * a + b)] += (edge_nu[c] * k + edge_c[2 * c] * m) * dv;
-                me[2 * (ne * a + b) + 1] += edge_c[2 * c + 1] * m * dv;
+                me[2 * (ne * a + b)] += (nu * k + cr * m) * dv;
+                me[2 * (ne * a + b) + 1] += ci * m * dv;
             }
         }
     }
 }
 
-// The pattern of the edges: two edges are neighbours if they share a cell.
+// The pattern of the dofs: two dofs are neighbours if they share a cell.
 fn edge_pattern() {
     clear_matrix();
-    let ne = edge_total();
-    let le = local_edges();
+    let ne = dof_total_c;
+    let le = local_dofs();
     var keys: i64[>..] = [];
     for c in cell_count() {
         for a in le {
-            for b in le { keys.push(cell_edge[le * c + a] * ne + cell_edge[le * c + b]); }
+            for b in le { keys.push(cell_dof[le * c + a] * ne + cell_dof[le * c + b]); }
         }
     }
     sort(keys);
@@ -206,18 +323,23 @@ fn edge_assemble() {
     wave_choose_path();
     assembled_source.clear();
     for d in dof_total() { assembled_source.push(0.0); }
-    let le = local_edges();
-    var me: f64[72] = [0.0; 72];
+    add_cells(false);
+    add_impedance();
+}
+
+// The matrices of the cells of edge_cell into val (the pattern is there).
+fn add_cells(mass: bool) {
+    let le = local_dofs();
+    var me: f64[800] = [0.0; 800];
     for c in cell_count() {
-        edge_cell(c, me[..2 * le * le]);
+        edge_cell(c, me[..2 * le * le], mass);
         for a in le {
             for b in le {
                 let k = le * a + b;
-                add_block(cell_edge[le * c + a], cell_edge[le * c + b], [me[2 * k], me[2 * k + 1]]);
+                add_block(cell_dof[le * c + a], cell_dof[le * c + b], [me[2 * k], me[2 * k + 1]]);
             }
         }
     }
-    add_impedance();
 }
 
 // --- the source and the conditions ---------------------------------------------
@@ -226,12 +348,12 @@ fn edge_assemble() {
 // parts of the components, then the imaginary parts.
 fn edge_source<S>() {
     guard physics == EDGE && dofs_sized() else { abort("edge_source: an edge physics and the arrays of the dofs"); }
-    let le = local_edges();
-    var w: f64[18] = [0.0; 18];
-    var cw: f64[18] = [0.0; 18];
+    let le = local_dofs();
+    var w: f64[60] = [0.0; 60];
+    var cw: f64[60] = [0.0; 60];
     for c in cell_count() {
-        for q in rich_count() {
-            let xi, wt = rich_point(q);
+        for q in volume_points() {
+            let xi, wt = volume_point(q);
             var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
             for r in dim {
                 l[r + 1] = xi[r];
@@ -244,7 +366,7 @@ fn edge_source<S>() {
             }
             let s: f64[6] = S(p);
             for a in le {
-                let d = 2 * cell_edge[le * c + a];
+                let d = 2 * cell_dof[le * c + a];
                 for t in 3 {
                     load[d] += s[t] * w[3 * a + t] * dv;
                     load[d + 1] += s[3 + t] * w[3 * a + t] * dv;
@@ -324,11 +446,15 @@ fn facet_has_edge(f: i64, e: i64) -> bool {
 
 // Holds each edge of the facets of the region at ∫ g · dl, with g = G(p)
 // as in edge_source: the condition cross(n, u) = cross(n, g). It gives the
-// number of edges that it holds.
+// number of edges that it holds. Order 2 also holds the gradient function
+// of the edge, at the L2 projection of g · t on 1 - 2 s along the edge, and in
+// 3D the 2 functions of the facet, at the L2 projection of the rest of g on
+// them: the tangent of u is then the projection of the tangent of g.
 fn fix_tangent<G>() -> i64 {
     guard physics == EDGE && dofs_sized() else { abort("fix_tangent: an edge physics and the arrays of the dofs"); }
     var count = 0;
     let le = local_edges();
+    let np = if edge_p == 1 { 2 } else { 4 };
     for c in cell_count() {
         for f in facet_count(dim) {
             if !edge_facet_on(c, f) { continue; }
@@ -337,34 +463,107 @@ fn fix_tangent<G>() -> i64 {
                 if !facet_has_edge(f, e) || fixed[2 * k] != 0 { continue; }
                 let a = edge_v[2 * k];
                 let b = edge_v[2 * k + 1];
-                var v: f64[2] = [0.0, 0.0];
-                for g in 2 {
-                    let s = if g == 0 { LINE_G } else { 1.0 - LINE_G };
+                // The dofs: ∫ g · (b - a) ds and, for order 2, 3 ∫ g · (b - a) (1 - 2 s) ds.
+                var v: f64[4] = [0.0; 4];
+                for g in np {
+                    let s = if edge_p == 1 { (if g == 0 { LINE_G } else { 1.0 - LINE_G }) } else { GAUSS_X[g] };
+                    let wq = if edge_p == 1 { 0.5 } else { GAUSS_W[g] };
                     var p: f64[3] = [0.0; 3];
                     for t in 3 { p[t] = (1.0 - s) * node_x(a, t) + s * node_x(b, t); }
                     let gv: f64[6] = G(p);
                     for t in 3 {
-                        v[0] += 0.5 * gv[t] * (node_x(b, t) - node_x(a, t));
-                        v[1] += 0.5 * gv[3 + t] * (node_x(b, t) - node_x(a, t));
+                        let dl = node_x(b, t) - node_x(a, t);
+                        v[0] += wq * gv[t] * dl;
+                        v[1] += wq * gv[3 + t] * dl;
+                        v[2] += 3.0 * wq * gv[t] * dl * (1.0 - 2.0 * s);
+                        v[3] += 3.0 * wq * gv[3 + t] * dl * (1.0 - 2.0 * s);
                     }
                 }
                 for p in 2 {
                     fixed[2 * k + p] = 1;
                     prescribed[2 * k + p] = v[p];
+                    if edge_p == 2 {
+                        fixed[2 * (edge_total() + k) + p] = 1;
+                        prescribed[2 * (edge_total() + k) + p] = v[2 + p];
+                    }
                 }
                 count++;
             }
+            if edge_p == 2 && dim == 3 { fix_face_dofs(c, f) { p => G(p) }; }
         }
     }
     return count;
 }
 
+// The 2 functions of facet f of cell c (order 2, 3D) at the projection on
+// them of the tangent of g less the part of the edges of the facet, which
+// the dofs of the edges in `prescribed` give.
+fn fix_face_dofs<G>(c: i64, f: i64) {
+    let le = local_edges();
+    let nl = local_dofs();
+    let n, size = facet_normal(c, f);
+    var w: f64[60] = [0.0; 60];
+    var cw: f64[60] = [0.0; 60];
+    var gram: f64[3] = [0.0; 3];
+    var rhs: f64[4] = [0.0; 4];
+    for q in facet_points() {
+        let l, wt = facet_point(f, q);
+        edge_basis(c, l, w, cw);
+        let g: f64[6] = G(edge_cell_point(c, l));
+        var r: f64[6] = [0.0; 6];
+        for t in 3 {
+            r[t] = g[t];
+            r[3 + t] = g[3 + t];
+        }
+        for e in le {
+            if !facet_has_edge(f, e) { continue; }
+            let k = cell_edge[le * c + e];
+            let kg = edge_total() + k;
+            for t in 3 {
+                r[t] -= prescribed[2 * k] * w[3 * e + t] + prescribed[2 * kg] * w[3 * (le + e) + t];
+                r[3 + t] -= prescribed[2 * k + 1] * w[3 * e + t] + prescribed[2 * kg + 1] * w[3 * (le + e) + t];
+            }
+        }
+        var phi: f64[6] = [0.0; 6];
+        for s in 2 {
+            var dn = 0.0;
+            for t in 3 { dn += w[3 * (2 * le + 2 * f + s) + t] * n[t]; }
+            for t in 3 { phi[3 * s + t] = w[3 * (2 * le + 2 * f + s) + t] - dn * n[t]; }
+        }
+        let wq = wt * size;
+        gram[0] += dot3s(phi[0..3], phi[0..3]) * wq;
+        gram[1] += dot3s(phi[0..3], phi[3..6]) * wq;
+        gram[2] += dot3s(phi[3..6], phi[3..6]) * wq;
+        for s in 2 {
+            // The tangent of r on phi: phi has no normal part, so r . phi.
+            rhs[s] += dot3s(r[0..3], phi[3 * s..3 * s + 3]) * wq;
+            rhs[2 + s] += dot3s(r[3..6], phi[3 * s..3 * s + 3]) * wq;
+        }
+    }
+    let det = gram[0] * gram[2] - gram[1] * gram[1];
+    guard det != 0.0 else { abort("fix_face_dofs: the two functions of a facet are independent"); }
+    for part in 2 {
+        let x0 = (gram[2] * rhs[2 * part] - gram[1] * rhs[2 * part + 1]) / det;
+        let x1 = (gram[0] * rhs[2 * part + 1] - gram[1] * rhs[2 * part]) / det;
+        for s in 2 {
+            let d = cell_dof[nl * c + 2 * le + 2 * f + s];
+            fixed[2 * d + part] = 1;
+            prescribed[2 * d + part] = if s == 0 { x0 } else { x1 };
+        }
+    }
+}
+
 // The facets of the impedance conditions of the step: cell, facet and z.
 var imp_facets: i64[>..] = [];
 var imp_z: f64[>..] = [];
+var imp_group: i64[>..] = [];   // the group of each facet, -1 for a z that is a constant (edge_modal reads z of the group at ω)
 
 // Adds the facets of the region to the condition cross(n, h) = z u.
-fn edge_impedance(z: f64[2]) -> i64 {
+fn edge_impedance(z: f64[2]) -> i64 { return edge_impedance_in(z, -1); }
+
+// The same with the group g of the facets: a modal step reads z(ω) of the
+// group (edge_modal), and z is a start value.
+fn edge_impedance_in(z: f64[2], g: i64) -> i64 {
     guard physics == EDGE else { abort("edge_impedance: an edge physics"); }
     var count = 0;
     for c in cell_count() {
@@ -373,6 +572,7 @@ fn edge_impedance(z: f64[2]) -> i64 {
             imp_facets.push(c);
             imp_facets.push(f);
             imp_z.append(z);
+            imp_group.push(g);
             count++;
         }
     }
@@ -400,10 +600,28 @@ fn facet_normal(c: i64, f: i64) -> f64[3], f64 {
     return n, size;
 }
 
-// The barycentric coordinates in its cell of point q of the rule of degree
-// 2 on facet f, and the weight of the point on the unit facet.
+// The points of the rule of a facet: degree 2 for order 1, and 4 Gauss
+// points along each direction (the conical product) for order 2.
+fn facet_points() -> i64 {
+    if edge_p == 1 { return quad_count(dim - 1); }
+    return if dim == 3 { 16 } else { 4 };
+}
+
+// The barycentric coordinates in its cell of point q of the rule on facet
+// f, and the weight of the point on the unit facet.
 fn facet_point(f: i64, q: i64) -> f64[4], f64 {
-    let xi, w = quad_point(dim - 1, q);
+    var xi: f64[3] = [0.0; 3];
+    var w = 0.0;
+    if edge_p == 1 {
+        xi, w = quad_point(dim - 1, q);
+    } else if dim == 3 {
+        let u = GAUSS_X[q % 4];
+        xi = [u, GAUSS_X[q / 4] * (1.0 - u), 0.0];
+        w = GAUSS_W[q % 4] * GAUSS_W[q / 4] * (1.0 - u);
+    } else {
+        xi = [GAUSS_X[q], 0.0, 0.0];
+        w = GAUSS_W[q];
+    }
     var fl: f64[3] = [1.0 - xi[0] - xi[1], xi[0], xi[1]];
     if dim == 2 { fl = [1.0 - xi[0], xi[0], 0.0]; }
     var l: f64[4] = [0.0; 4];
@@ -413,14 +631,14 @@ fn facet_point(f: i64, q: i64) -> f64[4], f64 {
 
 // Adds ∮ z u_t · v_t over the facets of the impedance conditions.
 fn add_impedance() {
-    let le = local_edges();
-    var w: f64[18] = [0.0; 18];
-    var cw: f64[18] = [0.0; 18];
+    let le = local_dofs();
+    var w: f64[60] = [0.0; 60];
+    var cw: f64[60] = [0.0; 60];
     for i in imp_facets.len / 2 {
         let c = imp_facets[2 * i];
         let f = imp_facets[2 * i + 1];
         let n, size = facet_normal(c, f);
-        for q in quad_count(dim - 1) {
+        for q in facet_points() {
             let l, wt = facet_point(f, q);
             edge_basis(c, l, w, cw);
             for a in le {
@@ -434,7 +652,7 @@ fn add_impedance() {
                         m += w[3 * a + t] * w[3 * b + t];
                     }
                     let tt = (m - dn_a * dn_b) * wt * size;
-                    add_block(cell_edge[le * c + a], cell_edge[le * c + b], [imp_z[2 * i] * tt, imp_z[2 * i + 1] * tt]);
+                    add_block(cell_dof[le * c + a], cell_dof[le * c + b], [imp_z[2 * i] * tt, imp_z[2 * i + 1] * tt]);
                 }
             }
         }
@@ -456,14 +674,14 @@ fn edge_cell_point(c: i64, l: f64[4]) -> f64[3] {
 fn edge_traction<G>() -> i64 {
     guard physics == EDGE && dofs_sized() else { abort("edge_traction: an edge physics and the arrays of the dofs"); }
     var count = 0;
-    let le = local_edges();
-    var w: f64[18] = [0.0; 18];
-    var cw: f64[18] = [0.0; 18];
+    let le = local_dofs();
+    var w: f64[60] = [0.0; 60];
+    var cw: f64[60] = [0.0; 60];
     for c in cell_count() {
         for f in facet_count(dim) {
             if !edge_facet_on(c, f) { continue; }
             let n, size = facet_normal(c, f);
-            for q in quad_count(dim - 1) {
+            for q in facet_points() {
                 let l, wt = facet_point(f, q);
                 edge_basis(c, l, w, cw);
                 let g: f64[6] = G(edge_cell_point(c, l));
@@ -477,7 +695,7 @@ fn edge_traction<G>() -> i64 {
                         gr += g[t] * wt_a;
                         gi += g[3 + t] * wt_a;
                     }
-                    let d = 2 * cell_edge[le * c + a];
+                    let d = 2 * cell_dof[le * c + a];
                     load[d] -= gr * wt * size;
                     load[d + 1] -= gi * wt * size;
                 }
@@ -498,7 +716,7 @@ fn edge_facet_integral<G>(field: bool) -> f64[2] {
         for f in facet_count(dim) {
             if !edge_facet_on(c, f) { continue; }
             let n, size = facet_normal(c, f);
-            for q in quad_count(dim - 1) {
+            for q in facet_points() {
                 let l, wt = facet_point(f, q);
                 let g: f64[6] = G(edge_cell_point(c, l));
                 if field {
@@ -519,6 +737,7 @@ fn edge_facet_integral<G>(field: bool) -> f64[2] {
 fn clear_impedance() {
     imp_facets.clear();
     imp_z.clear();
+    imp_group.clear();
 }
 
 // --- the tree gauge --------------------------------------------------------------
@@ -540,7 +759,7 @@ fn tree_root(up: i64[:], v: i64) -> i64 {
 // edge are one root first, so a gradient that the tree removes is 0 there.
 // Call it after the essential conditions. It gives the edges of the tree.
 fn tree_gauge() -> i64 {
-    guard physics == EDGE && dofs_sized() else { abort("tree_gauge: an edge physics and the arrays of the dofs"); }
+    guard physics == EDGE && dofs_sized() && edge_p == 1 else { abort("tree_gauge: an edge physics of order 1 and the arrays of the dofs"); }
     var up: i64[>..] = [];
     for v in node_count() { up.push(v); }
     var root = -1;
@@ -622,13 +841,13 @@ fn edge_solve() -> bool {
 // u (curl = false) or curl u in cell c at the barycentric coordinates l:
 // the real parts of the 3 components, then the imaginary parts.
 fn edge_cell_value(c: i64, l: f64[4], curl: bool) -> f64[6] {
-    var w: f64[18] = [0.0; 18];
-    var cw: f64[18] = [0.0; 18];
+    var w: f64[60] = [0.0; 60];
+    var cw: f64[60] = [0.0; 60];
     edge_basis(c, l, w, cw);
     var v: f64[6] = [0.0; 6];
-    let le = local_edges();
+    let le = local_dofs();
     for e in le {
-        let k = cell_edge[le * c + e];
+        let k = cell_dof[le * c + e];
         for t in 3 {
             let b = if curl { cw[3 * e + t] } else { w[3 * e + t] };
             v[t] += sol[2 * k] * b;
@@ -870,6 +1089,8 @@ fn far_intensity(d: f64[3], k: f64, eta: f64) -> f64 {
     return k * k / (32.0 * PI * PI * eta) * (u1 + u2);
 }
 
+fn dot3s(a: f64[:], b: f64[:]) -> f64 { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
 fn dot3(a: f64[3], b: f64[3]) -> f64 { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
 // The power out of the closed surface of the samples: ∮ ½ Re(E × H*) · n dA.
@@ -887,4 +1108,24 @@ fn surface_power() -> f64 {
         }
     }
     return p;
+}
+
+// Gives the coefficient m (re and im) of the term m u of the eigenvalue
+// problem to the cells in the shape g, or to every cell with g < 0. It
+// gives the number of these cells.
+fn edge_mass(g: i64, m: f64[2]) -> i64 {
+    guard physics == EDGE else { abort("edge_mass: an edge physics"); }
+    if edge_m.len != 2 * cell_count() {
+        edge_m.clear();
+        for e in 2 * cell_count() { edge_m.push(0.0); }
+    }
+    var count = 0;
+    for e in cell_count() {
+        if g >= 0 && !cell_in(e, g) { continue; }
+        edge_m[2 * e] = m[0];
+        edge_m[2 * e + 1] = m[1];
+        count++;
+    }
+    edge_eps_set = true;
+    return count;
 }
