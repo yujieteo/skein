@@ -1578,7 +1578,9 @@ The setting `family` of `cg` gives the cells of each order:
 - `nedelec`: the edge elements of Nédélec (1980), first kind, on
   triangles and tetrahedra. Order 1 has one dof on each edge, the
   integral of the tangential component of the vector unknown along it.
-  The tangential part is continuous between cells and the normal part is
+  Order 2 is hierarchical: it adds the gradient of a function of each
+  edge and 2 functions of each face (8 dofs on a triangle, 20 on a
+  tetrahedron). The tangential part is continuous between cells and the normal part is
   not. A `bc` `cross(n, u) = cross(n, g)` holds these edge dofs.
 - `raviart_thomas`: the face elements of Raviart and Thomas (1977) for a
   mixed physics with a vector `q` and a scalar `p`, such as
@@ -1593,7 +1595,8 @@ spanning tree of the cells where the coefficient of `u` in the equation
 is 0. There the curl-curl operator has the gradients in its null space,
 and the tree makes the solution unique. The edges of the essential
 conditions are in the tree first. Only `curl(u)` is unique there, not
-`u`. `gauge` with another family is an error [`method_setting`].
+`u`. `gauge` with another family is an error [`method_setting`]. The
+generator takes `gauge: tree` only with `order: 1`.
 Reason: an eddy current model has air and coils with no conductivity
 (femahoy gap G27).
 
