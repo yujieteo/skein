@@ -369,8 +369,19 @@ gives the roadmap phase that closes the gap:
   is for order 1 only.
 - Not run yet in the electromagnetic batch, each for a large missing piece
   (follow-up pull requests):
-  team7_eddy_current needs the `stadium` shape of the mesher, a source in
-  the edge physics and a material for each region of the edge physics.
+  team7_eddy_current: the source of the edge physics now runs
+  (`eq curl(h) + c*u = js`, with `js` a vector of x, y and z that each
+  material sets for its own cells, with `min`, `max` and `atan2` in it), the
+  material of each region of the edge physics ran before, and the `stadium`
+  of the mesher (a union of boxes and a `pattern` of cylinders) meshes. It
+  stays blocked: a 3D mesh that fits the direct solve limit of 15 minutes has
+  68066 dofs and plate cells of 19 mm. On it, Bz at x = 36, 126 and 162 mm
+  is -19.7, 70.3 and 39.0 G against -22.13, 78.11 and 60.44 G (misses of
+  11 %, 10 % and 36 %), and GMRES does not converge in 200 iterations. The
+  expect needs 6 %. A mesh of 9 mm has 646k dofs and needs about 16 hours of
+  direct solve. It needs a faster solve of the 3D edge physics (a better
+  ordering of the factor, or a multigrid for edge elements), and the PML in
+  3D. The tree gauge is not the limit.
   dipole_king_middleton needs a PML in 3D for the edge physics and the
   integral of a field on a curve. The order 2 element it needs runs now.
   optics_mie_cylinder needs a source that varies in space in the scalar wave

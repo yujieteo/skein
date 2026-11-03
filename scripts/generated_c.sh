@@ -48,6 +48,7 @@ examples/elements/kirsch_nurbs_tri.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
 examples/elements/radiation_annulus_tri.skn
+examples/elements/source_slab_tet.skn
 examples/elements/taylor_bar_tet.skn
 examples/elements/two_ply_block_hex.skn
 examples/elements/uniform_temperature_tet.skn

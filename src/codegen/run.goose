@@ -148,6 +148,11 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     } else {
         generate(runtime_path, results_dir, share, program);
     }
+    // A generator can find an unsupported part only when it writes the code.
+    if !ok() {
+        fmt::write_errors();
+        return false;
+    }
     split_long_functions(program);
     let at = unchecked_status(program);
     if at > 0 {
