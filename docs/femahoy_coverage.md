@@ -158,8 +158,7 @@ gives the roadmap phase that closes the gap:
   region: a grid in r and θ on a quarter of a ring or a tube, Blossom-Quad
   on another `Surface`, a swept grid on a prism along z, and a mapped grid
   on another `Solid`. The ring of
-  [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn),
-  the flag of [turek_hron_fsi1.skn](../examples/femahoy/turek_hron_fsi1.skn)
+  [submodel_kirsch_hole.skn](../examples/femahoy/submodel_kirsch_hole.skn)
   and the package of
   [warpage_2p5d_frame.skn](../examples/femahoy/warpage_2p5d_frame.skn) use
   the cells of femahoy. The ring of
