@@ -1109,6 +1109,7 @@ fn test_edge_modal() {
         print("edge modal ", d, "d: omega ", f * 2.0 * PI, ", want ", want, ", second ", f2 * 2.0 * PI);
     }
     test_edge_lossy();
+    test_edge_lossy_fixed();
 }
 
 // A wall on x = 0 with an impedance z(omega) = 0.2 i sqrt(omega) and perfect
@@ -1145,6 +1146,35 @@ fn test_edge_lossy() {
             expect_near("edge lossy fixed point", f, f_found, 1.0e-9);
         }
     }
+}
+
+// A box with an impedance wall on x = 0 and perfect walls elsewhere in 3D:
+// the edges on the lines where the impedance wall meets a perfect wall are
+// fixed, and the mode is 0 on each fixed dof.
+fn test_edge_lossy_fixed() {
+    elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 0.8, 1.3, 4, 3, 5);
+    elements::edge_order(2);
+    elements::edge(1.0, 0.0, 0.0, 1.0);
+    elements::edge_mass_in(-1, 1.0, 0.0);
+    elements::plane(elements::X, 1.0);
+    elements::also_plane(elements::Y, 0.0);
+    elements::also_plane(elements::Y, 0.8);
+    elements::also_plane(elements::Z, 0.0);
+    elements::also_plane(elements::Z, 1.3);
+    elements::tangent() { p => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
+    elements::plane(elements::X, 0.0);
+    elements::impedance_group(0);
+    let ok = elements::resonance(1, 3.0) { g, w => [0.0, 0.2 * sqrt(w)] };
+    if !ok { failures++; print("FAIL edge lossy fixed: no convergence"); return; }
+    var top = 0.0;
+    var at_fixed = 0.0;
+    for d in elements::fixed.len {
+        let v = abs(elements::edge_modes[d]);
+        top = max(top, v);
+        if elements::fixed[d] != 0 { at_fixed = max(at_fixed, v); }
+    }
+    if !(at_fixed <= 1.0e-12 * top) { failures++; print("FAIL edge lossy fixed: the mode is ", at_fixed, " on a fixed dof, max ", top); }
+    print("edge lossy fixed: max on a fixed dof ", at_fixed, ", max ", top);
 }
 
 // E and H of a Hertzian dipole of moment 1 along z at the origin, with the

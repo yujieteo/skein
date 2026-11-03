@@ -124,6 +124,7 @@ fn modal_shifted<Z>(w: f64, tau: f64) {
         imp_z[2 * i + 1] = z[1];
     }
     add_impedance();
+    mask_fixed(val, true);
     val_s.clear();
     for e in val.len { val_s.push(val[e] - tau * val_m[e]); }
 }
