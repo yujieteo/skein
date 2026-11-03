@@ -24,6 +24,7 @@ import ode.gen;        // skein-ode: the physics of global unknowns (ODE and DAE
 import check from "../check";
 import .study;
 import .split;
+import .lanes;
 import .status;
 
 import solvers from "../solvers";   // the memory budget of a study
@@ -223,6 +224,13 @@ fn run(args: const u8[:][:]) -> i64 {
     if study_at >= 0 { return run_study(path, text, args[study_at], jobs, json); }
     let prog = syntax::parse_model(path, text);
     let lane = if prog >= 0 { read_model(prog) } else { -1 };
+    if lane < 0 && prog >= 0 {
+        // Two physics that no one lane reads: one run for each physics.
+        var buf: u8[>..] = [];
+        var ends: i64[>..] = [];
+        lane_texts(text, buf, ends);
+        if ends.len >= 2 { return run_lanes(path, buf, ends, sets); }
+    }
     if lane < 0 {
         fmt::write_errors();
         return 1;
@@ -250,6 +258,62 @@ fn run(args: const u8[:][:]) -> i64 {
         return 3;
     }
     return shell(shell_quoted(str("./", exe)));
+}
+
+// A model of two physics in two lanes (lanes.goose): each text has one
+// physics. Lane k builds in <build>/lane<k> and writes in <results>/lane<k>,
+// and the TOON of the lanes is one. The status is the largest of the lanes.
+fn run_lanes(path: u8[:], buf: u8[:], ends: i64[:], sets: const u8[:][:]) -> i64 {
+    var outbuf: u8[>..] = [];
+    var outends: i64[>..] = [];
+    var status = 0;
+    var name: u8[>..] = [];
+    for e, k in ends {
+        let t = buf[(if k > 0 { ends[k - 1] } else { 0 })..e];
+        let prog = syntax::parse_model(path, t);
+        let lane = if prog >= 0 { read_model(prog) } else { -1 };
+        if lane < 0 {
+            fmt::write_errors();
+            return 1;
+        }
+        name.clear();
+        name.append(model_name);
+        let build_dir = str(set_path(".skein/build/", model_name, sets), "/lane", k + 1);
+        let results_dir = str(results_path(model_name, sets), "/lane", k + 1);
+        if !make_dirs(build_dir) || !make_dirs(results_dir) {
+            write_stderr("skein run: cannot make the directory .skein\n");
+            return 1;
+        }
+        var program: u8[>..] = [];
+        if !write_program(lane, results_dir, no_share(), program) { return 1; }
+        let source = str(build_dir, "/main.goose");
+        let exe = str(build_dir, "/", name);
+        // The model of the lane, for the reader of the program.
+        if !write_file(str(build_dir, "/lane.skn"), t) { return 1; }
+        if !write_file(source, program) {
+            write_stderr(str("skein run: cannot write '", source, "'\n"));
+            return 1;
+        }
+        var goose: u8[>..] = [];
+        if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
+        if shell(str(shell_quoted(goose), " build -q ", shell_quoted(source), " -o ", shell_quoted(exe), " 1>&2")) != 0 {
+            write_stderr(str("skein run: internal fault: goose cannot build '", source, "'. Please report it.\n"));
+            return 3;
+        }
+        let out_file = str(build_dir, "/out.toon");
+        status = max(status, shell(str(shell_quoted(str("./", exe)), " > ", shell_quoted(out_file))));
+        var out: u8[>..] = [];
+        if !read_file(out_file, out) {
+            write_stderr(str("skein run: cannot read '", out_file, "'\n"));
+            return 1;
+        }
+        outbuf.append(out);
+        outends.push(outbuf.len);
+    }
+    var outs: u8[:][>..] = [];
+    for e, k in outends { outs.push(outbuf[(if k > 0 { outends[k - 1] } else { 0 })..e]); }
+    write_stdout(merge_toon(outs));
+    return status;
 }
 
 // `skein run --study` (spec §20, command_line.md §5, §6.5): the study
