@@ -77,7 +77,7 @@ fn find_walls(fixed: u8[:], prescribed: f64[:], omega_wall: f64[:]) -> bool {
     var any = false;
     for n in vertex_count {
         let wall = if wall_seed.len > 0 { wall_seed[n] != 0 } else { on_boundary[n] != 0 && fixed[vdof(n, 0)] != 0 && fixed[vdof(n, 1)] != 0
-                   && prescribed[vdof(n, 0)] == 0.0 && prescribed[vdof(n, 1)] == 0.0 };
+            && prescribed[vdof(n, 0)] == 0.0 && prescribed[vdof(n, 1)] == 0.0 };
         on_wall[n] = if wall { 1 } else { 0 };
         if wall { any = true; }
     }
