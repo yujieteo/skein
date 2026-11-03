@@ -24,7 +24,7 @@ material air {
 }
 
 mesh m on cavity {
-    size: 2 mm
+    size: 4 mm
     cell: tet
 }
 
@@ -35,7 +35,7 @@ physics wave on cavity solves E: Vector<Complex<Power/(Current*Length)>> {
     eq div(Hs) + eps*ddt2(E) = 0
 }
 
-method wave: cg { mesh: m, order: 1, family: nedelec }
+method wave: cg { mesh: m, order: 2, family: nedelec }
 
 // The copper walls: the Leontovich condition cross(n, H) = -cross(n, cross(n, E))/zs, with n
 // out of the cavity. Hs*n = -im*omega*cross(n, H) for the time factor exp(im*omega*t). omega

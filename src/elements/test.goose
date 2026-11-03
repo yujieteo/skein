@@ -1013,9 +1013,10 @@ fn edge_errors() -> f64, f64 {
 // Solves curl(curl(u)) + c u = s on the unit box with n cells on each
 // side, u along the boundary as the manufactured field, with the tree gauge
 // if c = 0. It gives the L2 errors of u and curl u.
-fn edge_box(d: i64, n: i64, c: f64) -> f64, f64 {
+fn edge_box(d: i64, n: i64, c: f64, p: i64) -> f64, f64 {
     elements::mesh_box(d, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, n, n, if d == 3 { n } else { 1 });
     distort(n);
+    elements::edge_order(p);
     elements::edge(1.0, c, 0.0, 1.0);
     let k = if d == 2 { PI * PI } else { 2.0 * PI * PI };
     elements::current() { p =>
@@ -1043,8 +1044,8 @@ fn test_edge() {
     for d in [2, 3] {
         for c in [1.0, 0.0] {
             let n0 = if d == 2 { 8 } else { 4 };
-            let eu0, ec0 = edge_box(d, n0, c);
-            let eu1, ec1 = edge_box(d, 2 * n0, c);
+            let eu0, ec0 = edge_box(d, n0, c, 1);
+            let eu1, ec1 = edge_box(d, 2 * n0, c, 1);
             let ou = log(eu0 / eu1) / log(2.0);
             let oc = log(ec0 / ec1) / log(2.0);
             let what = str("nedelec ", d, "d c=", c);
@@ -1053,6 +1054,95 @@ fn test_edge() {
             if c != 0.0 && !(ou >= 0.7) { failures++; print("FAIL ", what, ": the L2 order of u is ", ou, ", want 1 - 0.3"); }
             if !(oc >= 0.7) { failures++; print("FAIL ", what, ": the L2 order of curl u is ", oc, ", want 1 - 0.3"); }
             print(what, ": L2 orders ", ou, " (u) and ", oc, " (curl u), errors ", eu1, " and ", ec1);
+        }
+    }
+}
+
+// The elements of order 2: the L2 errors of u and of curl u of c = 1 fall
+// as h^2 (the full space of degree 2 of the first kind), in 2D and in 3D.
+// edge_p stays 1 for the other tests.
+fn test_edge_order2() {
+    for d in [2, 3] {
+        let n0 = if d == 2 { 4 } else { 2 };
+        let eu0, ec0 = edge_box(d, n0, 1.0, 2);
+        let eu1, ec1 = edge_box(d, 2 * n0, 1.0, 2);
+        let ou = log(eu0 / eu1) / log(2.0);
+        let oc = log(ec0 / ec1) / log(2.0);
+        let what = str("nedelec order 2 ", d, "d");
+        if !(ou >= 1.6) { failures++; print("FAIL ", what, ": the L2 order of u is ", ou, ", want 2 - 0.4"); }
+        if !(oc >= 1.6) { failures++; print("FAIL ", what, ": the L2 order of curl u is ", oc, ", want 2 - 0.4"); }
+        print(what, ": L2 orders ", ou, " (u) and ", oc, " (curl u), errors ", eu1, " and ", ec1);
+    }
+    elements::edge_order(1);
+}
+
+// The resonances of a box with perfect walls: omega^2 = pi^2 (1/a^2 + 1/c^2)
+// for the mode of the tangent u = sin(pi x / a) sin(pi z / c) along y in
+// 3D, and pi/a in 2D (u = sin(pi x / a) along y).
+fn test_edge_modal() {
+    for d in [2, 3] {
+        let a = 1.0;
+        let c = 1.3;
+        elements::mesh_box(d, 1, 0.0, 0.0, 0.0, a, 0.8, c, if d == 2 { 10 } else { 4 }, if d == 2 { 7 } else { 3 }, if d == 3 { 5 } else { 1 });
+        elements::edge_order(2);
+        elements::edge(1.0, 0.0, 0.0, 1.0);
+        elements::edge_mass_in(-1, 1.0, 0.0);
+        elements::plane(elements::X, 0.0);
+        elements::also_plane(elements::X, a);
+        elements::also_plane(elements::Y, 0.0);
+        elements::also_plane(elements::Y, 0.8);
+        if d == 3 {
+            elements::also_plane(elements::Z, 0.0);
+            elements::also_plane(elements::Z, c);
+        }
+        elements::tangent() { p => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
+        let want = if d == 2 { PI } else { PI * sqrt(1.0 / (a * a) + 1.0 / (c * c)) };
+        let ok = elements::resonance(3, 0.9 * want) { g, w => [0.0, 0.0] };
+        if !ok { failures++; print("FAIL edge modal ", d, "d: no convergence"); continue; }
+        let f, fi = elements::modal_frequency(1);
+        expect_near(str("edge modal ", d, "d frequency"), f * 2.0 * PI, want, 1.0e-3);
+        if abs(fi) > 1.0e-8 * f { failures++; print("FAIL edge modal ", d, "d: a lossless mode has Im f = ", fi); }
+        let f2, f2i = elements::modal_frequency(2);
+        let f3, f3i = elements::modal_frequency(3);
+        if !(f2 > f * (1.0 + 1.0e-6) && f3 > f2 * (1.0 + 1.0e-6)) { failures++; print("FAIL edge modal ", d, "d: the modes are not different and in the sequence of f"); }
+        if d == 2 { expect_near("edge modal 2d second frequency", f2 * 2.0 * PI, PI / 0.8, 2.0e-3); }
+        print("edge modal ", d, "d: omega ", f * 2.0 * PI, ", want ", want, ", second ", f2 * 2.0 * PI);
+    }
+    test_edge_lossy();
+}
+
+// A wall on x = 0 with an impedance z(omega) = 0.2 i sqrt(omega) and perfect
+// walls elsewhere: the mode loses energy (Im f != 0), and the frequency is
+// the fixed point of the nonlinear problem: the same z, frozen at the
+// converged Re omega, gives the same mode.
+fn test_edge_lossy() {
+    var w_found = 0.0;
+    var f_found = 0.0;
+    for pass in 2 {
+        elements::mesh_box(2, 1, 0.0, 0.0, 0.0, 1.0, 0.8, 0.0, 10, 7, 1);
+        elements::edge_order(2);
+        elements::edge(1.0, 0.0, 0.0, 1.0);
+        elements::edge_mass_in(-1, 1.0, 0.0);
+        elements::plane(elements::X, 1.0);
+        elements::also_plane(elements::Y, 0.0);
+        elements::also_plane(elements::Y, 0.8);
+        elements::tangent() { p => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] };
+        elements::plane(elements::X, 0.0);
+        elements::impedance_group(0);
+        let ok = if pass == 0 {
+            elements::resonance(1, 3.0) { g, w => [0.0, 0.2 * sqrt(w)] }
+        } else {
+            elements::resonance(1, 3.0) { g, w => [0.0, 0.2 * sqrt(w_found)] }
+        };
+        if !ok { failures++; print("FAIL edge lossy: no convergence"); return; }
+        let f, fi = elements::modal_frequency(1);
+        if pass == 0 {
+            w_found = 2.0 * PI * f;
+            f_found = f;
+            if !(abs(fi) > 1.0e-3 * f) { failures++; print("FAIL edge lossy: Im f = ", fi, " for a wall with loss"); }
+            print("edge lossy: f ", f, " + ", fi, " i");
+        } else {
+            expect_near("edge lossy fixed point", f, f_found, 1.0e-9);
         }
     }
 }
@@ -1448,6 +1538,8 @@ fn main() {
     test_pml();
     test_bloch();
     test_edge();
+    test_edge_order2();
+    test_edge_modal();
     test_far_field();
     test_darcy();
     test_warm_start();
