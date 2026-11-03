@@ -536,6 +536,13 @@ fn rans_start() {
 // vertex, so k and w stay positive. Reason: with a clip at k = 0, the k
 // of the channel at Re_τ = 395 fell to 0 below y+ = 10, and k = 0 is a
 // root of its own equation. False if GMRES fails.
+// The cell size of the row of dof d: the sqrt of its lumped mass. The rows of
+// w are scaled (omega_scale), so that scale is undone.
+fn row_size(d: i64) -> f64 {
+    let omega_row = !spalart_on && turbulent && d < vertex_count * vertex_dofs() && d % vertex_dofs() == 4;
+    return sqrt(lumped[d] * (if omega_row { omega_scale } else { 1.0 }));
+}
+
 fn ptc_step(dt: f64, f: f64[:], du: f64[:]) -> bool {
     jacobian(sol, val);
     // Local time step. When the smallest cell of a mesh is under 1/10000 of the
@@ -549,15 +556,18 @@ fn ptc_step(dt: f64, f: f64[:], du: f64[:]) -> bool {
     var count = 0.0;
     var least = 1.0e300;
     for d in sol.len {
-        if lumped[d] > 0.0 { mean += sqrt(lumped[d]); count += 1.0; least = min(least, sqrt(lumped[d])); }
+        if lumped[d] > 0.0 {
+            let size = row_size(d);
+            mean += size;
+            count += 1.0;
+            least = min(least, size);
+        }
     }
     mean = mean / max(count, 1.0);
     let local = least < 0.0001 * mean;
     for d in sol.len {
         if fixed[d] == 0 && lumped[d] > 0.0 {
-            // the rows of w are scaled (omega_scale), so undo it for a cell size
-            let omega_row = !spalart_on && turbulent && d < vertex_count * vertex_dofs() && d % vertex_dofs() == 4;
-            let size = sqrt(lumped[d] * (if omega_row { omega_scale } else { 1.0 }));
+            let size = row_size(d);
             let local_dt = if local { dt * size / mean } else { dt };
             val[solvers::entry(row_start, col, d, d)] += lumped[d] / local_dt;
         }

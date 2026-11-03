@@ -369,7 +369,11 @@ fn merge_layers(g: i64, tol: f64) {
     var ct: i64[>..] = [];
     read_mesh(cx, cy, ct);
     let b = bounds(g);
-    let w = 1.0e-6 * sqrt((b[3] - b[0]) * (b[3] - b[0]) + (b[4] - b[1]) * (b[4] - b[1]));
+    // The cell of the grid is twice the merge tolerance, so a cell holds at most
+    // one node of the outer loop, and the 3 x 3 search finds a node within tol.
+    // Reason: with a cell of 1e-6 of the diameter, two outer nodes near the
+    // sharp tip of an airfoil could share a cell, and the second one was lost.
+    let w = 2.0 * tol;
     var grid = dictionary<i64, i64> {};
     for i in bl_ln { grid.insert(cell_key(bl_lx[lid(bl_lk, i)], bl_ly[lid(bl_lk, i)], b[0], b[1], w), i + 1); }
     var nid: i64[>..] = [];

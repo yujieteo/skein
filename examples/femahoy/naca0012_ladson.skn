@@ -128,7 +128,8 @@ material air {
 }
 
 // The femahoy C-grid has a first cell height of 4 um and 64 cells across 1 chord. This mesh
-// has 10 um and 40 layers, and 8 mm on the wall: 28 thousand cells, and it meets the tolerance.
+// has 10 um and 40 layers, and 8 mm on the wall: 28 thousand cells. It does not meet the
+// expects at 4.04 and 10.12 deg (see the blocked-by mark).
 mesh m on fluid {
     size: 20*chord
     cell: tri

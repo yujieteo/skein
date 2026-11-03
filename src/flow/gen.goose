@@ -182,7 +182,20 @@ recursive fn call_quantity(n: i64) -> Q {
         let a = quantity(arg(n, 0));
         if a.n != 1 { unsupported(tok(n), "a function of a vector", "write a scalar"); return real(0.0); }
         let x = a.v[0];
-        if fi == 3 { return Q { n: 1, v: [sqrt(x), 0.0], d: [a.d[0] / 2, a.d[1] / 2, a.d[2] / 2] }; }
+        // Reason: abs(-0.3 m) was a dimensionless 0.3, which scaled() does not
+        // divide by the length reference, and sqrt of an odd exponent lost it.
+        if fi == 6 { return Q { n: 1, v: [abs(x), 0.0], d: [a.d[0], a.d[1], a.d[2]] }; }
+        if fi == 3 {
+            if a.d[0] % 2 != 0 || a.d[1] % 2 != 0 || a.d[2] % 2 != 0 {
+                unsupported(tok(n), "sqrt of a quantity with an odd dimension exponent", "take the square root of a quantity with even exponents, or divide by a unit first");
+                return real(0.0);
+            }
+            return Q { n: 1, v: [sqrt(x), 0.0], d: [a.d[0] / 2, a.d[1] / 2, a.d[2] / 2] };
+        }
+        if a.d[0] != 0 || a.d[1] != 0 || a.d[2] != 0 {
+            unsupported(tok(n), str(name(callee), " of a quantity with a dimension"), "divide the argument by a unit to make it dimensionless");
+            return real(0.0);
+        }
         return real(if fi == 0 { sin(x) } else if fi == 1 { cos(x) } else if fi == 2 { tan(x) } else if fi == 4 { exp(x) } else if fi == 5 { log(x) } else { abs(x) });
     }
     var f = find_fn(name(callee));
