@@ -90,6 +90,20 @@ fn exact(n: i64, a: i64) -> f64 {
 // Fixes the boundary nodes at the linear field, solves, and gives the
 // largest error of the nodal values and of the cell stresses (or fluxes),
 // relative to the size of the field.
+var written_out = false;    // the patch test gives the isotropic law as a written-out stiffness
+
+// The stiffness of the isotropic law (E, nu) in the form of elements::anisotropic.
+fn isotropic_stiffness(E: f64, nu: f64) -> f64[36] {
+    let lambda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+    let mu = E / (2.0 * (1.0 + nu));
+    var c: f64[36] = [0.0; 36];
+    for i in 3 {
+        for j in 3 { c[6 * i + j] = lambda + (if i == j { 2.0 * mu } else { 0.0 }); }
+    }
+    for i in 3..6 { c[7 * i] = 2.0 * mu; }
+    return c;
+}
+
 fn patch(d: i64, ord: i64, heat: bool) -> f64, f64 {
     let cells = 3;
     elements::mesh_box(d, ord, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, cells, cells, cells);
@@ -98,6 +112,7 @@ fn patch(d: i64, ord: i64, heat: bool) -> f64, f64 {
     let nu = 0.3;
     if heat { elements::heat(2.0, 0.0, 1.0); } else { elements::elastic_plane_strain(E, nu, 1.0); }
     if d == 3 && !heat { elements::elastic(E, nu); }
+    if written_out && !heat { elements::anisotropic(isotropic_stiffness(E, nu), [0.0; 6]); }
     let nc = elements::ncomp;
     for n in elements::node_count() {
         if !on_boundary(n) { continue; }
@@ -169,6 +184,22 @@ fn test_patches() {
             }
         }
     }
+}
+
+// The patch test with the isotropic law as a written-out stiffness: the same exact fields.
+fn test_written_out() {
+    written_out = true;
+    for d in [2, 3] {
+        for ord in [1, 2] {
+            let eu, es = patch(d, ord, false);
+            print("patch ", kind_name(d, ord), " written out: error of the nodal values ", eu, ", of the stress ", es);
+            if !(eu <= 1.0e-10) || !(es <= 1.0e-9) {
+                failures++;
+                print("FAIL patch ", kind_name(d, ord), " written out: the linear field is not exact");
+            }
+        }
+    }
+    written_out = false;
 }
 
 // --- the plate with a hole -------------------------------------------------------
@@ -1400,6 +1431,7 @@ fn main() {
     test_solid_plastic();
     test_contact_points();
     test_patches();
+    test_written_out();
     test_kirsch();
     test_heated_bar();
     test_body_force();

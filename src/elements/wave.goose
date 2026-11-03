@@ -409,9 +409,7 @@ fn wave_rhs() -> f64[>..] {
     return b;
 }
 
-
 let WAVE_SECONDS = 900.0;       // the longest estimated time of a direct solve (15 minutes). Reason: a run that cannot finish stops with a message and never looks like a hang
-var wave_direct = false;        // the system of this solve takes the direct solve
 
 // The solution path of a system with its pattern in row_start and col: the
 // direct solve of src/solvers/slu.goose, whose factor is also the
@@ -421,7 +419,6 @@ var wave_direct = false;        // the system of this solve takes the direct sol
 // ILU(0) does not converge on the indefinite systems of a fine mesh
 // (waveguide_step at 1.4 mm ran for more than 5 minutes).
 fn wave_choose_path() {
-    wave_direct = false;
     guard solvers::slu_plan(row_start, col, 2) else {
         write_stderr(str("skein run: the direct solve cannot plan the system of ", dof_total(), " dofs. Use a coarser mesh\n"));
         exit(1);
@@ -432,7 +429,6 @@ fn wave_choose_path() {
                          " seconds, and the limit is ", round(WAVE_SECONDS) as! i64, " seconds. Use a coarser mesh\n"));
         exit(1);
     }
-    wave_direct = true;
     solvers::memory_check("simplex wave lu", solvers::slu_entry_count(), dof_total(), 40, 0, "");
     if seconds > 20.0 {
         write_stderr(str("skein run: the direct solve of ", dof_total(), " dofs takes about ", round(seconds) as! i64, " seconds\n"));
@@ -442,7 +438,7 @@ fn wave_choose_path() {
 
 // The solve of b with the factor of the direct solve: x in sol. False if
 // GMRES does not converge.
-fn wave_krylov<G>(b: f64[:], corrected: bool) -> i64, bool {
+fn wave_krylov(b: f64[:]) -> i64, bool {
     var its = 0;
     var converged = solvers::slu_factor(row_start, col, val);
     if converged {
@@ -462,7 +458,7 @@ fn wave_solve() -> bool {
     wave_assemble();
     let sizes = wave_sizes();
     let b = wave_rhs();
-    let its, converged = wave_krylov(b, false) { r, z => z[0] = r[0]; };
+    let its, converged = wave_krylov(b);
     for n in node_count() {
         if tie[n] < 0 { continue; }
         let m, p = master(n);

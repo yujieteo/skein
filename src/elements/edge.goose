@@ -35,7 +35,6 @@ import .post;
 import .eigen;
 import solvers from "../solvers";
 
-
 var edge_v: i64[>..] = [];      // the two vertices of each edge, the lower index first
 var cell_edge: i64[>..] = [];   // the edge of each local edge of each cell
 var cell_sign: f64[>..] = [];   // +1 if the local edge runs from the lower vertex, else -1
@@ -43,7 +42,6 @@ var edge_nu: f64[>..] = [];     // ν of each cell
 var edge_c: f64[>..] = [];      // c of each cell, as re and im
 var gauge_count = 0;            // the edges of the tree of the last gauge
 var facet_open: u8[>..] = [];   // 1 for each facet of each cell on the boundary of the mesh
-var node_held: u8[>..] = [];    // 1 for each node of a held edge
 
 fn edge_total() -> i64 { return edge_v.len / 2; }
 
@@ -271,18 +269,6 @@ fn facet_on_region(c: i64, f: i64) -> bool {
 // edges are chords through the cells.
 fn edge_facet_on(c: i64, f: i64) -> bool {
     return facet_open[facet_count(dim) * c + f] != 0 && facet_on_region(c, f);
-}
-
-// The nodes of the held edges in node_held.
-fn find_held_nodes() {
-    node_held.clear();
-    for v in node_count() { node_held.push(0); }
-    for e in edge_total() {
-        if fixed[2 * e] != 0 {
-            node_held[edge_v[2 * e]] = 1;
-            node_held[edge_v[2 * e + 1]] = 1;
-        }
-    }
 }
 
 // The key of facet f of cell c: its edge in 2D, else its two edges of the
@@ -616,147 +602,15 @@ fn edge_rhs() -> f64[>..] {
     return b;
 }
 
-// --- the gradient correction ----------------------------------------------------
-//
-// The gradient ∇φ of each P1 nodal function φ is in the space of the
-// edges, and on the gradients the matrix has only the term of c. When
-// |c| h² is small to ν (0.02 for the coax line of gap G4), these are many
-// small eigenvalues that ILU(0) does not hold, and GMRES stalls. When c is
-// not 0 on any cell, the preconditioner adds a correction in the space of
-// the gradients (Hiptmair 1998): after ILU(0), z += G S⁻¹ Gᵀ (r - A z).
-// G gives each node the gradient of its φ on the edges, and on them A is
-// close to the phase of c times S = ∫ |c| ∇φi · ∇φj dV, the matrix of
-// grad_rs, grad_col and grad_val. One V-cycle of AMG solves S, once for the
-// real parts and once for the imaginary parts. A node on a held edge is out
-// of the correction: its row of S is the identity.
-
-var grad_rs: i64[>..] = [];
-var grad_col: i32[>..] = [];
-var grad_val: f64[>..] = [];
-var grad_phase: f64[2] = [1.0, 0.0];   // the phase of the sum of c over the cells
-var grad_t: f64[>..] = [];             // r - A z
-var grad_y: f64[>..] = [];             // Gᵀ (r - A z): the real parts of the nodes, then the imaginary parts
-var grad_w: f64[>..] = [];             // S⁻¹ of grad_y
-
-// The pattern of S: each node and its neighbours along the edges.
-fn gradient_pattern() {
-    let nv = node_count();
-    var keys: i64[>..] = [];
-    for v in nv { keys.push(v * nv + v); }
-    for e in edge_total() {
-        keys.push(edge_v[2 * e] * nv + edge_v[2 * e + 1]);
-        keys.push(edge_v[2 * e + 1] * nv + edge_v[2 * e]);
-    }
-    sort(keys);
-    grad_rs.clear();
-    grad_col.clear();
-    grad_val.clear();
-    grad_rs.push(0);
-    var k = 0;
-    for v in nv {
-        while k < keys.len && keys[k] / nv == v {
-            grad_col.push((keys[k] % nv) as i32);
-            grad_val.push(0.0);
-            k++;
-        }
-        grad_rs.push(grad_col.len);
-    }
-}
-
-// The values of S, the identity in the rows of the held nodes, and the
-// phase of c. False if c is 0 on a cell.
-fn gradient_values() -> bool {
-    var vol = 0.0;
-    for q in quad_count(dim) {
-        let xi, wt = quad_point(dim, q);
-        vol += wt + 0.0 * xi[0];
-    }
-    var sum: f64[2] = [0.0, 0.0];
-    for c in cell_count() {
-        let a = sqrt(edge_c[2 * c] * edge_c[2 * c] + edge_c[2 * c + 1] * edge_c[2 * c + 1]);
-        guard a > 0.0 else { return false; }
-        sum[0] += edge_c[2 * c] / a;
-        sum[1] += edge_c[2 * c + 1] / a;
-        let s = a * vol * cell_geometry(c, [0.0; 3]) * thickness;
-        for i in dim + 1 {
-            for j in dim + 1 {
-                var g = 0.0;
-                for t in 3 { g += grad[3 * i + t] * grad[3 * j + t]; }
-                grad_val[solvers::entry(grad_rs, grad_col, cell_node(c, i), cell_node(c, j))] += s * g;
-            }
-        }
-    }
-    let m = sqrt(sum[0] * sum[0] + sum[1] * sum[1]);
-    guard m > 0.0 else { return false; }
-    grad_phase = [sum[0] / m, sum[1] / m];
-    for r in node_count() {
-        for e in grad_rs[r]..grad_rs[r + 1] {
-            let c = grad_col[e] as i64;
-            if node_held[r] != 0 || node_held[c] != 0 { grad_val[e] = if r == c { 1.0 } else { 0.0 }; }
-        }
-    }
-    return true;
-}
-
-// Builds S and its AMG levels. False if there is no correction: c is 0 on
-// a cell, or S is not positive definite.
-fn gradient_setup() -> bool {
-    find_held_nodes();
-    gradient_pattern();
-    guard gradient_values() && solvers::amg_setup(grad_rs, grad_col, grad_val, 1) else { return false; }
-    grad_t.clear();
-    for d in sol.len { grad_t.push(0.0); }
-    grad_y.clear();
-    grad_w.clear();
-    for v in 2 * node_count() {
-        grad_y.push(0.0);
-        grad_w.push(0.0);
-    }
-    return true;
-}
-
-// z += G S⁻¹ Gᵀ (r - A z), with S divided by the phase of c.
-fn gradient_apply(r: f64[:], z: f64[:]) {
-    let nv = node_count();
-    solvers::rows_multiply(row_start, col, val, z, grad_t);
-    for d in r.len { grad_t[d] = r[d] - grad_t[d]; }
-    for &y in grad_y { y = 0.0; }
-    for e in edge_total() {
-        for q in 2 {
-            grad_y[q * nv + edge_v[2 * e + 1]] += grad_t[2 * e + q];
-            grad_y[q * nv + edge_v[2 * e]] -= grad_t[2 * e + q];
-        }
-    }
-    for v in nv {
-        if node_held[v] != 0 {
-            grad_y[v] = 0.0;
-            grad_y[nv + v] = 0.0;
-        }
-    }
-    solvers::amg_apply(grad_y[..nv], grad_w[..nv]);
-    solvers::amg_apply(grad_y[nv..], grad_w[nv..]);
-    let p = grad_phase;
-    for e in edge_total() {
-        if fixed[2 * e] != 0 { continue; }
-        let a = edge_v[2 * e];
-        let b = edge_v[2 * e + 1];
-        let wr = grad_w[b] - grad_w[a];
-        let wi = grad_w[nv + b] - grad_w[nv + a];
-        z[2 * e] += wr * p[0] + wi * p[1];
-        z[2 * e + 1] += wi * p[0] - wr * p[1];
-    }
-}
-
-// Assembles and solves by GMRES with ILU(0) and the gradient correction.
-// False if GMRES does not converge.
+// Assembles and solves with the direct factor of wave_choose_path as the
+// preconditioner of GMRES. False if GMRES does not converge.
 fn edge_solve() -> bool {
     guard physics == EDGE && dofs_sized() && edge_nu.len == cell_count() else { abort("edge_solve: an edge physics and the arrays of the dofs"); }
     let start = clock();
     edge_assemble();
     let sizes = wave_sizes();
     let b = edge_rhs();
-    let corrected = !wave_direct && gradient_setup();
-    let its, converged = wave_krylov(b, corrected) { r, z => gradient_apply(r, z); };
+    let its, converged = wave_krylov(b);
     guard wave_sizes() == sizes else { abort("edge_solve: a solve grows no array of the state (rule 3)"); }
     last_iterations = its;
     last_seconds = clock() - start;
