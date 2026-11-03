@@ -361,7 +361,6 @@ fn wave_rhs() -> f64[>..] {
     return b;
 }
 
-
 let WAVE_SECONDS = 900.0;       // the longest estimated time of a direct solve (15 minutes). Reason: a run that cannot finish stops with a message and never looks like a hang
 
 // The solution path of a system with its pattern in row_start and col: the

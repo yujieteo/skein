@@ -35,7 +35,6 @@ import .post;
 import .eigen;
 import solvers from "../solvers";
 
-
 var edge_v: i64[>..] = [];      // the two vertices of each edge, the lower index first
 var cell_edge: i64[>..] = [];   // the edge of each local edge of each cell
 var cell_sign: f64[>..] = [];   // +1 if the local edge runs from the lower vertex, else -1
