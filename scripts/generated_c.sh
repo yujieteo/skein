@@ -122,6 +122,7 @@ examples/grid/mms_dg_transient.skn
 examples/grid/mms_fv_static.skn
 examples/grid/mms_fv_transient.skn
 examples/lame_profile.skn
+examples/meshless/bar_release.skn
 examples/meshless/mms_gfd.skn
 examples/meshless/mms_rkpm.skn
 examples/optim/stiffness_bar.skn
