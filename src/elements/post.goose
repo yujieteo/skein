@@ -37,7 +37,6 @@ fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
             xi[a] -= (m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])) / det;
         }
     }
-    if order == 2 { xi = newton_refine(c, p, xi); }
     return [min(1.0 - xi[0], min(1.0 - xi[1], 1.0 - xi[2])), xi[0], xi[1], xi[2]];
 }
 
