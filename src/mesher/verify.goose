@@ -1,14 +1,3 @@
-// `skein verify model.skn` (docs/command_line.md §1): `check`, then the
-// mesh of each `mesh` block, with its refine lines (refine.goose), and the
-// pre-solve check mesh_quality. The
-// other pre-solve checks are not in this version.
-//
-// The reader evaluates the geometry of the model: numbers with a length
-// or an angle unit, vectors, + - * / and the names of `let` items, the
-// shapes box, cylinder, sphere, rect, circle, polygon, fill of a spline, extrude,
-// revolve, loft, pattern and pattern_polar, and the operators |, & and -. Each length is
-// in the length unit of the header (m for SI, mm for the mm systems), and
-// each angle is in radians.
 import std;
 import os;
 import math;
@@ -25,24 +14,22 @@ import .sweep;
 
 let VERIFY_USAGE = "usage: skein verify <file.skn>\n";
 
-// A value: a geometry node (n = 0), a scalar (n = 1), or a vector of 2 or
-// 3 components (n = 2 or 3).
 struct Value {
     n: i64,
     v: f64[3],
     g: i64,
 }
 
-var metre = 1.0;            // one metre in the length unit of the header
+var metre = 1.0;
 var length_name: u8[..4] = [];
 var let_names: u8[..64][>..] = [];
 var let_values: i64[>..] = [];
 var eval_depth = 0;
-var fn_names: u8[..64][>..] = [];     // the `fn` items: a name, and the node of the item
+var fn_names: u8[..64][>..] = [];
 var fn_items: i64[>..] = [];
-var param_names: u8[..64][>..] = [];  // the parameters of the `fn` calls in progress, and their values
+var param_names: u8[..64][>..] = [];
 var param_values: Value[>..] = [];
-var arg_scratch: Value[>..] = [];     // the arguments of a call in progress: a local array cannot live across the recursive call
+var arg_scratch: Value[>..] = [];
 var polygon_scratch: f64[>..<] = [];
 
 fn reader_fault(t: i64, msg: u8[:], fix: u8[:]) {
@@ -53,7 +40,6 @@ fn node_text(n: i64) -> const u8[:] { syntax::text(syntax::nodes[n].tok) }
 
 fn number_value(x: f64) -> Value { Value { n: 1, v: [x, 0.0, 0.0], g: -1 } }
 
-// The factor of a unit: a length to the header unit, an angle to radians.
 fn unit_factor(u: i64) -> f64 {
     let n = syntax::nodes[u].first;
     if syntax::nodes[n].kind == syntax::N_UNIT_NAME {
@@ -80,7 +66,6 @@ fn let_node(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The argument i of the call c (0 is the first argument).
 fn argument(c: i64, i: i64) -> i64 { syntax::nodes[syntax::child(c, i + 1)].first }
 
 recursive fn eval_value(n: i64) -> Value {
@@ -174,10 +159,6 @@ recursive fn eval_value(n: i64) -> Value {
     return number_value(0.0);
 }
 
-// fill(nurbs(degree, [knots(k...),] p1, w1, ..., pn, wn)) (spec §8.1).
-// The knots are 0 (degree + 1 times), 1, 2, ..., n - degree (degree + 1
-// times) when the model gives none. The values go on polygon_scratch: a
-// local array cannot live across the recursive call of eval_value.
 recursive fn read_nurbs(c: i64) -> Value {
     let args = syntax::child_count(c) - 1;
     let p = eval_value(argument(c, 0)).v[0] as! i64;
@@ -221,8 +202,6 @@ recursive fn read_nurbs(c: i64) -> Value {
     return Value { n: 0, v: [0.0, 0.0, 0.0], g: g };
 }
 
-// The value of the call n of the `fn` item f: its body, with the
-// arguments for the parameters.
 recursive fn call_fn(n: i64, f: i64, count: i64) -> Value {
     guard syntax::child_count(f) - 2 == count && eval_depth < 100 else {
         reader_fault(syntax::nodes[n].tok, str("the call of '", node_text(f), "' has the wrong number of arguments or recurses"), "give each parameter an argument");
@@ -297,8 +276,6 @@ recursive fn shape_call(n: i64) -> Value {
         return shape(circle(c.v[0], c.v[1], arg(1, 1).v[0]));
     }
     if name == "polygon" && count >= 3 {
-        // The points go on a global stack: a local array cannot live
-        // across the recursive call of arg.
         let mark = polygon_scratch.len;
         for i in count {
             let p = arg(i, 2);
@@ -322,8 +299,6 @@ recursive fn shape_call(n: i64) -> Value {
             let p = eval_value(argument(c, i));
             if p.n != 2 { reader_fault(syntax::nodes[argument(c, i)].tok, str("argument ", i + 1, " of spline is not a vector of 2"), "write (x, y)"); }
             let k = polygon_scratch.len;
-            // A point equal to the one before it is not a new point. The
-            // last point equal to the first gives a closing line of length 0.
             let same = k > mark && p.v[0] == polygon_scratch[k - 2] && p.v[1] == polygon_scratch[k - 1];
             if same { continue; }
             polygon_scratch.push(p.v[0]);
@@ -366,8 +341,6 @@ recursive fn shape_call(n: i64) -> Value {
         }
         guard syntax::errors.len == 0 else { return number_value(0.0); }
         if name == "pattern" { return shape(pattern(a.g, v.v[0], v.v[1], v.v[2], copies as i64)); }
-        // The axis of a 2D shape has 2 components, with no direction out of
-        // the plane (the checker), so the mesher has no turn for it.
         guard v.n == 3 else {
             reader_fault(syntax::nodes[argument(n, 1)].tok, "pattern_polar of a 2D shape is not in the mesher",
                          "turn a Solid: pattern_polar of the extrude, about (0, 0, 1)");
@@ -380,8 +353,6 @@ recursive fn shape_call(n: i64) -> Value {
     return number_value(0.0);
 }
 
-// Appends the shape of each box and rect call in expression n to `out`, in
-// the operands of |, & and -: the faces of each one are planes of a grid.
 recursive fn written_boxes(n: i64, out: i64[>..]&) {
     let k = syntax::nodes[n].kind;
     if k == syntax::N_BINARY {
@@ -397,7 +368,6 @@ recursive fn written_boxes(n: i64, out: i64[>..]&) {
     }
 }
 
-// The shape whose surface is the Curve boundary(a) | boundary(b) | ..., or -1.
 recursive fn boundary_union(v: i64) -> i64 {
     if syntax::nodes[v].kind == syntax::N_CALL && node_text(syntax::child(v, 0)) == "boundary" && syntax::child_count(v) == 2 {
         let b = eval_value(argument(v, 0));
@@ -411,9 +381,6 @@ recursive fn boundary_union(v: i64) -> i64 {
     return -1;
 }
 
-// The shape of the region `r` of a refine line, and whether the target is
-// its surface: the shape `b` of a let `boundary(a, b)`, or a shape. It
-// gives -1 on an error.
 fn refine_target(r: i64) -> i64, bool {
     if syntax::nodes[r].kind == syntax::N_NAME {
         let v = let_node(node_text(r));
@@ -424,7 +391,6 @@ fn refine_target(r: i64) -> i64, bool {
             if g >= 0 { return g, true; }
         }
         if boundary && syntax::child_count(v) == 2 {
-            // boundary(shape): the whole surface of a shape.
             let b = eval_value(argument(v, 0));
             guard b.n == 0 else {
                 reader_fault(syntax::nodes[r].tok, "the refine region is not a shape", "refine a let shape");
@@ -450,16 +416,14 @@ fn refine_target(r: i64) -> i64, bool {
     return g.g, false;
 }
 
-// The record of one mesh, for the table of the report.
 struct MeshRecord {
     name: u8[..64],
     cell: u8[..4],
     size: f64,
-    g: i64,      // the shape of the region
+    g: i64,
     q: Quality,
 }
 
-// Meshes block n. False on an error in the block.
 fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     let region = syntax::child(n, 0);
     guard syntax::nodes[region].kind == syntax::N_NAME else {
@@ -474,8 +438,6 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     }
     var size = 0.0;
     clear_refine();
-    // A copy, not a slice of a string: mesh_3d and mesh_2d reallocate the
-    // byte arrays of the runtime mesh.
     var cell: u8[..4] = [];
     cell.append(if dim == 2 { "tri" } else { "tet" });
     let grid = if dim == 2 { "quad" } else { "hex" };
@@ -543,8 +505,6 @@ fn mesh_block(n: i64, dim: i64, records: MeshRecord[>..]&) -> bool {
     return done;
 }
 
-// Reads the header and the `let` items of program `prog` for the reader of
-// the geometry. The result is the dimension, 2 or 3.
 fn read_geometry(prog: i64) -> i64 {
     clear_shapes();
     let_names.clear();

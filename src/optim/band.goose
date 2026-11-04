@@ -1,23 +1,13 @@
-// The matrix of the package optim and its direct solve: the Cholesky
-// factor L of the band of the matrix, K = L Lᵀ. Reason: the matrix of a
-// grid is symmetric positive definite with a narrow band, and a topology
-// loop solves it again for each design and for each adjoint, so the
-// factor is used two times for each solve. The row of each fixed dof is
-// that of the identity.
-//
-// Row i of L holds the columns i - width..i, at i (width + 1) + (i - j).
 import std;
 import math;
 namespace optim;
 import .q4;
 import solvers from "../solvers";
 
-var width = 0;               // the half band width of the matrix
+var width = 0;
 var factor: f64[>..] = [];
-var rhs: f64[>..] = [];      // the loads, less K times the fixed values
+var rhs: f64[>..] = [];
 
-// The half band width of the dofs of the grid: the largest difference of
-// two dofs of a cell.
 fn band_width() -> i64 {
     var w = 0;
     for c in cell_count() {
@@ -29,8 +19,6 @@ fn band_width() -> i64 {
 
 fn at(i: i64, j: i64) -> i64 { return i * (width + 1) + (i - j); }
 
-// The loads of the step, and the band of K, with the identity on the
-// fixed dofs and their values in rhs.
 fn assemble() {
     let n = dof_count();
     for &v in rhs { v = 0.0; }
@@ -61,8 +49,6 @@ fn assemble() {
     }
 }
 
-// L in place of the band. False if a pivot is not positive: the
-// conditions do not hold the body.
 fn cholesky() -> bool {
     let n = dof_count();
     for i in n {
@@ -81,7 +67,6 @@ fn cholesky() -> bool {
     return true;
 }
 
-// x = K⁻¹ b with the factor: L y = b, then Lᵀ x = y.
 fn substitute(b: f64[:], x: f64[:]) {
     let n = dof_count();
     guard b.len == n && x.len == n && factor.len == n * (width + 1) else { abort("substitute: b and x of one value for each dof, and a factor"); }
@@ -98,18 +83,14 @@ fn substitute(b: f64[:], x: f64[:]) {
     }
 }
 
-// The facts of the last solve, for the records of the program.
-var solves = 0;              // the solves of the run: 1, or one for each design of a topology loop
+var solves = 0;
 var last_seconds = 0.0;
 
-// Solves the step: u = K⁻¹ f with the fixed values. False if the
-// conditions do not hold the body.
 fn solve() -> bool {
     guard young > 0.0 && fixed.len == dof_count() else { abort("solve: elastic and clear_bcs"); }
     let start = clock();
     width = band_width();
     let n = dof_count();
-    // The band, the loads, u, and the 2 vectors of the adjoint.
     solvers::memory_check("q4 band cholesky", n * (width + 1), n, 4, 0, "");
     if u.len != n || factor.len != n * (width + 1) {
         solvers::zeros(u, n);
@@ -126,7 +107,4 @@ fn solve() -> bool {
     return regular;
 }
 
-// The length of each array of the state of the package. A solve grows none
-// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6). The first
-// solve of a grid sizes u, rhs and the factor.
 fn state_sizes() -> i64[6] { return [density.len, fixed.len, u.len, factor.len, rhs.len, loads.len]; }

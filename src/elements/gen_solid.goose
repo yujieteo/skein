@@ -1,27 +1,3 @@
-// The part of the simplex generator for the nonlinear solid of spec §10.6
-// (src/elements/solid.goose): J2 plasticity at small and at finite strain,
-// and isotropic hyperelastic energies.
-//
-// Plasticity: `state eps_p: Tensor2<Real> = 0`, `state alpha: Real = 0`,
-// `let sigma = hooke(E, nu, strain(u) - eps_p)` and a `plastic` block with
-// `yield: von_mises(sigma) - (sy + Hk*alpha)`, `strain: eps_p` and
-// `hardening: alpha`. With `assume finite_strain` and the eq
-// `div(defgrad(u)*S)`, it is the multiplicative split of G22.
-//
-// Energy: `let S = 2*diff(W, C)` with `let C = transpose(defgrad(u))*defgrad(u)`,
-// `assume finite_strain` and the eq `div(defgrad(u)*S) = 0`. W is a function
-// of principal(C), det(C) and tr(C), of other lets, of the material and of
-// `fn` items. The program has W as a function of the principal values of C
-// in hyper-dual numbers (elements::Hd), so the solver gets S and dS/dE.
-//
-// A static step is `static(ramp: n)`: n load increments, each with
-// Newton's method.
-//
-// Explicit dynamics of J2 at finite strain: the first-order form
-// `solves u: Vector<Length>, v: Vector<Velocity> = (vx, vy, vz)` with
-// `eq ddt(u) - v = 0` and `eq rho*ddt(v) - div(defgrad(u)*S) = 0`, and a
-// `transient` step with `scheme: central_difference`. `bc wall: v.z = 0`
-// holds u.z at its start value 0.
 import std;
 import math;
 namespace elements_gen;
@@ -31,30 +7,30 @@ import .gen;
 import .gen_contact;
 import .gen_aniso;
 
-let SOLID_J2 = 1;           // as in src/elements/solid.goose
+let SOLID_J2 = 1;
 let SOLID_J2_FINITE = 2;
 let SOLID_ENERGY = 3;
 
 let PLASTIC_FIX = "write plastic { yield: von_mises(sigma) - (sy + Hk*alpha), strain: eps_p, hardening: alpha }, with state eps_p: Tensor2<Real> = 0 and state alpha: Real = 0";
 let ENERGY_FIX = "write let S: Tensor2<Pressure> = 2*diff(W, C), with C = transpose(defgrad(u))*defgrad(u) and W of principal(C), det(C) and tr(C)";
 
-var solid_law = 0;              // a SOLID_ constant, or 0 for the linear law
-var finite_strain = false;      // assume finite_strain
-var finite_eq = false;          // eq div(defgrad(u)*S) = 0
-var pk_name: u8[..64];          // P of `let P = defgrad(u)*sigma` with a linear sigma: the preload form
+var solid_law = 0;
+var finite_strain = false;
+var finite_eq = false;
+var pk_name: u8[..64];
 var plastic_tok = -1;
 var state_names: u8[..64][>..];
-var strain_state: u8[..64];     // eps_p of hooke(E, nu, strain(u) - eps_p)
-var yield_node = -1;            // sy of the yield
-var hard_node = -1;             // Hk of the yield, or -1
-var solid_lets: i64[>..];       // the other lets of the physics, in source order
-var c_name: u8[..64];           // C = transpose(defgrad(u))*defgrad(u)
-var principal_name: u8[..64];   // c = principal(C)
-var energy_node = -1;           // the value of W
-var energy_fns: i64[>..];       // the fn items that W calls
-var velocity_name: u8[..64];    // v of the first-order form
-var velocity_start = -1;        // the initial value of v, or -1
-var dynamic_eq = false;         // eq rho*ddt(v) - div(defgrad(u)*S) = 0
+var strain_state: u8[..64];
+var yield_node = -1;
+var hard_node = -1;
+var solid_lets: i64[>..];
+var c_name: u8[..64];
+var principal_name: u8[..64];
+var energy_node = -1;
+var energy_fns: i64[>..];
+var velocity_name: u8[..64];
+var velocity_start = -1;
+var dynamic_eq = false;
 
 fn solid_reset() {
     solid_law = 0;
@@ -79,19 +55,15 @@ fn solid_reset() {
 
 let DYNAMIC_FIX = "write solves u: Vector<Length>, v: Vector<Velocity> = (0, 0, -V0), with eq ddt(u) - v = 0 and eq rho*ddt(v) - div(defgrad(u)*S) = 0";
 
-// The second unknown: v of the first-order form.
 fn solid_unknown(c: i64) {
     if velocity_name.len > 0 { unsupported(tok(c), "a third unknown", DYNAMIC_FIX); }
     set64(velocity_name, name(c));
     velocity_start = child(c, 1);
 }
 
-// The eqs of the first-order form: ddt(u) - v = 0, and
-// rho*ddt(v) - div(x) = 0 with x as in solid_eq. False for another eq.
 fn solid_dynamic_eq(c: i64) -> bool {
     guard source_of(child(c, 1)) == "0" else { return false; }
     let left = child(c, 0);
-    // The second-order form eq rho*ddt2(u) - div(sigma) = 0, for a modal step.
     if kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "-" && source_of(child(left, 0)) == str("rho*ddt2(", unknown_name, ")") &&
        is_call(child(left, 1), "div") && source_of(arg(child(left, 1), 0)) == flux_name {
         dynamic_eq = true;
@@ -108,16 +80,12 @@ fn solid_dynamic_eq(c: i64) -> bool {
     return true;
 }
 
-// The left side of a traction bc: sigma*n, or defgrad(u)*S*n at finite
-// strain, a load on the reference shape (P N).
 fn traction_target() -> u8[>..] {
     if pk_name.len > 0 { return str(pk_name, "*n"); }
     if finite_eq { return str("defgrad(", unknown_name, ")*", flux_name, "*n"); }
     return str(flux_name, "*n");
 }
 
-// `bc wall: v.z = 0` of the first-order form: b fixes u.z at 0. False for
-// another target.
 fn solid_velocity_bc(target: i64, v: i64, b: Bc&) -> bool {
     guard velocity_name.len > 0 && kind(target) == syntax::N_MEMBER && source_of(first(target)) == velocity_name else { return false; }
     b.comp = axis_of(name(target));
@@ -125,7 +93,6 @@ fn solid_velocity_bc(target: i64, v: i64, b: Bc&) -> bool {
     return true;
 }
 
-// `state x: T = 0`.
 fn solid_state(n: i64) {
     if source_of(child(n, 1)) != "0" { unsupported(tok(n), "a state starts at 0 in this generator", PLASTIC_FIX); }
     var w: u8[..64] = [];
@@ -138,8 +105,6 @@ fn is_state(word: u8[:]) -> bool {
     return false;
 }
 
-// A let of the nonlinear solid: the flux hooke(E, nu, strain(u) - eps_p)
-// or 2*diff(W, C), or a let that W can use. False for another let.
 fn solid_let(n: i64) -> bool {
     let v = child(n, 1);
     let u = unknown_name;
@@ -150,7 +115,6 @@ fn solid_let(n: i64) -> bool {
         set_flux(n);
         return true;
     }
-    // P = defgrad(u)*S of the flux S: the preload form, which the buckling step reads (solid_finish).
     if flux_name.len > 0 && source_of(v) == str("defgrad(", u, ")*", flux_name) && physics == ELASTIC {
         set64(pk_name, name(n));
         return true;
@@ -176,15 +140,12 @@ fn solid_let(n: i64) -> bool {
     return true;
 }
 
-// The let n is the flux of the elastic physics.
 fn set_flux(n: i64) {
     if physics >= 0 && physics != ELASTIC { unsupported(tok(n), "a second flux", PHYSICS_FIX); }
     physics = ELASTIC;
     set64(flux_name, name(n));
 }
 
-// Whether the eq div(x) = 0 has x = defgrad(u)*S, the flux of the
-// reference configuration.
 fn solid_eq(x: i64) -> bool {
     if pk_name.len > 0 && source_of(x) == pk_name {
         finite_eq = true;
@@ -195,7 +156,6 @@ fn solid_eq(x: i64) -> bool {
     return true;
 }
 
-// `plastic { yield: ..., strain: eps_p, hardening: alpha }`.
 fn solid_plastic(n: i64) {
     plastic_tok = tok(n);
     var s = first(first(n));
@@ -215,7 +175,6 @@ fn solid_plastic(n: i64) {
     solid_law = SOLID_J2;
 }
 
-// yield: von_mises(sigma) - (sy + Hk*alpha), or von_mises(sigma) - sy.
 fn plastic_yield(v: i64) {
     let ok = kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "-" && source_of(child(v, 0)) == str("von_mises(", flux_name, ")");
     let r = if ok { child(v, 1) } else { -1 };
@@ -229,10 +188,7 @@ fn plastic_yield(v: i64) {
     }
 }
 
-// The checks at the end of the physics.
 fn solid_finish(n: i64) {
-    // The preload form: a linear S with P = defgrad(u)*S. The steps solve the first-order form (the
-    // load of a preload is small), and a buckling step takes the geometric stiffness of its stress.
     if pk_name.len > 0 && solid_law == 0 && strain_state.len == 0 {
         if !finite_strain || !finite_eq {
             unsupported(tok(n), "P = defgrad(u)*S needs assume finite_strain and eq div(P) = 0", "write both");
@@ -254,7 +210,6 @@ fn solid_finish(n: i64) {
     if solid_law == SOLID_ENERGY && !finite_strain { unsupported(tok(n), "an energy W needs assume finite_strain", ENERGY_FIX); }
     if finite_strain && solid_law == 0 { unsupported(tok(n), "finite_strain needs a plastic block or an energy", ENERGY_FIX); }
     if solid_law == SOLID_ENERGY { energy_calls(energy_node); }
-    // The lets that W does not use are not in this generator.
     for l in solid_lets {
         if solid_law != SOLID_ENERGY && aniso_node < 0 {
             unsupported(tok(l), str("the let '", name(l), "' is not a flux of this generator"),
@@ -263,8 +218,6 @@ fn solid_finish(n: i64) {
     }
 }
 
-// Adds the fn items that the expression n calls to energy_fns, and of the
-// lets that it names.
 recursive fn energy_calls(n: i64) {
     guard n >= 0 else { return; }
     if kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME {
@@ -286,7 +239,6 @@ recursive fn energy_calls(n: i64) {
     }
 }
 
-// The fn item `word`, or -1.
 fn find_fn(word: u8[:]) -> i64 {
     var c = first(program_node);
     while c >= 0 {
@@ -296,13 +248,11 @@ fn find_fn(word: u8[:]) -> i64 {
     return -1;
 }
 
-// Whether the material property `word` is one of the nonlinear solid.
 fn solid_property(word: u8[:]) -> bool {
     if solid_law == SOLID_ENERGY { return true; }
     return solid_law > 0 && (word == source_of(yield_node) || hard_node >= 0 && word == source_of(hard_node));
 }
 
-// static(ramp: n) of the nonlinear solid: s.count gets n.
 fn solid_ramp(proc: i64, s: Step&) -> bool {
     let a = first(proc);
     guard (solid_law > 0 || has_ties()) && a >= 0 && next(a) < 0 && syntax::nodes[a].aux >= 0 && syntax::text(syntax::nodes[a].aux) == "ramp" else { return false; }
@@ -310,8 +260,6 @@ fn solid_ramp(proc: i64, s: Step&) -> bool {
     if s.count < 1 { unsupported(tok(a), "the ramp needs at least 1 increment", "write static(ramp: 10)"); }
     return true;
 }
-
-// --- the program ---------------------------------------------------------------
 
 let SOLID_PRELUDE = """
     // A static step of the nonlinear solid. Its cg_iterations are those of
@@ -336,7 +284,6 @@ let SOLID_PRELUDE = """
 
     """;
 
-// The law of the solid, after the elastic law.
 fn emit_solid_law(out: u8[>..]&) {
     if solid_law == SOLID_ENERGY {
         out.append("    elements::hyperelastic(");
@@ -352,8 +299,6 @@ fn emit_solid_law(out: u8[>..]&) {
     format(out, ", ", if solid_law == SOLID_J2_FINITE { "true" } else { "false" }, ");\n");
 }
 
-// The solve of step s: a static step, or the explicit step of the
-// first-order form.
 fn emit_solid_solve(out: u8[>..]&, s: Step) {
     if s.procedure == TRANSIENT {
         let v0 = if velocity_start >= 0 { value(velocity_start).v } else { [0.0; 3] };
@@ -375,7 +320,6 @@ fn emit_solid_solve(out: u8[>..]&, s: Step) {
     }
 }
 
-// The fn items that W calls, and W, as functions of hyper-dual numbers.
 fn emit_energy(out: u8[>..]&) {
     out.append(SOLID_PRELUDE);
     guard solid_law == SOLID_ENERGY else { return; }
@@ -403,14 +347,12 @@ fn emit_energy(out: u8[>..]&) {
     out.append(";\n}\n\n");
 }
 
-// The fn parameter `word` of fn item f, or false.
 fn is_param(f: i64, word: u8[:]) -> bool {
     guard f >= 0 else { return false; }
     for i in syntax::child_count(f) - 2 { if name(child(f, i)) == word { return true; } }
     return false;
 }
 
-// Expression n in hyper-dual numbers, in fn item f or in W (f = -1).
 recursive fn hd_expr(out: u8[>..]&, n: i64, f: i64) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY { syntax::text(tok(n)) } else { "" };
@@ -445,7 +387,6 @@ recursive fn hd_expr(out: u8[>..]&, n: i64, f: i64) {
     }
 }
 
-// Whether `word` is a let that the energy function holds.
 fn energy_let(word: u8[:]) -> bool {
     for l in solid_lets { if name(l) == word && child(l, 1) != energy_node { return true; } }
     return false;
@@ -454,7 +395,6 @@ fn energy_let(word: u8[:]) -> bool {
 let HD_CALLS = ["sqrt", "ln", "log", "exp"];
 let HD_FNS = ["elements::hd_sqrt(", "elements::hd_ln(", "elements::hd_ln(", "elements::hd_exp("];
 
-// A call in the energy: det(C), tr(C), sqrt, ln, exp, or a fn item.
 recursive fn hd_call(out: u8[>..]&, n: i64, f: i64) {
     let callee = source_of(child(n, 0));
     let count = syntax::child_count(n) - 1;

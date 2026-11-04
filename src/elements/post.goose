@@ -1,8 +1,3 @@
-// Values of the solution at a point, and VTU output.
-//
-// A point value is the mean over the cells that hold the point. At a node
-// this is the nodal average of the cell values, which is the usual
-// recovery of a stress or a flux at a node.
 import std;
 import math;
 import os;
@@ -14,14 +9,10 @@ import .stages;
 import .field;
 import .edge;
 
-let FIELD_VALUE = 0;    // component comp of u, or T
-let FIELD_STRESS = 1;   // sigma at comp = 3 i + j
-let FIELD_FLUX = 2;     // the heat flux -k grad(T) at comp
+let FIELD_VALUE = 0;
+let FIELD_STRESS = 1;
+let FIELD_FLUX = 2;
 
-// The reference point xi in [0, 1]^3 of p in hexahedron c: Newton's method
-// on x(xi) = p, which is exact in one step for a box. It gives l with
-// l[1..3] = xi, and l[0] = the smallest 1 - xi_r, so that p is in the cell
-// when the smallest of l is >= 0, as for a simplex.
 fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
     var xi: f64[3] = [0.5; 3];
     var n: f64[20] = [0.0; 20];
@@ -38,7 +29,6 @@ fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
             }
         }
         for t in 3 { r[t] -= p[t]; }
-        // j[3 t + a] = dx_t / dxi_a: solve j d = r by Cramer's rule.
         let det = j[0] * (j[4] * j[8] - j[5] * j[7]) - j[1] * (j[3] * j[8] - j[5] * j[6]) + j[2] * (j[3] * j[7] - j[4] * j[6]);
         guard det > 0.0 else { break; };
         for a in 3 {
@@ -51,7 +41,6 @@ fn cube_coordinates(c: i64, p: f64[3]) -> f64[4] {
     return [min(1.0 - xi[0], min(1.0 - xi[1], 1.0 - xi[2])), xi[0], xi[1], xi[2]];
 }
 
-// Newton's method on the isoparametric map of the curved cell c of order 2, from the affine guess.
 fn newton_refine(c: i64, p: f64[3], guess: f64[3]) -> f64[3] {
     var xi = guess;
     let affine = xi;
@@ -86,16 +75,15 @@ fn newton_refine(c: i64, p: f64[3], guess: f64[3]) -> f64[3] {
         }
         for a in dim { xi[a] -= step[a]; }
     }
-    // A point far from the cell keeps its affine coordinates: the map is not one-to-one there.
     for a in dim { if !(xi[a] > -0.5 && xi[a] < 1.5) { xi = affine; } }
-    // A root where the map folds (det <= 0) is not in the cell.
     shape(dim, 2, xi, n, dn);
     var back: f64[9] = [0.0; 9];
     for l in per_cell {
         for t in dim { for a in dim { back[3 * t + a] += dn[3 * l + a] * node_x(cell_node(c, l), t); } }
     }
-    let folded = if dim == 2 { back[0] * back[4] - back[1] * back[3] <= 0.0 } else { false };
-    // A root that does not reproduce p (Newton did not converge) is not one either.
+    let folded = if dim == 2 { back[0] * back[4] - back[1] * back[3] <= 0.0 } else {
+        back[0] * (back[4] * back[8] - back[5] * back[7]) - back[1] * (back[3] * back[8] - back[5] * back[6])
+            + back[2] * (back[3] * back[7] - back[4] * back[6]) <= 0.0 };
     var miss = 0.0;
     var span = 0.0;
     for t in dim {
@@ -108,7 +96,6 @@ fn newton_refine(c: i64, p: f64[3], guess: f64[3]) -> f64[3] {
     return xi;
 }
 
-// The barycentric coordinates of p in cell c, from its vertices.
 fn barycentric(c: i64, p: f64[3]) -> f64[4] {
     guard c >= 0 && c < cell_count() && (dim == 2 || dim == 3) else { abort("barycentric: c < cell_count()"); }
     if hex_cells { return cube_coordinates(c, p); }
@@ -128,7 +115,6 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
     } else {
         let det = e[0] * (e[4] * e[8] - e[5] * e[7]) - e[1] * (e[3] * e[8] - e[5] * e[6])
             + e[2] * (e[3] * e[7] - e[4] * e[6]);
-        // Cramer's rule: column r of e replaced by b.
         for r in 3 {
             var m = e;
             for t in 3 { m[3 * t + r] = b[t]; }
@@ -136,8 +122,6 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
                 + m[2] * (m[3] * m[7] - m[4] * m[6])) / det;
         }
     }
-    // A curved cell of order 2 (snapped edges, quarter-point nodes): Newton's method on x(xi) = p
-    // from the affine guess, which is exact for a straight cell.
     if order == 2 { xi = newton_refine(c, p, xi); }
     var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
     for r in dim {
@@ -147,10 +131,8 @@ fn barycentric(c: i64, p: f64[3]) -> f64[4] {
     return l;
 }
 
-// The field in cell c at reference point xi.
 fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 && ncomp <= 3 && sol.len == dof_total() else { abort("cell_field: a field, 0 <= comp < 9 and a solution of each dof"); }
-    // A value needs the shape functions only: the Jacobian of a quarter-point cell is singular at its tip.
     if what == FIELD_VALUE { shape(dim, order, xi, shp, dref); } else { cell_geometry(c, xi); }
     use_law(c);
     if what == FIELD_VALUE {
@@ -160,8 +142,6 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
         }
         return v;
     }
-    // du[3 a + t] = du_a / dx_t
-    // A born cell is strain-free at its birth (stages.goose).
     let b = born.len > 0 && born[c] != 0;
     var du: f64[9] = [0.0; 9];
     for l in per_cell {
@@ -188,9 +168,6 @@ fn cell_field(c: i64, xi: f64[3], what: i64, comp: i64) -> f64 {
     return s;
 }
 
-// The field at point (x, y, z), and whether a live cell holds the point. A point
-// a little outside the mesh, as on the arc of a hole between two nodes,
-// takes the nearest live cell.
 fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     guard what >= FIELD_VALUE && what <= FIELD_FLUX && comp >= 0 && comp < 9 else { abort("field_at: a field and 0 <= comp < 9"); }
     guard cell_count() > 0 && sol.len > 0 else { return 0.0, false; }
@@ -220,8 +197,6 @@ fn field_at(what: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     return cell_field(best, [l[1], l[2], l[3]], what, comp), best_l >= -0.1;
 }
 
-// The largest von Mises stress at the nodes of the region, from the
-// stress of each live cell at the node. 0 if the region holds no node.
 fn region_max_von_mises() -> f64 {
     guard physics == ELASTIC && sol.len == dof_total() else { abort("region_max_von_mises: an elastic model and a solution"); }
     var most = 0.0;
@@ -241,9 +216,6 @@ fn region_max_von_mises() -> f64 {
     return most;
 }
 
-// The integral over the boundary facets of the region of the expression
-// `code` (field.goose) of the coordinates and the solution: the solution
-// at a point of a facet is its interpolation from the nodes of the facet.
 fn region_integral(code: i64[:], consts: f64[:]) -> f64 {
     guard physics >= 0 && sol.len == dof_total() && ncomp <= 3 else { abort("region_integral: a physics and its solution"); }
     let fd = dim - 1;
@@ -271,8 +243,6 @@ fn region_integral(code: i64[:], consts: f64[:]) -> f64 {
     return if any { total } else { 0.0 / 0.0 };
 }
 
-// The largest sign * (component comp of the solution) at the nodes of the
-// region. NaN if the region holds no node.
 fn region_extreme(comp: i64, sign: f64) -> f64 {
     guard sol.len == dof_total() && comp >= 0 && comp < ncomp else { abort("region_extreme: a solution and a component of it"); }
     var most = 0.0 / 0.0;
@@ -284,11 +254,6 @@ fn region_extreme(comp: i64, sign: f64) -> f64 {
     return most;
 }
 
-// The largest sign σ_ij at the nodes of the region, with σ at a node the
-// mean of the stress of the live cells at the node. NaN if the region
-// holds no node. Reason: at a corner of a P2 cell the stress of one cell
-// is an extrapolation, and in contact-cattaneo the largest of them is
-// 3 % above the mean.
 fn region_max_stress(i: i64, j: i64, sign: f64) -> f64 {
     guard physics == ELASTIC && sol.len == dof_total() && i >= 0 && i < 3 && j >= 0 && j < 3 else { abort("region_max_stress: an elastic model, a solution and 0 <= i, j < 3"); }
     var sum: f64[>..] = [];
@@ -314,17 +279,12 @@ fn region_max_stress(i: i64, j: i64, sign: f64) -> f64 {
     return most;
 }
 
-// --- VTU -----------------------------------------------------------------------
-
-// VTK cell types: the triangle, the quadratic triangle, the tetrahedron, the
-// quadratic tetrahedron and the hexahedron. Their node sequence is the one of shape.goose.
 fn vtk_type() -> i64 {
     if dim == 2 { return if order == 1 { 5 } else { 22 }; }
     if hex_cells { return if order == 2 { 25 } else { 12 }; }
     return if order == 1 { 10 } else { 24 };
 }
 
-// The VTU file up to its point data: the nodes and the cells of the mesh.
 fn vtu_mesh(out: u8[>..]&) {
     let nodes = node_count();
     let cells = cell_count();

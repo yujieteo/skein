@@ -190,8 +190,7 @@ The package `flow` in `src/flow/` solves steady incompressible flow in 2D
   each vertex. The solve is pseudo-transient continuation with the lumped
   mass. A step takes at most half of k or w at a vertex, the sources of k
   and w use the vertex rule, and the w rows are divided by the largest w
-  of a wall. The comments of `rans.goose` and `solve.goose` give the run
-  that showed the need for each of these.
+  of a wall.
 - A `bloch` group with `k: 0` makes the flow periodic: the nodes of `high`
   share the dofs of the nodes of `low`. The mesh is half of the rect and
   its mirror. Reason: the mesher splits the boundary segments by the

@@ -20,7 +20,6 @@ var node_psi: f64[>..] = [];
 var modulus: f64[>..] = [];
 var dyn_steps = 0;
 var dyn_seconds = 0.0;
-var dyn_courant = 0.0;
 var started = false;
 var divergence = 0.0;
 

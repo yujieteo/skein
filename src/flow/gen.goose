@@ -1,33 +1,3 @@
-// The code generator of the flow models: a Skein syntax tree to a Goose
-// program that calls src/flow/flow.goose.
-//
-// It takes the models with a physics `navier_stokes(f)` or `stokes(f)`, or
-// the same equations written out: an unknown Vector<Velocity> and an
-// unknown Pressure. The model is 2d and SI. The domain is a CSG shape of
-// rect and circle, meshed with triangles by src/mesher/ with its `refine`
-// on segments and circles. The steps are `static`, solved by Newton's
-// method with GMRES and ILU(0). Each other construct gives an error
-// `unsupported` at its token, with a fix.
-//
-// A temperature Tf: Temperature in the flow physics, with the energy equation
-// `rho*cp*dot(v, grad(Tf)) + div(qf) = 0` and a body force that is affine in
-// Tf (the Boussinesq buoyancy), is a thermal flow (src/flow/heat.goose). A
-// second physics that solves a Temperature alone on a shape that touches the
-// flow is a solid with heat conduction: conjugate heat transfer. The mesher
-// meshes the two shapes as one, with the cells of the solid marked, so that T
-// is continuous across their interface and the heat flux that leaves the
-// solid enters the fluid.
-//
-// A second physics `linear_elastic` in plane strain on its own shape, with
-// an `interface` item, is a solid in the flow (src/flow/fsi.goose). The
-// mesher meshes the two shapes as one, with the boundary of the solid as
-// an interface, so that the two meshes share the nodes of the interface.
-//
-// The scaled form of spec §21.2: the three values of the `scales` line give
-// the reference length, mass and time, so each quantity q of the dimension
-// L^a M^b T^c has the reference value q_ref = L^a M^b T^c, and the generated
-// program gives the runtime q / q_ref. Each report, expect and VTU file is
-// dimensional again: the program multiplies each result by its q_ref.
 import std;
 import math;
 namespace flow_gen;
@@ -52,21 +22,14 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
     return n >= 0 && kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME && name(child(n, 0)) == callee;
 }
 
-// The value of argument i of call n.
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 
-// The source of n with no spaces.
 fn compact(n: i64) -> u8[>..] {
     var s: u8[>..] = [];
     for c in source_of(n) { if c != ' ' { s.push(c); } }
     return s;
 }
 
-// --- the claim ---------------------------------------------------------------
-
-// Whether this generator takes the model: a physics that uses stokes,
-// navier_stokes or k_omega_sst, or that solves a Vector<Velocity> and a
-// Pressure.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -93,10 +56,6 @@ fn claims(prog: i64) -> bool {
     return false;
 }
 
-// --- quantities and the scales (spec §21) ------------------------------------
-
-// A scalar or a 2D vector in SI, and its dimension: the exponents of L, M
-// and T in halves.
 struct Q {
     n: i64,
     v: f64[2],
@@ -105,10 +64,8 @@ struct Q {
 
 fn real(x: f64) -> Q { Q { n: 1, v: [x, 0.0], d: [0, 0, 0] } }
 
-// The reference length, mass and time of the scales line.
 var base: f64[3] = [1.0, 1.0, 1.0];
 
-// q_ref of the dimension d.
 fn reference(d: i64[3]) -> f64 {
     return pow(base[0], d[0] / 2.0) * pow(base[1], d[1] / 2.0) * pow(base[2], d[2] / 2.0);
 }
@@ -122,7 +79,6 @@ fn scaled(q: Q) -> Q {
 
 fn same_dim(a: i64[3], b: i64[3]) -> bool { a[0] == b[0] && a[1] == b[1] && a[2] == b[2] }
 
-// The table row that a table column stands for, in an expect of a table.
 var table_node = -1;
 var table_row = -1;
 
@@ -155,7 +111,6 @@ recursive fn quantity(n: i64) -> Q {
     return real(0.0);
 }
 
-// The parameters of the user functions that are being evaluated: a stack.
 var fn_names: u8[..64][>..];
 var fn_nodes: i64[>..];
 
@@ -167,10 +122,6 @@ fn find_fn(word: u8[:]) -> i64 {
 var bind_names: u8[..64][>..];
 var bind_vals: Q[>..];
 
-// sin, cos, tan, sqrt, exp, ln and abs of a scalar, and a call of a `fn` of
-// the model (spec §5.4): its body, with each parameter the value of its
-// argument. Reason: the flap of naca23012_flap turns the points of the
-// spline by `turn(x, y, w)`.
 recursive fn call_quantity(n: i64) -> Q {
     let callee = child(n, 0);
     if kind(callee) != syntax::N_NAME {
@@ -182,8 +133,6 @@ recursive fn call_quantity(n: i64) -> Q {
         let a = quantity(arg(n, 0));
         if a.n != 1 { unsupported(tok(n), "a function of a vector", "write a scalar"); return real(0.0); }
         let x = a.v[0];
-        // Reason: abs(-0.3 m) was a dimensionless 0.3, which scaled() does not
-        // divide by the length reference, and sqrt of an odd exponent lost it.
         if fi == 6 { return Q { n: 1, v: [abs(x), 0.0], d: [a.d[0], a.d[1], a.d[2]] }; }
         if fi == 3 {
             if a.d[0] % 2 != 0 || a.d[1] % 2 != 0 || a.d[2] % 2 != 0 {
@@ -261,8 +210,6 @@ recursive fn name_quantity(n: i64) -> Q {
     return q;
 }
 
-// A vector: its dimension is that of its components, with the unit after
-// them. A 0 with no unit fits each dimension.
 recursive fn vector_quantity(n: i64) -> Q {
     var q = Q { n: 0, v: [0.0, 0.0], d: [0, 0, 0] };
     var f = 1.0;
@@ -329,7 +276,6 @@ recursive fn binary_quantity(n: i64) -> Q {
     return a;
 }
 
-// The value of column n.tok of the row table_row of table table_node.
 fn table_quantity(n: i64) -> Q {
     var col = 0;
     var c = first(table_node);
@@ -361,11 +307,8 @@ fn scalar_value(n: i64) -> f64 {
     return q.v[0];
 }
 
-// The scaled value of n.
 fn scaled_value(n: i64) -> f64 { return scaled(quantity(n)).v[0]; }
 
-// `scales a, U, rho`: the reference length, mass and time from the three
-// scales, by the solution of the 3 × 3 system of the logarithms.
 fn scales(n: i64) {
     var m: f64[9] = [0.0; 9];
     var b: f64[3] = [0.0; 3];
@@ -373,8 +316,6 @@ fn scales(n: i64) {
     var c = first(n);
     while c >= 0 {
         let q = quantity(c);
-        // a fourth scale is the temperature: T has no scale, since K is not a
-        // dimension of this generator
         if count >= 3 && thermal_scale_ok(c) { count++; c = next(c); continue; }
         if count < 3 && q.n == 1 && q.v[0] > 0.0 {
             for j in 3 { m[3 * count + j] = q.d[j] / 2.0; }
@@ -393,13 +334,11 @@ fn scales(n: i64) {
     for j in 3 { base[j] = exp(x[j]); }
 }
 
-// Whether the scale c after the third is a positive scalar.
 fn thermal_scale_ok(c: i64) -> bool {
     let q = quantity(c);
     return q.n == 1 && q.v[0] > 0.0 && same_dim(q.d, [0, 0, 0]);
 }
 
-// The solution of m x = b, by Gauss elimination with partial pivots.
 fn solve3(m: f64[9], b: f64[3]) -> f64[3], bool {
     var a = m;
     var r = b;
@@ -431,44 +370,37 @@ fn solve3(m: f64[9], b: f64[3]) -> f64[3], bool {
     return x, true;
 }
 
-// --- the model -------------------------------------------------------------------
-
-// A `let` of a shape (rect, circle, or - | & of shapes), a boundary
-// region `boundary(shape, condition)`, or a point region `point(p)`.
 let SHAPE = 0;
 let BOUNDARY = 1;
 let POINT = 2;
-let LINE = 3;       // line(p0, p1): a segment in the flow, for max(f, line)
+let LINE = 3;
 
 struct Named {
     name: u8[..64],
     kind: i64,
-    value: i64,     // the expression node
+    value: i64,
 }
 
-// A `refine`: a segment from (p0, p1) to (p2, p3), or a circle of centre
-// (p0, p1) and radius p2, scaled, with the scaled size h.
 struct Refine {
     circle: bool,
     p: f64[4],
     h: f64,
 }
 
-let BC_V = 0;       // component comp of the velocity, or both for comp -1
+let BC_V = 0;
 let BC_P = 1;
-let BC_U = 2;       // the displacement of the solid at 0
-let BC_T = 3;       // the temperature
-let BC_FLUX = 4;    // the outward heat flux dot(q, n)
-let BC_NT = 5;      // nt of Spalart-Allmaras
-let BC_D = 6;       // d = 0: the wall of the wall distance
+let BC_U = 2;
+let BC_T = 3;
+let BC_FLUX = 4;
+let BC_NT = 5;
+let BC_D = 6;
 
-// A `bc`: the region (an index in `named`), the target and the scaled value.
 struct Bc {
     region: i64,
     kind: i64,
     comp: i64,
     v: f64[2],
-    expr: i64,      // the value node when it has x or y, or -1
+    expr: i64,
 }
 
 struct Report {
@@ -478,9 +410,9 @@ struct Report {
 
 struct Step {
     name: u8[..64],
-    first_own: i64,     // the bcs of the step itself: a range of `bcs`
+    first_own: i64,
     own_count: i64,
-    first_bc: i64,      // all bcs that hold in the step: a range of `active`
+    first_bc: i64,
     bc_count: i64,
     first_report: i64,
     report_count: i64,
@@ -489,11 +421,10 @@ struct Step {
     solid_output: bool,
 }
 
-// An `expect`: for each row of a table, when its sides name a table.
 struct Expect {
     node: i64,
-    table: i64,     // the N_TABLE node, or -1
-    step: i64,      // the step that checks it at its end, or -1 for an item
+    table: i64,
+    step: i64,
 }
 
 var named: Named[>..];
@@ -509,64 +440,64 @@ var material_node = -1;
 var material_name: u8[..64];
 var physics_name: u8[..64];
 var physics_tok = -1;
-var domain = -1;            // the shape of the physics: an index in `named`
-var velocity: u8[..64];     // the names of the unknowns
+var domain = -1;
+var velocity: u8[..64];
 var pressure: u8[..64];
-var stress: u8[..64];       // the let of the stress: sigma
+var stress: u8[..64];
 var convective = true;
-var turbulent = false;      // k_omega_sst: the unknowns k and w too
-var spalart = false;        // Spalart-Allmaras: the working viscosity nt too
+var turbulent = false;
+var spalart = false;
 var sa_nt: u8[..64];
-var sa_d: u8[..64];         // the wall distance of the physics walldist
-var sa_d_name: u8[..64];    // the name of that physics
+var sa_d: u8[..64];
+var sa_d_name: u8[..64];
 var sa_d_tok = -1;
-var sa_lets = 0;            // the lets and eqs of the model that match the template
+var sa_lets = 0;
 var sa_eqs = 0;
 var v_start: f64[2] = [0.0, 0.0];
 var nt_start = 0.0;
-var layer_region = -1;      // `layers r: { first, ratio, count }`: an index in `named`, or -1
+var layer_region = -1;
 var layer_first = 0.0;
 var layer_ratio = 0.0;
 var layer_count = 0;
 var turb_k: u8[..64];
 var turb_w: u8[..64];
 var period: f64[2] = [0.0, 0.0];
-var period_high = -1;       // the high boundary of a bloch group: an index in `named`, or -1
+var period_high = -1;
 var force: f64[2] = [0.0, 0.0];
 var force_node = -1;
 var mesh_size = 0.0;
 var grade = 1.3;
 var order = 2;
-var stabilize = 1;          // flow::SUPG
+var stabilize = 1;
 var stabilize_set = false;
 var has_scales = false;
-var solid_tok = -1;         // the solid physics, or -1
+var solid_tok = -1;
 var solid_name: u8[..64];
-var solid_domain = -1;      // an index in `named`
+var solid_domain = -1;
 var displacement: u8[..64];
 var solid_material = -1;
 var solid_size = 0.0;
 var interface_node = -1;
 
-var thermal = false;        // the flow solves a temperature
-var temp: u8[..64];         // its name
+var thermal = false;
+var temp: u8[..64];
 var temp_start = 0.0;
-var flux: u8[..64];         // the let of the heat flux of the fluid: fourier(k, T)
+var flux: u8[..64];
 var energy_seen = false;
-var heat_source = 0.0;      // Q of the fluid, scaled
-var buoyancy: f64[2] = [0.0, 0.0];   // the body force is force + buoyancy*T, scaled
-var probe_on = false;       // a name of the temperature is the number probe_value
+var heat_source = 0.0;
+var buoyancy: f64[2] = [0.0, 0.0];
+var probe_on = false;
 var probe_value = 0.0;
-var th_tok = -1;            // the physics of the solid with heat conduction, or -1
+var th_tok = -1;
 var th_name: u8[..64];
-var th_domain = -1;         // an index in `named`
+var th_domain = -1;
 var th_temp: u8[..64];
 var th_flux: u8[..64];
 var th_mat = -1;
 var th_source = 0.0;
 var th_size = 0.0;
 var th_energy_seen = false;
-var p_offset = 0.0;         // the pressure level of the traction bcs, scaled
+var p_offset = 0.0;
 var p_offset_set = false;
 var thermal_materials: i64[>..];
 
@@ -665,17 +596,14 @@ fn find_named(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The named shape, boundary or point of node n, or -1.
 fn named_of(n: i64, k: i64) -> i64 {
     guard kind(n) == syntax::N_NAME else { return -1; }
     let i = find_named(name(n));
     return if i >= 0 && named[i].kind == k { i } else { -1 };
 }
 
-// The property `word` of the fluid, or -1.
 fn property(word: u8[:]) -> i64 { return property_of(material_node, word); }
 
-// The property `word` of material m, or -1.
 fn property_of(m: i64, word: u8[:]) -> i64 {
     guard m >= 0 else { return -1; }
     var p = first(m);
@@ -697,7 +625,6 @@ fn header(n: i64) {
     codegen::system = codegen::SYSTEMS[0];
 }
 
-// fill(spline(p0, p1, ...)): the region inside a closed spline (spec §8.1).
 fn is_fill(n: i64) -> bool { return is_call(n, "fill") && syntax::child_count(n) == 2 && is_call(arg(n, 0), "spline"); }
 
 recursive fn is_shape(n: i64) -> bool {
@@ -707,13 +634,11 @@ recursive fn is_shape(n: i64) -> bool {
     return (op == "-" || op == "|" || op == "&") && is_shape(child(n, 0)) && is_shape(child(n, 1));
 }
 
-// Whether n is `a | b` of boundaries that a let names.
 recursive fn is_union(n: i64) -> bool {
     guard kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "|" else { return false; }
     return (named_of(child(n, 0), BOUNDARY) >= 0 || is_union(child(n, 0))) && (named_of(child(n, 1), BOUNDARY) >= 0 || is_union(child(n, 1)));
 }
 
-// `let` and `param`: a shape, a region, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
     var g = Named { name: [], kind: SHAPE, value: v };
@@ -735,7 +660,6 @@ fn material(n: i64) {
         return;
     }
     if property_of(n, "mu") < 0 && property_of(n, "k") >= 0 && property_of(n, "rho") < 0 {
-        // the material of a solid with heat conduction: k
         thermal_materials.push(n);
         var p = first(n);
         while p >= 0 {
@@ -759,7 +683,6 @@ fn material(n: i64) {
     }
 }
 
-// A material of the solid: E and nu.
 fn solid_materials(n: i64) {
     if solid_material >= 0 {
         unsupported(tok(n), "a second solid material: the flow generator has one", "remove the second material");
@@ -776,8 +699,6 @@ fn solid_materials(n: i64) {
 
 let SA_FIX = "write the Spalart-Allmaras model with the lets chi, fv1, fv2, nut, omg, s_t, r_sa, g_sa, fw, sigma and q_nt and the 3 eqs, as in examples/femahoy/naca0012_ladson.skn";
 
-// The right side of the let `word` of the Spalart-Allmaras template (Spalart
-// and Allmaras 1992), with the names of the unknowns v, p, nt and d.
 fn spalart_let_text(word: u8[:]) -> u8[>..] {
     let v = velocity;
     let nt = sa_nt;
@@ -796,10 +717,6 @@ fn spalart_let_text(word: u8[:]) -> u8[>..] {
     return "";
 }
 
-// A let or an eq of a Spalart-Allmaras physics: it must be the text of the
-// template, so that the cell residual of sa.goose is the model. Reason: the
-// generator runs a fixed residual, and a different law would run silently
-// as this one.
 fn spalart_statement(c: i64) {
     let v = velocity;
     let nt = sa_nt;
@@ -825,8 +742,6 @@ fn spalart_statement(c: i64) {
     unsupported(tok(c), "the eq is not in the Spalart-Allmaras template", SA_FIX);
 }
 
-// A physics that solves only a wall distance d: Length with
-// `eq norm(grad(d)) = 1` (the eikonal equation).
 fn is_walldist(n: i64) -> bool {
     var found = false;
     var c = first(n);
@@ -867,8 +782,6 @@ fn walldist_item(n: i64) {
 
 let PHYSICS_FIX = "write physics flow on dom: navier_stokes solves v: Vector<Velocity>, p: Pressure { material fluid }";
 
-// The statements of a physics written out: `let sigma = -p*I + 2*mu*sym(grad(v))`,
-// `eq rho*grad(v)*v - div(sigma) = 0` and `eq div(v) = 0`.
 fn written_out(c: i64, eqs: i64&) {
     let k = kind(c);
     let v = velocity;
@@ -913,11 +826,6 @@ fn written_out(c: i64, eqs: i64&) {
                 str("write eq rho*grad(", v, ")*", v, " - div(", s, ") = 0 and eq div(", v, ") = 0"));
 }
 
-// The body force of the momentum equation, the right side of
-// `rho*grad(v)*v - div(sigma) = f`, when the flow is thermal: force + buoyancy*T,
-// which must be affine in T (checked at three values of T). Reason: the
-// Boussinesq force rho*(1 - beta*(T - T0))*g is of this form, and the cell
-// rows need only the two vectors.
 fn body_force_of(f: i64) {
     probe_on = true;
     var q: Q[3] = [real(0.0); 3];
@@ -983,7 +891,6 @@ fn physics_item(n: i64) {
                 set64(temp, name(c));
                 if syntax::child_count(c) > 1 { temp_start = scaled_value(child(c, 1)); }
             } else if kind(t) == syntax::N_TYPE_NAME && name(t) == "KinViscosity" && !spalart {
-                // the working viscosity nt of Spalart-Allmaras
                 spalart = true;
                 turbulent = true;
                 set64(sa_nt, name(c));
@@ -1028,7 +935,6 @@ fn physics_item(n: i64) {
 
 let SOLID_FIX = "write physics flag on bar: linear_elastic solves u: Vector<Length> { material steel  assume plane_strain }";
 
-// Whether physics n solves a Temperature alone: a solid with heat conduction.
 fn is_thermal_solid(n: i64) -> bool {
     var temperature = false;
     var c = first(n);
@@ -1046,7 +952,6 @@ fn is_thermal_solid(n: i64) -> bool {
 
 let THERMAL_SOLID_FIX = "write physics solid on wall solves Ts: Temperature = T0 { material pvc  let q: Vector<HeatFlux> = fourier(k, Ts)  eq div(q) = 0 }";
 
-// The solid with heat conduction: `let qs = fourier(k, Ts)` and `eq div(qs) = Q`.
 fn thermal_solid_item(n: i64) {
     if th_tok >= 0 {
         unsupported(tok(n), "a second solid with heat conduction: the flow generator has one", "remove the second physics");
@@ -1079,7 +984,6 @@ fn thermal_solid_item(n: i64) {
     if !th_energy_seen && ok() { unsupported(tok(n), "the solid has no energy equation", THERMAL_SOLID_FIX); }
 }
 
-// Whether the assume node c has finite_strain: the solid written out.
 fn assumes_finite(c: i64) -> bool {
     var a = first(c);
     while a >= 0 {
@@ -1089,7 +993,6 @@ fn assumes_finite(c: i64) -> bool {
     return false;
 }
 
-// Whether physics n uses the template linear_elastic: the solid.
 fn is_solid(n: i64) -> bool {
     var c = first(n);
     while c >= 0 {
@@ -1101,17 +1004,15 @@ fn is_solid(n: i64) -> bool {
 }
 
 let SVK_FIX = "write assume finite_strain, isotropic, plane_strain, let S = hooke(E, nu, strain(u)) and eq div(defgrad(u)*S) = 0";
-var solid_finite = false;   // St. Venant-Kirchhoff written out
+var solid_finite = false;
 var solid_stress: u8[..64];
 
-// The let S = hooke(E, nu, strain(u)) of the finite-strain solid; it names S.
 fn solid_finite_text(c: i64) -> bool {
     if compact(child(c, 1)) != str("hooke(E,nu,strain(", displacement, "))") { return false; }
     set64(solid_stress, name(c));
     return true;
 }
 
-// The solid physics: linear_elastic with no body force, in plane strain.
 fn solid_item(n: i64) {
     if solid_tok >= 0 {
         unsupported(tok(n), "a second solid: the flow generator has one", "remove the second solid");
@@ -1157,8 +1058,6 @@ fn solid_item(n: i64) {
     if !plane { unsupported(tok(n), "the 2d solid of the flow generator is in plane strain", "add assume plane_strain"); }
 }
 
-// `interface s: a, b { mesh_motion: harmonic }`. The two meshes share the
-// nodes of the boundary of the solid, so the regions a and b are not used.
 fn interface_item(n: i64) {
     if interface_node >= 0 {
         unsupported(tok(n), "a second interface: the flow generator has one", "remove the second interface");
@@ -1179,7 +1078,6 @@ fn interface_item(n: i64) {
     if !harmonic { unsupported(tok(n), "the interface needs a mesh motion", "add mesh_motion: harmonic"); }
 }
 
-// The method of the solid: cg with order 2.
 fn solid_method(n: i64) {
     if syntax::text(syntax::nodes[n].aux) != "cg" { unsupported(tok(n), "the solid has the cg method", "write method flag: cg { order: 2 }"); }
     var s = first(child(n, 0));
@@ -1193,7 +1091,6 @@ fn solid_method(n: i64) {
     }
 }
 
-// The mesh of the solid: a size, and tri cells.
 fn solid_mesh(n: i64) {
     var s = first(child(n, 1));
     while s >= 0 {
@@ -1208,7 +1105,6 @@ fn solid_mesh(n: i64) {
     if solid_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 1 cm"); }
 }
 
-// The mesh of the solid with heat conduction: a size, and tri cells.
 fn thermal_solid_mesh(n: i64) {
     var s = first(child(n, 1));
     while s >= 0 {
@@ -1223,7 +1119,6 @@ fn thermal_solid_mesh(n: i64) {
     if th_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 1 cm"); }
 }
 
-// The method of the solid with heat conduction: cg, on the mesh of the flow.
 fn thermal_solid_method(n: i64) {
     if syntax::text(syntax::nodes[n].aux) != "cg" { unsupported(tok(n), "the solid with heat conduction has the cg method", "write method solid: cg { mesh: ms }"); }
     var s = first(child(n, 0));
@@ -1235,7 +1130,6 @@ fn thermal_solid_method(n: i64) {
     }
 }
 
-// The checks of a model with a temperature, after the fluid.
 fn read_thermal(at: i64) {
     if th_tok >= 0 && !thermal { unsupported(th_tok, "a solid with heat conduction needs a flow with a temperature", "add Tf: Temperature to the flow"); }
     if !thermal { return; }
@@ -1247,7 +1141,6 @@ fn read_thermal(at: i64) {
     if turbulent || solid_tok >= 0 || period_high >= 0 { unsupported(at, "a flow with a temperature is laminar, with no solid linear_elastic and not periodic", "remove them"); }
 }
 
-// The checks of a model with a solid, after the fluid.
 fn read_solid(at: i64) {
     if solid_tok < 0 {
         if interface_node >= 0 { unsupported(tok(interface_node), "an interface needs a solid physics linear_elastic", SOLID_FIX); }
@@ -1256,8 +1149,6 @@ fn read_solid(at: i64) {
     if interface_node < 0 { unsupported(solid_tok, "the solid needs an interface with the flow", "write interface fsi: wet_fluid, wet_solid { mesh_motion: harmonic }"); }
     if solid_domain >= 0 && solid_size <= 0.0 { unsupported(solid_tok, "the solid has no mesh", "add mesh ms on bar { size: 5 mm, cell: tri }"); }
     if solid_material < 0 { unsupported(solid_tok, "the solid needs a material with E and nu", "add material steel { E: Pressure = 200 GPa, nu: Real = 0.3 }"); }
-    // Reason: the P2 edge nodes of the solid take the reactions of the
-    // edge nodes of the flow.
     if order != 2 { unsupported(at, "a flow with a solid has order 2", "write method flow: cg { order: { v: 2, p: 1 } }"); }
     if turbulent || period_high >= 0 { unsupported(solid_tok, "a flow with a solid is laminar and not periodic", "remove k_omega_sst and the symmetry"); }
 }
@@ -1276,8 +1167,6 @@ fn assumptions(n: i64) {
 fn method(n: i64) {
     let kind_name = syntax::text(syntax::nodes[n].aux);
     if sa_d_tok >= 0 && name(n) == sa_d_name && kind_name == "cg" { return; }
-    // Spalart-Allmaras runs on P1 cells with SUPG and PSPG. The settings of the
-    // finite volume method (gradient, flux, limiter, pv_coupling) do not apply.
     if spalart && name(n) == physics_name && kind_name == "fv" {
         order = 1;
         stabilize = 2;
@@ -1305,8 +1194,6 @@ fn method(n: i64) {
     }
 }
 
-// `order: 2` or `order: { v: 2, p: 1 }`: the velocity has order 1 or 2,
-// and the pressure has order 1.
 fn order_setting(v: i64) {
     if kind(v) != syntax::N_RECORD {
         order = scalar_value(v) as! i64;
@@ -1326,12 +1213,8 @@ fn order_setting(v: i64) {
     }
 }
 
-// --- the mesh ----------------------------------------------------------------------
-
 let REFINE_FIX = "refine a boundary on a side of a rect, boundary(box, y == 1 m), or on a circle, boundary(dom, hole)";
 
-// The refines of boundary g with the scaled size h: a side x == c or
-// y == c of the rect of the boundary, an || of these, or a circle.
 recursive fn refine_parts(shape: i64, cond: i64, h: f64) {
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "||" {
         refine_parts(shape, child(cond, 0), h);
@@ -1370,7 +1253,6 @@ recursive fn refine_parts(shape: i64, cond: i64, h: f64) {
     }
 }
 
-// The points of the spline of fill(spline(...)) n, scaled, x and y of each.
 fn fill_points(n: i64, xy: f64[>..]&) {
     let sp = arg(n, 0);
     var c = 1;
@@ -1383,8 +1265,6 @@ fn fill_points(n: i64, xy: f64[>..]&) {
     }
 }
 
-// The refines of the segments from point to point of a fill, closed by the
-// line from the last to the first: the size h along the curve.
 fn fill_refines(n: i64, h: f64, into: Refine[>..]&) {
     var xy: f64[>..] = [];
     fill_points(n, xy);
@@ -1395,8 +1275,6 @@ fn fill_refines(n: i64, h: f64, into: Refine[>..]&) {
     }
 }
 
-// The refines of the edges of the shape n: each side of a rect, and each
-// circle.
 recursive fn edge_refines(n: i64, h: f64, into: Refine[>..]&) {
     if kind(n) == syntax::N_NAME {
         edge_refines(named[named_of(n, SHAPE)].value, h, into);
@@ -1420,8 +1298,6 @@ recursive fn edge_refines(n: i64, h: f64, into: Refine[>..]&) {
     }
 }
 
-// `layers wall: { first: 4 um, ratio: 1.18, count: 64 }`: boundary layer
-// cells on a boundary(dom, shape) (spec §9.1, mesher::mesh_2d_layers).
 fn layers_item(s: i64) {
     let v = child(s, 0);
     let r = named_of(v, BOUNDARY);
@@ -1486,11 +1362,8 @@ fn mesh(n: i64) {
     if mesh_size <= 0.0 { unsupported(tok(n), "the mesh needs a size > 0", "add size: 1 cm"); }
 }
 
-// --- the steps ---------------------------------------------------------------------
-
 let BC_FIX_TEXT = "write bc wall: v = 0, bc lid: v = (1, 0) m/s, bc side: v.y = 0, bc corner: p = 0, or bc outlet: sigma*n = 0";
 
-// A `bc` item or statement. It gives its index in `bcs`, or -1.
 fn bc(n: i64) -> i64 {
     let region = child(n, 0);
     let target = child(n, 1);
@@ -1514,7 +1387,6 @@ fn bc(n: i64) -> i64 {
     if t == str(stress, "*n") && is_pressure_level(v) { return -1; }
     if solid_tok >= 0 && t == displacement { return solid_bc(n, b); }
     if mentions_xy(v) && (t == velocity || t == str(velocity, ".x") || t == str(velocity, ".y")) {
-        // a value of x and y: emit_bc writes it as Goose (emit_coordinate)
         if t == velocity && (kind(v) != syntax::N_VECTOR || syntax::child_count(v) != 2) { unsupported(tok(v), str(velocity, " is a vector"), "write v = (6*U*y*(H - y)/H^2, 0)"); }
         b.expr = v;
         b.comp = if t == velocity { -1 } else if t[t.len - 1] == 'x' { 0 } else { 1 };
@@ -1533,7 +1405,6 @@ fn bc(n: i64) -> i64 {
         b.kind = BC_P;
         b.v[0] = q.v[0];
     } else if t == str(stress, "*n") {
-        // The natural condition of the weak form.
         if q.v[0] != 0.0 || q.v[1] != 0.0 { unsupported(tok(v), "the flow generator has the traction 0 only", "write sigma*n = 0"); }
         return -1;
     } else {
@@ -1545,24 +1416,14 @@ fn bc(n: i64) -> i64 {
     return bcs.len - 1;
 }
 
-// Whether t is the temperature of the fluid or of the solid, or the flux
-// dot(q, n) of one of them.
 fn is_temperature_target(t: u8[:]) -> bool { return thermal_kind(t) != 0; }
 
-// 1 for the temperature of the fluid or of the solid, 2 for the flux
-// dot(q, n) of one of them, else 0.
 fn thermal_kind(t: u8[:]) -> i64 {
     if t == temp || (th_tok >= 0 && t == th_temp) { return 1; }
     if t == str("dot(", flux, ",n)") || (th_tok >= 0 && t == str("dot(", th_flux, ",n)")) { return 2; }
     return 0;
 }
 
-// `bc inlet: Tf = T_in`, `bc heater: dot(qs, n) = -q_h`, and the two
-// conditions of an interface, `Tf = Ts` and `dot(qs, n) = dot(qf, n)`. The
-// interface needs no condition in the weak form: the cells of the fluid and
-// of the solid share the nodes of their interface, so T is continuous and the
-// flux is the same on both sides. The bcs of an interface only have to say
-// what the weak form holds.
 fn temperature_bc(n: i64, b: Bc, t: u8[:]) -> i64 {
     let v = child(n, 2);
     let w = compact(v);
@@ -1578,10 +1439,6 @@ fn temperature_bc(n: i64, b: Bc, t: u8[:]) -> i64 {
     return bcs.len - 1;
 }
 
-// `bc outlet: sigma*n = -p_out*n`. The pressure enters the flow through its
-// gradient, so the level of the traction only shifts p: the flow solves for p
-// - p_out with the traction 0, and a report of p adds p_out again. Two bcs
-// with different levels have no such shift.
 fn is_pressure_level(v: i64) -> bool {
     guard kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" && compact(child(v, 1)) == "n" else { return false; }
     let level = -scaled(quantity(child(v, 0))).v[0];
@@ -1593,19 +1450,16 @@ fn is_pressure_level(v: i64) -> bool {
     return true;
 }
 
-// Whether the boundary g (an index in `named`) is on the solid.
 fn on_solid(g: i64) -> bool {
     let v = named[g].value;
     return solid_domain >= 0 && named[g].kind == BOUNDARY && is_call(v, "boundary") && named_of(arg(v, 0), SHAPE) == solid_domain;
 }
 
-// Whether the boundary g is on the solid with heat conduction.
 fn on_thermal_solid(g: i64) -> bool {
     let v = named[g].value;
     return th_domain >= 0 && named[g].kind == BOUNDARY && is_call(v, "boundary") && named_of(arg(v, 0), SHAPE) == th_domain;
 }
 
-// `bc root: u = 0`, on a boundary of the solid.
 fn solid_bc(n: i64, b: Bc) -> i64 {
     let v = child(n, 2);
     let q = quantity(v);
@@ -1670,7 +1524,6 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-// The fields of an output. True if it has the displacement of the solid.
 fn output_fields(n: i64) -> bool {
     var solid = false;
     var o = first(n);
@@ -1680,7 +1533,6 @@ fn output_fields(n: i64) -> bool {
         } else if kind(o) == syntax::N_EVERY {
             unsupported(tok(o), "a static step has no every", "remove it");
         } else if kind(o) == syntax::N_NAME && thermal && (name(o) == temp || (th_tok >= 0 && name(o) == th_temp)) {
-            // T is always in the VTU file of a thermal flow
         } else if kind(o) != syntax::N_NAME || (name(o) != velocity && name(o) != pressure && !(turbulent && (name(o) == turb_k || name(o) == turb_w)) && !(spalart && (name(o) == sa_nt || name(o) == sa_d))) {
             unsupported(tok(o), "the flow generator writes the velocity and the pressure, and k and w of k_omega_sst", str("write output ", velocity, ", ", pressure));
         }
@@ -1700,9 +1552,6 @@ fn report(item: i64) {
     reports.push(r);
 }
 
-// `f at p` of the velocity, a component of it, the pressure, or the
-// displacement of the solid or a component of it: the
-// flow::VALUE_* of each component, with -1 for the second of a scalar.
 fn point_field(e: i64) -> i64, i64 {
     let f = compact(child(e, 0));
     if f == velocity { return 0, 1; }
@@ -1716,21 +1565,17 @@ fn point_field(e: i64) -> i64, i64 {
     return -1, -1;
 }
 
-// Whether `e` is `v at p`, the velocity vector at a point. Only a report
-// shows it: an expect or a + - * / uses one component.
 fn whole_vector(e: i64) -> bool {
     guard kind(e) == syntax::N_AT else { return false; }
     let what, other = point_field(e);
     return other >= 0;
 }
 
-// The point of `f at p`: a vector, or a Point that a let names.
 fn at_point(p: i64) -> Q {
     let i = named_of(p, POINT);
     return quantity(if i >= 0 { arg(named[i].value, 0) } else { p });
 }
 
-// Whether the point of `f at p` is a vector (x, y), with an error if not.
 fn point_ok(e: i64) -> bool {
     let before = syntax::errors.len;
     let p = at_point(child(e, 1));
@@ -1740,19 +1585,12 @@ fn point_ok(e: i64) -> bool {
     return syntax::errors.len == before;
 }
 
-// The last traction integral that traction_integral read: it is
-// a*Fx + b*Fy + m*M about (x0, y0), with F the force of the wall on the
-// fluid and M its moment, in the scaled units.
 var tf_a = 0.0;
 var tf_b = 0.0;
 var tf_m = 0.0;
 var tf_x0 = 0.0;
 var tf_y0 = 0.0;
 
-// `integral((sigma*n).x, wall)`, `integral(dot(sigma*n, e), wall)` with a
-// vector e of two numbers, and the moment `integral((x - x0)*(sigma*n).y -
-// (y - y0)*(sigma*n).x, wall)`: 0 for a force, 1 for a moment, or -1. It
-// sets tf_a to tf_x0.
 fn traction_integral(e: i64) -> i64 {
     guard is_call(e, "integral") && syntax::child_count(e) == 3 && named_of(arg(e, 1), BOUNDARY) >= 0 else { return -1; }
     let f = compact(arg(e, 0));
@@ -1772,7 +1610,6 @@ fn traction_integral(e: i64) -> i64 {
         tf_b = q.v[1];
         return 0;
     }
-    // (x - x0)*(sigma*n).y - (y - y0)*(sigma*n).x
     if kind(w) == syntax::N_BINARY && syntax::text(tok(w)) == "-" {
         let l = child(w, 0);
         let r = child(w, 1);
@@ -1792,10 +1629,6 @@ fn traction_integral(e: i64) -> i64 {
 
 let REGION_FIX = "write mean(-grad(T).x, wall), integral(T*dot(v, n), outlet) or max(v.x, line_name), with let line_name: Curve = line((0.5, 0) m, (0.5, 1) m)";
 
-// The dimension and the Goose text of the field of an integrand, or false:
-// a component of the velocity, the pressure, T, a component of grad(T),
-// dot(v, n) and dot(q, n) with q the heat flux of the fluid or of the solid.
-// The text reads the local values `s` of flow::Local.
 fn field_text(e: i64, out: u8[>..]&) -> i64[3], bool {
     let f = compact(e);
     let zero: i64[3] = [0, 0, 0];
@@ -1826,7 +1659,6 @@ fn field_text(e: i64, out: u8[>..]&) -> i64[3], bool {
     return zero, false;
 }
 
-// Appends the field e to out, if e is one.
 fn try_field(out: u8[>..]&, e: i64) -> i64[3], bool {
     var text: u8[>..] = [];
     let d, field = field_text(e, text);
@@ -1834,8 +1666,6 @@ fn try_field(out: u8[>..]&, e: i64) -> i64[3], bool {
     return d, field;
 }
 
-// The Goose text of the integrand e of mean, integral and max, and its
-// dimension: a field, + - * / of integrands, a minus, or a value.
 recursive fn emit_integrand(out: u8[>..]&, e: i64) -> i64[3] {
     let d, field = try_field(out, e);
     if field { return d; }
@@ -1864,8 +1694,6 @@ recursive fn emit_integrand(out: u8[>..]&, e: i64) -> i64[3] {
     return quantity(e).d;
 }
 
-// `mean(f, r)` and `integral(f, r)` on a boundary r, and `max(f, r)` on a
-// line r.
 fn region_ok(e: i64) -> bool {
     guard syntax::child_count(e) == 3 else {
         unsupported(tok(e), "mean, integral and max have a field and a region", REGION_FIX);
@@ -1887,7 +1715,6 @@ fn region_ok(e: i64) -> bool {
     return ok();
 }
 
-// Whether `e` is a result of this generator, with an error if not.
 recursive fn result_ok(e: i64) -> bool {
     let k = kind(e);
     if k == syntax::N_AT {
@@ -1912,7 +1739,6 @@ recursive fn result_ok(e: i64) -> bool {
     return ok() && q.n >= 1;
 }
 
-// The table that the sides of expect n name, or -1.
 recursive fn table_of(n: i64) -> i64 {
     if kind(n) == syntax::N_MEMBER && kind(first(n)) == syntax::N_NAME {
         for t in tables { if name(t) == name(first(n)) { return t; } }
@@ -1926,7 +1752,6 @@ recursive fn table_of(n: i64) -> i64 {
     return -1;
 }
 
-// An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
     var x = Expect { node: n, table: table_of(n), step: step };
     table_node = x.table;
@@ -1938,7 +1763,6 @@ fn expect(n: i64, step: i64) {
     if good && ok() { expects.push(x); }
 }
 
-// The rows of table t.
 fn row_count(t: i64) -> i64 {
     var k = 0;
     var c = first(t);
@@ -1949,8 +1773,6 @@ fn row_count(t: i64) -> i64 {
     return k;
 }
 
-// Reads the program `prog`. False on an error, and `syntax::errors` holds
-// the errors.
 fn read(prog: i64) -> bool {
     reset();
     var physics_nodes: i64[>..] = [];
@@ -2033,10 +1855,6 @@ fn read(prog: i64) -> bool {
 
 let SYMMETRY_FIX = "write symmetry ends: bloch { period: (L, 0 m), low: inlet, high: outlet, k: (0, 0) m^-1 }, on a rect of width L";
 
-// symmetry s: bloch { period: p, low: a, high: b, k: 0 }: the flow on b is
-// the flow on a (periodic). The domain is a rect, and p is its width
-// along x. Reason: write_mesh meshes half of the rect and its mirror, so
-// that the nodes of a and b match.
 fn symmetry(n: i64) {
     if name(child(n, 0)) != "bloch" {
         unsupported(tok(n), "the flow generator has the symmetry bloch with k = 0", SYMMETRY_FIX);
@@ -2065,8 +1883,6 @@ fn symmetry(n: i64) {
     if period_high >= 0 { use_region(period_high); }
 }
 
-// rho and mu of the material, and the body force f of the template.
-// The dynamic viscosity of the fluid, scaled: mu, or rho*nu.
 fn fluid_mu() -> f64 {
     if property("mu") >= 0 { return scaled_value(property("mu")); }
     return scaled_value(property("nu")) * scaled_value(property("rho"));
@@ -2074,7 +1890,6 @@ fn fluid_mu() -> f64 {
 
 let SA_CONSTANTS = ["sig_sa", "kap", "cb1", "cb2", "cw1", "cw2", "cw3", "cv1", "c_s"];
 
-// The value of the dimensionless constant `word` of a model, or an error.
 fn constant(word: u8[:]) -> f64 {
     let v = codegen::find_value(word);
     if v < 0 {
@@ -2116,12 +1931,10 @@ fn read_steps(prog: i64, at: i64) {
     }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step steady: static { bc wall: v = 0 ... }"); }
     if ok() { step_bcs(); }
-    // The conditions of the regions give their errors here, not in generate.
     var scratch: u8[>..] = [];
     emit_selects(scratch);
 }
 
-// Puts `b` in `set`, in place of a bc on the same region and target.
 fn merge(set: Bc[>..]&, b: Bc) {
     for i in 0..set.len {
         if set[i].region == b.region && set[i].kind == b.kind && set[i].comp == b.comp {
@@ -2132,7 +1945,6 @@ fn merge(set: Bc[>..]&, b: Bc) {
     set.push(b);
 }
 
-// The bcs that hold in each step (spec §12.2).
 fn step_bcs() {
     var set: Bc[>..] = [];
     for g in global_bcs { merge(set, bcs[g]); }
@@ -2145,9 +1957,6 @@ fn step_bcs() {
     }
 }
 
-// --- the mesh file -----------------------------------------------------------------
-
-// The mesher shape of the shape expression n, scaled.
 recursive fn mesher_shape(n: i64) -> i64 {
     if kind(n) == syntax::N_NAME { return mesher_shape(named[named_of(n, SHAPE)].value); }
     if is_call(n, "rect") {
@@ -2170,10 +1979,6 @@ recursive fn mesher_shape(n: i64) -> i64 {
     return if op == "-" { mesher::subtract(a, b) } else if op == "|" { mesher::union(a, b) } else { mesher::intersect(a, b) };
 }
 
-// Meshes the domain of the model that `read` read, and writes its
-// vertices and triangles in the directory `dir` for flow::read_mesh. It
-// gives an error, and false, if the mesher does not finish or a file
-// cannot be written.
 fn write_mesh(dir: u8[:]) -> bool {
     mesher::clear_shapes();
     mesher::clear_refines();
@@ -2181,17 +1986,12 @@ fn write_mesh(dir: u8[:]) -> bool {
     for r in refines {
         if r.circle { mesher::refine_circle(r.p[0], r.p[1], r.p[2], r.h); } else { mesher::refine_segment(r.p[0], r.p[1], r.p[2], r.p[3], r.h); }
     }
-    // With a period, half of the rect and its mirror at the middle.
     var shape = mesher_shape(named[domain].value);
     mesher::clear_interfaces();
     if solid_tok >= 0 || th_tok >= 0 {
-        // the flow and the solid as one shape, with the edges of the solid
         let sd = if solid_tok >= 0 { solid_domain } else { th_domain };
         let ssize = if solid_tok >= 0 { solid_size } else { th_size };
         let solid = mesher_shape(named[sd].value);
-        // The sides of its rects at the solid size, so that the solid has
-        // its size inside. Its circles are on the boundary with the flow,
-        // which the refines of the flow mesh.
         var list: Refine[>..] = [];
         edge_refines(named[sd].value, ssize, list);
         for r in list { if !r.circle { mesher::refine_segment(r.p[0], r.p[1], r.p[2], r.p[3], r.h); } }
@@ -2240,17 +2040,12 @@ fn write_mesh(dir: u8[:]) -> bool {
     return th_tok < 0 || write_parts(dir);
 }
 
-// Whether the boundary g needs a mask file: the shape of the boundary is
-// not the domain, a rect or a circle (a union, a spline), or its condition is
-// the name of a spline.
 fn needs_mask(g: i64) -> bool {
     let b = named[g].value;
     if named[g].kind != BOUNDARY || !is_call(b, "boundary") || is_union(b) { return false; }
     return mask_shape(arg(b, 0)) >= 0 || (syntax::child_count(b) >= 3 && mask_shape(arg(b, 1)) >= 0);
 }
 
-// The index in `named` of the shape n when a boundary of it needs a mask: a
-// shape that is not the domain, a rect or a circle. Else -1.
 fn mask_shape(n: i64) -> i64 {
     let s = named_of(n, SHAPE);
     if s < 0 || s == domain || s == solid_domain || s == th_domain { return -1; }
@@ -2259,10 +2054,6 @@ fn mask_shape(n: i64) -> i64 {
     return s;
 }
 
-// Writes <region>.mask for the used regions that need one: 1 for each
-// vertex of the mesh on the boundary of the shape of the region and of the
-// shape of its condition (|phi| of the mesher at most a millionth of the
-// diameter), else 0. Reason: a condition of x and y cannot name a spline.
 fn write_masks(dir: u8[:], xy: f64[:]) -> bool {
     for r in used_regions {
         if !needs_mask(r) { continue; }
@@ -2287,7 +2078,6 @@ fn write_masks(dir: u8[:], xy: f64[:]) -> bool {
     return true;
 }
 
-// The diameter of the bounding box of the domain, scaled.
 fn mesh_diameter() -> f64 {
     let b = mesher::bounds(mesher_shape(named[domain].value));
     let w = b[3] - b[0];
@@ -2295,8 +2085,6 @@ fn mesh_diameter() -> f64 {
     return sqrt(w * w + h * h);
 }
 
-// Writes flow.part: 1 for each cell of the mesh with the centre in the solid
-// with heat conduction, else 0.
 fn write_parts(dir: u8[:]) -> bool {
     let solid = mesher_shape(named[th_domain].value);
     var part: u8[>..] = [];
@@ -2316,9 +2104,6 @@ fn write_parts(dir: u8[:]) -> bool {
     return true;
 }
 
-// Writes the triangles of the mesh of the flow and the solid: the cells
-// with the centre in the solid to solid.xy and solid.tri, and the others
-// to flow.xy and flow.tri, each with its own vertices.
 fn write_coupled(dir: u8[:]) -> bool {
     let solid = mesher_shape(named[solid_domain].value);
     var part: i64[>..] = [];
@@ -2363,8 +2148,6 @@ fn write_coupled(dir: u8[:]) -> bool {
     return true;
 }
 
-// Adds the mirror of the triangles at x = middle. The vertices on the
-// line x = middle stay single.
 fn mirror(xy: f64[>..]&, tri: i64[>..]&, middle: f64) {
     let n = xy.len / 2;
     let t = tri.len;
@@ -2385,22 +2168,15 @@ fn mirror(xy: f64[>..]&, tri: i64[>..]&, middle: f64) {
 var cells = 0;
 var vertices = 0;
 
-// The dofs of the mesh, from the area of the domain and the sizes of the
-// mesh: the mesher makes about 2 / (√3 h²/2) cells for each unit of area.
 fn dof_estimate() -> i64 {
     let area = shape_area(named[domain].value);
     var cell_count = area / (0.4330127 * mesh_size * mesh_size);
     for r in refines {
         let length = if r.circle { TAU * r.p[2] } else { sqrt((r.p[2] - r.p[0]) * (r.p[2] - r.p[0]) + (r.p[3] - r.p[1]) * (r.p[3] - r.p[1])) };
-        // The band where the size grows from h to the mesh size.
         let band = (mesh_size - r.h) / (grade - 1.0);
         cell_count += length * band / (0.4330127 * r.h * mesh_size);
     }
     if layer_region >= 0 {
-        // Boundary layers: two triangles for each wall node and layer, with a
-        // wall node at each smallest refine target along the wall. Reason: the
-        // flap mesh had 28 thousand cells, and the estimate without this term
-        // gave 12 thousand.
         var h = mesh_size;
         for r in refines { h = min(h, r.h); }
         let perimeter = shape_perimeter(named[named_of(arg(named[layer_region].value, 1), SHAPE)].value);
@@ -2412,7 +2188,6 @@ fn dof_estimate() -> i64 {
     return (if turbulent { 5.0 * vertex_count } else if order == 1 { 3.0 * vertex_count } else { 3.0 * vertex_count + 2.0 * 1.5 * cell_count }) as! i64;
 }
 
-// The length of the closed polygon of a fill(spline) that a let names, else 0.
 fn shape_perimeter(n: i64) -> f64 {
     var m = n;
     if kind(m) == syntax::N_NAME { m = named[named_of(m, SHAPE)].value; }
@@ -2453,9 +2228,6 @@ recursive fn shape_area(n: i64) -> f64 {
     return if op == "-" { max(a - b, 0.0) } else if op == "|" { a + b } else { min(a, b) };
 }
 
-// --- the emitters ------------------------------------------------------------------
-
-// The SI unit of the dimension d (in halves of L, M and T).
 fn unit_of(d: i64[3]) -> u8[>..] {
     if same_dim(d, [0, 0, 0]) { return ""; }
     if same_dim(d, [2, 0, -2]) { return "m/s"; }
@@ -2476,7 +2248,6 @@ fn unit_of(d: i64[3]) -> u8[>..] {
     return s;
 }
 
-// The component of a velocity vector in a report, or -1.
 var vector_comp = -1;
 
 let VALUE_NAMES = ["flow::VALUE_VX", "flow::VALUE_VY", "flow::VALUE_P", "flow::VALUE_UX", "flow::VALUE_UY", "flow::VALUE_T"];
@@ -2484,9 +2255,6 @@ let VELOCITY_D: i64[3] = [2, 0, -2];
 let PRESSURE_D: i64[3] = [-2, 2, -4];
 let LENGTH_D: i64[3] = [2, 0, 0];
 
-// The Goose expression of the SI value of result e, and its dimension.
-// The program evaluates it in a function with the variable `name`, the
-// label of the report or expect.
 recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
     let k = kind(e);
     if k == syntax::N_AT {
@@ -2511,7 +2279,6 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
         return emit_region(out, e);
     }
     if is_call(e, "integral") {
-        // The force of the wall on the fluid: p_ref L for each unit of depth.
         let r = named_of(arg(e, 1), BOUNDARY);
         let form = traction_integral(e);
         let d: i64[3] = if form == 1 { [2, 2, -4] } else { [0, 2, -4] };
@@ -2565,7 +2332,6 @@ recursive fn emit_result(out: u8[>..]&, e: i64) -> i64[3] {
     return q.d;
 }
 
-// `mean`, `integral` and `max` of a field on a region.
 fn emit_region(out: u8[>..]&, e: i64) -> i64[3] {
     let r = find_named(name(arg(e, 1)));
     var f: u8[>..] = [];
@@ -2591,8 +2357,6 @@ fn emit_region(out: u8[>..]&, e: i64) -> i64[3] {
     return d;
 }
 
-// The Goose condition of the region of a `boundary(shape, cond)`, in the
-// coordinates x and y and the tolerance tol of the program.
 recursive fn emit_boundary(out: u8[>..]&, b: i64) {
     if is_union(b) {
         for k in 2 {
@@ -2612,7 +2376,6 @@ recursive fn emit_boundary(out: u8[>..]&, b: i64) {
         }
         out.append(" && ");
     }
-    // boundary(shape) has no condition: all of the boundary
     if syntax::child_count(b) < 3 {
         out.append("true");
         return;
@@ -2622,7 +2385,6 @@ recursive fn emit_boundary(out: u8[>..]&, b: i64) {
     out.push(')');
 }
 
-// The condition of the edge of a rect or a circle. False for another shape.
 fn emit_shape_edge(out: u8[>..]&, n: i64) -> bool {
     if is_call(n, "circle") {
         let c = scaled(quantity(arg(n, 0)));
@@ -2682,7 +2444,6 @@ recursive fn emit_cond(out: u8[>..]&, n: i64) {
         unsupported(tok(n), str("the condition '", source_of(n), "' is not in the flow generator"), COND_FIX);
         return;
     }
-    // Each comparison has the tolerance of spec §8.2.
     out.append(if i <= 1 { "abs(" } else { "(" });
     emit_coordinate(out, child(n, 0));
     out.append(" - ");
@@ -2731,7 +2492,6 @@ recursive fn mentions_xy(n: i64) -> bool {
     return false;
 }
 
-// The part of the generated program that is the same for each model.
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
     var reports: u8[>..] = [];
@@ -2860,7 +2620,6 @@ let PRELUDE = """
 
     """;
 
-// The part of the program of a model with a solid.
 let COUPLED_PRELUDE = """
     fn solve_coupled(step: u8[:], rtol: f64) {
         let converged = flow::solve_fsi(rtol);
@@ -2883,12 +2642,10 @@ let COUPLED_PRELUDE = """
 
     """;
 
-// The regions that the program selects: indices in `named`.
 var used_regions: i64[>..];
 
 fn use_region(r: i64) { if position(used_regions, r) < 0 { used_regions.push(r); } }
 
-// `fn select_<name>() -> bool` for each region that the program selects.
 fn emit_selects(out: u8[>..]&) {
     for r in used_regions {
         let g = named[r];
@@ -3008,7 +2765,6 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
     out.append(", name, ");
     let e = r.expr;
     if whole_vector(e) {
-        // The velocity vector at a point.
         var x: u8[>..] = [];
         vector_comp = 0;
         let d = emit_result(x, e);
@@ -3025,7 +2781,6 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: Report) {
     out.append(");\n    }\n");
 }
 
-// One check for an expect, or one for each row of its table.
 fn emit_expect(out: u8[>..]&, x: Expect) {
     let n = x.node;
     let rows = if x.table >= 0 { row_count(x.table) } else { 1 };
@@ -3061,9 +2816,6 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     table_node = -1;
 }
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the flow package from `flow_path`, reads the mesh that
-// `write_mesh` wrote in `results_dir`, and writes its VTU files there.
 fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     out.append("// The flow package works in the scaled units of the scales line (spec §21.2): length ");
@@ -3074,7 +2826,6 @@ fn generate(flow_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     lit(out, base[2]);
     out.append(" s.\nimport std;\nimport os;\nimport flow from ");
     quoted(out, flow_path);
-    // The flow package imports the package solvers, beside it.
     out.append(";\nimport solvers from ");
     quoted(out, str(flow_path[..flow_path.len - 4], "solvers"));
     out.append(";\n");

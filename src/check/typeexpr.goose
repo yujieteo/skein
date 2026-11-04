@@ -1,4 +1,3 @@
-// The meaning of a type written in the source (spec §3 `type`, §5, §6.2).
 import std;
 namespace check;
 import syntax from "../syntax";
@@ -6,10 +5,6 @@ import .dims;
 import .types;
 import .state;
 
-let TYPE_NAMES = ["Real", "Int", "Angle", "Bool", "Solid", "Surface", "Curve", "Point",
-                  "Mesh", "Points", "Results"];
-
-// The type of the type node `n`. With `report`, an unknown name is an error.
 recursive fn type_of(n: i64, report: bool) -> Ty {
     let k = syntax::nodes[n];
     match k.kind {
@@ -53,7 +48,6 @@ recursive fn type_of(n: i64, report: bool) -> Ty {
         syntax::N_DIM_POW => {
             let a = type_of(k.first, report);
             guard a.kind == K_NUM else { return any_ty(); }
-            // The base is a named type with whole exponents, so each half power is valid.
             let d, _ok = dim_pow_halves(a.dim, k.aux);
             return num_ty(d, 0);
         },

@@ -1,5 +1,3 @@
-// Values of the solution at a point, the L2 error against a field, and
-// VTU output.
 import std;
 import math;
 import os;
@@ -7,7 +5,6 @@ namespace grid;
 import .mesh;
 import .dg;
 
-// The cell that holds (x, y), and the reference point there, or -1.
 fn locate(x: f64, y: f64) -> i64, f64[2] {
     let tol = tolerance();
     let i = floor((x - x0) / hx) as! i64;
@@ -22,8 +19,6 @@ fn locate(x: f64, y: f64) -> i64, f64[2] {
     return c, [clamp(xi, -1.0, 1.0), clamp(eta, -1.0, 1.0)];
 }
 
-// The value of u in cell c at the reference point (ξ, η): the value of
-// the cell (fv), or the sum of the basis (dg).
 fn value_in(c: i64, xi: f64, eta: f64) -> f64 {
     guard method == FV || method == DG else { abort("value_in: a method"); }
     if method == FV { return sol[c]; }
@@ -34,7 +29,6 @@ fn value_in(c: i64, xi: f64, eta: f64) -> f64 {
     return v;
 }
 
-// The value of u at (x, y), and whether a cell holds the point.
 fn value_at(x: f64, y: f64) -> f64, bool {
     guard sol.len == dof_count() && method >= 0 else { abort("value_at: a method and a state"); }
     let c, p = locate(x, y);
@@ -42,9 +36,6 @@ fn value_at(x: f64, y: f64) -> f64, bool {
     return value_in(c, p[0], p[1]), true;
 }
 
-// The L2 norm of u - F(x, y, t) at the time of the state, and the L2 norm
-// of F. fv takes the value at the centre of each cell, which is second
-// order, and dg the Gauss rule of p + 2 points on each axis.
 fn l2_error<F>() -> f64, f64 {
     guard sol.len == dof_count() && method >= 0 else { abort("l2_error: a method and a state"); }
     var e = 0.0;
@@ -73,8 +64,6 @@ fn l2_error<F>() -> f64, f64 {
     return sqrt(e), sqrt(f2);
 }
 
-// Writes the cells and u to a VTU file: 4 points for each cell, so that a
-// dg field keeps its jumps, and u of the cell at each of them.
 fn write_vtu(path: const u8[:], name: const u8[:]) -> bool {
     guard sol.len == dof_count() && method >= 0 else { abort("write_vtu: a method and a state"); }
     let cells = cell_count();
@@ -93,7 +82,6 @@ fn write_vtu(path: const u8[:], name: const u8[:]) -> bool {
     for c in cells { format(out, 4 * c, " ", 4 * c + 1, " ", 4 * c + 2, " ", 4 * c + 3, "\n"); }
     out.append("</DataArray>\n<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\n");
     for c in cells { format(out, 4 * (c + 1), "\n"); }
-    // VTK_QUAD (9).
     out.append("</DataArray>\n<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\n");
     for c in cells { out.append("9\n"); }
     format(out, "</DataArray>\n</Cells>\n<PointData>\n<DataArray type=\"Float64\" Name=\"", name, "\" format=\"ascii\">\n");

@@ -1,21 +1,10 @@
-// Tests of the simplex elements. `./build.sh test` runs this program from
-// the root of the repository, and a non-zero exit status is a failure.
-//
-// The gates of phase 2 (docs/roadmap.md):
-// - the patch test: a linear field on a mesh of distorted cells is exact,
-//   for each element (P1 and P2 triangles and tetrahedra), in elasticity
-//   and in heat conduction;
-// - the plate with a hole under tension: the stress at the top of the hole
-//   against the Kirsch factor 3;
-// - a square bar with a uniform heat source: the centre temperature against
-//   the series solution (Timoshenko and Goodier 1970, §109).
 import std;
 import math;
 import os;
 import elements from "../elements";
 import mesher from "../mesher";
-import runtime from "../runtime";   // the mesher imports it
-import solvers from "../solvers";   // the runtime imports it
+import runtime from "../runtime";
+import solvers from "../solvers";
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -24,6 +13,14 @@ extern "libc.so.6" {
 }
 
 var failures = 0;
+
+let PATCH_NODAL_TOLERANCE = 1.0e-10;
+let PATCH_STRESS_TOLERANCE = 1.0e-9;
+let KIRSCH_TRI3_TOLERANCE = 0.05;
+let KIRSCH_P2_TOLERANCE = 0.01;
+let KIRSCH_MESHER_TOLERANCE = 0.02;
+let HARMONIC_STATIC_TOLERANCE = 1.0e-4;
+let HARMONIC_PEAK_TOLERANCE = 0.01;
 
 fn expect_near(what: u8[:], got: f64, want: f64, rel: f64) {
     let err = abs(got - want) / abs(want);
@@ -37,11 +34,6 @@ fn kind_name(d: i64, ord: i64) -> u8[>..] {
     return str(if d == 2 { "tri" } else { "tet" }, elements::node_count_of(d, ord));
 }
 
-// --- the patch test ------------------------------------------------------------
-
-// Moves each vertex node inside the unit box by up to 0.2 of a lattice
-// cell, then puts each midpoint node back on the midpoint of its edge, so
-// the cells are distorted but straight.
 fn distort(cells: i64) {
     var seed: u64 = 12345;
     let h = 1.0 / cells;
@@ -78,7 +70,6 @@ fn on_boundary(n: i64) -> bool {
     return false;
 }
 
-// The linear field of the patch test: u_a = Σt G[a][t] x_t + 0.01 (a + 1).
 let G: f64[9] = [0.010, 0.004, -0.003, 0.002, -0.006, 0.005, -0.001, 0.003, 0.008];
 
 fn exact(n: i64, a: i64) -> f64 {
@@ -87,12 +78,8 @@ fn exact(n: i64, a: i64) -> f64 {
     return v;
 }
 
-// Fixes the boundary nodes at the linear field, solves, and gives the
-// largest error of the nodal values and of the cell stresses (or fluxes),
-// relative to the size of the field.
-var written_out = false;    // the patch test gives the isotropic law as a written-out stiffness
+var written_out = false;
 
-// The stiffness of the isotropic law (E, nu) in the form of elements::anisotropic.
 fn isotropic_stiffness(E: f64, nu: f64) -> f64[36] {
     let lambda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     let mu = E / (2.0 * (1.0 + nu));
@@ -133,7 +120,6 @@ fn patch(d: i64, ord: i64, heat: bool) -> f64, f64 {
             size_u = max(size_u, abs(exact(n, a)));
         }
     }
-    // The exact stress (or flux) of the linear field.
     let lambda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     let mu = E / (2.0 * (1.0 + nu));
     var want: f64[9] = [0.0; 9];
@@ -157,7 +143,6 @@ fn patch(d: i64, ord: i64, heat: bool) -> f64, f64 {
     let what = if heat { elements::FIELD_FLUX } else { elements::FIELD_STRESS };
     let comps = if heat { 3 } else { 9 };
     for c in elements::cell_count() {
-        // A point inside the cell that is not a quadrature point.
         let xi: f64[3] = [0.15, 0.2, if d == 3 { 0.25 } else { 0.0 }];
         for k in comps {
             let s = elements::cell_field(c, xi, what, k);
@@ -176,8 +161,7 @@ fn test_patches() {
                 print("patch ", name, ": ", elements::dof_count(), " dofs, ", elements::cg_iterations(),
                       " CG iterations, error of the nodal values ", eu, ", of the ",
                       if heat { "flux " } else { "stress " }, es);
-                // Round-off of a solve with CG to 1e-12 on a few hundred dofs.
-                if !(eu <= 1.0e-10) || !(es <= 1.0e-9) {
+                if !(eu <= PATCH_NODAL_TOLERANCE) || !(es <= PATCH_STRESS_TOLERANCE) {
                     failures++;
                     print("FAIL patch ", name, ": the linear field is not exact");
                 }
@@ -186,14 +170,13 @@ fn test_patches() {
     }
 }
 
-// The patch test with the isotropic law as a written-out stiffness: the same exact fields.
 fn test_written_out() {
     written_out = true;
     for d in [2, 3] {
         for ord in [1, 2] {
             let eu, es = patch(d, ord, false);
             print("patch ", kind_name(d, ord), " written out: error of the nodal values ", eu, ", of the stress ", es);
-            if !(eu <= 1.0e-10) || !(es <= 1.0e-9) {
+            if !(eu <= PATCH_NODAL_TOLERANCE) || !(es <= PATCH_STRESS_TOLERANCE) {
                 failures++;
                 print("FAIL patch ", kind_name(d, ord), " written out: the linear field is not exact");
             }
@@ -202,19 +185,10 @@ fn test_written_out() {
     written_out = false;
 }
 
-// --- the plate with a hole -------------------------------------------------------
-
-// A quarter of a plate 2W × 2W with a hole of radius A, under a tension S
-// along x on x = W. The Kirsch solution for an infinite plate gives
-// sigma_xx = 3 S at the top of the hole (0, A) and sigma_yy = -S at its side
-// (A, 0). The plate has the width 2W = 80 A, so the finite width changes
-// the factor by less than 0.1 % (Heywood: Kt = 3.002 for d/W = 0.025).
 let A = 1.0;
 let W = 40.0;
 let S = 100.0;
 
-// Solves the quarter plate of half width w on the graded structured mesh
-// and gives the factor sigma_xx / S at the top of the hole.
 fn kirsch(d: i64, ord: i64, w: f64, size: f64, fine: f64) -> f64 {
     let th = 1.0;
     elements::mesh_hole(d, ord, 0.0, 0.0, 0.0, w, w, th, A, size, fine);
@@ -249,10 +223,6 @@ fn kirsch(d: i64, ord: i64, w: f64, size: f64, fine: f64) -> f64 {
     return top / S;
 }
 
-// The quarter plate of half width w on the unstructured triangles of
-// src/mesher/, all of the size h, and the factor at the top of the hole.
-// For order 2, the midpoint node of each edge on the hole goes onto the
-// arc, so the cell edge there is curved.
 fn kirsch_mesher(ord: i64, w: f64, h: f64) -> f64 {
     mesher::clear_shapes();
     let g = mesher::subtract(mesher::rect(0.0, 0.0, w, w), mesher::circle(0.0, 0.0, A));
@@ -312,30 +282,15 @@ fn radius(n: i64) -> f64 {
     return sqrt(x * x + y * y);
 }
 
-// The gate: the factor against Kirsch on the plate of half width W = 40 A.
-// The tolerance of P1 is 5 % because its stress is constant in each cell.
-// Then the mesh of src/mesher/ on a plate of half width 10 A, which is
-// small enough for cells of one size: its factor against the structured
-// mesh of the same plate. The finite plate raises the factor to about
-// 3.08, so Kirsch is not the reference there. The tolerance is 2 %: the
-// stress at the top is the mean of the 2 cells at that node, which differ
-// by 2.3 % at h = 0.2 A.
 fn test_kirsch() {
-    expect_near("kirsch tri3 factor at the top", kirsch(2, 1, W, 4.0, 0.05), 3.0, 0.05);
-    expect_near("kirsch tri6 factor at the top", kirsch(2, 2, W, 4.0, 0.1), 3.0, 0.01);
-    expect_near("kirsch tet10 factor at the top", kirsch(3, 2, W, 4.0, 0.1), 3.0, 0.01);
+    expect_near("kirsch tri3 factor at the top", kirsch(2, 1, W, 4.0, 0.05), 3.0, KIRSCH_TRI3_TOLERANCE);
+    expect_near("kirsch tri6 factor at the top", kirsch(2, 2, W, 4.0, 0.1), 3.0, KIRSCH_P2_TOLERANCE);
+    expect_near("kirsch tet10 factor at the top", kirsch(3, 2, W, 4.0, 0.1), 3.0, KIRSCH_P2_TOLERANCE);
     let small = 10.0 * A;
     let structured = kirsch(2, 2, small, 1.0, 0.05);
-    expect_near("kirsch mesher tri6 against the structured mesh", kirsch_mesher(2, small, 0.2), structured, 0.02);
+    expect_near("kirsch mesher tri6 against the structured mesh", kirsch_mesher(2, small, 0.2), structured, KIRSCH_MESHER_TOLERANCE);
 }
 
-// --- the heated bar --------------------------------------------------------------
-
-// The section a × a of a long bar with a uniform source q and its sides at
-// T = 0. The series of Timoshenko and Goodier (1970), §109, for the centre:
-// T = (q b² / 2k) (1 - (32/π³) Σ_n odd (-1)^((n-1)/2) / (n³ cosh(nπ/2))),
-// b = a/2. femahoy (validation/cases/grid-heated-bar) gives 14.734270656 K
-// for a = 0.02 m, q = 1e7 W/m³, k = 20 W/(m K).
 let BAR_A = 0.02;
 let BAR_Q = 1.0e7;
 let BAR_K = 20.0;
@@ -386,12 +341,6 @@ fn test_heated_bar() {
     heated_bar(3, 2, 8, 0.002);
 }
 
-// --- a body force ------------------------------------------------------------------
-
-// A column of length L under its own weight rho*g, held at z = 0 with
-// rollers on x = 0 and y = 0, with nu = 0: u_z = -(rho g / E)(L z - z²/2).
-// P2 cells hold the quadratic, so the tip value is exact. The base takes
-// the weight rho g V.
 fn test_body_force() {
     let L = 4.0;
     let w = 1.0;
@@ -418,11 +367,6 @@ fn test_body_force() {
     expect_near("body force base", rz, rg * w * w * L, 1.0e-8);
 }
 
-// --- the scale of the check `equilibrium` -----------------------------------------
-
-// One nonzero temperature at all fixed nodes and no source: the reactions
-// are round-off of K u, and they are inside the limit. A solution that is
-// not the solve of K u = f (one free node moved by 10 K) is outside it.
 fn test_equilibrium_scale() {
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, BAR_A, BAR_A, 0.25 * BAR_A, 8, 8, 2);
     elements::heat(BAR_K, 0.0, 1.0);
@@ -454,10 +398,6 @@ fn test_equilibrium_scale() {
     }
 }
 
-// A nearly incompressible solid, fixed at x = 0 and pulled at x = 1: its
-// matrix has a pivot that the factor of the direct solve rejects (relative
-// 1e-12). The solve must still end, with CG and AMG, as before the direct
-// solve.
 fn test_direct_fallback() {
     elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 4, 4, 4);
     elements::elastic(1000.0, 0.49999999999999);
@@ -477,12 +417,6 @@ fn test_direct_fallback() {
     }
 }
 
-// --- the warm start of a page ----------------------------------------------------
-
-// Two fixed temperatures and no source: the free load is 0. A second solve
-// of the model with the same key starts from the solution of the first
-// (SKEIN_WARM), so it is already converged: CG must stop at the target of
-// a cold run, not run to its limit.
 fn warm_bar() -> bool {
     solvers::warm_solves = 0;
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, BAR_A, BAR_A, 0.25 * BAR_A, 8, 8, 2);
@@ -522,11 +456,6 @@ fn test_warm_start() {
     }
 }
 
-// --- skein run ------------------------------------------------------------------
-
-// `skein run` of the gate models: each model holds its own `expect`, so a
-// run that does not pass exits with a status other than 0. `./build.sh
-// test` builds build/skein first. The runs write .skein under build/.
 let MODELS = [
     "examples/femahoy/grid_kirsch_hole.skn",
     "examples/femahoy/birth_death_column.skn",
@@ -555,11 +484,6 @@ fn test_runs() {
     }
 }
 
-// --- the submodel cut ------------------------------------------------------------
-
-// A box with the linear field of the patch test is the source of a smaller
-// box with other cells. The smaller box takes the field on its faces, so it
-// has the same field inside, and the stress resultants on its faces match.
 fn test_submodel() {
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 4, 4, 4);
     elements::elastic(1000.0, 0.3);
@@ -612,15 +536,6 @@ fn test_submodel() {
     }
 }
 
-// --- materials, birth and death ---------------------------------------------------
-
-// Two blocks side by side, the left [0, 1] x [0, 1] and the right
-// [1, 2] x [0, 1], with nu = 0, stretched by u.y = 0.1 at y = 1 and held at
-// y = 0. Step 1 has the right block dead. Step 2 gives birth to it on the
-// stretched shape: the nearest live node of each new node is on x = 1, so
-// u_b = 0.1 y, and the right block has no stress. Step 3 kills the left
-// block: the right block alone then carries no force. A last case gives the
-// right block E2: the force is then 0.1 (E + E2).
 fn test_stages() {
     let E = 1000.0;
     let E2 = 3000.0;
@@ -672,9 +587,6 @@ fn test_stages() {
     top_force("two materials", 0.1 * (E + E2));
 }
 
-// A node that a birth made shows the change since its birth (stages.goose,
-// shown). The right block of test_stages is born on the stretched shape, so
-// its far nodes (x = 2) hold u.y = 0.1 y in sol, and show 0 after the birth.
 fn test_birth_origin() {
     mesher::clear_shapes();
     let right = mesher::rect(1.0, 0.0, 2.0, 1.0);
@@ -702,9 +614,6 @@ fn test_birth_origin() {
     }
 }
 
-// quarter_point (csg.goose) and the point location on a curved cell: P2 triangles
-// with a vertex at the tip. The field sqrt(r) is exact on a quarter-point edge,
-// so it is reproduced at each node by u = sqrt(r) at the nodes.
 fn test_quarter_point() {
     elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2, 2, 1);
     elements::elastic_plane_strain(1000.0, 0.3, 1.0);
@@ -724,7 +633,6 @@ fn test_quarter_point() {
         worst = max(worst, abs(v - sqrt(r)));
         if !found { failures++; print("FAIL quarter point: node ", n, " is not found"); }
     }
-    // A point on the edge from the tip at a quarter of its length: sqrt(r) is linear in the reference coordinate there.
     let on_edge, found_e = elements::value_at(elements::X, 0.125, 0.0, 0.0);
     print("quarter point: ", moved, " edges moved, largest error at the nodes ", worst, ", at r = 0.125: ", on_edge, " (", sqrt(0.125), ")");
     if worst > 1.0e-9 || abs(on_edge - sqrt(0.125)) > 1.0e-9 {
@@ -733,11 +641,6 @@ fn test_quarter_point() {
     }
 }
 
-// LOBPCG (eigen.goose). A steel cantilever of 100 x 10 x 5 mm, clamped
-// at x = 0: its first natural frequency is 417.758 Hz (Blevins 1979, Table
-// 8-1). A steel column of 10 x 10 x 200 mm, fixed at the base, with 1 N on
-// the top: its first load factor is pi^2 E I / (4 L^2) = 10794.88
-// (Timoshenko and Gere 1961, Art. 2.1). Each within 1 %.
 fn test_eigen() {
     let E = 210000.0;
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 1);
@@ -775,11 +678,6 @@ fn test_eigen() {
     }
 }
 
-// --- the hexahedra ---------------------------------------------------------------
-
-// The heated bar on hexahedra, once with a constant k and once with the
-// curve k(T) = BAR_K: the centre against the series (the nonlinear step is
-// the same solve).
 fn hex_bar(curve: bool) {
     elements::mesh_hex_box(0.0, 0.0, 0.0, BAR_A, BAR_A, 0.25 * BAR_A, 16, 16, 4);
     elements::heat(BAR_K, BAR_Q, 1.0);
@@ -801,8 +699,6 @@ fn hex_bar(curve: bool) {
     expect_near(name, t, BAR_CENTRE, 0.01);
 }
 
-// A slab at 100 K with both faces at 0: the centre at Fo = 0.2 against the
-// series of Carslaw and Jaeger (77.231160686 for 100 K), by backward Euler.
 fn hex_cooling() {
     let h = 0.02;
     elements::mesh_hex_box(0.0, 0.0, 0.0, 0.001, 0.001, h, 1, 1, 20);
@@ -822,8 +718,6 @@ fn hex_cooling() {
     expect_near("hex cooling slab", t, 77.231160686, 0.01);
 }
 
-// The first mode of the clamped beam (Blevins: 417.758 Hz) with the
-// incompatible modes, on a mesh of 20 x 2 x 2 hexahedra.
 fn hex_modal() {
     elements::mesh_hex_box(0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 2);
     elements::elastic(210000.0, 0.3);
@@ -847,9 +741,6 @@ fn test_hex() {
     hex_modal();
 }
 
-// --- the frequency domain ---------------------------------------------------
-
-// The wave field at (x, 0.05): re and im.
 fn wave_at(x: f64) -> f64[2] {
     let re, f1 = elements::value_at(0, x, 0.05, 0.0);
     let im, f2 = elements::value_at(1, x, 0.05, 0.0);
@@ -864,11 +755,6 @@ fn expect_wave(what: u8[:], got: f64[2], want: f64[2], tol: f64) {
     }
 }
 
-// The harmonic step of the elastic physics (harmonic.goose). A steel
-// cantilever of 100 x 10 x 5 mm under the body force of a base acceleration
-// of 1000 mm/s^2 in z. At 1 Hz the response is the static one. The peak of
-// the tip response of the damping ratio 0.02 is at the first frequency,
-// 417.758 Hz (Blevins 1979, Table 8-1), within 1 %.
 fn test_solid_harmonic() {
     elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 100.0, 10.0, 5.0, 20, 2, 1);
     elements::elastic(210000.0, 0.3);
@@ -883,8 +769,7 @@ fn test_solid_harmonic() {
     elements::set_harmonic(2.0 * PI, 0.02);
     if !elements::solve() { failures++; print("FAIL solid harmonic: the step at 1 Hz does not solve"); }
     elements::plane(elements::X, 100.0);
-    // At 1 Hz the real part is the static value over 1 + 4 zeta^2 (zeta 0.02); the mass term is below 1e-5.
-    expect_near("solid harmonic, static limit", elements::harmonic_mean(0, elements::Z), still / (1.0 + 4.0 * 0.02 * 0.02), 1.0e-4);
+    expect_near("solid harmonic, static limit", elements::harmonic_mean(0, elements::Z), still / (1.0 + 4.0 * 0.02 * 0.02), HARMONIC_STATIC_TOLERANCE);
     var best = 0.0;
     var best_f = 0.0;
     var f = 380.0;
@@ -902,11 +787,9 @@ fn test_solid_harmonic() {
         f += 4.0;
     }
     print("solid harmonic: static ", still, " mm, peak ", best, " mm at ", best_f, " Hz");
-    expect_near("solid harmonic, peak frequency", best_f, 417.758, 0.01);
+    expect_near("solid harmonic, peak frequency", best_f, 417.758, HARMONIC_PEAK_TOLERANCE);
 }
 
-// The Helmholtz equation p'' + k^2 p = 0 on a strip of length L, with
-// p(0) = 1 and p(L) = i: p = (sin k(L - x) + i sin kx)/sin kL.
 fn test_harmonic() {
     let L = 1.1;
     let k = 2.0 * PI / 0.25;
@@ -925,8 +808,6 @@ fn test_harmonic() {
     expect_wave("harmonic strip", wave_at(x), [sin(k * (L - x)) / s, sin(k * x) / s], 1.0e-3);
 }
 
-// A plane wave exp(-ikx) from x = 0 into a PML from x = 1 to 1.5: the
-// reflected wave is small, so p stays near exp(-ikx).
 fn test_pml() {
     let k = 2.0 * PI / 0.25;
     elements::mesh_box(2, 2, 0.0, 0.0, 0.0, 1.5, 0.1, 0.0, 120, 2, 1);
@@ -943,10 +824,6 @@ fn test_pml() {
     }
 }
 
-// A Bloch cell: p'' + kap^2 p = 1 on 0..L, with p(L) = E p(0) and
-// p'(L) = E p'(0), E = e^{i theta}. With P = 1/kap^2, the closed form is
-// p = P + A cos(kap x) + B sin(kap x), where c = cos(kap L) - E,
-// A = (E - 1) P/(c + sin^2(kap L)/c) and B = A sin(kap L)/c.
 fn test_bloch() {
     let L = 1.0;
     let kap = 7.0;
@@ -962,11 +839,6 @@ fn test_bloch() {
     expect_wave("bloch cell", wave_at(0.3), [0.0247168, -0.0093576], 1.0e-5);
 }
 
-// --- edge elements ----------------------------------------------------------------
-
-// The manufactured field of the edge tests: in 2D (sin(pi y), sin(pi x)),
-// with curl(curl(u)) = pi^2 u, and in 3D (sin(pi y) sin(pi z),
-// sin(pi z) sin(pi x), sin(pi x) sin(pi y)), with curl(curl(u)) = 2 pi^2 u.
 fn edge_exact(p: f64[3]) -> f64[6] {
     if elements::dim == 2 { return [sin(PI * p[1]), sin(PI * p[0]), 0.0, 0.0, 0.0, 0.0]; }
     return [sin(PI * p[1]) * sin(PI * p[2]), sin(PI * p[2]) * sin(PI * p[0]), sin(PI * p[0]) * sin(PI * p[1]), 0.0, 0.0, 0.0];
@@ -979,7 +851,6 @@ fn edge_exact_curl(p: f64[3]) -> f64[3] {
     return [PI * s[0] * (c[1] - c[2]), PI * s[1] * (c[2] - c[0]), PI * s[2] * (c[0] - c[1])];
 }
 
-// The L2 errors of u and of curl u against the manufactured field.
 fn edge_errors() -> f64, f64 {
     var eu = 0.0;
     var ec = 0.0;
@@ -1010,9 +881,6 @@ fn edge_errors() -> f64, f64 {
     return sqrt(eu), sqrt(ec);
 }
 
-// Solves curl(curl(u)) + c u = s on the unit box with n cells on each
-// side, u along the boundary as the manufactured field, with the tree gauge
-// if c = 0. It gives the L2 errors of u and curl u.
 fn edge_box(d: i64, n: i64, c: f64, p: i64) -> f64, f64 {
     elements::mesh_box(d, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, n, n, if d == 3 { n } else { 1 });
     distort(n);
@@ -1037,9 +905,6 @@ fn edge_box(d: i64, n: i64, c: f64, p: i64) -> f64, f64 {
     return edge_errors();
 }
 
-// The manufactured solutions of the Nédélec element: the L2 errors of u
-// and of curl u fall as h^1 (implementation.md §10, level 2), in 2D and in
-// 3D, and with the tree gauge for c = 0.
 fn test_edge() {
     for d in [2, 3] {
         for c in [1.0, 0.0] {
@@ -1049,8 +914,6 @@ fn test_edge() {
             let ou = log(eu0 / eu1) / log(2.0);
             let oc = log(ec0 / ec1) / log(2.0);
             let what = str("nedelec ", d, "d c=", c);
-            // With the gauge, u differs from the field by a gradient, so
-            // only curl u converges.
             if c != 0.0 && !(ou >= 0.7) { failures++; print("FAIL ", what, ": the L2 order of u is ", ou, ", want 1 - 0.3"); }
             if !(oc >= 0.7) { failures++; print("FAIL ", what, ": the L2 order of curl u is ", oc, ", want 1 - 0.3"); }
             print(what, ": L2 orders ", ou, " (u) and ", oc, " (curl u), errors ", eu1, " and ", ec1);
@@ -1058,9 +921,6 @@ fn test_edge() {
     }
 }
 
-// The elements of order 2: the L2 errors of u and of curl u of c = 1 fall
-// as h^2 (the full space of degree 2 of the first kind), in 2D and in 3D.
-// edge_p stays 1 for the other tests.
 fn test_edge_order2() {
     for d in [2, 3] {
         let n0 = if d == 2 { 4 } else { 2 };
@@ -1076,9 +936,6 @@ fn test_edge_order2() {
     elements::edge_order(1);
 }
 
-// The resonances of a box with perfect walls: omega^2 = pi^2 (1/a^2 + 1/c^2)
-// for the mode of the tangent u = sin(pi x / a) sin(pi z / c) along y in
-// 3D, and pi/a in 2D (u = sin(pi x / a) along y).
 fn test_edge_modal() {
     for d in [2, 3] {
         let a = 1.0;
@@ -1112,10 +969,6 @@ fn test_edge_modal() {
     test_edge_lossy_fixed();
 }
 
-// A wall on x = 0 with an impedance z(omega) = 0.2 i sqrt(omega) and perfect
-// walls elsewhere: the mode loses energy (Im f != 0), and the frequency is
-// the fixed point of the nonlinear problem: the same z, frozen at the
-// converged Re omega, gives the same mode.
 fn test_edge_lossy() {
     var w_found = 0.0;
     var f_found = 0.0;
@@ -1148,9 +1001,6 @@ fn test_edge_lossy() {
     }
 }
 
-// A box with an impedance wall on x = 0 and perfect walls elsewhere in 3D:
-// the edges on the lines where the impedance wall meets a perfect wall are
-// fixed, and the mode is 0 on each fixed dof.
 fn test_edge_lossy_fixed() {
     elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 1.0, 0.8, 1.3, 4, 3, 5);
     elements::edge_order(2);
@@ -1177,8 +1027,6 @@ fn test_edge_lossy_fixed() {
     print("edge lossy fixed: max on a fixed dof ", at_fixed, ", max ", top);
 }
 
-// E and H of a Hertzian dipole of moment 1 along z at the origin, with the
-// time factor exp(i omega t) (Balanis, Antenna Theory, §4.2).
 fn dipole_field(p: f64[3], k: f64, eta: f64) -> f64[6], f64[6] {
     let r = sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
     let ct = p[2] / r;
@@ -1186,10 +1034,9 @@ fn dipole_field(p: f64[3], k: f64, eta: f64) -> f64[6], f64[6] {
     let cp = if st > 0.0 { p[0] / (r * st) } else { 1.0 };
     let sp = if st > 0.0 { p[1] / (r * st) } else { 0.0 };
     let kr = k * r;
-    // exp(-i k r) times the bracket of each part.
     let ph: f64[2] = [cos(kr), -sin(kr)];
-    let b1: f64[2] = [1.0, -1.0 / kr];                  // 1 + 1/(i k r)
-    let b2: f64[2] = [1.0 - 1.0 / (kr * kr), -1.0 / kr]; // 1 + 1/(i k r) - 1/(k r)^2
+    let b1: f64[2] = [1.0, -1.0 / kr];
+    let b2: f64[2] = [1.0 - 1.0 / (kr * kr), -1.0 / kr];
     let er = elements::cmul(elements::cmul([eta * ct / (2.0 * PI * r * r), 0.0], b1), ph);
     let eth = elements::cmul(elements::cmul([0.0, eta * k * st / (4.0 * PI * r)], b2), ph);
     let hph = elements::cmul(elements::cmul([0.0, k * st / (4.0 * PI * r)], b1), ph);
@@ -1207,9 +1054,6 @@ fn dipole_field(p: f64[3], k: f64, eta: f64) -> f64[6], f64[6] {
     return e, h;
 }
 
-// The near-to-far-field transform of the exact field of a Hertzian dipole
-// on a cube of side 1 at k = 2 pi: the directivity 1.5 and the intensity
-// eta k^2/(32 pi^2) at theta = 90 degrees (gap G13).
 fn test_far_field() {
     let k = 2.0 * PI;
     let eta = 376.730313;
@@ -1243,9 +1087,6 @@ fn test_far_field() {
     expect_near("far field at 45 degrees", u45, 0.5 * eta * k * k / (32.0 * PI * PI), 1.0e-2);
 }
 
-// --- the Raviart-Thomas element ------------------------------------------------------
-
-// The L2 errors of p and q against p = sin(pi x) sin(pi y), q = -grad(p).
 fn darcy_errors() -> f64, f64 {
     var ep = 0.0;
     var eq = 0.0;
@@ -1264,8 +1105,6 @@ fn darcy_errors() -> f64, f64 {
     return sqrt(ep), sqrt(eq);
 }
 
-// q + grad(p) = 0 and div(q) = 2 pi^2 sin(pi x) sin(pi y) on the unit square
-// of n cells on each side, with p = 0 on the boundary.
 fn darcy_square(n: i64) -> f64, f64 {
     elements::mesh_box(2, 1, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, n, n, 1);
     distort(n);
@@ -1280,9 +1119,6 @@ fn darcy_square(n: i64) -> f64, f64 {
     return darcy_errors();
 }
 
-// The manufactured solution of the Raviart-Thomas element: the L2 errors
-// of p and of q fall as h^1 (implementation.md §10, level 2). A flux
-// condition on a part of the boundary holds that flux.
 fn test_darcy() {
     let ep0, eq0 = darcy_square(8);
     let ep1, eq1 = darcy_square(16);
@@ -1291,8 +1127,6 @@ fn test_darcy() {
     if !(op >= 0.7) { failures++; print("FAIL raviart_thomas: the L2 order of p is ", op, ", want 1 - 0.3"); }
     if !(oq >= 0.7) { failures++; print("FAIL raviart_thomas: the L2 order of q is ", oq, ", want 1 - 0.3"); }
     print("raviart_thomas 2d: L2 orders ", op, " (p) and ", oq, " (q), errors ", ep1, " and ", eq1);
-    // A strip of length 2 with the flux 3 in at x = 0 and p = 0 at x = 2:
-    // p = 3 (2 - x), and the flux out at x = 2 is 3 times the height 1.
     elements::mesh_box(2, 1, 0.0, 0.0, 0.0, 2.0, 1.0, 0.0, 8, 4, 1);
     elements::darcy(1.0, 0.0, 1.0);
     elements::plane(elements::X, 0.0);
@@ -1305,10 +1139,6 @@ fn test_darcy() {
     expect_near("darcy strip flux", elements::boundary_flux(), 3.0, 1.0e-9);
 }
 
-// --- the nonlinear solid (solid.goose, material.goose) ---------------------------
-
-// The largest difference of a and b, relative to the largest of a, or to
-// 1 if that is less.
 fn rel_diff(a: f64[:], b: f64[:]) -> f64 {
     var d = 0.0;
     var m = 0.0;
@@ -1319,21 +1149,17 @@ fn rel_diff(a: f64[:], b: f64[:]) -> f64 {
     return d / max(m, 1.0);
 }
 
-// The compressible neo-Hookean energy of the principal values of C:
-// μ/2 (I1 - 3) - μ ln J + λ/2 (ln J)², with μ = 80 and λ = 120.
 fn neo_hooke(c: elements::Hd[3]) -> elements::Hd {
     let lnj = elements::hd_ln(elements::hd_mul(elements::hd_mul(c[0], c[1]), c[2])) * 0.5;
     return (c[0] + c[1] + c[2] - elements::hd(3.0)) * 40.0 - lnj * 80.0 + elements::hd_mul(lnj, lnj) * 60.0;
 }
 
-// S of neo_hooke at C: μ (I - C⁻¹) + λ ln J C⁻¹.
 fn neo_hooke_s(cm: f64[9]) -> f64[6] {
     let ci = elements::mat_inv(cm);
     let lnj = 0.5 * log(elements::mat_det(cm));
     return elements::to_voigt((elements::EYE - ci) * 80.0 + ci * (120.0 * lnj));
 }
 
-// S and the tangent dS/dE of neo_hooke at C by the spectral formulas.
 fn spectral_s(cm: f64[9], s: f64[6]&, t: f64[36]&) {
     let c, e = elements::sym_eigen(cm);
     var w1: f64[3] = [0.0; 3];
@@ -1342,14 +1168,12 @@ fn spectral_s(cm: f64[9], s: f64[6]&, t: f64[36]&) {
     elements::energy_stress(c, e, 3, w1, w2, s, t);
 }
 
-// Column w of the tangent of neo_hooke by central differences of S in E.
 fn tangent_column(cm: f64[9], w: i64) -> f64[6] {
     let h = 1.0e-6;
     var up = cm;
     var down = cm;
     let i = elements::VOIGT_I[w];
     let j = elements::VOIGT_J[w];
-    // dE_ij = h (normal) or the engineering shear 2 dE_ij = h
     let dc = if i == j { 2.0 * h } else { h };
     up[3 * i + j] += dc;
     down[3 * i + j] -= dc;
@@ -1361,7 +1185,6 @@ fn tangent_column(cm: f64[9], w: i64) -> f64[6] {
 }
 
 fn test_solid_points() {
-    // Jacobi: A e_k = λ_k e_k
     let a: f64[9] = [4.0, 1.0, 0.5, 1.0, 3.0, -0.2, 0.5, -0.2, 1.0];
     let l, e = elements::sym_eigen(a);
     var worst = 0.0;
@@ -1374,7 +1197,6 @@ fn test_solid_points() {
     }
     print("solid: Jacobi residual ", worst);
     if !(worst < 1.0e-12) { failures++; print("FAIL solid Jacobi: residual ", worst); }
-    // the energy: S and the tangent at a general C and at C = I
     let cs: f64[9][2] = [[1.3, 0.2, -0.1, 0.2, 0.9, 0.15, -0.1, 0.15, 1.1], elements::EYE];
     for cm, k in cs {
         var s: f64[6] = [0.0; 6];
@@ -1395,9 +1217,6 @@ fn test_solid_points() {
     test_j2_points();
 }
 
-// The tangent of J2 at small strain against central differences of the
-// stress, on a plastic state; and the plastic flow at finite strain keeps
-// det Cp = 1.
 fn test_j2_points() {
     let m = elements::J2 { lame: 115384.6, shear: 76923.1, yield0: 250.0, hard: 1000.0 };
     let eps: f64[9] = [0.004, 0.001, 0.0, 0.001, -0.002, 0.0005, 0.0, 0.0005, 0.0];
@@ -1431,7 +1250,6 @@ fn test_j2_points() {
         elements::j2_small(m, down, ep2, a2, sm, tt);
         var tw: f64[6] = [0.0; 6];
         for v in 6 { tw[v] = t[6 * v + w]; }
-        // a local: Goose gives a slice of an expression a wrong length
         let col = (sp - sm) * (0.5 / h);
         et = max(et, rel_diff(col, tw));
     }
@@ -1446,17 +1264,10 @@ fn test_j2_points() {
     if !(af > 0.0 && abs(det - 1.0) < 1.0e-12) { failures++; print("FAIL solid J2 finite: det Cp⁻¹ ", det); }
 }
 
-// u = G X on the faces of a box of P2 tetrahedra with the free nodes
-// inside: a homogeneous deformation. The reaction on the face x = 1 is
-// P e_x times its area, with P = F S of neo_hooke.
 fn g_x(p: f64[3]) -> f64 { return 0.3 * p[0] + 0.1 * p[1]; }
 fn g_y(p: f64[3]) -> f64 { return -0.1 * p[1] + 0.05 * p[2]; }
 fn g_z(p: f64[3]) -> f64 { return 0.02 * p[0] - 0.08 * p[2]; }
 
-// --- the contact (contact.goose) ---------------------------------------------------
-
-// One point of a contact with the normal z: the traction of the return map
-// in stick and in slip, and the stick tangent against central differences.
 fn test_contact_points() {
     elements::clear_contact();
     elements::ct_n.append([0.0, 0.0, 1.0]);
@@ -1470,7 +1281,6 @@ fn test_contact_points() {
     }
     elements::ct_p.push(0.0);
     var d: f64[9] = [0.0; 9];
-    // stick: p = kn (0.003 - 0.001) = 2 and t = kt r_t = 0.05 < mu p
     let r: f64[3] = [1.0e-4, 0.0, -0.003];
     let f = elements::point_traction(0, r, d);
     expect_near("contact stick t", f[0], 0.05, 1.0e-12);
@@ -1488,11 +1298,9 @@ fn test_contact_points() {
     }
     print("contact: stick tangent error ", worst);
     if !(worst < 1.0e-9) { failures++; print("FAIL contact stick tangent: ", worst); }
-    // slip: t = mu p along the trial traction kt r_t
     let s = elements::point_traction(0, [0.01, 0.005, -0.003], d);
     expect_near("contact slip |t|", sqrt(s[0] * s[0] + s[1] * s[1]), 0.6, 1.0e-12);
     expect_near("contact slip direction", s[1] / s[0], 0.5, 1.0e-12);
-    // open: no traction
     let o = elements::point_traction(0, [0.01, 0.0, 0.0], d);
     if !(o[0] == 0.0 && o[2] == 0.0 && elements::ct_p[0] == 0.0) { failures++; print("FAIL contact open: ", o[0], " ", o[2]); }
     elements::clear_contact();
@@ -1522,8 +1330,6 @@ fn test_solid_energy() {
     if !(done && err < 1.0e-8) { failures++; print("FAIL solid neo-Hooke box: converged ", done, ", error ", err); }
 }
 
-// A bar of J2 at small strain pulled to the strain 0.01 with free sides:
-// the stress sy + Et (ε - εy), Et = E H / (E + H).
 fn test_solid_plastic() {
     let E = 200000.0;
     let sy = 250.0;
@@ -1553,8 +1359,79 @@ fn test_curve_missed() {
     }
 }
 
+fn test_quadrature_weights_sum_to_reference_size() {
+    let sizes: f64[3] = [1.0, 0.5, 1.0 / 6.0];
+    let second_moments: f64[3] = [1.0 / 3.0, 1.0 / 12.0, 1.0 / 60.0];
+    for d in [1, 2, 3] {
+        var total = 0.0;
+        var moment = 0.0;
+        for q in elements::quad_count(d) {
+            let xi, w = elements::quad_point(d, q);
+            total += w;
+            moment += w * xi[0] * xi[0];
+        }
+        expect_near(str("quadrature weights d=", d), total, sizes[d - 1], 1.0e-14);
+        expect_near(str("quadrature degree 2 exact d=", d), moment, second_moments[d - 1], 1.0e-14);
+    }
+}
+
+fn expect_true(what: u8[:], ok: bool) {
+    if !ok {
+        failures++;
+        print("FAIL ", what);
+    }
+}
+
+fn test_midpoints_straight() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 2, 1, 1);
+    var worst = 0.0;
+    for c in elements::cell_count() {
+        for e in 6 {
+            let a = elements::cell_node(c, elements::edge_node(3, e, 0));
+            let b = elements::cell_node(c, elements::edge_node(3, e, 1));
+            let m = elements::cell_node(c, 4 + e);
+            for t in 3 { worst = max(worst, abs(elements::node_x(m, t) - 0.5 * (elements::node_x(a, t) + elements::node_x(b, t)))); }
+        }
+    }
+    expect_true("mesh_box order 2: each midpoint node is the middle of its edge", worst < 1.0e-12);
+}
+
+fn test_cells_for() {
+    expect_true("cells_for rounds up to a cell size of at most size",
+                elements::cells_for(1.0, 0.25) == 4 && elements::cells_for(1.0, 0.3) == 4 && elements::cells_for(0.1, 1.0) == 1);
+}
+
+fn test_geometry_tolerance() {
+    elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 40.0, 10.0, 10.0, 2, 1, 1);
+    expect_true("geometry_tolerance is 1e-6 of the largest side of the box",
+                abs(elements::geometry_tolerance() - 40.0e-6) < 1.0e-12);
+}
+
+fn test_hole_corner_node() {
+    elements::mesh_hole(2, 1, 0.0, 0.0, 0.0, 40.0, 30.0, 0.0, 1.0, 4.0, 0.5);
+    var found = false;
+    for n in elements::node_count() {
+        if abs(elements::node_x(n, 0) - 40.0) < 1.0e-9 && abs(elements::node_x(n, 1) - 30.0) < 1.0e-9 { found = true; }
+    }
+    expect_true("mesh_hole has a node on the corner (hi.x, hi.y)", found);
+}
+
+fn test_curve_below_zero() {
+    var c: u8[>..] = [];
+    format(c, "cd build && ./skein run ../tests/elements/curve_below_zero.skn > curve_below_zero.out 2>&1");
+    c.push(0);
+    let status = system(c[0]);
+    var out: u8[>..] = [];
+    let read = read_file("build/curve_below_zero.out", out);
+    if status == 0 || !read || find(out, "curve_value: the conductivity curve k(T) gives k = ") < 0 {
+        failures++;
+        print("FAIL curve below zero: the run does not stop in curve_value with the curve message\n", out);
+    }
+}
+
 fn main() {
     test_curve_missed();
+    test_quadrature_weights_sum_to_reference_size();
     test_solid_points();
     test_solid_energy();
     test_solid_plastic();
@@ -1583,6 +1460,11 @@ fn main() {
     test_darcy();
     test_warm_start();
     test_runs();
+    test_midpoints_straight();
+    test_cells_for();
+    test_geometry_tolerance();
+    test_hole_corner_node();
+    test_curve_below_zero();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");
 }

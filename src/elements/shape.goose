@@ -1,41 +1,15 @@
-// The shape functions and the quadrature of the Lagrange simplices: lines,
-// triangles and tetrahedra of order 1 (P1) and order 2 (P2). With
-// `hex_cells` set, the cells of dimension 3 are the 8-node hexahedra of
-// order 1, and their facets (dimension 2) are 4-node quadrilaterals. A
-// hexahedron has the lattice reference cell [0, 1]^3, and its nodes follow
-// VTK: the corners of the bottom face counter-clockwise, then the same
-// corners on the top face.
-//
-// The local nodes follow VTK: the vertices, then the midpoint of each edge
-// in the sequence of `edge_node`. The reference simplex of dimension d has
-// its vertices at the origin and at the d unit points, so the barycentric
-// coordinates are L0 = 1 - xi_1 - ... - xi_d and Lk = xi_k.
 import std;
 import math;
 namespace elements;
 
-let MAX_NODES = 20;     // a 20-node serendipity hexahedron
-
-// Whether the cells of dimension 3 are hexahedra and their facets
-// quadrilaterals (mesh.goose sets it when it builds a mesh). The hexahedra
-// have 8 nodes (order 1) or the 20 nodes of the serendipity family (order 2).
 var hex_cells = false;
 
-// The Gauss points along each axis of a hexahedron: 2 (reduced, the exact
-// rule of the trilinear box and the C3D20R rule) or 3.
 var cube_gauss = 2;
 
-// The corner (x, y, z) of the reference cube at local node l of a hexahedron
-// or at node l of a quadrilateral (the first four), in VTK sequence.
 let HEX_CORNERS: i64[24] = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1];
 
-// The edges of the hexahedron as pairs of corners, in the sequence of VTK type 25
-// (quadratic hexahedron). The midpoint node of edge e is node 8 + e. The edges of
-// a quadrilateral are the first four, and its midpoint node of edge e is node 4 + e.
 let HEX_EDGES: i64[24] = [0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7];
 
-// The edges of the line, the triangle and the tetrahedron, as pairs of
-// vertices. The midpoint node of edge e is node d + 1 + e.
 let LINE_EDGES: i64[2] = [0, 1];
 let TRI_EDGES: i64[6] = [0, 1, 1, 2, 2, 0];
 let TET_EDGES: i64[12] = [0, 1, 1, 2, 0, 2, 0, 3, 1, 3, 2, 3];
@@ -47,11 +21,8 @@ fn edge_count(d: i64) -> i64 {
     return 6;
 }
 
-// Whether cells of dimension d are the hexahedra, or the quadrilaterals of
-// their facets.
 fn is_cube(d: i64) -> bool { return hex_cells && d >= 2; }
 
-// Vertex `side` (0 or 1) of edge e of the simplex of dimension d.
 fn edge_node(d: i64, e: i64, side: i64) -> i64 {
     guard e >= 0 && e < edge_count(d) && (side == 0 || side == 1) else { abort("edge_node: e < edge_count(d) and side 0 or 1"); }
     if d == 1 { return LINE_EDGES[2 * e + side]; }
@@ -66,7 +37,6 @@ fn node_count_of(d: i64, order: i64) -> i64 {
     return d + 1 + edge_count(d);
 }
 
-// The derivative of barycentric coordinate k by xi_r.
 fn bary_grad(k: i64, r: i64) -> f64 {
     guard k >= 0 && k <= 3 && r >= 0 && r < 3 else { abort("bary_grad: 0 <= k <= 3 and 0 <= r < 3"); }
     if k == 0 { return -1.0; }
@@ -74,8 +44,6 @@ fn bary_grad(k: i64, r: i64) -> f64 {
     return 0.0;
 }
 
-// The trilinear or bilinear shape functions (order 1), or the serendipity
-// shape functions of 20 or 8 nodes (order 2), at xi in [0, 1]^d.
 fn cube_shape(d: i64, order: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
     if order == 2 {
         cube_shape_2(d, xi, n, dn);
@@ -98,7 +66,6 @@ fn cube_shape(d: i64, order: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
     }
 }
 
-// The natural coordinate (-1, 0 or 1) of axis r at node l of the serendipity cell of dimension d.
 fn natural(d: i64, l: i64, r: i64) -> f64 {
     if l < (1 << d) { return if HEX_CORNERS[3 * l + r] == 1 { 1.0 } else { -1.0 }; }
     let e = l - (1 << d);
@@ -108,8 +75,6 @@ fn natural(d: i64, l: i64, r: i64) -> f64 {
     return if a == 1 { 1.0 } else { -1.0 };
 }
 
-// The serendipity functions with s = 2 xi - 1: a corner has (1 + a s)(1 + b t)(1 + c u)
-// (a s + b t + c u - 2) / 8, and a midpoint with a = 0 has (1 - s^2)(1 + b t)(1 + c u) / 4.
 fn cube_shape_2(d: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
     var s: f64[3] = [0.0; 3];
     for r in d { s[r] = 2.0 * xi[r] - 1.0; }
@@ -121,7 +86,6 @@ fn cube_shape_2(d: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
             a[r] = natural(d, l, r);
             if a[r] == 0.0 { zeros++; }
         }
-        // f[r] is the factor of axis r and df[r] its derivative by s[r].
         var f: f64[3] = [1.0; 3];
         var df: f64[3] = [0.0; 3];
         var lin = -(d as f64 - 1.0);
@@ -135,7 +99,6 @@ fn cube_shape_2(d: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
                 lin += a[r] * s[r];
             }
         }
-        // A corner has the extra factor lin = sum a s - (d - 1); a midpoint has none.
         let corner = zeros == 0;
         var value = 1.0;
         for r in d { value *= f[r]; }
@@ -150,8 +113,6 @@ fn cube_shape_2(d: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
     }
 }
 
-// The values n[l] and the reference gradients dn[3 l + r] = dN_l / dxi_r of
-// the shape functions at xi.
 fn shape(d: i64, order: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
     guard node_count_of(d, order) <= n.len && 3 * n.len <= dn.len else { abort("shape: n and dn hold the nodes of the simplex"); }
     if is_cube(d) {
@@ -182,16 +143,10 @@ fn shape(d: i64, order: i64, xi: f64[3], n: f64[20]&, dn: f64[60]&) {
     }
 }
 
-// --- quadrature --------------------------------------------------------------
-
-// Rules of degree 2 on the reference simplex, so the stiffness of a P2 cell
-// with straight edges is exact: 2 Gauss points on a line, 3 points on a
-// triangle and 4 points on a tetrahedron. The weights sum to the size of
-// the reference simplex.
 let TET_A = 0.1381966011250105;
 let TET_B = 0.5854101966249685;
-let LINE_G = 0.21132486540518713;   // (1 - 1/sqrt(3)) / 2
-let GAUSS_3 = 0.7745966692414834;   // sqrt(3/5)
+let LINE_G = 0.21132486540518713;
+let GAUSS_3 = 0.7745966692414834;
 
 fn quad_count(d: i64) -> i64 {
     guard d >= 1 && d <= 3 else { abort("quad_count: 1 <= d <= 3"); }
@@ -202,8 +157,6 @@ fn quad_count(d: i64) -> i64 {
 fn quad_point(d: i64, q: i64) -> f64[3], f64 {
     guard q >= 0 && q < quad_count(d) else { abort("quad_point: 0 <= q < quad_count(d)"); }
     if is_cube(d) {
-        // 2 Gauss points along each axis: exact for the trilinear stiffness of a box. 3 points
-        // for a serendipity cell of full integration.
         var p: f64[3] = [0.0; 3];
         var w = 1.0;
         var rest = q;
@@ -235,11 +188,6 @@ fn quad_point(d: i64, q: i64) -> f64[3], f64 {
     return p, 1.0 / 24.0;
 }
 
-// --- facets ------------------------------------------------------------------
-
-// Local node l of facet f of a cell of dimension d, in the node sequence of
-// the facet as a simplex of dimension d - 1: an edge of a triangle, or a
-// face of a tetrahedron.
 let TET_FACES: i64[24] = [
     0, 1, 2, 4, 5, 6,
     0, 1, 3, 4, 8, 7,
@@ -247,8 +195,6 @@ let TET_FACES: i64[24] = [
     0, 2, 3, 6, 9, 7,
 ];
 
-// The faces of the hexahedron: the 4 nodes of each, in the sequence of a
-// quadrilateral.
 let HEX_FACES: i64[24] = [
     0, 3, 7, 4,
     1, 2, 6, 5,
@@ -264,9 +210,6 @@ fn facet_count(d: i64) -> i64 {
     return d + 1;
 }
 
-// The vertices of a facet of a cell of dimension d: 2 for a triangle edge, 3 for a
-// tetrahedron face, 4 for a hexahedron face. They are the nodes that
-// decide whether the facet is on a surface.
 fn facet_vertices(d: i64) -> i64 {
     guard d == 2 || d == 3 else { abort("facet_vertices: d is 2 or 3"); }
     if is_cube(d) && d == 3 { return 4; }
@@ -281,7 +224,6 @@ fn facet_node(d: i64, f: i64, l: i64) -> i64 {
     return 3 + f;
 }
 
-// The midpoint node (8 to 19) of the edge of the hexahedron between corners a and b.
 fn hex_mid_node(a: i64, b: i64) -> i64 {
     for e in 12 {
         if (HEX_EDGES[2 * e] == a && HEX_EDGES[2 * e + 1] == b) || (HEX_EDGES[2 * e] == b && HEX_EDGES[2 * e + 1] == a) { return 8 + e; }

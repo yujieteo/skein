@@ -1,5 +1,3 @@
-// Tests of `skein fmt`. `./build.sh test` runs this program from the root of
-// the repository, and a non-zero exit status is a failure.
 import std;
 import os;
 import syntax from "../syntax";
@@ -12,7 +10,6 @@ fn fail(what: u8[:], got: u8[:], want: u8[:]) {
     print("FAIL ", what, "\n--- got:\n", got, "--- want:\n", want);
 }
 
-// Formats `text` and gives the result. A result that is not OK is a failure.
 fn formatted(what: u8[:], text: u8[:]) -> u8[>..] {
     var result: u8[>..] = [];
     let r = fmt::format_text("t.skn", text, result);
@@ -23,7 +20,6 @@ fn formatted(what: u8[:], text: u8[:]) -> u8[>..] {
     return result;
 }
 
-// `fmt` changes `text` to `want`, and changes `want` not at all.
 fn expect_fmt(what: u8[:], text: u8[:], want: u8[:]) {
     let once = formatted(what, text);
     if once != want { fail(what, once, want); return; }
@@ -79,7 +75,6 @@ fn test_comments() {
 }
 
 fn test_long_lines() {
-    // A statement on many lines that fits joins into one line.
     expect_fmt("join",
         str(HEAD, "let a: Real = f(\n    1,\n    2,\n)\nlet b: Real = 1 +\n    2\n"),
         str(HEAD, "let a: Real = f(1, 2)\nlet b: Real = 1 + 2\n"));
@@ -104,7 +99,6 @@ fn test_long_lines() {
         str(HEAD, "step s: static {\n    solve {\n        nonlinear: newton\n        linear: gmres\n",
             "        precond: ilu0\n        rtol: 1e-8\n        atol: 1e-10\n",
             "        max_iterations: 50\n    }\n}\n"));
-    // A line breaks at an operator inside a list that ends with an added comma.
     let calls = "g(alpha_one, alpha_one) + g(alpha_one, alpha_one) - g(alpha_one, alpha_one) - g(alpha_one, alpha_one)";
     expect_fmt("an operator after an added comma",
         str(HEAD, "expect e: f(", calls, ") == 1 within 1\n"),
@@ -118,7 +112,6 @@ fn test_errors() {
     if r != fmt::SYNTAX_ERROR { failures++; print("FAIL syntax error: format_text gives ", r); }
 }
 
-// The names of the files in directory `dir` that end with `.skn`.
 fn models(dir: u8[:], into: u8[>..]&) -> const u8[:][>..] {
     var names: const u8[:][>..] = [];
     if !list_dir(dir, into) { return names; }
@@ -128,8 +121,6 @@ fn models(dir: u8[:], into: u8[>..]&) -> const u8[:][>..] {
     return names;
 }
 
-// Each sample is in the standard layout, and a change of one value changes
-// only its line (implementation.md §10).
 fn test_samples() {
     var list: u8[>..] = [];
     let names = models("samples", list);
@@ -140,7 +131,6 @@ fn test_samples() {
         read_file(path, text);
         let once = formatted(path, text);
         if once != text { fail(path, once, text); continue; }
-        // The first value that is a number.
         var at = -1;
         for i in 0..text.len - 4 {
             if text[i..i + 3] == " = " && text[i + 3] >= '0' && text[i + 3] <= '9' { at = i; break; }
@@ -155,7 +145,6 @@ fn test_samples() {
     }
 }
 
-// `fmt` is idempotent on each femahoy model that parses.
 fn test_femahoy() {
     var list: u8[>..] = [];
     let names = models("examples/femahoy", list);
@@ -174,7 +163,6 @@ fn test_femahoy() {
     }
 }
 
-// `skein fmt --check` and `skein fmt` on a file.
 fn test_command() {
     let path = "build/fmt_test.skn";
     let messy = str(HEAD, "let a:Real=1\n");

@@ -1,7 +1,3 @@
-// The registration point of the shells, beams and laminates lane
-// (src/shells/): the registry entries of quad4_shell and beam2 (fem.goose).
-// Each function gives false for a cell type that has no entry yet. The node
-// order of each cell type is its VTK node order (vtu.goose).
 import std;
 namespace runtime;
 import .fem;

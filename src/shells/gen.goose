@@ -1,37 +1,3 @@
-// The code generator of the shell models: a Skein syntax tree to a Goose
-// program that calls src/shells/.
-//
-// It takes a model whose physics uses the template reissner_mindlin (spec
-// §4.3), the template timoshenko, or both. The first Surface is the side of
-// a cylinder on the x axis, `boundary(c, y^2 + z^2 == R^2 && <cuts>)`, with
-// cuts that keep one arc of θ (θ turns from +z to +y). The physics of the
-// shell is on it or on a later Surface: a part of it with & and - of
-// solids, for example a cutout (gen_geo.goose). The mesh is a grid of x and
-// θ lines with a line on each beam, finer near a `refine` curve, with the
-// nodes moved onto the cuts and onto the boundaries of the materials. It
-// has MITC4 cells (order 1) or MITC9 cells (order 2). A Curve of the shell
-// is the edges of the mesh on it. A Point is the node at it. Each material
-// of the shell is a laminate of the template arguments `layup` and
-// `mirror` and of the material.
-//
-// The beams are on a Curve of straight lines and of rings
-// `boundary(shell, x == c)`, with pattern, pattern_polar, move, |, and & or
-// - of a solid. With a shell, each line is along x on the cylinder, and
-// the tie `bc beams: w_b = w` and `theta_b = theta` makes the beams share
-// the shell nodes. With no shell, each line is meshed alone, and a modal
-// or a buckling step can follow. Each other construct gives an error
-// `unsupported` at its token, with a fix.
-//
-// gen_expr.goose writes the reports, the expects and the outputs as code,
-// and gen_emit.goose writes the program. A submodel takes the state of
-// another shell model through a results value (spec §15.1).
-//
-// src/codegen/dispatch.goose has hooks of the shells lane for a model of
-// the box generator. A shell model has 6 dofs at each node, a section in
-// place of E and nu, and a direct solve (solve.goose), so
-// src/codegen/run.goose sends the whole model here, as it does for
-// src/elements/gen.goose. It uses the units and the values of
-// src/codegen/codegen.goose.
 import std;
 import math;
 namespace shells_gen;
@@ -56,13 +22,8 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
 }
 fn set64(into: u8[..64]&, s: u8[:]) { codegen::set64(into, s); }
 
-// The value of argument i of call n.
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 
-// --- the claim ---------------------------------------------------------------
-
-// Whether this generator takes the model: a physics with a shell or a beam
-// template.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -80,10 +41,6 @@ fn claims(prog: i64) -> bool {
     return false;
 }
 
-// --- values --------------------------------------------------------------------
-
-// A scalar (n 1), a vector (n 3) or a 3 × 3 tensor (n 9, row-major), in the
-// unit system of the header.
 struct Val {
     n: i64,
     v: f64[9],
@@ -103,8 +60,6 @@ fn vector(a: f64[3]) -> Val {
 
 fn vec3(v: Val) -> f64[3] { return [v.v[0], v.v[1], v.v[2]]; }
 
-// The names of the `let` and `param` items and of the lets of the physics,
-// with their value nodes and their types.
 var value_names: u8[..64][>..];
 var value_nodes: i64[>..];
 var value_types: i64[>..];
@@ -113,9 +68,6 @@ var let_nodes: i64[>..];
 var let_types: i64[>..];
 var depth = 0;
 
-// x, y and z are the point `px` while `at_point`. N and eps_m are the
-// tensors `tn` and `te` while `in_physics`. n is `edge_n`, the outward
-// normal of an edge on the surface, while `edge_mode`.
 var at_point = false;
 var edge_mode = false;
 var edge_n: f64[3] = [0.0, 0.0, 0.0];
@@ -135,7 +87,6 @@ let AXIS_NAMES = ["x", "y", "z"];
 
 fn axis_of(word: u8[:]) -> i64 { return position(AXIS_NAMES, word); }
 
-// The factor of an angle unit to rad, or -1 if `unit` is not deg or rad.
 fn angle_unit(unit: i64) -> f64 {
     let u = first(unit);
     if kind(u) != syntax::N_UNIT_NAME { return -1.0; }
@@ -173,7 +124,6 @@ recursive fn named(n: i64, word: u8[:]) -> Val {
     }
     if at_point && axis_of(word) >= 0 { return scalar(px[axis_of(word)]); }
     if at_point && word == "n" && edge_mode { return vector(edge_n); }
-    // n is the outward unit normal of the side of the cylinder.
     if at_point && word == "n" && flat { return vector([0.0, 0.0, 1.0]); }
     if at_point && word == "n" && radius > 0.0 { return vector([0.0, px[1] / radius, px[2] / radius]); }
     if word == "pi" { return scalar(PI); }
@@ -276,13 +226,9 @@ recursive fn value(n: i64) -> Val {
     return scalar(0.0);
 }
 
-// The copies of the patterns that copy(r) has met: the pattern node and
-// the shape of its copy 0.
 var copy_nodes: i64[>..] = [];
 var copy_shapes: i64[>..] = [];
 
-// copy(r) at the point px (spec §8.1): the index of the copy of the
-// pattern r, a Solid, whose φ is the lowest.
 fn copy_index(r: i64) -> f64 {
     var v = r;
     if kind(v) == syntax::N_NAME {
@@ -331,22 +277,15 @@ fn value_at(n: i64, p: f64[3]) -> Val {
     return v;
 }
 
-// --- the model -------------------------------------------------------------------
-
-// A region: a curve of the shell (its edges in the mesh, gen_geo.goose), the
-// node at a point, or the pieces of a beam Curve. boundary(s, x == c) is
-// also a ring piece, for a frame.
 struct Region {
     name: u8[..64],
-    node: i64,      // the value of a curve of the shell, or -1
+    node: i64,
     point: bool,
     at: f64[3],
     first_piece: i64,
     piece_count: i64,
 }
 
-// A piece of a beam Curve: the straight line from p0 to p1, or the arc of
-// the ring of the shell at x = p0[0] from θ = ta to tb.
 struct Piece {
     ring: bool,
     p0: f64[3],
@@ -355,8 +294,6 @@ struct Piece {
     tb: f64,
 }
 
-// The bc kinds: fixed dofs, a force per length `N*n` on the edges of a
-// curve, or a force or a moment `F_b*n`, `M_b*n` at a point.
 let BC_FIX = 0;
 let BC_EDGE = 1;
 let BC_FORCE = 2;
@@ -364,9 +301,9 @@ let BC_FORCE = 2;
 struct Bc {
     region: i64,
     kind: i64,
-    dof: i64,       // the first dof, 0 to 5
-    count: i64,     // the dofs from dof: 1 or 3
-    value: i64,     // the value: -1 for 0, a field of the results value, or the load
+    dof: i64,
+    count: i64,
+    value: i64,
 }
 
 let STEP_STATIC = 0;
@@ -376,12 +313,12 @@ let STEP_BUCKLING = 2;
 struct Step {
     name: u8[..64],
     kind: i64,
-    count: i64,         // the modes of a modal or a buckling step
-    first_own: i64,     // the bcs of the step: a range of `bcs`
+    count: i64,
+    first_own: i64,
     own_count: i64,
     first_report: i64,
     report_count: i64,
-    first_output: i64,  // the values of its output: a range of `outputs`
+    first_output: i64,
     output_count: i64,
 }
 
@@ -397,14 +334,14 @@ struct Expect {
     within: i64,
     relative: bool,
     label: u8[..256],
-    step: i64,      // the step that checks it at its end, or -1 for an item
+    step: i64,
 }
 
 var solid_names: u8[..64][>..];
 var solid_nodes: i64[>..];
-var solid_shapes: i64[>..];     // the shape of each Solid, or -1 before its first use
-var shape_nodes: i64[>..];      // the nodes that node_shape made a shape for
-var shape_ids: i64[>..];        // the shape of each of shape_nodes
+var solid_shapes: i64[>..];
+var shape_nodes: i64[>..];
+var shape_ids: i64[>..];
 var surface_names: u8[..64][>..];
 var surface_shapes: i64[>..];
 var table_names: u8[..64][>..];
@@ -420,12 +357,10 @@ var outputs: i64[>..];
 var steps: Step[>..];
 var expects: Expect[>..];
 
-// The cylinder of the shell: radius r about the x axis, from x0 to x1 and
-// from t0 to t1 in θ. The meshed surface is mesh_g, a part of it.
 var shell_name: u8[..64];
 var shell_tok = -1;
 var radius = 0.0;
-var flat = false;       // the shell is the face z == flat_z of a box: a plate with the lines of x and of y, radius 1
+var flat = false;
 var flat_z = 0.0;
 var x0 = 0.0;
 var x1 = 0.0;
@@ -438,21 +373,16 @@ var physics_tok = -1;
 var physics_name: u8[..64];
 var w_name: u8[..64];
 var theta_name: u8[..64];
-var args: i64[5] = [-1; 5];     // the nodes of layup, mirror, axis, top and q, or -1
+var args: i64[5] = [-1; 5];
 
 let TEMPLATE_ARGS = ["layup", "mirror", "axis", "top", "q"];
 
-// The materials of the shell and of the beams: an index of material_nodes,
-// and the shape (shell) or the region (beams) where each one is, or -1 for
-// the rest.
 var shell_mats: i64[>..];
 var shell_mat_g: i64[>..];
 var beam_mats: i64[>..];
 var beam_mat_r: i64[>..];
-var cur_mat = -1;       // the material whose properties `named` gives
+var cur_mat = -1;
 
-// The beam physics: its region, unknowns and the nodes of its template
-// arguments, and whether the tie of each unknown is there.
 var beam_tok = -1;
 var beam_name: u8[..64];
 var beam_region = -1;
@@ -464,8 +394,6 @@ var tie_theta = false;
 
 let BEAM_ARGS = ["A", "I_y", "I_z", "J", "y_axis", "offset"];
 
-// The results value of a submodel (spec §15.1): its name, the model file,
-// the model name in the file, and the step.
 var source_name: u8[..64];
 var source_path: u8[..256];
 var source_model: u8[..64];
@@ -558,8 +486,6 @@ fn reset() {
     source_step = [];
 }
 
-// The value node of property `word` of material m (an index of
-// material_nodes), or -1.
 fn prop_node(m: i64, word: u8[:]) -> i64 {
     var p = first(material_nodes[m]);
     while p >= 0 {
@@ -569,7 +495,6 @@ fn prop_node(m: i64, word: u8[:]) -> i64 {
     return -1;
 }
 
-// The declared type of property `word` of a material of the shell, or -1.
 fn prop_type(word: u8[:]) -> i64 {
     for m in shell_mats {
         var p = first(material_nodes[m]);
@@ -581,7 +506,6 @@ fn prop_type(word: u8[:]) -> i64 {
     return -1;
 }
 
-// Property `word` of shell material k.
 fn prop_value(k: i64, word: u8[:], at: i64) -> Val {
     let p = prop_node(shell_mats[k], word);
     if p < 0 {
@@ -599,10 +523,8 @@ fn prop_value(k: i64, word: u8[:], at: i64) -> Val {
 
 fn is_source(n: i64) -> bool { return source_name.len > 0 && kind(n) == syntax::N_NAME && name(n) == source_name; }
 
-// Whether n is `global.f`, with global the results value.
 fn source_member(n: i64) -> bool { return kind(n) == syntax::N_MEMBER && is_source(first(n)); }
 
-// The point of the shell at x and θ.
 fn shell_point(x: f64, t: f64) -> f64[3] {
     if flat { return [x, t, flat_z]; }
     return [x, radius * sin(t), radius * cos(t)];
@@ -610,8 +532,6 @@ fn shell_point(x: f64, t: f64) -> f64[3] {
 
 let SHELL_FIX = "write the shell as boundary(c, y^2 + z^2 == R^2 && z >= 0 m), with c = cylinder((0, 0, 0) m, (1, 0, 0), R, L)";
 
-// The comparisons of `cond`, a && b && ..., into `out`. False if a part is
-// not a comparison.
 recursive fn terms(cond: i64, out: i64[>..]&) -> bool {
     if kind(cond) != syntax::N_BINARY { return false; }
     let o = op(cond);
@@ -623,8 +543,6 @@ recursive fn terms(cond: i64, out: i64[>..]&) -> bool {
     return false;
 }
 
-// The margin of comparison `term` at p, >= 0 where it holds, and the size
-// of its sides. For == the margin is -|a - b|.
 fn margin(term: i64, p: f64[3]) -> f64, f64 {
     let a = value_at(child(term, 0), p).v[0];
     let b = value_at(child(term, 1), p).v[0];
@@ -635,7 +553,6 @@ fn margin(term: i64, p: f64[3]) -> f64, f64 {
     return -abs(a - b), size;
 }
 
-// Whether the cuts (the terms other than ==) hold at θ, at mid-length.
 fn cuts_hold(cuts: i64[:], t: f64) -> bool {
     for c in cuts {
         let m, size = margin(c, shell_point(0.5 * (x0 + x1), t));
@@ -644,8 +561,6 @@ fn cuts_hold(cuts: i64[:], t: f64) -> bool {
     return true;
 }
 
-// The θ between a (where the cuts do not hold) and b (where they hold) at
-// which the cuts start to hold.
 fn edge_of(cuts: i64[:], a: f64, b: f64) -> f64 {
     var lo = a;
     var hi = b;
@@ -656,7 +571,6 @@ fn edge_of(cuts: i64[:], a: f64, b: f64) -> f64 {
     return hi;
 }
 
-// `let roof: Surface = boundary(c, y^2 + z^2 == R^2 && z >= ...)`.
 fn shell(n: i64, v: i64) {
     if shell_tok >= 0 {
         unsupported(tok(n), str("a second shell surface: this slice meshes ", shell_name, " only"),
@@ -699,7 +613,6 @@ fn shell(n: i64, v: i64) {
     var side = false;
     for p in parts {
         if op(p) == "==" {
-            // An == must hold on the side of the cylinder.
             var on = true;
             for t in [0.3, 1.7, -2.1] {
                 for x in [x0, x1] {
@@ -713,7 +626,6 @@ fn shell(n: i64, v: i64) {
             }
             side = true;
         } else {
-            // A cut must not change along x.
             for t in [0.3, 1.7, -2.1, 2.9] {
                 let a, sa = margin(p, shell_point(x0, t));
                 let b, sb = margin(p, shell_point(x1, t));
@@ -730,7 +642,6 @@ fn shell(n: i64, v: i64) {
         unsupported(tok(arg(v, 1)), "the condition has no y^2 + z^2 == R^2", SHELL_FIX);
         return;
     }
-    // The arc of θ where the cuts hold, from a scan of -π to π.
     let count = 1440;
     var holds: bool[>..] = [];
     var inside = 0;
@@ -766,8 +677,6 @@ fn shell(n: i64, v: i64) {
 
 let FLAT_FIX = "write the shell as boundary(b, z == z0), with b = box((x0, y0, z0 - h), (x1, y1, z0)) a box that a let names";
 
-// `let plate: Surface = boundary(b, z == z0)`: the face of a box in the plane z = z0 is a flat
-// plate, meshed on the lines of x and of y (radius 1, so that the y lines are lengths).
 fn flat_shell(n: i64, v: i64, c: i64) {
     let lo = vec3(value(arg(c, 0)));
     let hi = vec3(value(arg(c, 1)));
@@ -798,9 +707,6 @@ fn flat_shell(n: i64, v: i64, c: i64) {
 
 let REGION_FIX = "write boundary(shell, x == 0 m) for a side of the shell, or point((x, y, z) m)";
 
-// `let end0: Curve = boundary(roof, x == 0 mm)`, a curve of the shell
-// (gen_geo.goose), `let tip: Point = point((x, y, z) mm)`, or the lines of
-// beams.
 fn region(n: i64, v: i64, curve: bool) {
     var r = Region { name: [], node: -1, point: !curve, at: [0.0, 0.0, 0.0], first_piece: pieces.len, piece_count: 0 };
     set64(r.name, name(n));
@@ -815,7 +721,6 @@ fn region(n: i64, v: i64, curve: bool) {
     }
     if shell_curve(v) {
         r.node = v;
-        // boundary(s, x == c) is also the ring at c, for a frame.
         let cond = if is_call(v, "boundary") { arg(v, 1) } else { -1 };
         if cond >= 0 && kind(cond) == syntax::N_BINARY && op(cond) == "==" && kind(child(cond, 0)) == syntax::N_NAME &&
            name(child(cond, 0)) == "x" {
@@ -833,8 +738,6 @@ fn region(n: i64, v: i64, curve: bool) {
 
 let CURVE_FIX = "write the beam line as line(p0, p1), a pattern or pattern_polar of it, & or - a box, or boundary(shell, x == c) for a ring";
 
-// The pieces of the beam Curve `v`, appended to `out`. False after an
-// error. Each form changes the pieces that its operand appended, in place.
 recursive fn curve_pieces(v: i64, out: Piece[>..]&) -> bool {
     let from = out.len;
     if is_call(v, "line") && syntax::child_count(v) == 3 {
@@ -843,7 +746,6 @@ recursive fn curve_pieces(v: i64, out: Piece[>..]&) -> bool {
     }
     if kind(v) == syntax::N_NAME && find_region(v) >= 0 && regions[find_region(v)].piece_count > 0 {
         let r = regions[find_region(v)];
-        // `out` may be `pieces`: copy by index.
         for i in r.piece_count {
             let p = pieces[r.first_piece + i];
             out.push(p);
@@ -880,7 +782,6 @@ recursive fn curve_pieces(v: i64, out: Piece[>..]&) -> bool {
         if g < 0 { return false; }
         let count = out.len - from;
         for i in count { cut_piece(out[from + i], g, op(v) == "&", out); }
-        // The cut pieces replace the pieces of the operand.
         let kept = out.len - from - count;
         for i in kept { out[from + i] = out[from + count + i]; }
         for i in count { out.pop(); }
@@ -907,12 +808,10 @@ fn moved(p: Piece, d: f64[3], at: i64) -> Piece {
     return q;
 }
 
-// p turned by angle a about the axis d through the origin (Rodrigues).
 fn turned(p: Piece, d: f64[3], a: f64, at: i64) -> Piece {
     let l = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     if p.ring {
         if abs(d[1]) > 1.0e-12 * l || abs(d[2]) > 1.0e-12 * l { unsupported(at, "a ring turns about the x axis only", "turn the ring about (1, 0, 0)"); }
-        // A turn by a about +x takes θ to θ - a.
         var q = p;
         let s = if d[0] > 0.0 { a } else { -a };
         q.ta -= s;
@@ -931,7 +830,6 @@ fn rodrigues(v: f64[3], k: f64[3], a: f64) -> f64[3] {
     return r;
 }
 
-// The parts of piece p inside solid g (keep_in), or out of it, into out.
 fn cut_piece(p: Piece, g: i64, keep_in: bool, out: Piece[>..]&) {
     let n = 400;
     var start = -1.0;
@@ -957,7 +855,6 @@ fn piece_point(p: Piece, s: f64) -> f64[3] {
     return on_line(p, s);
 }
 
-// The place between a and b where φ of g changes sign along piece p.
 fn piece_cross(p: Piece, g: i64, a: f64, b: f64) -> f64 {
     let inside = phi(g, piece_point(p, a)) < 0.0;
     var lo = a;
@@ -1026,8 +923,6 @@ fn value_item(n: i64) {
 
 let RESULTS_FIX = "write let global: Results = results(\"model.skn\", step: \"load\"), with a shell model in the same unit system";
 
-// `let global: Results = results(file, step: s)`. The file is relative to
-// the model file, and its model is a shell model in the same unit system.
 fn results_item(n: i64, v: i64) {
     guard source_name.len == 0 && is_call(v, "results") && syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_STRING &&
           kind(arg(v, 1)) == syntax::N_STRING else {
@@ -1068,7 +963,6 @@ fn results_item(n: i64, v: i64) {
     set64(source_name, name(n));
 }
 
-// Whether r is the meshed surface, a beam Curve, or a | of these.
 recursive fn mesh_region(r: i64) -> bool {
     if kind(r) == syntax::N_BINARY && op(r) == "|" { return mesh_region(child(r, 0)) && mesh_region(child(r, 1)); }
     if kind(r) != syntax::N_NAME { return false; }
@@ -1108,7 +1002,6 @@ fn mesh(n: i64) {
     for h in refine_sizes { if h <= 0.0 || h > mesh_size { unsupported(tok(n), "a refine size is not in 0 < size <= the mesh size", "give a smaller size"); } }
 }
 
-// The shape of Surface name n (the shell, or a later Surface), or -1.
 fn surface_shape(n: i64) -> i64 {
     if kind(n) != syntax::N_NAME || shell_tok < 0 { return -1; }
     if name(n) == shell_name { return patch_shape; }
@@ -1158,7 +1051,6 @@ fn physics(n: i64) {
                 if i < 0 || (first(m) >= 0 && g < 0) {
                     unsupported(tok(m), "the material is not one that the model declares, on a Surface of the shell", PHYSICS_FIX);
                 }
-                // The first match wins, so the material of the rest comes last.
                 if first(m) < 0 && next(m) >= 0 {
                     unsupported(tok(m), "a material with no on takes the rest, so it comes last", "write material a on pad, b");
                 }
@@ -1257,7 +1149,6 @@ fn method(n: i64) {
             order = method_order;
         } else if kind(s) == syntax::N_SETTING && ((name(s) == "family" && source_of(first(s)) == "serendipity") ||
                   (name(s) == "quadrature" && source_of(first(s)) == "reduced")) {
-            // The cells of order 2 are the MITC9 cells, which tie the shear: no family or rule to choose.
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this slice", "use only mesh and order, and family: serendipity and quadrature: reduced");
         }
@@ -1267,9 +1158,6 @@ fn method(n: i64) {
 
 let BC_FIX_TEXT = "write bc end: w = 0, bc end: theta.x = 0, bc cut: w = global.w, bc end: N*n = (1, 0, 0) N/mm, or bc tip: F_b*n = (0, 0, -1) kN";
 
-// The dof of `w`, `w.x`, `theta` or `theta.z`: the first dof and the
-// count, or -1.
-// The beam unknowns share the dofs of the shell unknowns (the tie).
 fn target_dofs(t: i64) -> i64, i64 {
     if kind(t) == syntax::N_NAME && is_w(name(t)) { return 0, 3; }
     if kind(t) == syntax::N_NAME && is_theta(name(t)) { return 3, 3; }
@@ -1291,7 +1179,6 @@ fn add_bc(b: Bc) {
     if !in_step { global_bcs.push(bcs.len - 1); }
 }
 
-// A `bc` item or statement.
 fn bc(n: i64) {
     let r = find_region(child(n, 0));
     let target = child(n, 1);
@@ -1300,7 +1187,6 @@ fn bc(n: i64) {
         unsupported(tok(child(n, 0)), "the region of the bc is not a Curve or a Point that a let names", REGION_FIX);
         return;
     }
-    // The tie: bc beams: w_b = w and bc beams: theta_b = theta.
     if kind(target) == syntax::N_NAME && kind(v) == syntax::N_NAME && (name(target) == wb_name || name(target) == thb_name) &&
        (name(v) == w_name || name(v) == theta_name) {
         let pair_w = name(target) == wb_name && name(v) == w_name;
@@ -1368,7 +1254,6 @@ fn step(n: i64) {
             unsupported(tok(proc), str("this slice has ", p, " steps of the beams only, with no shell"), "remove the shell, or use a static step");
         }
         if s.count < 1 || s.count > 50 { unsupported(tok(proc), "the count is not 1 to 50", "write count: 4"); }
-        // The geometric stiffness comes from the axial force of the solve before.
         if s.kind == STEP_BUCKLING && (steps.len == 0 || steps[steps.len - 1].kind != STEP_STATIC) {
             unsupported(tok(proc), "a buckling step needs a static step just before it", "add step preload: static { ... } before it");
         }
@@ -1410,7 +1295,6 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-// An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
     var x = Expect { name: [], node: child(n, 0), want: child(n, 1), within: child(n, 2),
                      relative: kind(child(n, 2)) == syntax::N_PERCENT, label: [], step: step };
@@ -1419,8 +1303,6 @@ fn expect(n: i64, step: i64) {
     expects.push(x);
 }
 
-// Reads the program `prog`. False on an error, and `syntax::errors` holds
-// the errors.
 fn read(prog: i64) -> bool {
     reset();
     method_order = -1;
@@ -1481,8 +1363,6 @@ fn read(prog: i64) -> bool {
     return ok();
 }
 
-// The lines, the cells and the edges of the mesh of the shell, with a line
-// on each beam.
 fn build_grid() {
     var ring_x: f64[>..] = [];
     var line_t: f64[>..] = [];
@@ -1509,7 +1389,6 @@ fn build_grid() {
     make_edges();
 }
 
-// Each report, expect and output value can run: a dry emission.
 fn check_values() {
     var scratch: u8[>..] = [];
     fields.clear();
@@ -1523,7 +1402,6 @@ fn check_values() {
         }
     }
     for x in expects {
-        // A top level expect reads the results of the last step.
         eigen_step = steps[if x.step >= 0 { x.step } else { steps.len - 1 }].kind != STEP_STATIC;
         for v in [x.node, x.want, x.within] {
             let rank, d = emit_global_expr(v, scratch);
@@ -1536,7 +1414,6 @@ fn check_values() {
         if physics_tok < 0 { unsupported(tok(o), "an output of a value needs the shell", "write output w"); }
         let k = field_index(o);
     }
-    // The bcs, so that a value of a bc that cannot run stops here.
     for b in bcs { emit_bc(scratch, b); }
     for k in fields.len { emit_field_fn(scratch, k); }
     fields.clear();
@@ -1547,10 +1424,6 @@ fn is_output_word(o: i64) -> bool {
     return kind(o) == syntax::N_NAME && (is_w(name(o)) || is_theta(name(o)) || (name(o) == "Nx" && beam_tok >= 0));
 }
 
-// --- the section and the loads ----------------------------------------------------
-
-// The laminate of a shell material: the ply properties, and its plies at
-// angles[first..first + count] from the top face.
 struct Lam {
     e1: f64,
     e2: f64,
@@ -1564,10 +1437,9 @@ struct Lam {
 var lams: Lam[>..];
 var angles: f64[>..];
 var axis: f64[3] = [1.0, 0.0, 0.0];
-// The load per area: a vector, or a pressure along the top normal.
 var q: f64[3] = [0.0, 0.0, 0.0];
 var q_normal = false;
-var q_field = false;      // the load per area varies with the point of a flat shell: args[4] is its code
+var q_field = false;
 
 let MATERIAL_FIX = "give the material E1, E2, G12, nu12, t_ply and h";
 let LAM_PROPS = ["E1", "E2", "G12", "nu12", "t_ply", "h"];
@@ -1576,9 +1448,6 @@ fn read_sections() {
     for k in shell_mats.len { read_section(k); }
 }
 
-// The plies of `layup` (an angle, or a table column of angles) and the
-// properties of shell material k: the plies repeat to fill h (h/2 with
-// mirror), and mirror adds them again in the reverse sequence (spec §4.3).
 fn read_section(k: i64) {
     let m = material_nodes[shell_mats[k]];
     var v: f64[6] = [0.0; 6];
@@ -1614,7 +1483,6 @@ fn read_section(k: i64) {
     lams.push(lam);
 }
 
-// The values of column `word` of table t, in the unit of the column.
 fn table_column(t: i64, word: u8[:], at: i64, out: f64[>..]&) {
     var col = -1;
     var factor = 1.0;
@@ -1636,8 +1504,6 @@ fn table_column(t: i64, word: u8[:], at: i64, out: f64[>..]&) {
     if col < 0 { unsupported(at, str("the table has no column ", word), "name a column of the table"); }
 }
 
-// The section axis, the top normal and the load per area, from the template
-// arguments. Each is checked at points of the shell.
 fn read_loads() {
     let xm = 0.5 * (x0 + x1);
     let samples = [shell_point(xm, t0 + 0.2 * (t1 - t0)), shell_point(x0 + 0.3 * (x1 - x0), 0.5 * (t0 + t1)),
@@ -1661,7 +1527,6 @@ fn read_loads() {
     let a = vec3(value_at(args[4], samples[0]));
     let s = (a[1] * samples[0][1] + a[2] * samples[0][2]) / radius;
     if flat {
-        // A load per area that varies with the point: its code is in the program.
         for p in samples {
             let b = vec3(value_at(args[4], p));
             for j in 3 { if abs(b[j] - a[j]) > 1.0e-12 * (abs(a[0]) + abs(a[1]) + abs(a[2])) { same = false; } }
@@ -1690,11 +1555,6 @@ fn read_loads() {
     }
 }
 
-// --- the beams -------------------------------------------------------------------
-
-// A beam material: E, nu, A, I_y, I_z and J, the density (0 if none), and
-// y_axis and the offset: a vector, or, with the *_radial flag, [0] times
-// the outward normal of the shell.
 struct BeamMat {
     section: f64[6],
     rho: f64,
@@ -1708,9 +1568,6 @@ var bmats: BeamMat[>..];
 
 let BEAM_PROPS = ["E", "nu"];
 
-// The section and the vectors of each beam material, from the material
-// and the template arguments. The argument values can use the properties
-// of the material.
 fn read_beams() {
     let samples = beam_samples();
     for k in beam_mats.len {
@@ -1742,20 +1599,19 @@ fn beam_pieces() -> const Piece[:] {
     return pieces[r.first_piece..r.first_piece + r.piece_count];
 }
 
-// Points on up to 8 pieces of the beams: the start and the middle of each.
+let BEAM_SAMPLE_PIECES = 8;
+
 fn beam_samples() -> f64[3][>..] {
     let ps = beam_pieces();
     var out: f64[3][>..] = [];
-    for k in min(ps.len, 8) {
-        let p = ps[k * ps.len / min(ps.len, 8)];
+    for k in min(ps.len, BEAM_SAMPLE_PIECES) {
+        let p = ps[k * ps.len / min(ps.len, BEAM_SAMPLE_PIECES)];
         out.push(piece_point(p, 0.0));
         out.push(piece_point(p, 0.5));
     }
     return out;
 }
 
-// The vector of template argument n on the beams: the same at each sample,
-// or s times the outward normal of the shell ([s, 0, 0], true).
 fn beam_vector(n: i64, samples: f64[3][:], what: u8[:]) -> f64[3], bool {
     let a = vec3(value_at(n, samples[0]));
     var same = true;
@@ -1779,8 +1635,6 @@ fn beam_vector(n: i64, samples: f64[3][:], what: u8[:]) -> f64[3], bool {
     return a, false;
 }
 
-// With a shell, each line is along x on the cylinder; with no shell, each
-// piece is a line.
 fn check_pieces() {
     if beam_region < 0 { return; }
     for p in beam_pieces() {
@@ -1814,7 +1668,6 @@ fn on_shell(p: Piece) -> bool {
     return in_x && abs(sqrt(sq(p.p0[1]) + sq(p.p0[2])) - radius) <= tol && t >= t0 - 1.0e-9 && t <= t1 + 1.0e-9;
 }
 
-// θ of a point of the shell, from t0 up.
 fn theta_of(q: f64[3]) -> f64 {
     var d = atan2(q[1], q[2]) - t0;
     d -= 2.0 * PI * floor(d / (2.0 * PI));
@@ -1822,7 +1675,6 @@ fn theta_of(q: f64[3]) -> f64 {
     return t0 + d;
 }
 
-// Whether piece p is on a piece of region r: its middle is on one.
 fn piece_in(r: i64, p: Piece) -> bool {
     if r < 0 { return true; }
     let reg = regions[r];
@@ -1844,7 +1696,6 @@ fn piece_in(r: i64, p: Piece) -> bool {
     return false;
 }
 
-// The beam material of piece p: the first whose region holds it.
 fn piece_mat(p: Piece) -> i64 {
     for r, k in beam_mat_r { if piece_in(r, p) { return k; } }
     return -1;
@@ -1852,10 +1703,8 @@ fn piece_mat(p: Piece) -> i64 {
 
 fn line_cells(p: Piece) -> i64 { return order * cells_for(sqrt(sq(p.p1[0] - p.p0[0]) + sq(p.p1[1] - p.p0[1]) + sq(p.p1[2] - p.p0[2])), mesh_size); }
 
-// The number of cells along `length` for a cell size of at most `size`.
 fn cells_for(length: f64, size: f64) -> i64 { return max(ceil(length / size - 1.0e-9) as! i64, 1); }
 
-// The dofs of the mesh of the model that `read` read: 6 at each node.
 fn dof_estimate() -> i64 {
     if physics_tok >= 0 { return 6 * (lat_nx() + 1) * (lat_nt() + 1); }
     var nodes = 0;

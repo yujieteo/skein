@@ -1,16 +1,7 @@
-// Tests of the meshless methods. `./build.sh test` runs this program from
-// the root of the repository, and a non-zero exit status is a failure.
-//
-// Each manufactured solution is solved on 3 clouds, each with half the
-// spacing of the one before, and the observed order of the L2 error on
-// the two finest clouds must be within 0.3 of 2 (docs/checks.md §4.3):
-// rkpm with the linear basis, and gfd with its fit of order 2. The models
-// of examples/meshless/ check the same orders through
-// `skein verify convergence`.
 import std;
 import math;
 import meshless from "../meshless";
-import solvers from "../solvers";   // the meshless import it
+import solvers from "../solvers";
 
 var failures = 0;
 
@@ -19,7 +10,6 @@ fn fail(what: u8[:]) {
     print("FAIL ", what);
 }
 
-// The smooth field exp(x + y/2), and its source for a = (1, 0.5), d.
 let AX = 1.0;
 let AY = 0.5;
 let D = 0.5;
@@ -27,8 +17,6 @@ fn smooth(x: f64, y: f64) -> f64 { return exp(x + 0.5 * y); }
 fn smooth_source(x: f64, y: f64, t: f64) -> f64 { return (AX + 0.5 * AY - D * 1.25) * smooth(x, y); }
 fn smooth_value(k: i64, x: f64, y: f64, t: f64) -> f64 { return smooth(x, y); }
 
-// Solves the problem on the jittered n × n lattice of the unit square,
-// fixed on each edge, and gives the relative L2 error.
 fn error_on(n: i64, use_gfd: bool) -> f64 {
     meshless::points_rect(0.0, 0.0, 1.0, 1.0, n, n);
     meshless::equation(AX, AY, D);
@@ -50,9 +38,6 @@ fn check_order(what: u8[:], use_gfd: bool) {
     if got < 2.0 - 0.3 { fail(str(what, ": the order is ", got, ", less than 2 - 0.3")); }
 }
 
-// The linear field u = (1e-3 + 2e-3 x - 1e-3 y, -2e-3 + 1e-3 x + 3e-3 y) is
-// exact for elasticity with no load, so rkpm with SCNI and Nitsche must
-// give it on a cloud that is not a grid (the patch test).
 fn linear_u(k: i64, x: f64, y: f64, t: f64) -> f64 {
     return if k == 0 { 1.0e-3 + 2.0e-3 * x - 1.0e-3 * y } else { -2.0e-3 + 1.0e-3 * x + 3.0e-3 * y };
 }
@@ -75,7 +60,6 @@ fn patch_test() {
             worst = max(worst, abs(v - linear_u(c, p[0], p[1], 0.0)));
         }
         let sxx, found = meshless::stress_at(0, 0, p[0], p[1]);
-        // plane stress: sxx = E/(1 - nu²) (exx + nu eyy)
         worst = max(worst, abs(sxx - 1000.0 / 0.91 * (2.0e-3 + 0.3 * 3.0e-3)) * 1.0e-3);
     }
     let r, size, f = meshless::balance();

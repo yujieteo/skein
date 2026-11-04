@@ -1,18 +1,9 @@
-// The parser (spec §3). It reads the tokens of one file and writes the
-// syntax tree into `nodes`. It is recursive descent, with one function for
-// each production of the grammar.
-//
-// After a syntax error, the parser records the error and skips to the next
-// line that starts at column 1 with a keyword of an item, and continues
-// there. Thus one run reports the errors of each item.
 import std;
 namespace syntax;
 import .tree;
 import .units;
 
-// The tokens of the file, without the comments, as indices into `tokens`.
 var ptoks: i64[>..];
-// The position in `ptoks`.
 var pos = 0;
 
 fn tok() -> i64 { ptoks[pos] }
@@ -20,7 +11,6 @@ fn kind() -> i64 { tokens[ptoks[pos]].kind }
 fn kind_at(k: i64) -> i64 { tokens[ptoks[min(pos + k, ptoks.len - 1)]].kind }
 fn at(k: i64) -> bool { kind() == k }
 
-// The current token, and moves past it.
 fn advance() -> i64 {
     let t = ptoks[pos];
     if pos < ptoks.len - 1 { pos++; }
@@ -33,7 +23,6 @@ fn accept(k: i64) -> bool {
     return true;
 }
 
-// Words for a token in a message.
 fn describe(t: i64) -> u8[>..] {
     let k = tokens[t].kind;
     if k == TK_NL { return str("the end of the line"); }
@@ -42,8 +31,6 @@ fn describe(t: i64) -> u8[>..] {
     return str("'", text(t), "'");
 }
 
-// Records a syntax error at the current token, and leaves the item.
-// The lexer has already reported an error at a TK_ERROR token.
 fn fail(msg: u8[:], fix: u8[:]) -> i64 {
     if kind() != TK_ERROR { error_at(tok(), "syntax", msg, fix); }
     return -1 from parse_item;
@@ -53,7 +40,6 @@ fn fail_expected(what: u8[:], fix: u8[:]) -> i64 {
     return fail(str("expected ", what, ", found ", describe(tok())), fix);
 }
 
-// The current token, which must be of kind `k`, and moves past it.
 fn expect(k: i64, what: u8[:]) -> i64 {
     if kind() != k { fail_expected(what, str("insert ", what)); }
     return advance();
@@ -70,13 +56,10 @@ fn expect_ident(what: u8[:]) -> i64 {
     return advance();
 }
 
-// True when the cursor is at a name and `:`. The name of a setting or of an
-// argument may be a keyword, as in `mesh: m` and `results(f, step: "load")`.
 fn at_label() -> bool {
     (kind() == TK_IDENT || kind() >= KW_ALLOW) && kind_at(1) == TK_COLON
 }
 
-// The name of a setting, an argument or a field, and its `:`.
 fn label(what: u8[:]) -> i64 {
     if !at_label() { expect_ident(what); expect(TK_COLON, "':'"); }
     let t = advance();
@@ -84,7 +67,6 @@ fn label(what: u8[:]) -> i64 {
     return t;
 }
 
-// The end of a statement.
 fn end_statement() {
     if at(TK_EOF) { return; }
     if kind() != TK_NL {
@@ -96,16 +78,12 @@ fn end_statement() {
 
 fn skip_newlines() { while at(TK_NL) { advance(); } }
 
-// True when the cursor is at a line that starts in column 1 with the keyword
-// of an item. Such a line always starts a new item, as in the lexer.
 fn at_item() -> bool {
     starts_item(kind()) && tokens[tok()].col == 1 && kind_at(1) != TK_COLON
 }
 
-// True while the cursor is inside the body of a `{` bracket.
 fn in_body() -> bool { !at(TK_RBRACE) && !at(TK_EOF) && !at_item() }
 
-// A node of kind `k` at token `t` with the children `a` and `b`.
 fn node2(k: i64, t: i64, a: i64, b: i64) -> i64 {
     let n = node(k, t);
     add(n, a);
@@ -119,17 +97,11 @@ fn node1(k: i64, t: i64, a: i64) -> i64 {
     return n;
 }
 
-// --- units (spec §6.3) ---------------------------------------------------------
-
-// True when the tokens at the cursor continue a unit expression after `*` or
-// `/`: a unit name, or `(` and a unit name.
 fn unit_follows() -> bool {
     if at(TK_IDENT) { return is_unit_name(text(tok())); }
     return at(TK_LPAREN) && kind_at(1) == TK_IDENT && is_unit_name(text(ptoks[pos + 1]));
 }
 
-// The exponent after `^`: an optional `-` and a multiple of 0.5, as a
-// count of halves (spec §6.1).
 fn exponent() -> i64 {
     let neg = accept(TK_MINUS);
     let t = expect(TK_NUMBER, "an exponent");
@@ -160,8 +132,6 @@ recursive fn unit_factor() -> i64 {
     return u;
 }
 
-// A unit expression. Inside parentheses each `*` and `/` continues it. After
-// a literal, it continues only before a unit name (spec §6.3).
 recursive fn unit_product(inside: bool) -> i64 {
     var u = unit_factor();
     while at(TK_STAR) || at(TK_SLASH) {
@@ -179,18 +149,14 @@ recursive fn unit_product(inside: bool) -> i64 {
     return u;
 }
 
-// An N_UNIT node for the unit expression at the cursor.
 fn unit() -> i64 {
     let t = tok();
     return node1(N_UNIT, t, unit_product(false));
 }
 
-// Adds the unit after a literal to `n`, if there is one (spec §2.6).
 fn literal_unit(n: i64) {
     if at(TK_IDENT) { add(n, unit()); }
 }
-
-// --- types (spec §5) ---------------------------------------------------------------
 
 recursive fn dim_term() -> i64 {
     if at(TK_LPAREN) {
@@ -231,10 +197,6 @@ recursive fn parse_type() -> i64 {
     return dim_product();
 }
 
-// --- expressions (spec §3, §7) ---------------------------------------------------
-
-// An argument list after `(`, up to and with the `)`. Each argument is added
-// to `n` as an N_ARG. With `lists`, an argument can be a list (a procedure).
 recursive fn args(n: i64, lists: bool) {
     while !at(TK_RPAREN) {
         let start = tok();
@@ -247,8 +209,6 @@ recursive fn args(n: i64, lists: bool) {
     expect(TK_RPAREN, "')' or ','");
 }
 
-// The items of a vector, a list or a record, after the open bracket, up to
-// and with the close bracket of kind `close`.
 recursive fn items(n: i64, close: i64, what: u8[:]) {
     while !at(close) {
         add(n, expr());
@@ -257,8 +217,6 @@ recursive fn items(n: i64, close: i64, what: u8[:]) {
     expect(close, what);
 }
 
-// A list `[a, b]` and its unit. It is a study entry or a procedure
-// argument (spec §3, `list`).
 recursive fn list() -> i64 {
     let l = node(N_LIST, advance());
     items(l, TK_RBRACKET, "']' or ','");
@@ -349,7 +307,6 @@ recursive fn unary() -> i64 {
         let t = advance();
         let next = tok();
         let e = unary();
-        // `-5 degC` is one literal, -5 °C, and not -(5 degC).
         if tokens[t].kind == TK_MINUS && nodes[e].kind == N_NUMBER && nodes[e].tok == next &&
                 tokens[next].start == tokens[t].start + tokens[t].len {
             let u = child_of_kind(e, N_UNIT);
@@ -414,10 +371,6 @@ recursive fn expr() -> i64 {
     return e;
 }
 
-// --- blocks and procedures ---------------------------------------------------------
-
-// The value of a setting: an expression or, with `lists`, also a study list
-// or a range (spec §3, `study`).
 fn setting_value(lists: bool) -> i64 {
     if lists && at(TK_LBRACKET) { return list(); }
     let v = expr();
@@ -426,8 +379,6 @@ fn setting_value(lists: bool) -> i64 {
     return node2(N_RANGE, t, v, expr());
 }
 
-// A block: `{`, entries on separate lines or with commas, `}`. With
-// `lists`, the block of a study, an entry can be a list or a range.
 fn parse_block(lists: bool) -> i64 {
     let b = node(N_BLOCK, expect(TK_LBRACE, "'{'"));
     accept(TK_NL);
@@ -451,23 +402,18 @@ fn parse_block(lists: bool) -> i64 {
     return b;
 }
 
-// A procedure: a name and an optional argument list.
 fn procedure() -> i64 {
     let p = node(N_PROC, expect_ident("a procedure name"));
     if accept(TK_LPAREN) { args(p, true); }
     return p;
 }
 
-// `name: type`, the start of many declarations. It gives the node of kind
-// `k` with the type as its child.
 fn typed_name(k: i64, what: u8[:]) -> i64 {
     let n = node(k, expect_ident(what));
     expect(TK_COLON, "':'");
     add(n, parse_type());
     return n;
 }
-
-// --- items (spec §3) -----------------------------------------------------------
 
 fn header() -> i64 {
     advance();
@@ -580,7 +526,6 @@ fn material_decl() -> i64 {
     return n;
 }
 
-// `mesh` or `points`.
 fn discretization(k: i64) -> i64 {
     advance();
     let n = node(k, expect_ident("a name"));
@@ -600,7 +545,6 @@ fn unknowns(n: i64) {
     }
 }
 
-// One statement of a physics block or a template (spec §3, `physstmt`).
 fn physics_statement() -> i64 {
     let t = tok();
     match kind() {
@@ -663,7 +607,6 @@ fn physics_statement() -> i64 {
     }
 }
 
-// `{`, the statements of a physics block, `}`.
 fn physics_body(n: i64) {
     expect(TK_LBRACE, "'{'");
     accept(TK_NL);
@@ -722,7 +665,6 @@ fn method_decl() -> i64 {
     return n;
 }
 
-// `bc region: target = value`, without the end of the statement.
 fn bc_statement() -> i64 {
     let n = node(N_BC, advance());
     add(n, expr());
@@ -733,7 +675,6 @@ fn bc_statement() -> i64 {
     return n;
 }
 
-// `contact` or `interface`.
 fn pair_decl(k: i64) -> i64 {
     advance();
     let n = node(k, expect_ident("a name"));
@@ -746,7 +687,6 @@ fn pair_decl(k: i64) -> i64 {
     return n;
 }
 
-// `symmetry` or `study`: a name, a procedure and a block.
 fn procedure_decl(k: i64) -> i64 {
     advance();
     let n = node(k, expect_ident("a name"));
@@ -757,7 +697,6 @@ fn procedure_decl(k: i64) -> i64 {
     return n;
 }
 
-// `birth` or `death`.
 fn active_set(k: i64) -> i64 {
     let n = node(k, advance());
     loop {
@@ -771,7 +710,6 @@ fn active_set(k: i64) -> i64 {
     return n;
 }
 
-// One statement of a step (spec §3, `stepstmt`).
 fn step_statement() -> i64 {
     let t = tok();
     match kind() {
@@ -832,8 +770,6 @@ fn step_decl() -> i64 {
     return n;
 }
 
-// An `expect`: an item, a statement of a step or, with `lists`, an entry
-// of a study, whose expected value and `within` can be lists (spec §15.3).
 fn expect_statement(lists: bool) -> i64 {
     advance();
     let n = node(N_EXPECT, expect_ident("a name"));
@@ -871,7 +807,6 @@ fn scales_decl() -> i64 {
     return n;
 }
 
-// One item. It gives -1 after a syntax error.
 fn parse_item(first: bool) -> i64 {
     if first != at(KW_MODEL) {
         if first {
@@ -918,16 +853,11 @@ fn parse_item(first: bool) -> i64 {
     }
 }
 
-// Moves to the next line that starts at column 1 with the keyword of an
-// item, or to the end of the file. It moves past the token at `start`, where
-// the failed item started.
 fn recover(start: i64) {
     if pos == start { advance(); }
     while !at(TK_EOF) && !at_item() { advance(); }
 }
 
-// Starts the parse of file `f`, which `lex` has read. It gives a new
-// N_PROGRAM node.
 fn begin_file(f: i64) -> i64 {
     ptoks.clear();
     for t, i in tokens {
@@ -937,7 +867,6 @@ fn begin_file(f: i64) -> i64 {
     return node(N_PROGRAM, tok());
 }
 
-// Parses file `f`, which `lex` has read. It gives the N_PROGRAM node.
 fn parse(f: i64) -> i64 {
     let prog = begin_file(f);
     skip_newlines();
@@ -959,9 +888,6 @@ fn parse(f: i64) -> i64 {
     return prog;
 }
 
-// Parses the library file `f` of a `use` line (spec §4.1). It gives an
-// N_PROGRAM node with the `material`, `param`, `let` and `fn` items. Each
-// other item, also a header or a `use` line, is a `use_item` error.
 fn parse_library(f: i64) -> i64 {
     let prog = begin_file(f);
     skip_newlines();

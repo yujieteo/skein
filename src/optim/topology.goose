@@ -1,16 +1,3 @@
-// The topology loop of femahoy gap G1, as the 88 line code with the
-// sensitivity filter: E. Andreassen, A. Clausen, M. Schevenels, B. S.
-// Lazarov and O. Sigmund, "Efficient topology optimization in MATLAB
-// using 88 lines of code", Struct. Multidisc. Optim. 43 (2011) 1-16.
-//
-// Each cell has a density x, and the modulus E (E_MIN + (1 - E_MIN) x^p)
-// (SIMP). Each iteration solves the design, gives the sensitivities of
-// the objective by the adjoint (adjoint.goose), filters them, and moves
-// each density by the optimality criteria update. A bisection finds the
-// multiplier that keeps the volume at its limit. The loop stops when no
-// density changes by more than STOP_CHANGE. The densities start at the
-// volume limit. The update needs dJ/dx <= 0: the generator (gen.goose)
-// accepts only the compliance of the one point load as the objective.
 import std;
 import math;
 namespace optim;
@@ -18,24 +5,19 @@ import .q4;
 import .band;
 import .adjoint;
 
-let MOVE = 0.2;              // the largest change of a density in an iteration
+let MOVE = 0.2;
 let STOP_CHANGE = 0.01;
 
-// The history of the loop: the objective, the volume fraction and the
-// largest change of a density in each iteration.
 var history_objective: f64[>..] = [];
 var history_volume: f64[>..] = [];
 var history_change: f64[>..] = [];
 
-// The weights H(e, f) = max(0, r - |centre e - centre f|) of the filter,
-// of the cells f in the square of ±reach cells about e.
 fn filter_weight(e: i64, f: i64, r: f64) -> f64 {
     let ddx = (e / ny - f / ny) * dx;
     let ddy = (e % ny - f % ny) * dy;
     return max(0.0, r - sqrt(ddx * ddx + ddy * ddy));
 }
 
-// The sensitivity filter: dc(e) = Σ H(e, f) x(f) dc(f) / (max(1e-3, x(e)) Σ H(e, f)).
 fn filtered(dc: f64[:], r: f64) -> f64[>..] {
     let reach_x = max(0, ceil(r / dx) as! i64 - 1);
     let reach_y = max(0, ceil(r / dy) as! i64 - 1);
@@ -57,8 +39,8 @@ fn filtered(dc: f64[:], r: f64) -> f64[>..] {
     return out;
 }
 
-// The optimality criteria update of the densities, with the volume limit
-// `volume` (a fraction). It gives the new densities.
+let SENSITIVITY_SIGN_TOLERANCE = 1.0e-9;
+
 fn update(dc: f64[:], volume: f64) -> f64[>..] {
     var lo = 0.0;
     var hi = 1.0e9;
@@ -78,10 +60,6 @@ fn update(dc: f64[:], volume: f64) -> f64[>..] {
     return x;
 }
 
-// Runs the loop with the volume limit `volume`, the power `p` and the
-// filter radius `r`, for at most `most` iterations. At the end, the
-// densities and u are those of the last solve. False if a solve finds
-// that the conditions do not hold the body.
 fn topology(volume: f64, p: f64, r: f64, most: i64) -> bool {
     guard volume > 0.0 && volume <= 1.0 && p >= 1.0 && r > 0.0 && most >= 1 && objective_comp >= 0 else { abort("topology: 0 < volume <= 1, p >= 1, r > 0, most >= 1 and an objective"); }
     penalty = p;
@@ -94,7 +72,14 @@ fn topology(volume: f64, p: f64, r: f64, most: i64) -> bool {
     for it in most {
         guard solve() else { return false; }
         solve_adjoint();
-        for e in cell_count() { dc[e] = cell_sensitivity(e); }
+        var largest = 0.0;
+        for e in cell_count() {
+            dc[e] = cell_sensitivity(e);
+            largest = max(largest, abs(dc[e]));
+        }
+        for e in cell_count() {
+            guard dc[e] <= SENSITIVITY_SIGN_TOLERANCE * largest else { abort("topology: the optimality criteria update needs dJ/dx <= 0 in each cell: the objective is not a compliance"); }
+        }
         let next = update(filtered(dc, r), volume);
         var change = 0.0;
         var sum = 0.0;
@@ -111,11 +96,6 @@ fn topology(volume: f64, p: f64, r: f64, most: i64) -> bool {
     return true;
 }
 
-// Makes the design a solid: density 1 in each cell at `level` or more,
-// and 0 (the modulus E_MIN E) in the others. Then solves again, so that u
-// is that of the solid. False if the solve finds that the conditions do
-// not hold the body. Reason: femahoy topology-mbb-beam-cad checks the
-// compliance of the threshold of the last design at 0.5.
 fn solid(level: f64) -> bool {
     guard level > 0.0 && level < 1.0 && density.len == cell_count() else { abort("solid: 0 < level < 1 and a mesh"); }
     for &x in density { x = if x >= level { 1.0 } else { 0.0 }; }

@@ -1,38 +1,15 @@
-// The code generator of the simplex models: a Skein syntax tree to a Goose
-// program that calls src/elements/api.goose.
-//
-// It takes the models that the box slice of src/codegen/ does not: a 2d
-// model, a mesh of `tri` or `tet` cells, or a physics with a scalar
-// unknown. The physics block decides the equations: the template
-// `linear_elastic(b)` or `heat(q_v)`, or the same statements written out
-// (`hooke(E, nu, strain(u))` with `div(sigma) = 0`, `-k*grad(T)` or
-// `fourier(k, T)` with `div(q) = q_v`), or `div(grad(u)) + c*u = s` for a
-// `Complex` scalar unknown u in `harmonic` steps, with `pml` and `bloch`
-// (src/elements/wave.goose). A box or a rect, and one less a
-// cylinder or a circle on its corner (lo.x, lo.y) (the quarter model of a
-// plate with a hole), get the structured meshes of src/elements/mesh.goose.
-// Each other shape of the mesher reader (src/mesher/verify.goose) gets the
-// mesh of src/mesher/, with its refine lines: the generated program builds
-// the shapes of the reader again and meshes them. A 2d elastic model with
-// `points` and `method rkpm` solves with src/meshless/ on the nodes of P1
-// triangles of the same mesh (RKPM_PRELUDE). Each other construct gives an
-// error `unsupported` at its token, with a fix.
-//
-// The dispatch tables of src/codegen/dispatch.goose add a template or a
-// procedure to the box model of src/codegen/codegen.goose. A model of this
-// generator differs in the dimension, the geometry and the cells, so
-// src/codegen/run.goose sends the whole model here. It uses the units and
-// the values of src/codegen/codegen.goose.
 import std;
 import math;
 namespace elements_gen;
 import syntax from "../syntax";
 import codegen.codegen;
-import mesher from "../mesher";   // the reader of the geometry, and its shapes
-import .gen_edge;                  // the edge physics and the Darcy flow
-import .gen_aniso;                // a written-out linear elastic law
-import .gen_solid;                 // plasticity, finite strain and hyperelastic energies
-import .gen_contact;               // contact and the rigid face
+import mesher from "../mesher";
+import .gen_edge;
+import .gen_aniso;
+import .gen_solid;
+import .gen_contact;
+
+let HOLE_GRADE = 1.25;
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) { codegen::unsupported(tok, msg, fix); }
 fn ok() -> bool { syntax::errors.len == 0 }
@@ -47,13 +24,8 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
     kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME && name(child(n, 0)) == callee
 }
 
-// The value of argument i of call n.
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 
-// --- the claim ---------------------------------------------------------------
-
-// Whether this generator takes the model: a 2d header, a mesh of tri or
-// tet cells, or a physics with a scalar unknown.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -85,8 +57,6 @@ fn claims(prog: i64) -> bool {
     return false;
 }
 
-// Whether the model has a mesh of cell: hex of a 3D body: the fallback of
-// the box lane (src/codegen/run.goose).
 fn hex_claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -102,7 +72,6 @@ fn hex_claims(prog: i64) -> bool {
     return false;
 }
 
-// Whether step n has a birth or a death statement.
 fn has_change(n: i64) -> bool {
     var c = first(n);
     while c >= 0 {
@@ -112,46 +81,31 @@ fn has_change(n: i64) -> bool {
     return false;
 }
 
-// Whether step n is a modal step. A modal step of a model with hexahedra
-// runs here: the incompatible modes and the mass are in this lane.
 fn hex_modal(n: i64) -> bool {
     let proc = child(n, 0);
     return name(proc) == "modal";
 }
 
-// Whether type n is a scalar dimension: a name, or names with *, / and ^
-// (Power/Current), but no Vector<..>.
 fn scalar_type(n: i64) -> bool {
     let k = kind(n);
     return k == syntax::N_TYPE_NAME || k == syntax::N_DIM_MUL || k == syntax::N_DIM_DIV || k == syntax::N_DIM_POW;
 }
 
-// Whether type n is Complex<D> of a scalar D.
 fn complex_scalar(n: i64) -> bool {
     return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Complex" && !is_vector_type(first(n)) &&
            kind(first(n)) != syntax::N_TYPE_APPLY;
 }
 
-// Whether type n is Vector<Complex<D>> or Complex<Vector<D>>.
 fn complex_vector(n: i64) -> bool {
     if kind(n) != syntax::N_TYPE_APPLY { return false; }
     if syntax::text(tok(n)) == "Complex" { return is_vector_type(first(n)); }
     return is_vector_type(n) && kind(first(n)) == syntax::N_TYPE_APPLY && syntax::text(tok(first(n))) == "Complex";
 }
 
-// Whether the reports, the expects and the steps are those of the probes of
-// gen_edge.goose: complex values at points and on regions, for each
-// frequency.
 fn probe_physics() -> bool { return physics == EDGE || physics == DARCY || complex_solid; }
 
-// Whether the reports and the expects are complex values of probes (the
-// eddy form of the scalar wave physics has them too).
 fn probe_values() -> bool { return probe_physics() || wave_eddy; }
 
-// --- values --------------------------------------------------------------------
-
-// A scalar or a vector of `dim` components, in the unit system of the
-// header. A temperature in degC is an absolute temperature in K.
 var dim = 3;
 
 struct Vec {
@@ -161,7 +115,6 @@ struct Vec {
 
 fn scalar(x: f64) -> Vec { Vec { n: 1, v: [x, 0.0, 0.0] } }
 
-// The node `t.col` of a table t in the expression n, or -1.
 recursive fn table_member(n: i64) -> i64 {
     if n < 0 { return -1; }
     if kind(n) == syntax::N_MEMBER && kind(first(n)) == syntax::N_NAME && position(codegen::table_names, name(first(n))) >= 0 { return n; }
@@ -174,14 +127,13 @@ recursive fn table_member(n: i64) -> i64 {
     return -1;
 }
 
-// The values of the column of the member node m of a table.
 fn column_values(m: i64) -> f64[>..] {
     var col: f64[>..] = [];
     codegen::table_column(codegen::table_nodes[position(codegen::table_names, name(first(m)))], name(m), tok(m), col);
     return col;
 }
 
-var table_row = -1;     // the row of `t.col` in value, or -1
+var table_row = -1;
 
 recursive fn value(n: i64) -> Vec {
     let k = kind(n);
@@ -265,10 +217,7 @@ fn cdiv(a: f64[2], b: f64[2]) -> f64[2] {
     return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d];
 }
 
-// A Complex constant: `im`, and `omega` of the frequency that the
-// generator writes, with +, -, *, / and integer powers, over the real
-// values of value().
-var unknown_as_one = false;     // cval reads the unknown as 1: the z of z*p in a Robin condition
+var unknown_as_one = false;
 
 recursive fn cval(n: i64) -> f64[2] {
     let k = kind(n);
@@ -300,7 +249,6 @@ recursive fn cval(n: i64) -> f64[2] {
         let a = cval(first(n));
         return [-a[0], -a[1]];
     }
-    // sqrt of a Complex value that has omega: the root with Re >= 0.
     if is_call(n, "sqrt") && syntax::child_count(n) == 2 && mentions_omega(arg(n, 0)) {
         let a = cval(arg(n, 0));
         let r = sqrt(a[0] * a[0] + a[1] * a[1]);
@@ -329,35 +277,29 @@ recursive fn cval(n: i64) -> f64[2] {
     return [scalar_value(n), 0.0];
 }
 
-// --- the model -------------------------------------------------------------------
-
 let GEO_BOX = 0;
 let GEO_HOLE = 1;
 let GEO_SHAPE = 2;
 
 let ELASTIC = 0;
 let HEAT = 1;
-let WAVE = 2;       // as in src/elements/assemble.goose
+let WAVE = 2;
 
 let SOLID_3D = 0;
 let PLANE_STRESS = 1;
 let PLANE_STRAIN = 2;
 
-// The bc kinds: a fixed value of the unknown or a component of it, a
-// traction `sigma*n` or a heat flux `dot(q, n)`, or the unknown of another
-// model on the cut of a submodel.
 let BC_FIX = 0;
 let BC_LOAD = 1;
-let BC_SOURCE = 2;  // `bc cut: u = global.u`: the unknown of a `results`
-let BC_RADIATE = 3; // `bc r: dot(q, n) = radiation(eps)`: a face of the enclosure of the step
-let BC_PRESSURE = 4; // `bc inner: sigma*n = -p*n`: v[0] holds p
-let BC_FILM = 5;    // `bc skin: dot(q, n) = h*(T - T_air)`: v holds h and T_air
-let BC_ROBIN = 9;   // `bc far: dot(grad(p), n) = z*p`: node holds z*p, with p read as 1
-let BC_AMBIENT = 8; // `bc skin: dot(q, n) = c*(T^4 - T_amb^4)`: v holds c = eps sigma and T_amb
+let BC_SOURCE = 2;
+let BC_RADIATE = 3;
+let BC_PRESSURE = 4;
+let BC_FILM = 5;
+let BC_ROBIN = 9;
+let BC_AMBIENT = 8;
 
 fn is_load(b: Bc) -> bool { return b.kind == BC_LOAD || b.kind == BC_PRESSURE || b.kind == BC_MOMENT; }
 
-// The pressure p of the traction value -p*n, or NaN.
 fn pressure_of(v: i64) -> f64 {
     let neg = kind(v) == syntax::N_UNARY && syntax::text(tok(v)) == "-";
     let m = if neg { first(v) } else { v };
@@ -366,29 +308,24 @@ fn pressure_of(v: i64) -> f64 {
     return if neg { p } else { -p };
 }
 
-// A region of the boundary: the union of planes `axis == value` and of
-// the surfaces of the shapes `shapes` of the mesher, or the surface of the
-// hole.
 struct Surf {
     name: u8[..64],
     hole: bool,
     axes: i64[..6],
     values: f64[..6],
     shapes: i64[..6],
-    points: f64[..48],  // x, y and z of each point of a Point let: the node nearest to each
-    lims: f64[..24],    // the limits of a condition x < c or sqrt(x^2 + y^2) <= r: kind (0 coordinate, 1 radius), relation (surf_limit), axis, value or cx, cy, r
-    pcut: f64[..24],    // for the planes with a limit of their own (a && inside an ||): the plane index, axis, value and relation of the limit
-    minus: i64,     // the boundary whose nodes a - b removes, or -1
-    body: i64,      // the body of a contact that holds the boundary, or -1 (gen_contact.goose)
+    points: f64[..48],
+    lims: f64[..24],
+    pcut: f64[..24],
+    minus: i64,
+    body: i64,
 }
 
-// A refine line of the mesh of a shape: the shape, the size, and whether
-// the target is the surface of the shape (src/mesher/refine.goose).
 struct Refine {
     g: i64,
     size: f64,
     surface: bool,
-    axis: i64,      // clipped to the planes `axis` = planes (mesher::add_refine_clip), or -1
+    axis: i64,
     planes: f64[2],
     plane_count: i64,
     round: bool,
@@ -396,16 +333,14 @@ struct Refine {
 }
 
 struct Bc {
-    surf: i64,      // index in `surfs`
+    surf: i64,
     kind: i64,
-    comp: i64,      // -1 for all components, or the index in `sources` of BC_SOURCE
+    comp: i64,
     v: f64[3],
     tok: i64,
-    node: i64,      // the value of a bc of the wave physics: a Complex constant, which can hold omega
+    node: i64,
 }
 
-// A `results` of another model (spec §15.1): the let, the file, its model
-// and unit system, the step, and the --set word of `case:`, or "".
 struct Source {
     name: u8[..64],
     path: u8[..256],
@@ -415,22 +350,19 @@ struct Source {
     set: u8[..256],
 }
 
-// A material on a region (`material backfill on lift1`): the shape of the
-// region, and the law of the material in the units of the model.
 struct Law {
     g: i64,
-    item: i64,      // the material item
-    cond: f64,      // the conductivity and the source of a heat physics
+    item: i64,
+    cond: f64,
     src: f64,
     young: f64,
     poisson: f64,
     force: f64[3],
-    cm: f64[36],    // the written-out elastic law of gen_aniso.goose
+    cm: f64[36],
     s0: f64[6],
     label: u8[..256],
 }
 
-// `birth r` or `death r` of a step: the shape of r.
 struct Change {
     g: i64,
     birth: bool,
@@ -440,7 +372,7 @@ struct Change {
 struct Report {
     expr: i64,
     label: u8[..256],
-    row: i64,           // the row of the table that the point of the report names, or -1
+    row: i64,
 }
 
 struct Step {
@@ -454,41 +386,40 @@ struct Step {
     first_change: i64,
     change_count: i64,
     output: bool,
-    procedure: i64,     // STATIC, MODAL, BUCKLING or HARMONIC
-    count: i64,         // the modes of a modal or buckling step
-    first_freq: i64,    // the frequencies of a harmonic step in `freqs`
+    procedure: i64,
+    count: i64,
+    first_freq: i64,
     freq_count: i64,
-    damping: f64,       // the damping ratio of a harmonic step
-    end: f64,           // the end time of a transient step
-    dt: f64,            // its time step, or 0 for dt: stable
-    theta: f64,         // the scheme of a transient heat step: 1 backward Euler, 1/2 Crank-Nicolson
-    every: i64,         // the fields of a transient step each `every` time steps, or 0
+    damping: f64,
+    end: f64,
+    dt: f64,
+    theta: f64,
+    every: i64,
 }
 
 let STATIC = 0;
 let MODAL = 1;
 let BUCKLING = 2;
 let HARMONIC = 3;
-let TRANSIENT = 4;  // central_difference (src/elements/explicit.goose)
+let TRANSIENT = 4;
 
-// What a point field samples (api.goose: value_at, stress_at, flux_at).
 let FIELD_VALUE = 0;
 let FIELD_STRESS = 1;
 let FIELD_FLUX = 2;
-let FIELD_EIGEN = 3;    // eigenvalue(comp + 1)
-let FIELD_WAVE = 4;     // a part of the wave unknown: comp is the index in PARTS
-let FIELD_REACTION = 5; // reaction(r).x, or the heat into the body by integral(dot(q, n), r) on a fixed boundary r
-let FIELD_MEAN = 6;     // mean(T, r) or mean(u.x, r) on the boundary r
-let FIELD_BODY_MEAN = 7; // mean(sigma.xx, body): comp is 3 i + j
-let FIELD_BOX_MEAN = 14; // mean(sigma.xz, r) over the box r of a Solid let: comp is 3 i + j, the box is box_lo and box_hi
-let FIELD_VON_MISES = 12; // max(von_mises(sigma), r) on the boundary r
-let FIELD_CONSTANT = 11; // a number, a param or a let: scale is its value
-let FIELD_COMPOSITE = 9; // a value of two physics: comp is the node of its expression (composite_text)
-let FIELD_EXTREME = 10; // max(u.z, r), min(u.z, r) or their difference on the boundary r: comp is the component + 10 for min, + 20 for the range
-let FIELD_WAVE_Z = 13;  // a part of an expression of samples of the wave unknown: comp is the node of the part call
-let FIELD_MAX = 8;      // max(sigma.yy, r) or max(-sigma.yy, r) on the boundary r: comp is 3 i + j, + 9 for the minus
+let FIELD_EIGEN = 3;
+let FIELD_WAVE = 4;
+let FIELD_REACTION = 5;
+let FIELD_MEAN = 6;
+let FIELD_BODY_MEAN = 7;
+let FIELD_BOX_MEAN = 14;
+let FIELD_VON_MISES = 12;
+let FIELD_CONSTANT = 11;
+let FIELD_COMPOSITE = 9;
+let FIELD_EXTREME = 10;
+let FIELD_WAVE_Z = 13;
+let FIELD_MAX = 8;
 
-var box_lo: f64[3] = [0.0; 3];   // the box of the last region_field of a FIELD_BOX_MEAN
+var box_lo: f64[3] = [0.0; 3];
 var box_hi: f64[3] = [0.0; 3];
 
 struct Expect {
@@ -500,13 +431,13 @@ struct Expect {
     within: f64,
     relative: bool,
     label: u8[..256],
-    step: i64,      // the step that checks it at its end, or -1 for an item
-    modal: bool,    // an eigenvalue of a modal step: a frequency
-    surf: i64,      // the boundary of FIELD_MEAN and FIELD_REACTION, or -1
-    scale: f64,     // the factor of the value: -1 for a minus sign or for the heat out of the body
-    inverse: bool,  // the value is scale / the field, as -V0/integral(dot(J, n), spot)
-    unit: u8[..64], // the unit of the value, for a reaction of a heat physics with no k; else ""
-    lo: f64[3],     // the corners of the box of FIELD_BOX_MEAN
+    step: i64,
+    modal: bool,
+    surf: i64,
+    scale: f64,
+    inverse: bool,
+    unit: u8[..64],
+    lo: f64[3],
     hi: f64[3],
 }
 
@@ -514,13 +445,13 @@ var geometry_names: u8[..64][>..];
 var geometry_nodes: i64[>..];
 var surface_lets: i64[>..];
 var point_lets: i64[>..];
-var conductivity_name: u8[..64] = [];  // the property of the flux of the heat physics: k, or eps of -eps*grad(phi)
+var conductivity_name: u8[..64] = [];
 var geo = GEO_BOX;
 var lo: f64[3];
 var hi: f64[3];
 var hole_r = 0.0;
 var hole_name: u8[..64];
-var body_shape = -1;            // the shape of the mesher of GEO_SHAPE
+var body_shape = -1;
 var refines: Refine[>..];
 var body_name: u8[..64];
 var surfs: Surf[>..];
@@ -532,79 +463,79 @@ var steps: Step[>..];
 var expects: Expect[>..];
 var skipped: u8[..256][>..];
 var sources: Source[>..];
-var cut_source = -1;            // the source of the BC_SOURCE bcs, or -1
-var flux_plus = false;          // the flux is +c*grad(u): integral(dot(F, n)) is the reaction, not minus it
-var coef_inverse = false;       // the coefficient of the flux is 1/c, for a flux grad(u)/c
-var thermal_strain_node = -1;   // S of hooke(E, nu, strain(u) - S*I), or -1
+var cut_source = -1;
+var flux_plus = false;
+var coef_inverse = false;
+var thermal_strain_node = -1;
 var mesh_size = 0.0;
 var mesh_fine = 0.0;
-var mesh_angle = 0.0;   // the mesh setting feature_angle in radians (spec §9.1), or 0 if not given
-var mesh_grade = 0.0;   // the mesh setting grade (spec §9.1), or 0 if not given
+var mesh_angle = 0.0;
+var mesh_grade = 0.0;
 var mesh_tok = -1;
-var capacity = 0.0;             // rho*cp of the material
-var capacity_node = -1;         // rho*cp of `eq rho*cp*ddt(T) + div(q) = 0`, or -1
-var curve_node = -1;            // the k of the material when it depends on the unknown T, else -1
-var initial_node = -1;          // the initial value of the unknown, or -1
-var nl_rtol = 0.0;              // rtol of a solve item, or 0
-var mesh_has_tip = false;        // the mesh has a crack_tip: the body is a shape of the mesher
-var crack_tips: f64[3][>..];     // x, y and the size of each crack_tip
-var hex_regions = false;         // a region of cells on the hexahedra of a union of boxes
-var has_regions = false;         // the physics has a `material m on r`
-var quad_mesh = false;           // cell: quad of a 2D mesh, meshed as triangles
-var incompatible_family = false; // method solid: cg { family: incompatible } of the hexahedra
-var hex_mesh = false;           // the mesh has cell: hex (hexahedra of order 1, or the 20-node serendipity hexahedra of order 2)
-var reduced_quadrature = false; // method solid: cg { quadrature: reduced }: 2 Gauss points along each axis of a hexahedron of order 2, else 3
+var capacity = 0.0;
+var capacity_node = -1;
+var curve_node = -1;
+var initial_node = -1;
+var nl_rtol = 0.0;
+var mesh_has_tip = false;
+var crack_tips: f64[3][>..];
+var hex_regions = false;
+var has_regions = false;
+var quad_mesh = false;
+var incompatible_family = false;
+var hex_mesh = false;
+var reduced_quadrature = false;
 var order = 2;
-var rkpm_support = 0.0;         // the support of the rkpm method, or 0 for cg
+var rkpm_support = 0.0;
 var physics = -1;
-var program_node = -1;          // the program that read() reads
+var program_node = -1;
 var plane = SOLID_3D;
 var thickness = 1.0;
 var physics_tok = -1;
 var physics_name: u8[..64];
 var unknown_name: u8[..64];
-var flux_name: u8[..64];        // sigma or q
+var flux_name: u8[..64];
 var material_name: u8[..64];
-var material_node = -1;         // the material of law 0: of the cells that no other material holds
-var material_items: i64[>..];   // each material item
-var region_laws: Law[>..];      // the other materials, on regions
-var changes: Change[>..];       // the birth and death statements of the steps
-var interfaces: i64[>..];       // the shapes whose boundary the mesh keeps
-var law_c: f64[36] = [0.0; 36];   // the written-out law of law 0 (gen_aniso.goose) and its stress at zero strain
+var material_node = -1;
+var material_items: i64[>..];
+var region_laws: Law[>..];
+var changes: Change[>..];
+var interfaces: i64[>..];
+var law_c: f64[36] = [0.0; 36];
 var law_s0: f64[6] = [0.0; 6];
 var young = 0.0;
 var poisson = -1.0;
 var conductivity = 0.0;
 var source = 0.0;
-var source_node = -1;           // the right side of the eq, or -1 for 0
-var body_node = -1;             // the argument b of linear_elastic, or -1
+var source_node = -1;
+var body_node = -1;
 var body_force: f64[3] = [0.0; 3];
 var density = 0.0;
-var complex_solid = false;      // the unknown of the elastic physics is a Complex vector: harmonic steps (harmonic.goose)
-var wave_c_node = -1;           // c of eq div(grad(u)) + c*u = s, or -1 for 0
-var wave_s_node = -1;           // s, or -1 for 0
-var wave_eddy = false;          // the eq is -div(grad(u)/mu) = R(u), as in the eddy currents: c, s and mu come from the material of each region
-var eddy_mu_node = -1;          // mu of div(grad(u)/mu)
-var eddy_rhs_node = -1;         // R, the right side of the eq
-var eddy_sign = 1.0;            // -1 for -div(...) = R
-var eddy_k_node = -1;           // k of the heat form rho*cp*ddt(T) + div(q) = q_v with q = -k*grad(T), else -1
-var eddy_heat_node = -1;        // rho*cp*ddt(T) of the heat form
-var eddy_on = false;            // cval reads the unknown as eddy_u and ddt(x) as im*omega*x
+var complex_solid = false;
+var wave_c_node = -1;
+var wave_s_node = -1;
+var wave_eddy = false;
+var eddy_mu_node = -1;
+var eddy_rhs_node = -1;
+var eddy_sign = 1.0;
+var eddy_k_node = -1;
+var eddy_heat_node = -1;
+var eddy_on = false;
 var eddy_u: f64[2] = [0.0, 0.0];
-var omega_now = 0.0;            // omega of the frequency that the generator writes
-var freqs: f64[>..];            // the frequencies of the harmonic steps
-var pml_g = -1;                 // the shape of the pml layer, or -1
+var omega_now = 0.0;
+var freqs: f64[>..];
+var pml_g = -1;
 var pml_tok = -1;
-var pml_lo: f64[3] = [0.0; 3];  // the box inside the layer
+var pml_lo: f64[3] = [0.0; 3];
 var pml_hi: f64[3] = [0.0; 3];
 var pml_h = 0.0;
-var bloch_low = -1;             // the low and high boundaries of a bloch group, or -1
+var bloch_low = -1;
 var bloch_high = -1;
 var bloch_period: f64[3] = [0.0; 3];
-var bloch_theta = 0.0;          // dot(k, period)
+var bloch_theta = 0.0;
 var step_now = Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0, report_count: 0,
                       first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0, first_freq: 0, freq_count: 0,
-                      damping: 0.0, end: 0.0, dt: 0.0, theta: 1.0, every: 0 };   // the step that step() reads
+                      damping: 0.0, end: 0.0, dt: 0.0, theta: 1.0, every: 0 };
 
 fn reset() {
     density = 0.0;
@@ -730,7 +661,6 @@ fn axis_of(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The geometry call that `n` is or names.
 fn geometry_call(n: i64) -> i64 {
     if kind(n) == syntax::N_NAME { return find_geometry(name(n)); }
     return n;
@@ -744,8 +674,6 @@ fn is_shape(n: i64) -> bool {
     return false;
 }
 
-// Whether `n` is a shape: a shape call, the name of one, or |, & and - of
-// shapes.
 recursive fn geometric(n: i64) -> bool {
     if kind(n) == syntax::N_NAME { return find_geometry(name(n)) >= 0; }
     if kind(n) == syntax::N_BINARY {
@@ -772,13 +700,10 @@ fn header(n: i64) {
     unsupported(tok(sys), "the unit system is not in this slice", "write SI, mm_N_MPa_s or mm_kg_ms");
 }
 
-// `let` and `param`: a geometry value, a boundary, or a value.
-// `point(p)`, or a `pattern` of one: a Point let.
 recursive fn point_set(v: i64) -> bool {
     return is_call(v, "point") || is_call(v, "pattern") && syntax::child_count(v) == 4 && point_set(arg(v, 0));
 }
 
-// Adds the points of the point set v to s.
 recursive fn add_points(v: i64, s: Surf&) {
     if is_call(v, "point") {
         let p = value(arg(v, 0));
@@ -805,7 +730,6 @@ recursive fn add_points(v: i64, s: Surf&) {
     }
 }
 
-// `let tip: Point = pattern(point((L, 0 mm, 0 mm)), (0 mm, W/2, 0 mm), 3)`.
 fn point_surf(n: i64) {
     var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: -1, body: -1 };
     set64(s.name, name(n));
@@ -832,8 +756,6 @@ fn value_item(n: i64) {
     }
 }
 
-// `let global: Results = results(file, step: s, case: p)`. The file is
-// relative to the model file.
 fn results_item(n: i64, v: i64) {
     var src = Source { name: [], path: [], model: [], system: -1, step: [], set: [] };
     set64(src.name, name(n));
@@ -898,9 +820,6 @@ fn corner(n: i64, i: i64) -> f64[3] {
     return v.v;
 }
 
-// Whether shape `n` is a box (a rect in 2d), or one less a hole along z
-// with its axis on the corner (lo.x, lo.y): the structured meshes of
-// mesh_box and mesh_hole.
 fn structured(n: i64) -> bool {
     let shape = if dim == 3 { "box" } else { "rect" };
     let round = if dim == 3 { "cylinder" } else { "circle" };
@@ -925,8 +844,6 @@ fn structured(n: i64) -> bool {
         centre[2] + h >= max(a[2], b[2]) - tol;
 }
 
-// The body of the physics: a box, or a box less a hole on its corner, for
-// the structured meshes, else a shape of the mesher.
 fn body(region: i64) {
     let n = if kind(region) == syntax::N_NAME { find_geometry(name(region)) } else { -1 };
     if n < 0 {
@@ -934,7 +851,6 @@ fn body(region: i64) {
         return;
     }
     set64(body_name, name(region));
-    // Hexahedra with regions of materials need a grid plane on each face of a region.
     if !structured(n) || has_regions {
         shape_body(region);
         return;
@@ -955,7 +871,6 @@ fn body(region: i64) {
     geo = GEO_HOLE;
 }
 
-// The body as a shape of the mesher reader: its bounds give lo and hi.
 fn shape_body(region: i64) {
     let v = mesher::eval_value(region);
     guard ok() else { return; }
@@ -979,18 +894,14 @@ fn shape_body(region: i64) {
 
 let SURF_FIX = "write boundary(plate, x == 0 mm), with x, y or z on a face of the body, abs(x - 40 mm) == 15 mm or abs(x) == 15 mm for two faces, an || of these, or boundary(plate, bore) for the hole";
 
-var in_and = false;   // surf_parts reads the atoms of an &&
-var in_or = false;    // surf_parts reads the atoms of an ||
+var in_and = false;
+var in_or = false;
 
-// A limit atom `v < c`, `v <= c`, `v > c` or `v >= c` of a coordinate v, or of the
-// radius sqrt(x^2 + y^2) or x^2 + y^2 (against R^2): the nodes of the
-// boundary that it keeps. It gives false when `cond` is no such atom.
 fn limit_atom(cond: i64, s: Surf&) -> bool {
     guard kind(cond) == syntax::N_BINARY else { return false; }
     let op = syntax::text(tok(cond));
     guard op == "<" || op == "<=" || op == ">" || op == ">=" else { return false; }
     let low = op == ">" || op == ">=";
-    // The nodes that the limit removes: v >= c removes v < c (-1), v > c removes v <= c (-2), v < c removes v >= c (2), v <= c removes v > c (1).
     let rel = if op == ">=" { -1 } else if op == ">" { -2 } else if op == "<" { 2 } else { 1 };
     guard s.lims.len + 6 <= s.lims.cap else {
         unsupported(tok(cond), "a boundary has at most 4 limits", SURF_FIX);
@@ -1026,7 +937,6 @@ fn limit_atom(cond: i64, s: Surf&) -> bool {
     return true;
 }
 
-// Adds the planes of condition `cond` to `s`.
 recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "||" {
         let before = s.lims.len;
@@ -1040,7 +950,6 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         }
         return done;
     }
-    // a && b: the nodes of a plane, or of the surface, that the limits keep.
     if kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "&&" {
         let was = in_and;
         in_and = true;
@@ -1048,7 +957,6 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         let lims = s.lims.len;
         let done = surf_parts(child(cond, 0), s) && surf_parts(child(cond, 1), s);
         in_and = was;
-        // In an ||, a coordinate limit of the && cuts only the planes of the &&.
         if done && in_or && s.lims.len == lims + 6 && s.lims[lims] == 0.0 && s.axes.len > planes && s.pcut.len + 4 * (s.axes.len - planes) <= s.pcut.cap {
             for i in planes..s.axes.len {
                 s.pcut.push(i * 1.0);
@@ -1071,7 +979,6 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         s.shapes.push(v.g);
         return true;
     }
-    // abs(x - c) == d: the planes x == c - d and x == c + d.
     let is_abs = kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" && is_call(child(cond, 0), "abs") &&
         syntax::child_count(child(cond, 0)) == 2;
     let inner = if is_abs { arg(child(cond, 0), 0) } else { -1 };
@@ -1082,7 +989,6 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
         let d = scalar_value(child(cond, 1));
         return face_plane(cond, axis, c - d, s) && face_plane(cond, axis, c + d, s);
     }
-    // abs(x) == d: the planes x == -d and x == d.
     if inner >= 0 && kind(inner) == syntax::N_NAME && axis_of(name(inner)) >= 0 && s.axes.len + 2 <= s.axes.cap {
         let d = scalar_value(child(cond, 1));
         return face_plane(cond, axis_of(name(inner)), -d, s) && face_plane(cond, axis_of(name(inner)), d, s);
@@ -1099,9 +1005,6 @@ recursive fn surf_parts(cond: i64, s: Surf&) -> bool {
     return face_plane(cond, axis, scalar_value(child(cond, 1)), s);
 }
 
-// `x > 0 mm` on a box, with 0 mm on its lo face (or `x < a` with a on its
-// hi face): each face of the box but that one. It gives false when `cond`
-// is no such condition.
 fn half_space(cond: i64, s: Surf&) -> bool {
     guard kind(cond) == syntax::N_BINARY && kind(child(cond, 0)) == syntax::N_NAME else { return false; }
     let op = syntax::text(tok(cond));
@@ -1126,7 +1029,6 @@ fn half_space(cond: i64, s: Surf&) -> bool {
     return true;
 }
 
-// The axis and the centre of `x^2` or `(x - c)^2`, or -1.
 fn square(n: i64) -> i64, f64 {
     guard kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "^" && source_of(child(n, 1)) == "2" else { return -1, 0.0; }
     let b = child(n, 0);
@@ -1135,12 +1037,8 @@ fn square(n: i64) -> i64, f64 {
     return axis_of(name(child(b, 0))), scalar_value(child(b, 1));
 }
 
-// `y^2 + z^2 == R^2` or `sqrt(y^2 + z^2) == R` on a 3d shape: the surface at distance R from the
-// line along the third axis, as a cylinder of the mesher past the ends of
-// the body. It gives false when `cond` is no such condition.
 fn mantle(cond: i64, s: Surf&) -> bool {
     guard kind(cond) == syntax::N_BINARY && syntax::text(tok(cond)) == "==" else { return false; }
-    // sqrt(y^2 + z^2) == R is the same surface.
     let root = is_call(child(cond, 0), "sqrt") && syntax::child_count(child(cond, 0)) == 2;
     let sum = if root { arg(child(cond, 0), 0) } else { child(cond, 0) };
     guard kind(sum) == syntax::N_BINARY && syntax::text(tok(sum)) == "+" else { return false; }
@@ -1165,8 +1063,6 @@ fn mantle(cond: i64, s: Surf&) -> bool {
     return true;
 }
 
-// Adds the plane `axis == v` of condition `cond` to `s`. On a box, it is a
-// face. On a shape, it holds a part of the surface, so it is in the bounds.
 fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
     let tol = 1.0e-6 * (hi[axis] - lo[axis]);
     let face = abs(v - lo[axis]) <= tol || abs(v - hi[axis]) <= tol;
@@ -1180,8 +1076,6 @@ fn face_plane(cond: i64, axis: i64, v: f64, s: Surf&) -> bool {
     return true;
 }
 
-// `let skin: Surface = boundary(pin) - base`: every face of the box but the
-// nodes of the boundary `base`.
 fn surface_difference(n: i64) {
     let v = child(n, 1);
     let call = child(v, 0);
@@ -1203,7 +1097,6 @@ fn surface_difference(n: i64) {
     surfs.push(s);
 }
 
-// `let root: Surface = boundary(plate, x == 0 mm)`.
 fn surface(n: i64) {
     if kind(child(n, 1)) == syntax::N_BINARY {
         surface_difference(n);
@@ -1212,11 +1105,9 @@ fn surface(n: i64) {
     let v = child(n, 1);
     let of = if syntax::child_count(v) == 3 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { "" };
     let k = find_body(of);
-    // The boundary of another shape of the model serves a `refine` only, which the mesher reads from the let.
     let whole = if syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { of };
     if whole != body_name && find_body(whole) < 0 && whole.len > 0 && find_geometry(whole) >= 0 { return; }
     if syntax::child_count(v) == 2 && (is_call(arg(v, 0), "circle") || is_call(arg(v, 0), "rect")) { return; }
-    // boundary(body): all faces of the body.
     let all = syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == body_name;
     if of != body_name && k < 0 && !all {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
@@ -1225,7 +1116,6 @@ fn surface(n: i64) {
     var s = Surf { name: [], hole: false, axes: [], values: [], shapes: [], points: [], lims: [], pcut: [], minus: -1, body: k };
     set64(s.name, name(n));
     if !all && !surf_parts(arg(v, 1), s) { return; }
-    // Only limits, or no part: the whole boundary of the body.
     if (s.lims.len > 0 || all) && s.axes.len == 0 && s.shapes.len == 0 && !s.hole {
         if geo == GEO_SHAPE {
             s.shapes.push(body_shape);
@@ -1261,13 +1151,9 @@ fn find_material(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The shape of a region of cells: of a material, a birth or a death. The
-// mesh keeps its boundary (mesher::add_interface), so a cell is in it or
-// out of it as a whole.
 fn region_shape(r: i64) -> i64 {
     let v = mesher::eval_value(r);
     guard ok() else { return -1; }
-    // The hexahedra of a union of boxes are whole in a region: the grid has a plane on each face of it.
     if v.n == 0 && hex_mesh && geo == GEO_BOX {
         hex_regions = true;
         return v.g;
@@ -1290,8 +1176,6 @@ fn region_shape(r: i64) -> i64 {
     return v.g;
 }
 
-// Whether the expression n uses the name `word`, through the values and the
-// properties that it names.
 recursive fn mentions(n: i64, word: u8[:], depth: i64) -> bool {
     if n < 0 || depth > 20 { return false; }
     if kind(n) == syntax::N_NAME {
@@ -1308,7 +1192,6 @@ recursive fn mentions(n: i64, word: u8[:], depth: i64) -> bool {
     return false;
 }
 
-// The material property `word`, or -1.
 fn property(word: u8[:]) -> i64 {
     guard material_node >= 0 else { return -1; }
     var p = first(material_node);
@@ -1319,7 +1202,6 @@ fn property(word: u8[:]) -> i64 {
     return -1;
 }
 
-// Reads the material of law 0, then the one of each region law.
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
@@ -1345,16 +1227,11 @@ fn read_material() {
     }
 }
 
-// Reads the material `material_node` into young and poisson, or
-// conductivity.
 fn read_law() {
     var p = first(material_node);
     while p >= 0 {
         let w = name(p);
-        // The eq of the wave physics names its properties.
-        // Any property of a heat physics can be a part of k(T) or of a coefficient of a bc.
         let known = if physics == ELASTIC { w == "E" || w == "nu" || w == "alpha" || aniso_node >= 0 } else { physics == WAVE || physics == EDGE || physics == DARCY || physics == HEAT || w == conductivity_name || w == "q_v" };
-        // With several physics, a property of the material that this one does not read belongs to another.
         if !known && w != "rho" && !solid_property(w) && !multi() {
             unsupported(tok(p), str("the property '", w, "' is not in this generator"),
                         if physics == ELASTIC { "give the material E and nu" } else { "give the material k, and q_v for a source" });
@@ -1368,7 +1245,6 @@ fn read_law() {
         if e >= 0 { young = scalar_value(e); }
         if nu >= 0 { poisson = scalar_value(nu); }
         if rho >= 0 { density = scalar_value(rho); }
-        // The written-out law gives the moduli: the cells use it, and the others see the unit law.
         if aniso_node >= 0 {
             young = 1.0;
             poisson = 0.0;
@@ -1409,10 +1285,8 @@ fn mesh(n: i64) {
     while s >= 0 {
         let v = first(s);
         if kind(s) == syntax::N_REFINE && geo == GEO_SHAPE {
-            // A boundary by a condition of one surface (a mantle) refines that surface.
             let si = if kind(first(s)) == syntax::N_NAME { find_surf(name(first(s))) } else { -1 };
             let one = si >= 0 && surfs[si].shapes.len == 1 && surfs[si].axes.len == 0;
-            // A boundary by planes (and a round limit) on the shape: its surface near the planes.
             let clip = si >= 0 && surfs[si].shapes.len == 0 && surfs[si].axes.len > 0 && surfs[si].axes.len <= 2 && !surfs[si].hole &&
                 (surfs[si].axes.len == 1 || surfs[si].axes[0] == surfs[si].axes[1]);
             var g = if one { surfs[si].shapes[0] } else if clip { body_shape } else { -1 };
@@ -1456,7 +1330,6 @@ fn mesh(n: i64) {
             if dim == 3 && kind(v) == syntax::N_NAME && name(v) == "hex" {
                 hex_mesh = true;
             } else if dim == 2 && kind(v) == syntax::N_NAME && name(v) == "quad" {
-                // The quad cells of a model with a method (quad8, reduced) are P2 triangles of the same size here.
                 quad_mesh = true;
             } else if kind(v) != syntax::N_NAME || name(v) != cell {
                 unsupported(tok(v), str("a ", dim, "d model of this generator has ", cell, if dim == 3 { " or hex" } else { "" }, " cells"),
@@ -1472,8 +1345,6 @@ fn mesh(n: i64) {
     if mesh_fine <= 0.0 { mesh_fine = mesh_size; }
 }
 
-// `crack_tip p: L`: cells of size L at the point p, with the mid-side nodes on the
-// edges at p moved to a quarter (elements::quarter_point).
 fn crack_tip(s: i64) {
     let region = first(s);
     var p = if kind(region) == syntax::N_NAME { mesher::let_node(name(region)) } else { -1 };
@@ -1489,8 +1360,6 @@ fn crack_tip(s: i64) {
         return;
     };
     crack_tips.push([at.v[0], at.v[1], size]);
-    // The circle of radius L is an interface of the mesh: its arc is cut in edges of length L and no
-    // cell crosses it, so the cells in it are a fan of triangles with the edges of length L at the tip.
     let g = mesher::circle(at.v[0], at.v[1], size);
     interfaces.push(g);
     refines.push(Refine { g: g, size: size, surface: true, axis: -1, planes: [0.0; 2], plane_count: 0, round: false, ring: [0.0; 3] });
@@ -1498,15 +1367,12 @@ fn crack_tip(s: i64) {
 
 let PHYSICS_FIX = "write physics solid on plate: linear_elastic solves u: Vector<Length> { material steel }, or physics thermal on bar: heat(q_v) solves T: Temperature { material steel }";
 
-// A `let` of the flux: sigma = hooke(E, nu, strain(u)), or q = -k*grad(T)
-// or fourier(k, T). It gives the physics, or -1.
 fn flux_let(n: i64) -> i64 {
     let v = child(n, 1);
     let u = unknown_name;
     let hooke = is_call(v, "hooke") && syntax::child_count(v) == 4 && source_of(arg(v, 0)) == "E" &&
         source_of(arg(v, 1)) == "nu" && is_call(arg(v, 2), "strain") && source_of(arg(arg(v, 2), 0)) == u;
     if hooke { return ELASTIC; }
-    // hooke(E, nu, strain(u) - S*I): an isotropic thermal strain S.
     let a2 = if is_call(v, "hooke") && syntax::child_count(v) == 4 { arg(v, 2) } else { -1 };
     let thermal = a2 >= 0 && source_of(arg(v, 0)) == "E" && source_of(arg(v, 1)) == "nu" &&
         kind(a2) == syntax::N_BINARY && syntax::text(tok(a2)) == "-" && is_call(child(a2, 0), "strain") &&
@@ -1516,7 +1382,6 @@ fn flux_let(n: i64) -> i64 {
         thermal_strain_node = child(child(a2, 1), 0);
         return ELASTIC;
     }
-    // grad(u)/c: the flux +grad(u)/c, as the heat physics with the coefficient 1/c.
     let quotient = kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "/" && source_of(child(v, 0)) == str("grad(", u, ")") &&
         kind(child(v, 1)) == syntax::N_NAME;
     if quotient {
@@ -1528,9 +1393,6 @@ fn flux_let(n: i64) -> i64 {
     let fourier = is_call(v, "fourier") && syntax::child_count(v) == 3 && source_of(arg(v, 0)) == "k" &&
         source_of(arg(v, 1)) == u;
     if fourier || source_of(v) == str("-k*grad(", u, ")") { return HEAT; }
-    // -eps*grad(phi) or -sigma_e*grad(phi): the heat physics with the
-    // property eps or sigma_e in place of k.
-    // The parser reads it as (-eps)*grad(phi).
     let product = kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" && source_of(child(v, 1)) == str("grad(", u, ")");
     let c = if product { child(v, 0) } else { -1 };
     let scaled = c >= 0 && kind(c) == syntax::N_UNARY && syntax::text(tok(c)) == "-" && kind(first(c)) == syntax::N_NAME;
@@ -1539,7 +1401,6 @@ fn flux_let(n: i64) -> i64 {
     return HEAT;
 }
 
-// Whether the mesh item n has cell: hex, before the body of the physics is read.
 fn prescan_mesh(n: i64) {
     guard kind(n) == syntax::N_MESH && dim == 3 else { return; }
     var s = first(child(n, 1));
@@ -1549,7 +1410,6 @@ fn prescan_mesh(n: i64) {
     }
 }
 
-// Whether the physics item n has a `material m on r`, before its body is read.
 fn prescan_regions(n: i64) {
     var c = first(n);
     while c >= 0 {
@@ -1657,8 +1517,6 @@ fn physics_item(n: i64) {
     }
 }
 
-// `eq div(sigma) = 0` of a let sigma that is a written-out linear elastic law:
-// the generator takes the let as the flux (gen_aniso.goose).
 fn general_flux(left: i64, right: i64) -> bool {
     guard is_call(left, "div") && flux_name.len == 0 && physics < 0 && solid_law == 0 && source_of(right) == "0" else { return false; }
     guard kind(arg(left, 0)) == syntax::N_NAME else { return false; }
@@ -1675,8 +1533,6 @@ fn general_flux(left: i64, right: i64) -> bool {
     return true;
 }
 
-// `eq rho*cp*ddt(T) + div(q) = q_v` of the transient heat: the capacity and the
-// source. False for another eq.
 fn heat_dynamic_eq(c: i64) -> bool {
     let left = child(c, 0);
     guard flux_name.len > 0 && kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "+" else { return false; }
@@ -1690,7 +1546,6 @@ fn heat_dynamic_eq(c: i64) -> bool {
     return true;
 }
 
-// The value of rho*cp: a product of properties of the material and of numbers.
 recursive fn capacity_value(n: i64) -> f64 {
     if kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "*" { return capacity_value(child(n, 0)) * capacity_value(child(n, 1)); }
     if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) < 0 {
@@ -1700,8 +1555,6 @@ recursive fn capacity_value(n: i64) -> f64 {
     return scalar_value(n);
 }
 
-// `material steel, copper on pin`: the first material is law 0. Each
-// other one holds its region.
 fn materials_of(c: i64) {
     var m = first(c);
     while m >= 0 {
@@ -1724,7 +1577,6 @@ fn materials_of(c: i64) {
 
 let WAVE_FIX = "write physics sound on duct solves p: Complex<Pressure>, with eq div(grad(p)) + (omega/c)^2*p = 0 in its block";
 
-// eq div(grad(u)) + c*u = s, or div(grad(u)) = s, of a Complex unknown u.
 fn wave_eq(n: i64) {
     let left = child(n, 0);
     let lap = str("div(grad(", unknown_name, "))");
@@ -1743,10 +1595,6 @@ fn wave_eq(n: i64) {
 
 let HEAT_HARMONIC_FIX = "write let q: Vector<HeatFlux> = -k*grad(T) and eq rho*cp*ddt(T) + div(q) = q_v, with T: Complex<Temperature>";
 
-// `eq A + div(q) = q_v` with `let q = -k*grad(T)` or `fourier(k, T)` and A a
-// linear function of ddt(T) and T, for a Complex T: the heat equation of a
-// harmonic step, where ddt is im*omega. It is the eddy form with the
-// diffusion k, c = -A/T and the source q_v: div(k grad(T)) = A - q_v.
 fn heat_form_eq(n: i64) -> bool {
     let left = child(n, 0);
     guard kind(left) == syntax::N_BINARY && syntax::text(tok(left)) == "+" else { return false; }
@@ -1756,7 +1604,6 @@ fn heat_form_eq(n: i64) -> bool {
     guard is_call(d, "div") && syntax::child_count(d) == 2 else { return false; }
     var q = arg(d, 0);
     if kind(q) == syntax::N_NAME && physics_let(name(q)) >= 0 { q = physics_let(name(q)); }
-    // The parser reads -k*grad(T) as (-k)*grad(T).
     var k = -1;
     if is_call(q, "fourier") && syntax::child_count(q) == 3 && source_of(arg(q, 1)) == unknown_name {
         k = arg(q, 0);
@@ -1778,10 +1625,6 @@ fn heat_form_eq(n: i64) -> bool {
 
 let EDDY_FIX = "write eq -div(Hr) = J, with let Hr = grad(Az)/mu and let J = sigma_e*(E - ddt(Az))";
 
-// `eq -div(H) = R` or `eq div(H) = R` with `let H = grad(u)/mu` and R a
-// linear function of u, ddt(u) and the properties of the material: the
-// eddy currents, with c, s and the diffusion 1/mu of each region (eddy_terms).
-// False if the eq is not of this form.
 fn eddy_eq(n: i64) -> bool {
     if heat_form_eq(n) { return true; }
     let left = child(n, 0);
@@ -1801,8 +1644,6 @@ fn eddy_eq(n: i64) -> bool {
     return true;
 }
 
-// R(u) of the eddy form at eddy_u: the right side, or in the heat form
-// the capacity term less the source.
 fn eddy_rhs() -> f64[2] {
     guard eddy_k_node >= 0 else { return cval(eddy_rhs_node); }
     let a = cval(eddy_heat_node);
@@ -1810,8 +1651,6 @@ fn eddy_rhs() -> f64[2] {
     return [a[0] - q[0], a[1] - q[1]];
 }
 
-// nu = 1/mu, c and s of div(nu grad(u)) + c u = s for the material now, at
-// omega_now: R(u) = a u + b gives c = -sign a and s = sign b.
 fn eddy_terms() -> f64, f64[2], f64[2] {
     eddy_on = true;
     eddy_u = [0.0, 0.0];
@@ -1820,7 +1659,6 @@ fn eddy_terms() -> f64, f64[2], f64[2] {
     let r1 = eddy_rhs();
     eddy_u = [2.0, 0.0];
     let r2 = eddy_rhs();
-    // The heat form has the diffusion k, so its mu is 1/k.
     let mu = if eddy_k_node >= 0 { cdiv([1.0, 0.0], cval(eddy_k_node)) } else { cval(eddy_mu_node) };
     eddy_on = false;
     if abs(r2[0] - 2.0 * r1[0] + b[0]) > 1.0e-9 * (abs(r2[0]) + abs(b[0]) + 1.0e-300) || abs(r2[1] - 2.0 * r1[1] + b[1]) > 1.0e-9 * (abs(r2[1]) + abs(b[1]) + 1.0e-300) {
@@ -1852,8 +1690,6 @@ fn assumptions(n: i64) {
     }
 }
 
-// The source of the heat equation: a value, or the material property q_v,
-// of the material now. A source of an earlier physics is a field term.
 fn heat_source() {
     guard physics == HEAT else { return; }
     if source_node >= 0 && uses_earlier(source_node) {
@@ -1886,9 +1722,6 @@ fn heat_source_value() -> f64 {
     return scalar_value(source_node);
 }
 
-// The body force b of linear_elastic: a vector, for example rho*(0, 0, -g)
-// with rho of the material.
-// The body force b of law 0 and of each region law, with the rho of each.
 fn body_force_arg() {
     guard body_node >= 0 else { return; }
     let base = material_node;
@@ -1921,24 +1754,20 @@ fn method(n: i64) {
             order = scalar_value(first(s)) as! i64;
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
         } else if kind(s) == syntax::N_SETTING && name(s) == "couple" && source_of(first(s)) == "staggered" && multi() {
-            // One physics after the other: the passes of this generator.
         } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && (physics == WAVE || physics == EDGE) {
             pml_setting(first(s));
         } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
             incompatible_family = true;
         } else if kind(s) == syntax::N_SETTING && (quad_mesh || hex_mesh) && ((name(s) == "family" && source_of(first(s)) == "serendipity") ||
                   (name(s) == "quadrature" && source_of(first(s)) == "reduced")) {
-            // The quad8 of the quad cells: see quad_mesh. The 20 nodes of the hexahedra of order 2, and their 2 x 2 x 2 rule.
             if name(s) == "quadrature" { reduced_quadrature = true; }
         } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
-            // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this generator",
                         "use only mesh, order, the pml of a wave or edge physics, and the family and gauge: tree of edge elements");
         }
         s = next(s);
     }
-    // The elements of an edge physics have order 1 or 2 on the P1 cells of the mesh.
     if physics == EDGE && order == 2 {
         edge_order = 2;
         order = 1;
@@ -1956,9 +1785,6 @@ fn method(n: i64) {
     }
 }
 
-// method solid: rkpm { points: c, basis: linear, support: 2.5,
-// integrate: scni, bc: nitsche } of a 2D elastic physics: the meshless
-// package on the nodes of P1 triangles of the points item (spec §17.5).
 fn rkpm_method(n: i64) {
     order = 1;
     rkpm_support = 2.5;
@@ -1980,8 +1806,6 @@ fn rkpm_method(n: i64) {
     }
 }
 
-// The parts of a model that the rkpm lane does not have: it solves static
-// steps of one material with loads on the boundary.
 fn rkpm_limits(prog: i64) {
     let fix = "use method solid: cg for this model";
     var c = first(prog);
@@ -2002,8 +1826,6 @@ fn rkpm_limits(prog: i64) {
 
 let PML_FIX = "write pml: { region: layer, thickness: 1 m }, with let layer: Surface = world - rect(a, b)";
 
-// pml: { region: layer, thickness: h }. The layer is the body less a box
-// (a rect in 2d): the stretch grows with the distance past that box.
 fn pml_setting(v: i64) {
     pml_tok = tok(v);
     var region = -1;
@@ -2036,7 +1858,6 @@ fn pml_setting(v: i64) {
 
 let BC_FIX_TEXT = "write bc root: u = 0, bc sym: u.x = 0, bc tip: sigma*n = (0, 0, -1) MPa, bc wall: T = 20 degC or bc side: dot(q, n) = 1000 W/m^2";
 
-// A `bc` item or statement. It gives its index in `bcs`, or -1.
 fn bc(n: i64) -> i64 {
     let region = child(n, 0);
     let target = child(n, 1);
@@ -2067,7 +1888,6 @@ fn bc(n: i64) -> i64 {
         b.kind = BC_SOURCE;
         b.comp = from;
     } else if physics == WAVE && t == str("dot(grad(", unknown_name, "), n)") && names_in(v, unknown_name) {
-        // The Robin condition z*p, with z constant.
         b.kind = BC_ROBIN;
         b.node = v;
     } else if physics == WAVE && (t == unknown_name || t == str("dot(grad(", unknown_name, "), n)")) {
@@ -2095,7 +1915,6 @@ fn bc(n: i64) -> i64 {
         b.kind = BC_PRESSURE;
         b.v[0] = pressure_of(v);
     } else if physics == ELASTIC && t == traction_target() && mentions_xyz(v) && kind(v) == syntax::N_VECTOR {
-        // A traction that varies with the point p of the facet.
         b.kind = BC_LOAD;
         b.node = v;
     } else if physics == ELASTIC && t == traction_target() {
@@ -2122,7 +1941,6 @@ fn bc(n: i64) -> i64 {
     return bcs.len - 1;
 }
 
-// `c*(T^4 - T_amb^4)`: c and T_amb in b.v. False if v is no such value.
 fn ambient(v: i64, b: Bc&) -> bool {
     guard kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" else { return false; }
     let d = child(v, 1);
@@ -2137,7 +1955,6 @@ fn ambient(v: i64, b: Bc&) -> bool {
     return true;
 }
 
-// `h*(T - T_air)`: h and T_air in b.v. False if v is no such value.
 fn film(v: i64, b: Bc&) -> bool {
     guard kind(v) == syntax::N_BINARY && syntax::text(tok(v)) == "*" else { return false; }
     let d = child(v, 1);
@@ -2221,7 +2038,6 @@ fn step(n: i64) {
     steps.push(s);
 }
 
-// `solve { nonlinear: newton, rtol: 1e-10 }` of a heat step: the tolerance of the iteration.
 fn solve_item(n: i64) {
     var a = first(first(n));
     while a >= 0 {
@@ -2238,8 +2054,6 @@ fn solve_item(n: i64) {
 
 let REPORT_FIX = "write report reaction(root), reaction(root).x, mean(u.x, top), max(von_mises(sigma), hole), or report u.x at (1, 0, 0) mm, sigma.xx at (0, 1, 0) mm or T at (0, 0, 0) m";
 
-// The procedure of a step: static with no arguments, or modal or buckling
-// with count, on an elastic model, or harmonic on a wave physics.
 fn procedure(proc: i64, s: Step&) {
     let p = name(proc);
     if aniso_node >= 0 && (p == "buckling" || p == "transient") {
@@ -2293,8 +2107,6 @@ fn procedure(proc: i64, s: Step&) {
 
 let TRANSIENT_FIX = "write step pulse: transient(end: 1 ms, dt: stable, scheme: central_difference) { ... }";
 
-// A transient step of linear_elastic: transient(end:, dt:, scheme:
-// central_difference), from rest, with the density of one material.
 fn transient(proc: i64, s: Step&) {
     s.procedure = TRANSIENT;
     var scheme = false;
@@ -2336,13 +2148,11 @@ fn transient(proc: i64, s: Step&) {
     }
 }
 
-// A number with no unit, which takes the unit of its list.
 fn bare(n: i64) -> bool {
     let m = if kind(n) == syntax::N_UNARY { first(n) } else { n };
     return kind(m) == syntax::N_NUMBER && syntax::child_of_kind(m, syntax::N_UNIT) < 0;
 }
 
-// harmonic(freq: [f1, f2, ...], damping: z) of the wave physics.
 fn harmonic(proc: i64, s: Step&) {
     let fix = "write step sweep: harmonic(freq: [100, 200] Hz) { ... }, with a Complex unknown";
     if physics != WAVE && physics != EDGE && !complex_solid || name(proc) != "harmonic" {
@@ -2375,8 +2185,6 @@ fn harmonic(proc: i64, s: Step&) {
     if s.freq_count == 0 || s.damping < 0.0 { unsupported(tok(proc), "a harmonic step needs a frequency and damping >= 0", fix); }
 }
 
-// The step of an eigenvalue(k): with `own`, the step `step_now` that step()
-// reads, else the last modal or buckling step that read() has read.
 fn eigen_step(own: bool) -> Step {
     var at = if own { step_now } else { Step { name: [], first_own: 0, own_count: 0, first_bc: 0, bc_count: 0, first_report: 0,
                                                report_count: 0, first_change: 0, change_count: 0, output: false, procedure: STATIC, count: 0,
@@ -2385,7 +2193,6 @@ fn eigen_step(own: bool) -> Step {
     return at;
 }
 
-// eigenvalue(k) of eigen_step(own): k - 1, or -1 if it is not a mode of it.
 fn eigen_index(e: i64, own: bool) -> i64 {
     guard is_call(e, "eigenvalue") && syntax::child_count(e) == 2 else { return -1; }
     let count = eigen_step(own).count;
@@ -2398,8 +2205,6 @@ fn eigen_index(e: i64, own: bool) -> i64 {
 
 fn freq_unit() -> const u8[:] { return if codegen::system.t == 1.0 { "Hz" } else { "kHz" }; }
 
-// `max(von_mises(sigma), r)` of an elastic model, with r a boundary that a
-// let names.
 fn max_von_mises(e: i64) -> bool {
     guard is_call(e, "max") && syntax::child_count(e) == 3 && physics == ELASTIC else { return false; }
     let f = arg(e, 0);
@@ -2408,10 +2213,8 @@ fn max_von_mises(e: i64) -> bool {
            kind(r) == syntax::N_NAME && find_surf(name(r)) >= 0;
 }
 
-// The parts of a Complex value that a report or an expect takes at a point.
 let PARTS = ["re", "imag", "abs", "arg"];
 
-// The index in PARTS of `re(u at p)` and the others, or -1.
 fn wave_simple(e: i64) -> i64 {
     guard physics == WAVE && kind(e) == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME else { return -1; }
     let f = arg(e, 0);
@@ -2420,9 +2223,6 @@ fn wave_simple(e: i64) -> i64 {
     return -1;
 }
 
-// The number of samples of the wave unknown in the expression e: `u at p` and
-// `mean(u, r)` on a boundary r, joined by + - * / and constants. 0 for a
-// constant, -1 for anything else (a power of a sample, the bare unknown).
 recursive fn wave_samples(e: i64) -> i64 {
     let k = kind(e);
     if k == syntax::N_AT { return if kind(child(e, 0)) == syntax::N_NAME && name(child(e, 0)) == unknown_name { 1 } else { -1 }; }
@@ -2440,8 +2240,6 @@ recursive fn wave_samples(e: i64) -> i64 {
     return if names_in(e, unknown_name) || has_sample(e) || is_call(e, "mean") { -1 } else { 0 };
 }
 
-// The index in PARTS of `re(z)` and the others of an expression z of samples
-// of the wave unknown, or -1.
 fn wave_part(e: i64) -> i64 {
     guard physics == WAVE && kind(e) == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME else { return -1; }
     guard wave_samples(arg(e, 0)) >= 1 else { return -1; }
@@ -2451,7 +2249,6 @@ fn wave_part(e: i64) -> i64 {
 
 fn report(item: i64) {
     let e = first(item);
-    // The checks read the first row of a table column in the point.
     table_row = if kind(e) == syntax::N_AT && table_member(child(e, 1)) >= 0 { 0 } else { -1 };
     if probe_values() {
         edge_report(item);
@@ -2464,7 +2261,6 @@ fn report(item: i64) {
             return;
         }
         if wave_part(e) < 0 {
-            // A Complex value: its real part and its imaginary part.
             for part in 2 {
                 var r = Report { expr: e, label: [], row: part };
                 codegen::set256(r.label, str(source_of(item), if part == 0 { " (re)" } else { " (imag)" }));
@@ -2495,7 +2291,6 @@ fn report(item: i64) {
     }
     let m = if kind(e) == syntax::N_AT { table_member(child(e, 1)) } else { -1 };
     if m >= 0 {
-        // A table column in the point: one report for each row.
         let rows = max(column_values(m).len, 1);
         for row in rows {
             var r = Report { expr: e, label: [], row: row };
@@ -2511,9 +2306,6 @@ fn report(item: i64) {
     reports.push(r);
 }
 
-// The field of `f at p`: what it samples and the component, with -1 for
-// the whole vector u. It gives -1, -1 for a field it cannot sample, and an
-// error if `errors`.
 fn point_field(e: i64, errors: bool) -> i64, i64 {
     let f = child(e, 0);
     var what = -1;
@@ -2551,8 +2343,6 @@ fn point_field(e: i64, errors: bool) -> i64, i64 {
     return what, comp;
 }
 
-// The boundary of region r: a boundary that a let names, or a - b of two
-// of them, with the nodes of b removed (elements::except_plane). Or -1.
 fn region_surf(r: i64) -> i64 {
     if kind(r) == syntax::N_NAME { return find_surf(name(r)); }
     guard kind(r) == syntax::N_BINARY && syntax::text(tok(r)) == "-" && kind(child(r, 0)) == syntax::N_NAME && kind(child(r, 1)) == syntax::N_NAME else { return -1; };
@@ -2568,8 +2358,6 @@ fn region_surf(r: i64) -> i64 {
     return surfs.len - 1;
 }
 
-// Whether the tree n has an `f at p` below it.
-// Whether the expression n names the identifier w.
 recursive fn names_in(n: i64, w: u8[:]) -> bool {
     if n < 0 { return false; }
     if kind(n) == syntax::N_NAME && name(n) == w { return true; }
@@ -2584,7 +2372,6 @@ recursive fn names_in(n: i64, w: u8[:]) -> bool {
 recursive fn has_sample(n: i64) -> bool {
     if n < 0 { return false; }
     if kind(n) == syntax::N_AT { return true; }
-    // The integral of a field on a boundary: not the flux of a heat physics.
     if is_call(n, "integral") && syntax::child_count(n) == 3 {
         let flux = source_of(arg(n, 0));
         if !(flux.len > 8 && flux[..4] == "dot(" && flux[flux.len - 4..] == ", n)") { return true; }
@@ -2597,8 +2384,6 @@ recursive fn has_sample(n: i64) -> bool {
     return false;
 }
 
-// An `expect` of a value of two physics: each pass registers the terms
-// of its physics, and the last pass keeps the expect, after the terms of all.
 fn composite_expect(n: i64) {
     let left = child(n, 0);
     let right = child(n, 1);
@@ -2617,7 +2402,6 @@ fn composite_expect(n: i64) {
     expects.push(x);
 }
 
-// An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
     if probe_values() {
         edge_expect(n, step);
@@ -2660,16 +2444,12 @@ fn expect(n: i64, step: i64) {
         comp = 0;
         surf = find_surf(name(arg(left, 1)));
     }
-    // A param or a let: the study expects the optimum of its params.
     if what < 0 && kind(left) == syntax::N_NAME && codegen::find_value(name(left)) >= 0 && !has_sample(left) {
         what = FIELD_CONSTANT;
         comp = 0;
         scale = scalar_value(left);
     }
     if what < 0 { what, comp, surf, scale, inverse = scaled_field(left); }
-    // An expect on a field this generator cannot sample stays, and the
-    // report says that it did not run.
-    // A value of samples: an expression of `f at p` and constants.
     if (what < 0 || comp < 0) && has_sample(left) {
         composite_expect(n);
         return;
@@ -2686,8 +2466,6 @@ fn expect(n: i64, step: i64) {
                      within: scalar_value(within), relative: kind(within) == syntax::N_PERCENT, label: [], step: step,
                      modal: what == FIELD_EIGEN && eigen_step(step >= 0).procedure == MODAL, surf: surf, scale: scale,
                      inverse: inverse, unit: [], lo: box_lo, hi: box_hi };
-    // A reaction of -eps*grad(phi) is no heat: the value takes the unit of
-    // the expected value.
     let unit = if kind(right) == syntax::N_NUMBER { syntax::child_of_kind(right, syntax::N_UNIT) } else { -1 };
     if what == FIELD_REACTION && conductivity_name != "k" && unit >= 0 {
         let f = codegen::to_system(unit);
@@ -2696,7 +2474,6 @@ fn expect(n: i64, step: i64) {
         x.scale /= f;
         set64(x.unit, source_of(unit));
     }
-    // A tolerance of a temperature is a difference, not a degC value.
     if kind(within) == syntax::N_NUMBER && first(within) >= 0 && source_of(first(within)) == "degC" {
         x.within -= 273.15;
     }
@@ -2705,21 +2482,16 @@ fn expect(n: i64, step: i64) {
     expects.push(x);
 }
 
-// Whether a bc radiates to the surroundings on boundary s.
 fn ambient_surf(s: i64) -> bool {
     for b in bcs { if b.surf == s && b.kind == BC_AMBIENT { return true; } }
     return false;
 }
 
-// Whether a bc fixes the unknown on boundary s.
 fn fixed_surf(s: i64) -> bool {
     for b in bcs { if b.surf == s && b.kind == BC_FIX { return true; } }
     return false;
 }
 
-// region_field(e), or e / c, c / e or c * e with a constant c: the
-// field, the component, the boundary, the factor and whether the value is
-// the factor / the field.
 fn scaled_field(e: i64) -> i64, i64, i64, f64, bool {
     var f = e;
     var sign = 1.0;
@@ -2741,8 +2513,6 @@ fn scaled_field(e: i64) -> i64, i64, i64, f64, bool {
     return what, comp, surf, scale, false;
 }
 
-// The component of the solution that the value v is: u.x of an elastic physics, or T of a heat
-// physics. Or -1.
 fn solution_comp(v: i64) -> i64 {
     if physics == HEAT && source_of(v) == unknown_name { return 0; }
     if physics == ELASTIC && kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME && name(first(v)) == unknown_name {
@@ -2751,8 +2521,6 @@ fn solution_comp(v: i64) -> i64 {
     return -1;
 }
 
-// `max(u.z, r)` (mode 0), `min(u.z, r)` (1), or `max(u.z, r) - min(u.z, r)` (2) on a boundary r:
-// the mode, the component and the boundary, or -1.
 recursive fn extreme_parts(f: i64) -> i64, i64, i64 {
     if kind(f) == syntax::N_BINARY && syntax::text(tok(f)) == "-" {
         let a = child(f, 0);
@@ -2768,10 +2536,6 @@ recursive fn extreme_parts(f: i64) -> i64, i64, i64 {
     return if is_call(f, "max") { 0 } else { 1 }, c, region_surf(arg(f, 1));
 }
 
-// An expect of a value on a boundary: mean(T, r), mean(u.x, r),
-// reaction(r).x, reaction(r) of a heat physics, or integral(dot(q, n), r)
-// on a boundary r that a bc fixes, with a minus sign or not. It gives the
-// field, the component, the boundary and the factor, or -1 for the field.
 fn region_field(e: i64) -> i64, i64, i64, f64 {
     var scale = 1.0;
     var f = e;
@@ -2788,7 +2552,6 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
         guard i >= 0 && j >= 0 else { return -1, -1, -1, 1.0; }
         return FIELD_BODY_MEAN, 3 * i + j, -1, scale;
     }
-    // The mean of a stress over the box of a Solid let.
     if is_call(f, "mean") && syntax::child_count(f) == 3 && kind(arg(f, 1)) == syntax::N_NAME && physics == ELASTIC && find_surf(name(arg(f, 1))) < 0 {
         let v = arg(f, 0);
         let m = if kind(v) == syntax::N_MEMBER && kind(first(v)) == syntax::N_NAME && name(first(v)) == flux_name { name(v) } else { "" };
@@ -2823,7 +2586,6 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
         if physics == ELASTIC && member && axis_of(name(v)) >= 0 { return FIELD_MEAN, axis_of(name(v)), region_surf(arg(f, 1)), scale; }
         return -1, -1, -1, 1.0;
     }
-    // The heat out of the body through a fixed boundary is -reaction.
     if physics == HEAT && is_call(f, "integral") && syntax::child_count(f) == 3 && source_of(arg(f, 0)) == str("dot(", flux_name, ", n)") {
         let s = region_surf(arg(f, 1));
         guard s >= 0 && (fixed_surf(s) || ambient_surf(s)) else { return -1, -1, -1, 1.0; }
@@ -2840,15 +2602,6 @@ fn region_field(e: i64) -> i64, i64, i64, f64 {
     return -1, -1, -1, 1.0;
 }
 
-// --- field terms --------------------------------------------------------------
-//
-// An expression of the solution of an earlier physics, as a term of this
-// physics (src/elements/field.goose): the source of a heat physics (the
-// Joule heat of a current, `eq div(q) = dot(J, -grad(phi))`) or the thermal
-// strain of an elastic physics (`strain(u) - alpha*(T - T0)*I`). It is the
-// same for each physics: the expression names the unknown, or a let, of an
-// earlier physics, and the generator writes it as the postfix code of the
-// stack machine of the runtime.
 let TN_CONST = 0;
 let TN_VAL = 1;
 let TN_GRAD = 2;
@@ -2869,11 +2622,10 @@ var tn_b: i64[>..];
 var tn_x: i64[>..];
 var tn_y: i64[>..];
 var tn_c: f64[>..];
-var ftm_kind: i64[>..];     // the field terms of the pass now
+var ftm_kind: i64[>..];
 var ftm_root: i64[>..];
-var ftm_law: i64[>..];      // the law of the cells of each term, or -1 for each cell
+var ftm_law: i64[>..];
 
-// A scalar (n = 1) or a vector of n components, each a node of the tree.
 struct FTerm {
     n: i64,
     id: i64[3],
@@ -2891,10 +2643,8 @@ fn tnode(op: i64, a: i64, b: i64, x: i64, y: i64, c: f64) -> i64 {
 
 fn fscalar(id: i64) -> FTerm { return FTerm { n: 1, id: [id, -1, -1] }; }
 
-var self_terms = false;   // fterm reads an integral of the unknown and the coordinates of the physics now
+var self_terms = false;
 
-// Whether the tree n names the unknown of the physics now, or a coordinate x, y or z that no let
-// names: the expression of an integral on a boundary.
 recursive fn self_dependent(n: i64, depth: i64) -> bool {
     if n < 0 || depth > 20 { return false; }
     if kind(n) == syntax::N_NAME {
@@ -2911,7 +2661,6 @@ recursive fn self_dependent(n: i64, depth: i64) -> bool {
     return false;
 }
 
-// Whether the tree n names the unknown, or a let, of an earlier physics.
 fn uses_earlier(n: i64) -> bool {
     if self_terms && self_dependent(n, 0) { return true; }
     let m = owner_mask(n);
@@ -2942,7 +2691,6 @@ fn fbinary(op: i64, a: FTerm, b: FTerm, at: i64) -> FTerm {
     return r;
 }
 
-// The tree of expression n of the pass now.
 recursive fn fterm(n: i64, depth: i64) -> FTerm {
     if depth > 30 {
         unsupported(tok(n), "the field expression is too deep", "write a shorter expression");
@@ -3040,10 +2788,8 @@ recursive fn fterm(n: i64, depth: i64) -> FTerm {
     return fscalar(tnode(TN_CONST, 0, 0, -1, -1, 0.0));
 }
 
-// Adds the field term of kind `kind` for expression n, a scalar.
 fn field_term(kind: i64, n: i64) {
     guard region_laws.len > 0 else { field_term_law(kind, n, -1); return; };
-    // A property of the material in the term has the value of each region.
     let base = material_node;
     field_term_law(kind, n, 0);
     for &w, i in region_laws {
@@ -3107,24 +2853,18 @@ fn emit_field_terms(out: u8[>..]&) {
     }
 }
 
-// --- composite expects ------------------------------------------------------------
-//
-// An `expect` of a value that names two physics, for example the impedance
-// sqrt(L/C) of the lines: each integral(dot(F, n), r) of it is a term that
-// its physics samples at its end (elements::reaction of r), and the value is
-// the expression of the terms.
 struct Term {
     id: i64,
-    surf: i64,      // the boundary of an integral, or -1 for a sample `f at p`
+    surf: i64,
     sign: f64,
-    what: i64,      // the field of a sample
+    what: i64,
     comp: i64,
     at: f64[3],
-    root: i64,      // the tree of the expression of an integral of a field, or -1
+    root: i64,
 }
 
-var terms: Term[>..];       // the terms of the pass now
-var term_nodes: i64[>..];   // the integral call of each term, in the order of the model
+var terms: Term[>..];
+var term_nodes: i64[>..];
 
 recursive fn has_integral(n: i64) -> bool {
     if is_call(n, "integral") || kind(n) == syntax::N_AT { return true; }
@@ -3136,9 +2876,7 @@ recursive fn has_integral(n: i64) -> bool {
     return false;
 }
 
-// Registers the integrals of expression n, and the terms of the pass now.
 recursive fn collect_terms(n: i64) {
-    // A sample `u.y at (x, y)` in an expression of other values: the term is its value at the end of the pass.
     if kind(n) == syntax::N_AT {
         let id = term_nodes.len;
         term_nodes.push(n);
@@ -3154,7 +2892,6 @@ recursive fn collect_terms(n: i64) {
         let flux = source_of(arg(n, 0));
         if owner_of(n) != pass_now && !self_dependent(arg(n, 0), 0) { return; }
         let s = region_surf(arg(n, 1));
-        // The integral of an expression of the unknown and the coordinates on a boundary.
         if s >= 0 && !(flux.len > 8 && flux[..4] == "dot(" && flux[flux.len - 4..] == ", n)") && (physics == ELASTIC || physics == HEAT) {
             self_terms = true;
             let r = fterm(arg(n, 0), 0);
@@ -3218,14 +2955,11 @@ fn emit_term(out: u8[>..]&, tm: Term) {
     out.append(" * rx);\n    }\n");
 }
 
-// The end of the pass now, in main: the terms that this physics gives to a composite expect, and its solution
-// for a later physics.
 fn emit_pass_end(out: u8[>..]&) {
     for tm in terms { emit_term(out, tm); }
     if pass_now < keep_needed.len && keep_needed[pass_now] == 1 { format(out, "    elements::keep(", pass_now, ");\n"); }
 }
 
-// The Goose text of the value of expression n of a composite expect.
 recursive fn composite_text(out: u8[>..]&, n: i64) {
     if !has_integral(n) {
         out.append("(");
@@ -3272,15 +3006,9 @@ recursive fn composite_text(out: u8[>..]&, n: i64) {
     unsupported(tok(n), str("'", source_of(n), "' is not in a value of two physics"), "use +, -, *, /, ^2, sqrt, integral and constants");
 }
 
-// The physics of the program, in order. Each one is a pass: the generator
-// reads and writes the program of one physics at a time (read_pass), on the
-// one mesh, and a physics after the first can use the solution of the
-// physics before it (field terms, below).
 var physics_nodes: i64[>..];
 var pass_now = 0;
 
-// A name that a physics declares: its unknown, or a let of its block with
-// the value `node`.
 struct Owned {
     name: u8[..64],
     pass: i64,
@@ -3289,7 +3017,7 @@ struct Owned {
 }
 
 var owned: Owned[>..];
-var keep_needed: i64[>..];   // 1 for pass i if a later physics reads its solution
+var keep_needed: i64[>..];
 
 fn collect_owned() {
     owned.clear();
@@ -3314,7 +3042,6 @@ fn pass_bit(p: i64) -> i64 {
     return bit;
 }
 
-// The passes that own a name of the tree n, as a set of bits.
 recursive fn owner_mask(n: i64) -> i64 {
     var m = 0;
     if kind(n) == syntax::N_NAME {
@@ -3331,14 +3058,12 @@ recursive fn owner_mask(n: i64) -> i64 {
     return m;
 }
 
-// The first pass that owns a name of the tree n, or -1.
 fn owner_of(n: i64) -> i64 {
     let m = owner_mask(n);
     for p in physics_nodes.len { if (m / pass_bit(p)) % 2 == 1 { return p; } }
     return -1;
 }
 
-// Whether the pass now holds the statement whose target is n. A statement with no name of a physics belongs to the first.
 fn mine(n: i64) -> bool {
     if physics_nodes.len <= 1 { return true; }
     let o = owner_of(n);
@@ -3347,8 +3072,6 @@ fn mine(n: i64) -> bool {
 
 fn multi() -> bool { return physics_nodes.len > 1; }
 
-// The suffix of the names of the steps and files of the pass now: empty for
-// one physics, and `_<physics>` for several.
 fn tag() -> u8[>..] {
     var s: u8[>..] = [];
     if multi() {
@@ -3358,8 +3081,6 @@ fn tag() -> u8[>..] {
     return s;
 }
 
-// Reads the program `prog`, each physics in its pass. False on an error,
-// and `syntax::errors` holds the errors.
 fn read(prog: i64) -> bool {
     physics_nodes.clear();
     var c = first(prog);
@@ -3380,9 +3101,6 @@ fn read(prog: i64) -> bool {
 
 var mesh_signature: u8[..256] = [];
 
-// Several physics run in sequence on one mesh: the heat and elastic physics
-// of linear cells, and the same mesh and order for each. Reason: the solution of
-// one physics is a field of the nodes of the next.
 fn shares_mesh(p: i64) -> bool {
     if (physics != HEAT && physics != ELASTIC) || rkpm_support > 0.0 || cut_source >= 0 || solid_law > 0 || has_ties() || family_word.len > 0 {
         unsupported(physics_tok, "several physics are the heat and linear elastic physics of the simplex and hexahedron cells in this generator",
@@ -3406,7 +3124,6 @@ fn shares_mesh(p: i64) -> bool {
     return true;
 }
 
-// Whether mesh item n has a crack_tip.
 fn has_crack_tip(n: i64) -> bool {
     guard kind(n) == syntax::N_MESH else { return false; }
     var s = first(child(n, 1));
@@ -3441,7 +3158,6 @@ fn read_pass(prog: i64, pass: i64) -> bool {
         } else if k == syntax::N_MATERIAL {
             material(c);
         } else if k == syntax::N_PHYSICS {
-            // The physics of the pass: physics_nodes (read).
         } else if k == syntax::N_MESH || k == syntax::N_POINTS {
             if mesh_node >= 0 { unsupported(tok(c), "a second mesh: this generator has one", "remove the second mesh"); }
             mesh_node = c;
@@ -3509,8 +3225,6 @@ fn read_pass(prog: i64, pass: i64) -> bool {
     return ok();
 }
 
-// symmetry cell: bloch { period: p, low: a, high: b, k: kv } of the wave
-// physics: the value on b is the value on a times exp(im*dot(kv, p)).
 fn symmetry(n: i64) {
     let fix = "write symmetry cell: bloch { period: (1, 0) m, low: x0, high: x1, k: (3 m^-1, 0 m^-1) }";
     if physics != WAVE || bloch_low >= 0 {
@@ -3536,7 +3250,6 @@ fn symmetry(n: i64) {
     for j in 3 { bloch_theta += kv[j] * bloch_period[j]; }
 }
 
-// Puts `b` in `set`, in place of the bcs that it replaces.
 fn merge(set: Bc[>..]&, b: Bc) {
     var kept: Bc[>..] = [];
     var placed = false;
@@ -3553,9 +3266,6 @@ fn merge(set: Bc[>..]&, b: Bc) {
     set.append(kept);
 }
 
-// Whether b replaces c: the same region and target. A rigid face replaces
-// each fixed component of u on its region, and a fixed u replaces a rigid
-// face.
 fn replaces(b: Bc, c: Bc) -> bool {
     guard b.surf == c.surf else { return false; }
     let held = (b.kind == BC_FIX || b.kind == BC_RIGID) && (c.kind == BC_FIX || c.kind == BC_RIGID);
@@ -3563,7 +3273,6 @@ fn replaces(b: Bc, c: Bc) -> bool {
     return b.kind == c.kind && b.comp == c.comp;
 }
 
-// The bcs that hold in each step (spec §12.2), as in src/codegen.
 fn step_bcs() {
     var set: Bc[>..] = [];
     for g in global_bcs { merge(set, bcs[g]); }
@@ -3577,8 +3286,6 @@ fn step_bcs() {
     }
 }
 
-// The Complex values of each frequency of each harmonic step: c, s and the
-// bcs at its omega, so that a fault in them stops the model here.
 fn harmonic_values() {
     guard physics == WAVE else { return; }
     for s in steps {
@@ -3598,13 +3305,11 @@ fn harmonic_values() {
     }
 }
 
-// Each step needs a fixed value, and each reaction report a fixed region.
 fn supports() {
     if hex_mesh && (geo == GEO_HOLE || physics == EDGE || physics == DARCY || physics == WAVE) {
         unsupported(mesh_tok, "hexahedra are in this generator for a box and for the heat and elastic physics",
                     "write cell: tet, or mesh a box");
     }
-    // A natural condition alone makes the edge physics and the Darcy flow unique.
     guard physics != EDGE && physics != DARCY else { return; }
     for s in steps {
         var fixes = 0;
@@ -3627,15 +3332,11 @@ fn supports() {
     }
 }
 
-// --- the Goose program -------------------------------------------------------------
-
 let AXES = ["elements::X", "elements::Y", "elements::Z"];
 let AXIS_NAMES = ["x", "y", "z"];
 
 fn lit(out: u8[>..]&, x: f64) { codegen::lit(out, x); }
 
-// The prefix of the calls of a condition, a solve or a sample: the
-// elements, or the rk_ functions of RKPM_PRELUDE.
 fn api() -> const u8[:] { if rkpm_support > 0.0 { "rk_" } else { "elements::" } }
 
 fn lits(out: u8[>..]&, v: f64[3]) {
@@ -3648,14 +3349,10 @@ fn lits(out: u8[>..]&, v: f64[3]) {
 
 fn quoted(out: u8[>..]&, s: u8[:]) { codegen::quoted(out, s); }
 
-// The unit of the unknown, of its reaction, and of the flux.
-// The wave physics prints its values with no unit: in the units of the
-// model.
 fn value_unit() -> const u8[:] { if physics == HEAT && conductivity_name == "k" { "K" } else if physics == HEAT || physics == WAVE { "" } else { codegen::system.length } }
 
 fn reaction_unit() -> const u8[:] {
     guard physics == HEAT else { return codegen::system.force; }
-    // The flux of -eps*grad(phi) is no heat: its unit is not in the system.
     if conductivity_name != "k" { return ""; }
     if codegen::system.pressure == "Pa" { return "W"; }
     if codegen::system.pressure == "MPa" { return "mW"; }
@@ -3671,7 +3368,6 @@ fn field_unit(what: i64) -> const u8[:] {
     return "kW/mm^2";
 }
 
-// The part of the generated program that is the same for each model.
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
     var reports: u8[>..] = [];
@@ -3866,9 +3562,6 @@ let PRELUDE = """
 
     """;
 
-// The part of the program of the rkpm method: the meshless package on the
-// nodes of the P1 mesh, with the regions of the elements. A condition on a
-// region holds the boundary edges of the cloud with both points in it.
 let RKPM_PRELUDE = """
     var fixed_values: f64[>..] = [];   // the value of each condition k of the step
 
@@ -3942,11 +3635,9 @@ let RKPM_PRELUDE = """
 
     """;
 
-// The calls of PRELUDE that RKPM_PRELUDE takes.
 let RKPM_CALLS = ["solve()", "element_count()", "dof_count()", "cg_iterations()", "solve_seconds()", "total_reaction()",
                   "applied_load()", "load_scale()", "write_vtu("];
 
-// The part of the program of a wave physics.
 let WAVE_PRELUDE = """
     // The Complex unknown at a point.
     fn wave_pair(x: f64, y: f64, z: f64) -> f64[2], bool {
@@ -3983,7 +3674,6 @@ let WAVE_PRELUDE = """
 
     """;
 
-// The part of the program of a submodel (spec §15.2).
 let SUBMODEL_PRELUDE = """
     extern "libc.so.6" {
         fn system(command: const u8&) -> i32;
@@ -4019,12 +3709,8 @@ let SUBMODEL_PRELUDE = """
 
     """;
 
-// The size of the unit of pressure of unit system `sys` in SI.
 fn pressure_si(sys: codegen::System) -> f64 { return sys.m / (sys.l * sys.t * sys.t); }
 
-// Reads the state of the cut source, and runs its model first if the state
-// is not there. The run of the other model is locked, so the cases of a
-// study that need the same state run it once.
 fn emit_source(out: u8[>..]&) {
     let src = sources[cut_source];
     var sets: const u8[:][>..] = [];
@@ -4057,7 +3743,6 @@ fn emit_source(out: u8[>..]&) {
     out.append("]);\n");
 }
 
-// Selects the region of boundary `si`.
 fn emit_region(out: u8[>..]&, si: i64) {
     let s = surfs[si];
     out.append("    region(");
@@ -4140,7 +3825,6 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         lit(out, z[1]);
         out.append(");\n");
     } else if physics == WAVE {
-        // The value at the omega of the frequency that the generator writes.
         let z = cval(b.node);
         out.append(if b.kind == BC_LOAD { "    elements::traction(" } else { "    elements::fix(0, " });
         lit(out, z[0]);
@@ -4148,7 +3832,6 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         lit(out, z[1]);
         out.append(if b.kind == BC_LOAD { ", 0.0);\n" } else { ");\n" });
     } else if b.kind == BC_RADIATE {
-        // σ = 5.670374419e-8 kg/(s^3 K^4) in the units of the model.
         out.append("    elements::radiate(");
         lit(out, b.v[0]);
         out.append(", ");
@@ -4194,7 +3877,6 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         lit(out, b.v[0]);
         out.append(");\n");
     } else if b.node >= 0 {
-        // A value of the point p of the node.
         for j in dim {
             format(out, "    elements::fix_with(", AXES[j], ") { p => ");
             emit_space(out, b.node, j);
@@ -4213,8 +3895,6 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
     }
 }
 
-// A modal or buckling step: the bcs that fix, then LOBPCG. It writes a
-// file for each mode. The stages of a study share no mode.
 fn emit_eigen_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
     let modal = s.procedure == MODAL;
@@ -4257,15 +3937,11 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     }
     format(out, "// step ", s.name, tag(), ": ", if s.procedure == TRANSIENT { if physics == HEAT { "transient, theta scheme" } else { "transient, central_difference" } } else { "static" }, "\n");
     format(out, "fn step_", s.name, tag(), "() {\n");
-    // After the clear: clear_bcs keeps the solution of the last step,
-    // which a birth reads.
     format(out, "    ", api(), "clear_bcs();\n");
     for ch in changes[s.first_change..s.first_change + s.change_count] { emit_change(out, ch); }
     if share.stages >= 2 && share.reads {
         codegen::emit_share(out, "", "elements::read_solution", share, str(s.name, tag()));
     } else {
-        // The fixed values first: a load on a node that a later fix holds
-        // still counts in the reaction.
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
         if s.procedure == TRANSIENT && physics == HEAT {
@@ -4304,7 +3980,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             out.append(");\n");
         }
         if share.stages >= 2 { codegen::emit_share(out, "converged && ", "elements::write_solution", share, str(s.name, tag())); }
-        // The state of the step, for a `results` of another model.
         if rkpm_support <= 0.0 {
             out.append("    state(");
             quoted(out, results_dir);
@@ -4313,7 +3988,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
             out.append(");\n");
         }
     }
-    // A transient step has the inertia forces too: no equilibrium check.
     if s.procedure == STATIC { format(out, "    equilibrium(\"", reaction_unit(), "\");\n"); }
     if physics == ELASTIC {
         for b in active[s.first_bc..s.first_bc + s.bc_count] {
@@ -4336,16 +4010,12 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: codegen::Share) 
     out.append("}\n\n");
 }
 
-// A harmonic step: a function for each frequency, which calls the next.
 fn emit_harmonic_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
     format(out, "// step ", s.name, ": harmonic, ", s.freq_count, " frequencies\nfn step_", s.name, "() { step_", s.name, "_1(); }\n\n");
     for i in s.freq_count { emit_frequency(out, si, i, results_dir); }
 }
 
-// Frequency i of harmonic step si: the terms, the pml and the bcs at its
-// omega, the solve and the reports. The last frequency checks the expects
-// of the step and writes the output.
 fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     let s = steps[si];
     let f = freqs[s.first_freq + i];
@@ -4538,8 +4208,6 @@ recursive fn mentions_im(n: i64) -> bool {
     return false;
 }
 
-// The diffusion of the base material, and c, s and the diffusion of the
-// material of each region (eddy_terms), at omega_now.
 fn emit_eddy_laws(out: u8[>..]&, nu0: f64) {
     if nu0 != 1.0 {
         out.append("    elements::wave_nu(");
@@ -4600,8 +4268,6 @@ fn emit_wave_report(out: u8[>..]&, step_label: u8[:], r: Report) {
 var wz_count = 0;
 var wz_found: u8[>..] = [];
 
-// The Goose expression of the Complex value of z in `out`, a pair of f64,
-// and the statements that sample the unknown in `pre`.
 recursive fn emit_wz(out: u8[>..]&, pre: u8[>..]&, z: i64) {
     let k = kind(z);
     if is_call(z, "integral") && syntax::child_count(z) == 3 && is_curve(arg(z, 1)) {
@@ -4728,7 +4394,6 @@ fn emit_curve_integral(pre: u8[>..]&, n: i64, z: i64) {
     }
 }
 
-// `let v, found_v = <part of z>;`, with z an expression of samples.
 fn emit_wave_z(out: u8[>..]&, var_name: u8[:], z: i64, part: i64) {
     var pre: u8[>..] = [];
     var expr: u8[>..] = [];
@@ -4739,7 +4404,6 @@ fn emit_wave_z(out: u8[>..]&, var_name: u8[:], z: i64, part: i64) {
     format(out, "        let ", var_name, " = wave_pick(", part, ", ", expr, ");\n        let found_", var_name, " = true", wz_found, ";\n");
 }
 
-// The ties of the bloch group: the high boundary to the low one.
 fn emit_bloch(out: u8[>..]&) {
     out.append("    // symmetry: bloch\n");
     emit_region(out, bloch_low);
@@ -4759,7 +4423,6 @@ fn emit_change(out: u8[>..]&, ch: Change) {
     out.append(");\n");
 }
 
-// `let v, found = <sample at p>;`
 fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3]) {
     if what == FIELD_WAVE_Z {
         emit_wave_z(out, var_name, arg(comp, 0), wave_part(comp));
@@ -4916,15 +4579,9 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
 }
 
 let CURVE_POINTS = 257;
+let P2_NODES_PER_POINT_3D = 1 + 7;
+let P2_NODES_PER_POINT_2D = 1 + 3;
 
-// The initial temperature, the tolerance of the nonlinear steps, and the
-// conductivity k(T) of the material. The generator samples k at CURVE_POINTS
-// temperatures from the lowest to the highest temperature that the model
-// names (the initial value, the fixed values and the surroundings), and the
-// program interpolates linearly between them. Reason: k(T) is an expression
-// of the model, or a table, that only the generator can evaluate; the
-// sample is exact for a k that is linear in T or a table with its
-// nodes on the grid, and the error is of order h^2 k'' else.
 fn emit_nonlinear_heat(out: u8[>..]&) {
     var lo = 1.0e300;
     var hi = -1.0e300;
@@ -4977,10 +4634,6 @@ fn emit_nonlinear_heat(out: u8[>..]&) {
     out.append(", curve[..]);\n");
 }
 
-// The dofs of the mesh of the model that `read` read: for the hole, the
-// rows of cells that grow from `mesh_fine` by 1.25 (elements::grade_rows).
-// A shape is meshed: a P2 node is at each point and at each edge, and a
-// mesh has about 7 edges for each point in 3d, 3 in 2d.
 fn dof_estimate() -> i64 {
     if geo == GEO_SHAPE {
         mesher::clear_refine();
@@ -4994,7 +4647,7 @@ fn dof_estimate() -> i64 {
         let done = if dim == 3 { mesher::mesh_3d(body_shape, mesh_size) } else { mesher::mesh_2d(body_shape, mesh_size) };
         let points = if done { mesher::point_count() } else { 0 };
         if physics == EDGE || physics == DARCY { return edge_dofs(points); }
-        let nodes = if order == 2 { points * (if dim == 3 { 8 } else { 4 }) } else { points };
+        let nodes = if order == 2 { points * (if dim == 3 { P2_NODES_PER_POINT_3D } else { P2_NODES_PER_POINT_2D }) } else { points };
         return nodes * per_node();
     }
     var cells: i64[3] = [1, 1, 1];
@@ -5002,7 +4655,7 @@ fn dof_estimate() -> i64 {
         let w = hi[0] - lo[0];
         let h = hi[1] - lo[1];
         cells[0] = max(ceil(0.5 * PI * hole_r / mesh_fine) as! i64, ceil((w + h) / mesh_size) as! i64);
-        cells[1] = ceil((sqrt(w * w + h * h) - hole_r) / mesh_size + log(mesh_size / mesh_fine) / log(1.25)) as! i64 + 1;
+        cells[1] = ceil((sqrt(w * w + h * h) - hole_r) / mesh_size + log(mesh_size / mesh_fine) / log(HOLE_GRADE)) as! i64 + 1;
     } else {
         for j in 2 { cells[j] = max(ceil((hi[j] - lo[j]) / mesh_size - 1.0e-9) as! i64, 1); }
     }
@@ -5013,11 +4666,8 @@ fn dof_estimate() -> i64 {
     return nodes * per_node();
 }
 
-// The dofs of a node.
 fn per_node() -> i64 { return if physics == HEAT { 1 } else if physics == WAVE { 2 } else { dim }; }
 
-// The shapes of the mesher reader and the refine lines, again in the
-// program: mesh_shape meshes them, and a boundary can be the surface of one.
 fn emit_shapes(out: u8[>..]&) {
     out.append("    // the shapes of the geometry, in the sequence of the mesher reader\n");
     out.append("    mesher::clear_shapes();\n    mesher::clear_refine();\n");
@@ -5071,9 +4721,6 @@ fn emit_shapes(out: u8[>..]&) {
     for g in interfaces { format(out, "    mesher::add_interface(", g, ");\n"); }
 }
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the elements from `elements_path` and writes its VTU files under
-// `results_dir`. In a study, it writes or reads the stages of `share`.
 fn emit_head(elements_path: u8[:], out: u8[>..]&) {
     let sys = codegen::system;
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
@@ -5114,7 +4761,6 @@ fn emit_head(elements_path: u8[:], out: u8[>..]&) {
     if solid_law > 0 || has_ties() { emit_energy(out); }
 }
 
-// The mesh of the program, in main.
 fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
     let sys = codegen::system;
     let cell = if hex_mesh { "hexahedra" } else if dim == 3 { "tetrahedra" } else { "triangles" };
@@ -5189,7 +4835,6 @@ fn emit_mesh_part(out: u8[>..]&, share: codegen::Share) {
     if hex_mesh && order == 2 { format(out, "    elements::set_cube_gauss(", if reduced_quadrature { 2 } else { 3 }, ");\n"); }
 }
 
-// The written-out law as the arguments of the call: the 36 and the 6 values.
 fn emit_aniso(out: u8[>..]&, head: u8[:], c: f64[36], s0: f64[6], tail: u8[:]) {
     out.append(head);
     out.append("[");
@@ -5206,7 +4851,6 @@ fn emit_aniso(out: u8[>..]&, head: u8[:], c: f64[36], s0: f64[6], tail: u8[:]) {
     out.append(tail);
 }
 
-// The physics of the pass now, in main.
 fn emit_setup(out: u8[>..]&) {
     let sys = codegen::system;
     format(out, "    // physics ", physics_name, ", material ", material_name, "\n");
@@ -5303,7 +4947,6 @@ fn emit_setup(out: u8[>..]&) {
     emit_contacts(out);
 }
 
-// The steps of the pass now, and its expects of no step, in main.
 fn emit_calls(out: u8[>..]&) {
     for s in steps { format(out, "    step_", s.name, tag(), "();\n"); }
     if multi() || terms.len > 0 { emit_pass_end(out); }

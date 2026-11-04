@@ -1,0 +1,36 @@
+model curve_below_zero: 3d, SI
+
+let Ls: Length = 1 m
+
+scales Ls, 100 K, 2 W/(m*K)
+
+let slab: Solid = box((0, 0, 0) m, (0.05 m, 0.05 m, Ls))
+let hot: Surface = boundary(slab, z == 0 m)
+let cold: Surface = boundary(slab, z == Ls)
+
+let qv: Power/Volume = 2000 W/m^3
+
+material solid {
+    k0: Conductivity = 2 W/(m*K)
+    beta: Expansion = -0.0022222 K^-1
+    k: Conductivity = k0*(1 + beta*T)
+}
+
+mesh m on slab {
+    size: 0.25 m
+    cell: hex
+}
+
+physics thermal on slab solves T: Temperature = 300 K {
+    material solid
+    let q: Vector<HeatFlux> = -k*grad(T)
+    eq div(q) = qv
+}
+
+method thermal: cg { mesh: m, order: 1 }
+
+step steady: static {
+    bc hot: T = 300 K
+    bc cold: T = 400 K
+    output T
+}

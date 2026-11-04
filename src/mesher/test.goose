@@ -1,10 +1,3 @@
-// Tests of the mesher. `./build.sh test` runs this program from the root
-// of the repository, and a non-zero exit status is a failure.
-//
-// Each case meshes a shape, prints its mesh_quality, and compares the area
-// or the volume of the mesh with the exact value of the shape. The gate
-// case is the plate with a hole of femahoy validation/cases/grid-plate-
-// hole-ccx (examples/femahoy/grid_plate_hole_ccx.skn), in mm.
 import std;
 import math;
 import dictionary;
@@ -12,10 +5,10 @@ import os;
 import .mesher;
 import .lint;
 import .stl;
-import syntax from "../syntax";   // the lint imports it
-import check from "../check";     // the lint imports it
-import runtime from "../runtime";   // the mesher imports it
-import solvers from "../solvers";   // the runtime imports it
+import syntax from "../syntax";
+import check from "../check";
+import runtime from "../runtime";
+import solvers from "../solvers";
 
 var failures = 0;
 
@@ -24,8 +17,6 @@ fn fail(what: u8[:]) {
     print("FAIL ", what);
 }
 
-// The mesh is conforming: each face (an edge in 2D) is in one cell or in
-// two, and each face of one cell has its nodes on the surface of g.
 fn expect_conforming(what: u8[:], g: i64) {
     let k = mesher::mesh_dim + 1;
     let n = mesher::point_count();
@@ -61,8 +52,6 @@ fn expect_conforming(what: u8[:], g: i64) {
     if bad > 0 { fail(str(what, ": ", bad, " faces are not conforming")); }
 }
 
-// Meshes g, prints the quality and the measure against the exact value,
-// and checks both. Returns the relative error of the measure.
 fn mesh_case(what: u8[:], g: i64, size: f64, exact: f64, tolerance: f64) -> f64 {
     let ok = if mesher::bounds(g)[5] > mesher::bounds(g)[2] {
         mesher::mesh_3d(g, size)
@@ -79,10 +68,6 @@ fn mesh_case(what: u8[:], g: i64, size: f64, exact: f64, tolerance: f64) -> f64 
     return err;
 }
 
-// The area of the 2D plate with a hole: the plate less the polygon of the
-// boundary edges on the circle. Each such edge is a chord that cuts off
-// r^2 / 2 (theta - sin theta) of the hole. Thus this is exact for a mesh
-// that fills the domain of its boundary edges, with no gap or overlap.
 fn chord_area(w: f64, h: f64, cx: f64, cy: f64, r: f64) -> f64 {
     var area = w * h - PI * r * r;
     var edges = dictionary<i64, i64> {};
@@ -109,7 +94,6 @@ fn chord_area(w: f64, h: f64, cx: f64, cy: f64, r: f64) -> f64 {
     return area;
 }
 
-// The shortest edge of the cells of a 2D mesh.
 fn shortest_edge() -> f64 {
     var shortest = 1.0e300;
     for c in mesher::cell_count() {
@@ -122,18 +106,12 @@ fn shortest_edge() -> f64 {
     return shortest;
 }
 
-// The tolerances of the 3D cases. The boundary nodes are on the surface.
-// A facet with edges of length h on a surface of radius R misses it by at
-// most h^2 / (8 R), so a curved surface of area A loses at most
-// A h^2 / (8 R). A chamfered sharp edge of length L loses at most a
-// triangle with sides h, so L h^2 / 2. Both scale as h^2.
 fn tolerance(curved_area: f64, radius: f64, edge_length: f64, size: f64, volume: f64) -> f64 {
     var loss = edge_length * size * size / 2.0;
     if radius > 0.0 { loss += curved_area * size * size / (8.0 * radius); }
     return loss / volume;
 }
 
-// The ids of the diagnostics of `skein lint --mesh` on `src`, one per line.
 fn mesh_lint_ids(src: u8[:]) -> u8[>..] {
     check::lint_text("t.skn", src);
     mesher::mesh_lint();
@@ -150,7 +128,6 @@ fn expect_mesh_lints(what: u8[:], src: u8[:], want: u8[:]) {
     if got != want { fail(str("lint --mesh ", what, ": got [", got, "]")); }
 }
 
-// `mesher::lint(words)` exits 0 and gives exactly the ids `want`, one per line.
 fn expect_lint_command(what: u8[:], words: const u8[:][:], want: u8[:]) {
     var copies: u8[..64][>..] = [];
     for w in words {
@@ -169,8 +146,6 @@ fn expect_lint_command(what: u8[:], words: const u8[:][:], want: u8[:]) {
     if status != 0 || got != want { fail(str("skein lint ", what, ": the exit status is ", status, ", the ids [", got, "]")); }
 }
 
-// The area inside fill node g, by the Green theorem: the integral of x dy
-// on each cubic span and on the closing line.
 fn fill_area(g: i64) -> f64 {
     let n = mesher::shapes[g].b;
     var area = 0.0;
@@ -185,10 +160,6 @@ fn fill_area(g: i64) -> f64 {
     return area + 0.5 * (p[0] + q[0]) * (q[1] - p[1]);
 }
 
-// fill (spec §8.1): a half disc of radius 10, a spline through 13 points
-// of its arc and the line of its diameter, and a plate of 4 by 4 less a
-// quarter ellipse with the semi-axes sqrt(2) and 1/sqrt(2), a spline
-// through the 61 points of shape_hole_biaxial.skn at power 2.
 fn test_fill() {
     var arc: f64[>..] = [];
     for k in 13 {
@@ -197,18 +168,12 @@ fn test_fill() {
         arc.push(10.0 * sin(a));
     }
     let half = mesher::fill(arc[..]);
-    // The spline passes through each point, is inside the disc between
-    // the points, and the line closes it.
     for k in 13 {
         if abs(mesher::phi(half, arc[2 * k], arc[2 * k + 1], 0.0)) > 1.0e-9 { fail(str("fill: point ", k, " is not on the boundary")); }
     }
     if !(mesher::phi(half, 5.0, 0.0, 0.0) < -4.9 && mesher::phi(half, -1.0, 0.0, 0.0) > 0.99 && mesher::phi(half, 11.0, 0.0, 0.0) > 0.99) {
         fail("fill: the sign of phi of the half disc");
     }
-    // The end spans differ most from the arc: 5e-3 of the radius. Each
-    // boundary edge of length h is a chord, and cuts off h^3 / (12 r) of
-    // the arc of length h: h^2 / (12 r) in all on each unit of length. The
-    // tolerance is 2 times that on the arc of length pi r.
     let span_area = fill_area(half);
     if abs(span_area / (0.5 * PI * 100.0) - 1.0) > 2.0e-3 { fail(str("fill: the area of the spline is ", span_area)); }
     mesh_case("fill of a half disc", half, 0.5, span_area, 2.0 * PI * 10.0 * 0.25 / 120.0 / span_area);
@@ -223,11 +188,6 @@ fn test_fill() {
               1.0e-4);
 }
 
-// fill of a nurbs (spec §8.1): the rational circle of radius 10 of 4
-// quarters (9 points, the weights 1 and sqrt(2)/2, each inner knot 2
-// times), one quarter with the default knots, which the line from its
-// end to its start closes, and a triangle of degree 1. A rational quadratic is a conic, so each point
-// of the curve is on the circle to the round-off.
 fn test_nurbs() {
     let r2 = sqrt(0.5);
     let ring: f64[27] = [10.0, 0.0, 1.0, 10.0, 10.0, r2, 0.0, 10.0, 1.0, -10.0, 10.0, r2, -10.0, 0.0, 1.0,
@@ -258,8 +218,6 @@ fn test_nurbs() {
     if abs(nurbs_area(corner) - 0.5) > 1.0e-12 { fail(str("nurbs: the area of the triangle of degree 1 is ", nurbs_area(corner))); }
 }
 
-// The area of fill node g: x dy on each span by Simpson's rule on 200
-// pieces, and on the closing line.
 fn nurbs_area(g: i64) -> f64 {
     let n = mesher::shapes[g].b;
     var area = 0.0;
@@ -277,8 +235,6 @@ fn nurbs_area(g: i64) -> f64 {
     return area + 0.5 * (p[0] + q[0]) * (q[1] - p[1]);
 }
 
-// The lint rules that need the mesh (docs/checks.md §3) on a strip of
-// 1 m by 50 mm, in plane stress, with a load on its tip.
 fn test_lint() {
     fn strip(hole: u8[:], order: u8[:]) -> u8[>..] {
         return str("model t: 2d, SI\nscales 1 m, 1 MPa\nlet plate: Surface = rect((0, 0) m, (1, 0.05) m)", hole,
@@ -292,29 +248,21 @@ fn test_lint() {
     expect_mesh_lints("bending_lock", strip("", "1"), "bending_lock\n");
     expect_mesh_lints("order 2 does not lock", strip("", "2"), "");
     expect_mesh_lints("mesh_feature_small", strip(" - circle((0.5, 0.025) m, 5 mm)", "2"), "mesh_feature_small\n");
-    // The reader fills a spline, and the last point equal to the first
-    // closes it. It has no fill of another Curve.
     expect_mesh_lints("fill of a spline", strip(" - fill(spline((0.4, 0.015) m, (0.5, 0.01) m, (0.6, 0.025) m, (0.5, 0.04) m, (0.4, 0.015) m))", "2"), "");
     expect_mesh_lints("fill of a line", strip(" - fill(line((0.5, 0.01) m, (0.52, 0.04) m))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of a nurbs", strip(" - fill(nurbs(2, (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "mesh_feature_small\n");
-    expect_mesh_lints("fill of a nurbs with knots that fall", strip(" - fill(nurbs(1, knots(0, 0, 2, 1, 1), (0.5, 0.01) m, 1, (0.52, 0.04) m, 1, (0.48, 0.04) m, 1))", "2"), "verify_unsupported\n");
+    expect_mesh_lints("fill of a nurbs with knots that fall", strip(" - fill(nurbs(1, knots(0, 0, 2, 1, 1), (0.5, 0.01) m, 1, (0.52, 0.04) m, 1, (0.48, 0.04) m, 1))", "2"), "type_mismatch\n");
+    expect_mesh_lints("fill of a nurbs with a first knot degree times", strip(" - fill(nurbs(2, knots(0, 0, 1, 2, 2, 2), (0.51, 0.025) m, 1, (0.5, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of a nurbs with an inner knot degree + 1 times", strip(" - fill(nurbs(2, knots(0, 0, 0, 1, 1, 1, 2, 2, 2), (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of 2 points", strip(" - fill(spline((0.5, 0.01) m, (0.52, 0.04) m, (0.5, 0.01) m))", "2"), "verify_unsupported\n");
-    // The copy of a pattern is a feature. The reader needs a whole copy
-    // count of 1 or more, and has no pattern_polar of a 2D shape.
     expect_mesh_lints("mesh_feature_small of a pattern", strip(" - pattern(circle((0.2, 0.025) m, 5 mm), (0.2, 0) m, 3)", "2"), "mesh_feature_small\n");
     expect_mesh_lints("a copy count of 2.5", strip(" - pattern(circle((0.2, 0.025) m, 5 mm), (0.2, 0) m, 2.5)", "2"), "verify_unsupported\n");
     expect_mesh_lints("a 2D polar pattern", strip(" - pattern_polar(circle((0.5, 0.025) m, 5 mm), (0, 1), 2)", "2"), "verify_unsupported\n");
-    // In a 3d model: a loft from a circle to a square, with a polar
-    // pattern of pins.
     fn solid(body: u8[:]) -> u8[>..] {
         return str("model t: 3d, SI\nscales 1 m\nlet s: Solid = ", body, "\nmesh m on s {\n    size: 0.5 m\n    cell: tet\n}\n");
     }
     expect_mesh_lints("a loft and a polar pattern",
                       solid("loft(circle((0, 0) m, 4 m), rect((-2, -2) m, (2, 2) m), 3 m) | pattern_polar(cylinder((4, 0, 0) m, (0, 0, 1), 1 m, 3 m), (0, 0, 1), 6)"), "");
-    // cell: hex makes the grid on a union of boxes, with a plane on each
-    // face of the boxes of the model, and needs a union of boxes. Only its
-    // planes use the layer, so it is an unused_let.
     fn grid_model(region: u8[:], cell: u8[:]) -> u8[>..] {
         return str("model t: 3d, SI\nscales 1 m\nlet s: Solid = ", region, "\nlet layer: Solid = box((0, 0, 0) m, (1, 1, 0.3) m)\n",
                    "mesh m on s {\n    size: 0.25 m\n    cell: ", cell, "\n}\n");
@@ -323,8 +271,6 @@ fn test_lint() {
     if mesher::cell_count() != 80 { fail(str("lint --mesh cell: hex on a box: ", mesher::cell_count(), " cells, not 80")); }
     expect_mesh_lints("cell: hex on a cylinder", grid_model("cylinder((0, 0, 0) m, (0, 0, 1), 1 m, 1 m)", "hex"), "unused_let\n");
     expect_mesh_lints("cell: quad in 3D", grid_model("box((0, 0, 0) m, (1, 1, 1) m)", "quad"), "unused_let\nverify_unsupported\n");
-    // bending_lock is for triangles and tetrahedra only: an order-1 hex
-    // grid on a thin bar does not lock.
     fn bar(cell: u8[:]) -> u8[>..] {
         return str("model t: 3d, SI\nscales 1 m, 1 MPa\nlet bar: Solid = box((0, 0, 0) m, (1, 0.05, 0.05) m)\n",
                    "let root: Surface = boundary(bar, x == 0 m)\nlet tip: Surface = boundary(bar, x == 1 m)\n",
@@ -336,7 +282,6 @@ fn test_lint() {
     }
     expect_mesh_lints("bending_lock on a thin tet bar", bar("tet"), "bending_lock\n");
     expect_mesh_lints("no bending_lock on a thin hex grid", bar("hex"), "");
-    // `skein lint` applies the rules that need the mesh only with --mesh.
     let path = "build/mesh_lint_strip.skn";
     guard write_file(path, strip("", "1")) else {
         fail(str("cannot write ", path));
@@ -346,8 +291,6 @@ fn test_lint() {
     expect_lint_command("with --mesh", ["skein", "lint", "--mesh", path], "bending_lock\n");
 }
 
-// Meshes g with a grid, and checks the counts of cells and nodes, the
-// measure and the quality.
 fn grid_case(what: u8[:], g: i64, dim: i64, size: f64, planes: i64[:], cells: i64, nodes: i64, exact: f64) {
     if !mesher::mesh_grid(g, dim, size, planes) { fail(str(what, ": not a union of boxes")); }
     let q = mesher::mesh_quality();
@@ -357,26 +300,16 @@ fn grid_case(what: u8[:], g: i64, dim: i64, size: f64, planes: i64[:], cells: i6
     if !mesher::quality_passes(q) { fail(str(what, ": mesh_quality")); }
 }
 
-// The grid of quad and hex cells on a union of boxes (spec §9.2).
 fn test_grid() {
-    // The heated block of femahoy grid-heated-block-ccx, in mm: a plate
-    // 100 x 100 x 10 and a block 30 x 30 x 20 on it. Along x and y, the
-    // planes 35 and 65 give 4, 3 and 4 cells. Along z, 1 cell in the plate
-    // and 2 in the block. The plate has 11 x 11 cells and 12 x 12 x 2
-    // nodes, the block 3 x 3 x 2 cells and 4 x 4 x 2 more nodes.
     mesher::clear_shapes();
     let plate = mesher::box(0.0, 0.0, 0.0, 100.0, 100.0, 10.0);
     let top = mesher::box(35.0, 35.0, 10.0, 65.0, 65.0, 30.0);
     grid_case("grid on a plate and a block", mesher::union(plate, top), 3, 10.0, [], 139, 320, 118000.0);
-    // A layer of 0.3 of a unit cube: the face of the layer is a plane, so
-    // z has 2 cells below it and 3 above it.
     let cube = mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
     let layer = mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 0.3);
     grid_case("grid on a cube with a layer", cube, 3, 0.25, [layer], 80, 150, 1.0);
     let q = mesher::mesh_quality();
     if abs(q.max_aspect - 0.25 / 0.15) > 1.0e-9 { fail(str("grid on a cube with a layer: the aspect is ", q.max_aspect)); }
-    // The 2D L of 2 rects: 2 cells along each axis at size 9, 3 quads in
-    // the L, and 8 nodes.
     let l_rects = mesher::union(mesher::rect(0.0, 0.0, 10.0, 2.0), mesher::rect(0.0, 0.0, 2.0, 10.0));
     grid_case("2D grid on an L of 2 rects", l_rects, 2, 9.0, [], 3, 8, 36.0);
     if mesher::mesh_grid(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0), 3, 0.5, []) {
@@ -384,15 +317,11 @@ fn test_grid() {
     }
 }
 
-// The quad, triangle and hex cells are conforming: each edge (2D) or face
-// (3D) is in one cell or in two, and the nodes of each edge or face in one
-// cell are on the boundary of g. A face of a hex is keyed by its 3 lowest
-// nodes.
 fn expect_cells_conforming(what: u8[:], g: i64) {
     let n = mesher::point_count();
     let hex_faces: i64[4][6] = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
     var faces = dictionary<i64, i64> {};
-    var nodes = dictionary<i64, i64> {};    // a node of each face of one cell
+    var nodes = dictionary<i64, i64> {};
     fn add(f: i64[..4]) {
         var v = f;
         sort(v);
@@ -435,9 +364,6 @@ fn expect_cells_conforming(what: u8[:], g: i64) {
     if bad > 0 { fail(str(what, ": ", bad, " faces are not conforming")); }
 }
 
-// Meshes g with quad or hex cells, and checks the quality, the measure
-// against `exact` within `tolerance`, and the conformity. Returns the
-// number of triangles.
 fn cells_case(what: u8[:], g: i64, dim: i64, size: f64, exact: f64, tolerance: f64) -> i64 {
     if !mesher::mesh_cells(g, dim, size, []) { fail(str(what, ": the mesher did not finish")); }
     let q = mesher::mesh_quality();
@@ -453,27 +379,18 @@ fn cells_case(what: u8[:], g: i64, dim: i64, size: f64, exact: f64, tolerance: f
     return tris;
 }
 
-// The quad and hex cells on a region that is not a union of boxes (spec
-// §9.2, femahoy gap G36).
 fn test_cells() {
-    // A quarter of a ring 1 <= r <= 2 at size 0.2: 5 cells along r and
-    // ceil(π / 0.2) = 16 along θ. Each cell is the quad of the chords, so
-    // the area is 16 (2^2 - 1^2) sin(π / 32) / 2.
     mesher::clear_shapes();
     let ring = mesher::subtract(mesher::intersect(mesher::circle(0.0, 0.0, 2.0), mesher::rect(0.0, 0.0, 2.0, 2.0)),
                                 mesher::circle(0.0, 0.0, 1.0));
     let ring_area = 16.0 * 3.0 * sin(PI / 32.0) / 2.0;
     cells_case("quarter ring", ring, 2, 0.2, ring_area, 1.0e-12);
     if mesher::cell_count() != 80 || mesher::point_count() != 102 { fail("quarter ring: not 80 cells and 102 nodes"); }
-    // The quarter of the tube of height 1, the other form (o - i) & b: 5
-    // layers of the ring.
     let tube = mesher::intersect(mesher::subtract(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0),
                                                   mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)),
                                  mesher::box(0.0, 0.0, 0.0, 2.0, 2.0, 1.0));
     cells_case("quarter tube", tube, 3, 0.2, ring_area, 1.0e-12);
     if mesher::cell_count() != 400 || mesher::point_count() != 612 { fail("quarter tube: not 400 cells and 612 nodes"); }
-    // Blossom-Quad on the plate with a hole: the merge keeps the area of
-    // the triangles, and few triangles stay.
     let plate = mesher::subtract(mesher::rect(0.0, 0.0, 2.0, 1.0), mesher::circle(1.0, 0.5, 0.25));
     mesher::mesh_2d(plate, 0.05);
     let tri_area = mesher::mesh_quality().measure;
@@ -482,21 +399,15 @@ fn test_cells() {
     let quads = mesher::cell_count() - tris;
     if 2 * quads + tris != tri_count { fail(str("Blossom-Quad: ", quads, " quads and ", tris, " triangles from ", tri_count)); }
     if 10 * tris > mesher::cell_count() { fail(str("Blossom-Quad: ", tris, " of ", mesher::cell_count(), " cells are triangles")); }
-    // The swept grid on the quarter of a rod of radius 1 and length 3, as
-    // in femahoy taylor-bar-impact: no triangle stays, and the chords of
-    // the arc lose at most h^2 / (8 R) of the area for each unit of arc.
     let rod = mesher::intersect(mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 3.0), mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 3.0));
     let rod_volume = 0.75 * PI;
     cells_case("swept hex grid on a quarter of a rod", rod, 3, 0.2, rod_volume, tolerance(0.5 * PI * 3.0, 1.0, 0.0, 0.2, rod_volume));
     for c in mesher::cell_count() {
         if runtime::cell_type[c] as i64 != runtime::HEX8 { fail("swept hex grid: a cell is not a hex"); }
     }
-    // The mapped grid on a block with a hole along x: not a prism along z.
     let holed = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0), mesher::cylinder(0.0, 0.5, 0.5, 1.0, 0.0, 0.0, 0.25, 2.0));
     let block_volume = 2.0 - 2.0 * PI * 0.0625;
     cells_case("mapped hex grid on a block with a hole", holed, 3, 0.1, block_volume, tolerance(2.0 * TAU * 0.25, 0.25, 0.0, 0.1, block_volume));
-    // A unit square, a clockwise rhombus with angles of 30 degrees, and a
-    // quad with an edge of zero length: only the square gives angles.
     mesher::clear_mesh(2);
     let s0 = mesher::add_point(0.0, 0.0, 0.0);
     let s1 = mesher::add_point(1.0, 0.0, 0.0);
@@ -515,8 +426,6 @@ fn test_cells() {
     }
 }
 
-// `skein export` of the model `src` with the options `words`: the exit
-// status is `want`. The result is the STL.
 fn export_case(what: u8[:], src: u8[:], words: const u8[:][:], want: i64) -> u8[>..] {
     let path = "build/export_case.skn";
     var out: u8[>..] = [];
@@ -534,10 +443,6 @@ fn export_case(what: u8[:], src: u8[:], words: const u8[:][:], want: i64) -> u8[
     return out;
 }
 
-// Reads the facets of `stl`. Each facet has its normal of unit length and
-// in the direction of the right-hand rule of its vertices. The result is
-// the facet count, the volume by the divergence theorem, and the sum of
-// the area vectors, which is 0 on a closed surface.
 fn read_stl(what: u8[:], stl: u8[:]) -> i64, f64, f64[3] {
     var count = 0;
     var volume = 0.0;
@@ -568,7 +473,6 @@ fn read_stl(what: u8[:], stl: u8[:]) -> i64, f64, f64[3] {
     return count, volume, area;
 }
 
-// The integers of `text` in order, or only the ones that follow a '#'.
 fn integers(text: u8[:], marked: bool, list: i64[>..]&) {
     var i = 0;
     while i < text.len {
@@ -581,11 +485,6 @@ fn integers(text: u8[:], marked: bool, list: i64[>..]&) {
     }
 }
 
-// Checks the STEP file `step` as a schema check, with no CAD reader on the
-// machine: the Part 21 frame, every #n that is used is defined, every
-// coordinate is a REAL with a point, the pnmax of the TRIANGULATED_FACE is
-// the point count, and its triangles are in range of its COORDINATES_LIST.
-// The result is the triangle count.
 fn check_step(what: u8[:], step: u8[:]) -> i64 {
     if !starts_with(step, "ISO-10303-21;\n") || !ends_with(step, "END-ISO-10303-21;\n") { fail(str("export ", what, ": no Part 21 frame")); }
     if find(step, "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF") < 0 { fail(str("export ", what, ": no AP242 schema")); }
@@ -627,8 +526,6 @@ fn check_step(what: u8[:], step: u8[:]) -> i64 {
     return corners.len / 3;
 }
 
-// `skein export` (spec §22): the surface of the tetrahedra of a Solid,
-// closed and with its normals out, and the triangles of a 2D Surface.
 fn test_export() {
     fn solid(region: u8[:], mesh: u8[:]) -> u8[>..] {
         return str("model t: 3d, SI\nscales 1 m\nlet L: Length = 2 m\nlet s: Solid = ", region,
@@ -643,14 +540,12 @@ fn test_export() {
     if !starts_with(fine, "solid s\n") || !ends_with(fine, "endsolid s\n") { fail("export a block with a hole: no solid and endsolid lines"); }
     if n_fine == 0 || abs(volume - tets) > 1.0e-9 * tets { fail(str("export a block with a hole: the volume ", volume, " is not ", tets)); }
     if mesher::norm3(area) > 1.0e-9 { fail(str("export a block with a hole: the surface is open, area sum ", mesher::norm3(area))); }
-    // --format step: the same triangles in a STEP AP242 file.
     let step = export_case("a block with a hole as STEP", holed, ["--geometry", "s", "--format", "step"], 0);
     let n_step = check_step("a block with a hole", step);
     if n_step != n_fine { fail(str("export STEP: ", n_step, " triangles, the STL has ", n_fine)); }
     var small: u8[>..] = [];
     mesher::step_real(small, 5.0e-5);
     if small[..] != "5.E-05" { fail(str("export STEP: 5e-05 is the REAL ", small, ", not 5.E-05")); }
-    // --size sets the triangles in place of the size of the mesh block.
     let coarse = export_case("--size 50 cm", holed, ["--geometry", "s", "--size", "50 cm"], 0);
     let n_coarse, coarse_volume, coarse_area = read_stl("--size 50 cm", coarse);
     if n_coarse == 0 || n_coarse >= n_fine { fail(str("export --size 50 cm: ", n_coarse, " facets, not fewer than ", n_fine)); }
@@ -658,29 +553,22 @@ fn test_export() {
     let unmeshed = solid("box((0, 0, 0) m, (1, 1, 1) m)", "");
     let n_cube, cube_volume, cube_area = read_stl("a cube", export_case("a cube", unmeshed, ["--geometry", "s", "--size", "500mm"], 0));
     if n_cube == 0 || abs(cube_volume - 1.0) > 1.0e-12 { fail(str("export a cube: the volume is ", cube_volume, ", not 1")); }
-    // A 2D Surface: its triangles in the plane z = 0, with the normal +z.
     let plate = "model t: 2d, SI\nscales 1 m\nlet p: Surface = rect((0, 0) m, (2, 1) m)\n";
     let n_plate, plate_volume, plate_area = read_stl("a 2D rect", export_case("a 2D rect", plate, ["--geometry", "p", "--size", "0.25 m"], 0));
     if n_plate == 0 || abs(plate_area[2] - 2.0) > 1.0e-12 { fail(str("export a 2D rect: the area is ", plate_area[2], ", not 2")); }
     let plate_step = export_case("a 2D rect as STEP", plate, ["--geometry", "p", "--size", "0.25 m", "--format", "step"], 0);
     if check_step("a 2D rect", plate_step) != n_plate { fail("export STEP: a 2D rect has other triangles than its STL"); }
-    // Faults of the command line: exit status 2 and no STL.
     export_case("an unknown let", holed, ["--geometry", "nope", "--size", "1 m"], 2);
     export_case("--format iges", holed, ["--geometry", "s", "--format", "iges"], 2);
     export_case("a size with no unit", holed, ["--geometry", "s", "--size", "3"], 2);
     export_case("no --geometry", holed, ["--size", "1 m"], 2);
     export_case("an unknown option", holed, ["--geometry", "s", "--sizes", "1 m"], 2);
     export_case("with no mesh block and no --size", unmeshed, ["--geometry", "s"], 2);
-    // Faults of the model: exit status 1. A let that is not a shape, a
-    // Surface of a Solid that the mesher does not read, and a check error.
     export_case("a Length", holed, ["--geometry", "L"], 1);
     export_case("a boundary", holed, ["--geometry", "top"], 1);
     export_case("a model with an error", str(holed, "let bad: Length = 2 s\n"), ["--geometry", "s"], 1);
 }
 
-// The interfaces of mesh_2d: a ground under a trapezoid lift, with the
-// line y = 0 between them inside the body. No triangle crosses the line or
-// the slopes of the lift, and the areas of the two parts are exact.
 fn test_interfaces() {
     mesher::clear_shapes();
     let ground = mesher::rect(-6.0, -3.0, 6.0, 0.0);
@@ -718,9 +606,6 @@ fn test_interfaces() {
     if abs(area_lift - 7.0) > 1.0e-9 || abs(area - 43.0) > 1.0e-9 { fail(str("interfaces: the areas ", area_lift, " and ", area, " are not 7 and 43")); }
 }
 
-// The interfaces of mesh_3d: a block with a ball in it. No tetrahedron has
-// nodes inside and outside the ball, the volumes of the two parts add up
-// to the volume of the block, and each tetrahedron has a positive volume.
 fn test_interfaces_3d() {
     mesher::clear_shapes();
     let slab = mesher::box(-2.0, -2.0, -2.0, 2.0, 2.0, 2.0);
@@ -760,8 +645,6 @@ fn test_interfaces_3d() {
     if abs(volume - 64.0) > 1.0e-6 || abs(volume_ball - 4.18879) > 0.25 { fail(str("interfaces 3d: the volumes ", volume_ball, " and ", volume, " are not 4.19 and 64")); }
 }
 
-// The longest edge of a 2D mesh with both ends within `d` of the line
-// y = y0, or of the circle of centre (cx, cy) and radius r.
 fn longest_near(d: f64, y0: f64, cx: f64, cy: f64, r: f64, circle: bool) -> f64 {
     fn near(p: f64[3]) -> bool {
         let e = if circle { abs(sqrt((p[0] - cx) * (p[0] - cx) + (p[1] - cy) * (p[1] - cy)) - r) } else { abs(p[1] - y0) };
@@ -778,10 +661,6 @@ fn longest_near(d: f64, y0: f64, cx: f64, cy: f64, r: f64, circle: bool) -> f64 
     return longest;
 }
 
-// `refine` (spec §9.1): the edges next to a refined segment and a refined
-// circle are no longer than the refine size, the far edges stay near
-// `size`, and the mesh has far fewer cells than a uniform mesh of the
-// refine size.
 fn test_refine() {
     let square = mesher::rect(0.0, 0.0, 1.0, 1.0);
     mesher::clear_refines();
@@ -811,8 +690,6 @@ fn test_refine() {
     mesher::clear_refines();
 }
 
-// The share of the edges of the mesh with a length in [0.5, 1.5] times the
-// wanted size at their midpoint.
 fn edges_in_size(size: f64) -> f64 {
     let n = mesher::point_count();
     var seen = dictionary<i64, bool> {};
@@ -837,9 +714,6 @@ fn edges_in_size(size: f64) -> f64 {
     return inside * 1.0 / total;
 }
 
-// The length of the segment from p to q that no edge of the mesh on the
-// segment covers, as a share of the segment. 0 if the mesh keeps the sharp
-// edge p q.
 fn uncovered(p: f64[3], q: f64[3], tol: f64) -> f64 {
     let u = mesher::sub3(q, p);
     let l = mesher::norm3(u);
@@ -858,7 +732,6 @@ fn uncovered(p: f64[3], q: f64[3], tol: f64) -> f64 {
             }
         }
     }
-    // The union of the spans, by a sweep over 1000 points of the segment.
     var missed = 0;
     for k in 1000 {
         let t = (k + 0.5) / 1000.0;
@@ -871,9 +744,6 @@ fn uncovered(p: f64[3], q: f64[3], tol: f64) -> f64 {
     return missed / 1000.0;
 }
 
-// The wanted size of a refine clipped to a plane and a ring (the rim of a
-// round spot on a face): small at the rim, and larger with the distance to
-// the plane and to the ring.
 fn test_refine_clip() {
     let b = mesher::cylinder(0.0, 0.0, -20.0, 0.0, 0.0, 1.0, 20.0, 20.0);
     mesher::clear_refine();
@@ -886,18 +756,12 @@ fn test_refine_clip() {
     if abs(rim - 0.02) > 1.0e-12 || off_ring < 1.0 || below < 1.0 { fail("refine clip: small at the rim, and larger away from the plane and the ring"); }
 }
 
-// The 3D mesher gaps of phase 6 (docs/roadmap.md), on the test models of
-// its scout: a cube with a spherical dimple, with and without a refine of
-// the dimple, an L block with sharp edges off the planes of a uniform
-// lattice, and a ball.
 fn test_stuffing() {
     let dent = mesher::sphere(0.5, 0.5, 1.0, 0.3);
     let dimple = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), dent);
     let dimple_volume = 1.0 - 2.0 / 3.0 * PI * 0.027;
     mesh_case("dimple", dimple, 0.1, dimple_volume, tolerance(2.0 * PI * 0.09, 0.3, 4.0 + 2.0 * PI * 0.3, 0.1, dimple_volume));
 
-    // grade: the slope of the size away from the refine is grade - 1, so
-    // the cell count falls as grade rises, and the edges follow the size.
     var cells = 0;
     for grade in [1.1, 1.3, 2.0] {
         mesher::clear_refine();
@@ -923,8 +787,6 @@ fn test_stuffing() {
     }
     mesher::clear_refine();
 
-    // The box planes are lattice planes: steps of 0.086 and 0.095, and
-    // each sharp edge is on edges of the mesh.
     let lblock = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), mesher::box(0.43, 0.43, -1.0, 2.0, 2.0, 2.0));
     mesh_case("lblock", lblock, 0.1, 0.6751, 1.0e-9);
     if mesher::mesh_quality().min_angle < 10.0 { fail("lblock: a dihedral angle below 10 deg"); }
@@ -936,17 +798,11 @@ fn test_stuffing() {
         if missed > 0.0 { fail(str("lblock: ", missed, " of the sharp edge ", e, " is off the edges of the mesh")); }
     }
 
-    // The ball at 0.05 has 536 cells with γ < 0.35 before the improvement.
-    // At 0.03 (5 times the cells) the result is the same, but the debug
-    // build of this test takes 20 s for it.
     let ball = mesher::sphere(0.0, 0.0, 0.0, 1.0);
     if !mesher::mesh_3d(ball, 0.05) { fail("ball, size 0.05: the mesher did not finish"); }
     improved_case("ball, size 0.05", ball, 0.05);
 }
 
-// The improvement of the mesh that mesh_3d just made of g: each node of
-// the surface still on the surface, no cell with γ below 0.35, and no
-// cell worse than the worst cell of the stuffed mesh.
 fn improved_case(what: u8[:], g: i64, size: f64) {
     let q = mesher::mesh_quality();
     var off = 0;
@@ -964,9 +820,6 @@ fn improved_case(what: u8[:], g: i64, size: f64) {
     if q.max_aspect > 1.0 / 0.35 { fail(str(what, ": a cell with gamma ", 1.0 / q.max_aspect, ", below 0.35")); }
 }
 
-// The circle of centre (cx, cy, z) and radius r is a closed chain of edges
-// of the mesh: the nodes on it, in the order of their angle, each joined to
-// the next. Then the sharp edge is exact, and not cut off by faces.
 fn circle_in_edges(what: u8[:], cx: f64, cy: f64, z: f64, r: f64, size: f64) {
     let n = mesher::point_count();
     var edges = dictionary<i64, i64> {};
@@ -1010,15 +863,10 @@ fn circle_in_edges(what: u8[:], cx: f64, cy: f64, z: f64, r: f64, size: f64) {
         if !edges.get(min(a, b) * n + max(a, b)) { fail(str(what, ": no edge from the circle node ", i, " to the next")); return; }
         gap = max(gap, mesher::norm3(mesher::sub3(mesher::vertex(a), mesher::vertex(b))));
     }
-    // A chord of the circle is within gap^2 / (8 r) of it.
     print("  longest edge on the circle ", gap, ", chord error ", gap * gap / (8.0 * r) / size, " h");
     if gap > 1.6 * size { fail(str(what, ": an edge of ", gap, " on the circle, over 1.6 * size")); }
 }
 
-// The sharp edge of a 3D shape (spec 9.2, mesh_3d protect_edges): the
-// curve is on edges of the mesh, and the mesh is within the limits of the
-// stuffed mesh: dihedral angles 5 to 175 deg, 1.5 times the cells, 3 times
-// the time.
 fn edge_case(what: u8[:], g: i64, size: f64, cx: f64, cy: f64, z: f64, r: f64, must_find: bool, gate_time: bool) {
     mesher::keep_edges = false;
     let t0 = clock();
@@ -1047,16 +895,13 @@ fn test_edges() {
     let box = mesher::box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
     let dimple = mesher::subtract(box, mesher::sphere(0.5, 0.5, 1.0, 0.3));
     edge_case("dimple rim", dimple, 0.1, 0.5, 0.5, 1.0, 0.3, true, true);
-    // 2 curved surfaces meet at the circle of 2 spheres, at an oblique angle.
     let z0 = 0.5 + (0.25 + 0.45 * 0.45 - 0.09) / (2.0 * 0.5);
     let r0 = sqrt(0.45 * 0.45 - (z0 - 0.5) * (z0 - 0.5));
     let cup = mesher::subtract(mesher::sphere(0.5, 0.5, 0.5, 0.45), mesher::sphere(0.5, 0.5, 1.0, 0.3));
     edge_case("cup rim", cup, 0.06, 0.5, 0.5, z0, r0, true, false);
-    // Sizes at which the first lattice has no chain.
     for size in [0.08, 0.13] {
         edge_case(str("dimple rim, size ", size), dimple, size, 0.5, 0.5, 1.0, 0.3, false, false);
     }
-    // Axis-aligned edges are on the lattice already, and no curve is found.
     let lblock = mesher::subtract(box, mesher::box(0.43, 0.43, -1.0, 2.0, 2.0, 2.0));
     mesher::keep_edges = true;
     if !mesher::mesh_3d(lblock, 0.1) { fail("lblock: the mesher did not finish"); }
@@ -1064,10 +909,6 @@ fn test_edges() {
     if mesher::curves_missed > 0 { fail("lblock: a curve not on a chain"); }
 }
 
-// The boundary-layer mesh (layers.goose): no hanging node (each edge is in
-// 2 triangles, or in 1 on the wall or on the outer boundary), a positive
-// area for each triangle, the area of the mesh the area enclosed by its
-// boundary edges, and the first layer at the height `first` over the wall.
 fn expect_layers(what: u8[:], g: i64, wall: i64, first: f64, outer_area: f64) {
     let n = mesher::point_count();
     var edges = dictionary<i64, i64> {};
@@ -1124,8 +965,6 @@ fn expect_layers(what: u8[:], g: i64, wall: i64, first: f64, outer_area: f64) {
     if wrong > 0 { fail(str(what, ": the first layer is not ", first, " at ", wrong, " wall nodes")); }
 }
 
-// A NACA 0012 section of chord 1 (a cosine-spaced spline of 41 points) in a
-// circle of radius 50, and a cylinder of radius 0.5 in a circle of radius 20.
 fn test_layers() {
     var xy: f64[>..] = [];
     for s in 41 {
@@ -1149,9 +988,6 @@ fn test_layers() {
     print(q);
     expect_layers("layers on a foil", g, foil, 1.0e-4, PI * 2500.0 - 0.0817);
 
-    // The sharp tips on y = 0 (the leading and the trailing edge), where the
-    // ray of the sign of phi runs through 2 knots: a point 1e-5 outside is
-    // outside, and a layer fits there. A rect is the domain.
     for y in [0.0, -1.7e-18, 1.0e-18] {
         if mesher::phi(foil, -1.0e-5, y, 0.0) <= 0.0 { fail(str("sharp tip: (-1e-5, ", y, ") is inside the foil")); }
         if mesher::phi(foil, 1.00001, y, 0.0) <= 0.0 { fail(str("sharp tip: (1.00001, ", y, ") is inside the foil")); }
@@ -1177,9 +1013,6 @@ fn test_layers() {
 }
 
 fn main() {
-    // The 2D plate: 100 x 60 mm with a hole of radius 10 mm at (30, 30).
-    // The tolerance is the chord defect of the hole, (2 pi / 32)^2 / 6 of
-    // its area for 32 boundary edges of 2 mm, over the plate area.
     mesher::clear_shapes();
     let plate2 = mesher::subtract(mesher::rect(0.0, 0.0, 100.0, 60.0), mesher::circle(30.0, 30.0, 10.0));
     let exact2 = 6000.0 - PI * 100.0;
@@ -1193,9 +1026,6 @@ fn main() {
         fail(str("2D plate: the mesh area ", q2.measure, " is not the polygon area ", polygon_area));
     }
 
-    // A hole of radius 3 mm at size 5 mm: 4 chords, each with a sliver
-    // between it and the arc that is deeper than the centroid of a small
-    // triangle on the chord. The mesh must fill the chord polygon.
     let coarse = mesher::subtract(mesher::rect(0.0, 0.0, 20.0, 20.0), mesher::circle(10.0, 10.0, 3.0));
     if !mesher::mesh_2d(coarse, 5.0) { fail("2D coarse hole: the mesher did not finish"); }
     expect_conforming("2D coarse hole", coarse);
@@ -1206,9 +1036,6 @@ fn main() {
         fail(str("2D coarse hole: the mesh area ", qc.measure, " is not the polygon area ", coarse_area));
     }
 
-    // Edges of 2 primitives on one line: the L shape of a union, the
-    // rectangle of an intersect, and an L of a rect and a polygon. At
-    // size 3 the 2 edges on each line are cut at different points.
     let l_rects = mesher::union(mesher::rect(0.0, 0.0, 10.0, 2.0), mesher::rect(0.0, 0.0, 2.0, 10.0));
     mesh_case("2D L of 2 rects", l_rects, 3.0, 36.0, 1.0e-10);
     let overlap = mesher::intersect(mesher::rect(0.0, 0.0, 10.0, 10.0), mesher::rect(0.0, 0.0, 4.0, 6.0));
@@ -1217,9 +1044,6 @@ fn main() {
     let l_polygon = mesher::union(mesher::rect(0.0, 0.0, 10.0, 2.0), mesher::polygon(arm));
     mesh_case("2D L of a rect and a polygon", l_polygon, 3.0, 36.0, 1.0e-10);
 
-    // Corners below MIN_ANGLE: wedges of 21.8, 16.7 and 20 degrees. At
-    // the larger sizes, the 2 segments at the corner have different
-    // lengths, and a midpoint split of each encroaches the other.
     let wide: f64[6] = [0.0, 0.0, 10.0, 0.0, 10.0, 4.0];
     let narrow: f64[6] = [0.0, 0.0, 10.0, 0.0, 10.0, 3.0];
     let twenty: f64[6] = [0.0, 0.0, 10.0, 0.0, 6.578, 2.394];
@@ -1229,8 +1053,6 @@ fn main() {
     }
     mesh_case("2D wedge of 20 deg", mesher::polygon(twenty), 2.0, 0.5 * 10.0 * 2.394, 1.0e-10);
 
-    // A rect with a round end, as for a slot: the circle touches the top
-    // and the bottom edges of the rect at their ends.
     let slot = mesher::union(mesher::rect(0.0, 0.0, 20.0, 10.0), mesher::circle(20.0, 5.0, 5.0));
     for size in [0.7, 2.0, 4.5] {
         if !mesher::mesh_2d(slot, size) { fail(str("2D slot, size ", size, ": the mesher did not finish")); }
@@ -1241,9 +1063,6 @@ fn main() {
         if shortest_edge() < 0.1 * size { fail(str("2D slot, size ", size, ": the shortest edge is ", shortest_edge())); }
     }
 
-    // A circle that cuts an edge of the plate at an angle that is not 90
-    // deg: each of the 2 corners must be one point, so no edge is much
-    // shorter than the size.
     for cy in [2.0, 5.0, 8.0] {
         let notch = mesher::subtract(mesher::rect(0.0, 0.0, 100.0, 60.0), mesher::circle(50.0, cy, 10.0));
         let what = str("2D notch at y = ", cy);
@@ -1255,9 +1074,6 @@ fn main() {
         if shortest < 0.1 * 5.0 { fail(str(what, ": the shortest edge is ", shortest)); }
     }
 
-    // The femahoy plate with a hole and a pad, in mm. The sharp edges: the
-    // 2 rims of the hole, and the edges of the pad, plate and pad faces on
-    // the lattice planes, at most their perimeters.
     let bore = mesher::cylinder(30.0, 30.0, 0.0, 0.0, 0.0, 1.0, 10.0, 10.0);
     let plate = mesher::subtract(mesher::box(0.0, 0.0, 0.0, 100.0, 60.0, 10.0), bore);
     let body = mesher::union(plate, mesher::box(60.0, 20.0, 10.0, 90.0, 40.0, 20.0));
@@ -1265,8 +1081,6 @@ fn main() {
     mesh_case("3D plate with a hole and a pad", body, 2.0, body_volume,
               tolerance(TAU * 100.0, 10.0, 2.0 * TAU * 10.0, 2.0, body_volume));
 
-    // The cylinder at 2 sizes: the error must fall as h^2, so the order of
-    // convergence must be near 2.
     let cyl = mesher::cylinder(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 10.0, 30.0);
     let cyl_volume = PI * 3000.0;
     let e2 = mesh_case("cylinder", cyl, 2.0, cyl_volume, tolerance(TAU * 300.0, 10.0, 2.0 * TAU * 10.0, 2.0, cyl_volume));
@@ -1275,16 +1089,12 @@ fn main() {
     print("cylinder: order of convergence of the volume ", order);
     if order < 1.5 || order > 2.5 { fail(str("cylinder: the order of convergence is ", order, ", not 2")); }
 
-    // A hexagon of radius 10 mm, extruded 20 mm: 6 sharp side edges of 20 mm
-    // and 2 hexagon rims of 60 mm.
     let hexagon: f64[12] = [10.0, 0.0, 5.0, 8.660254037844386, -5.0, 8.660254037844386,
                             -10.0, 0.0, -5.0, -8.660254037844386, 5.0, -8.660254037844386];
     let prism = mesher::extrude(mesher::polygon(hexagon), 20.0);
     let prism_volume = 1.5 * sqrt(3.0) * 100.0 * 20.0;
     mesh_case("extruded hexagon", prism, 2.0, prism_volume, tolerance(0.0, 0.0, 240.0, 2.0, prism_volume));
 
-    // A tube of radii 6 and 10 mm and length 30 mm, the revolve of a
-    // rectangle: a full turn, and a quarter turn.
     let section = mesher::rect(6.0, 0.0, 10.0, 30.0);
     let tube = mesher::revolve(section, TAU);
     let tube_volume = PI * (100.0 - 36.0) * 30.0;
@@ -1294,9 +1104,6 @@ fn main() {
     mesh_case("quarter tube", quarter, 1.0, 0.25 * tube_volume,
               tolerance(0.25 * TAU * 16.0 * 30.0, 6.0, 4.0 * 0.25 * TAU * 8.0 + 4.0 * 30.0 + 4.0 * 4.0, 1.0, 0.25 * tube_volume));
 
-    // A loft from a circle of radius 10 mm to one of 5 mm, 20 mm up: a
-    // frustum of a cone. A loft between 2 squares is a frustum of a
-    // pyramid, as φ of a square centred on the origin is max(|x|, |y|) - a.
     let slant = sqrt(25.0 + 400.0);
     let cone = mesher::loft(mesher::circle(0.0, 0.0, 10.0), mesher::circle(0.0, 0.0, 5.0), 20.0);
     let cone_volume = PI * 20.0 / 3.0 * (100.0 + 50.0 + 25.0);
@@ -1307,8 +1114,6 @@ fn main() {
     mesh_case("lofted squares", pyramid, 1.0, pyramid_volume,
               tolerance(0.0, 0.0, 56.0 + 4.0 * sqrt(400.0 + 2.0 * 9.0), 1.0, pyramid_volume));
 
-    // Patterns: 3 cubes in a row, 6 cylinders about the z axis, and 4
-    // boxes about the y axis, each turned by 90 deg onto the next.
     let row = mesher::pattern(mesher::box(0.0, 0.0, 0.0, 4.0, 4.0, 4.0), 6.0, 0.0, 0.0, 3);
     mesh_case("pattern of 3 cubes", row, 1.0, 192.0, tolerance(0.0, 0.0, 144.0, 1.0, 192.0));
     let pins = mesher::pattern_polar(mesher::cylinder(8.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 5.0), 0.0, 0.0, 1.0, 6);
@@ -1318,7 +1123,6 @@ fn main() {
     let cross = mesher::pattern_polar(mesher::box(3.0, -1.0, -1.0, 5.0, 1.0, 1.0), 0.0, 1.0, 0.0, 4);
     mesh_case("polar pattern of 4 boxes about y", cross, 0.5, 32.0, tolerance(0.0, 0.0, 4.0 * 24.0, 0.5, 32.0));
 
-    // 2D patterns: 4 squares in a row, and a plate less a row of 4 holes.
     mesh_case("2D pattern of 4 squares", mesher::pattern(mesher::rect(0.0, 0.0, 2.0, 2.0), 3.0, 0.0, 0.0, 4), 1.0, 16.0, 1.0e-10);
     let holes = mesher::subtract(mesher::rect(0.0, 0.0, 40.0, 10.0), mesher::pattern(mesher::circle(5.0, 5.0, 2.0), 10.0, 0.0, 0.0, 4));
     let holes_area = 400.0 - 4.0 * PI * 4.0;

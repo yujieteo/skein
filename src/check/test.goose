@@ -1,5 +1,3 @@
-// Tests of `skein check`. `./build.sh test` runs this program from the root
-// of the repository, and a non-zero exit status is a failure.
 import std;
 import os;
 import syntax from "../syntax";
@@ -33,8 +31,6 @@ let FLOW = """
     }
     """;
 
-// A shell with ribs: the templates of G3 and N1 (spec §4.3), a tie, an edge
-// load N*n, argmax and max on a pattern (N2), and quad cells on a Surface (N3).
 let SHELL = """
 
     let barrel: Solid = cylinder((0, 0, 0) m, (1, 0, 0), 1 m, 2 m)
@@ -97,7 +93,6 @@ let SHELL = """
     }
     """;
 
-// The ids of the diagnostics of `src`, one per line.
 fn ids(src: u8[:]) -> u8[>..] {
     check::check_text("t.skn", src);
     var out: u8[>..] = [];
@@ -108,7 +103,6 @@ fn ids(src: u8[:]) -> u8[>..] {
     return out;
 }
 
-// `src` gives the error `id` (and perhaps others).
 fn expect_id(id: u8[:], src: u8[:]) {
     let got = ids(src);
     for line in split(got, '\n') {
@@ -118,7 +112,6 @@ fn expect_id(id: u8[:], src: u8[:]) {
     print("FAIL ", id, ": got [", got, "]");
 }
 
-// The free boundary report of `src`, one "field,region,condition" per line.
 fn free_rows(src: u8[:]) -> u8[>..] {
     check::check_text("t.skn", src);
     var out: u8[>..] = [];
@@ -140,7 +133,6 @@ fn expect_free(what: u8[:], src: u8[:], want: u8[:]) {
     print("FAIL ", what, ": got [", got, "] and ", check::diags.len, " diagnostics");
 }
 
-// `src` gives exactly the ids `want`, one per line.
 fn expect_ids(what: u8[:], src: u8[:], want: u8[:]) {
     let got = ids(src);
     if got == want { return; }
@@ -148,7 +140,6 @@ fn expect_ids(what: u8[:], src: u8[:], want: u8[:]) {
     print("FAIL ", what, ": got [", got, "]");
 }
 
-// `src` gives no diagnostic.
 fn expect_clean(what: u8[:], src: u8[:]) {
     let got = ids(src);
     if got.len == 0 { return; }
@@ -167,7 +158,6 @@ fn test_names() {
     expect_id("table_row_width", str(H, "table tb{a: Length in m, b: Real}:\n    1, 2, 3\n"));
 }
 
-// `use` library files (spec §4.1). The test writes them into build/.
 fn test_use() {
     write_file("build/use_ok.skn", """
         // The steel of the tests.
@@ -191,7 +181,6 @@ fn test_use() {
     expect_id("use_item", str(H, "use \"build/use_use.skn\"\n"));
     expect_id("duplicate_name", str(H, "use \"build/use_ok.skn\"\nlet E_s: Pressure = 1 GPa\n"));
     expect_id("duplicate_name", str(H, "use \"build/use_ok.skn\"\nuse \"build/use_ok.skn\"\n"));
-    // An error in the library and one in the model at the same line and column.
     expect_ids("a library and a model error at one place",
                str(H, "use \"build/use_bad.skn\"\nlet c: Real = dd\n"), "unknown_name\nunknown_name\n");
     if check::diags.len != 2 || check::diags[0].file != "t.skn" || check::diags[1].file != "build/use_bad.skn" {
@@ -208,7 +197,6 @@ fn test_types() {
     expect_id("unit_transcendental", str(H, "let a: Temperature = 300 K\nlet c: Real = exp(a)\n"));
     expect_id("unit_affine", str(H, "let k: ThermalConductivity = 1.2 W/(m*degC)\n"));
     expect_id("not_constant", str(H, "param a: Length = x\n"));
-    // sum over the rows of a table (spec §5.6).
     let tb = "table tb{a: Length in m, b: Real}:\n    1, 2\n    3, 4\n";
     expect_clean("sum of a table column", str(H, tb, "let s: Area = sum(tb.a^2*tb.b)\n"));
     expect_id("unit_mismatch", str(H, tb, "let s: Real = sum(tb.a)\n"));
@@ -227,28 +215,24 @@ fn test_types() {
     expect_id("type_mismatch", str(H, "let s: Solid = loft(circle((0, 0) m, 2 m), 3 m)\n"));
     expect_id("type_mismatch", str(H, "let s: Solid = loft(circle((0, 0) m, 2 m), 1 m, 3 m)\n"));
     expect_id("type_mismatch", str(H, "let s: Solid = pattern(box((0, 0, 0) m, (1, 1, 1) m), (2, 0, 0) m)\n"));
-    // Gap G24: fill of a Curve is a 2D Surface, also as the profile of an extrude.
     expect_clean("fill of a spline", str(H, "let s: Solid = extrude(fill(spline((0, 0) m, (1, 0) m, (1, 1) m, (0, 0) m)), 1 m)\n"));
     expect_id("type_mismatch", str(H, "let s: Solid = extrude(fill(rect((0, 0) m, (1, 1) m)), 1 m)\n"));
     expect_id("geometry_space", str(H, "let s: Surface = fill(spline((0, 0, 0) m, (1, 0, 0) m, (1, 1, 0) m))\n"));
-    // nurbs: a degree, a point and a weight for each control point, and
-    // n + degree + 1 knots when the model gives them.
     expect_clean("a nurbs", str(H2, "let s: Surface = fill(nurbs(2, (1, 0) m, 1, (1, 1) m, 0.7071, (0, 1) m, 1))\n"));
     expect_clean("a nurbs with knots", str(H2, "let s: Curve = nurbs(1, knots(0, 0, 1, 2, 2), (0, 0) m, 1, (1, 0) m, 2, (1, 1) m, 1)\n"));
     expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(4, (0, 0) m, 1, (1, 0) m, 1)\n"));
     expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, (0, 0) m, 1, (1, 0) m)\n"));
     expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, knots(0, 0, 1), (0, 0) m, 1, (1, 0) m, 1)\n"));
+    expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, knots(0, 2, 1, 2, 2), (0, 0) m, 1, (1, 0) m, 2, (1, 1) m, 1)\n"));
     expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, (0, 0) m, 1 m, (1, 0) m, 1)\n"));
     expect_id("type_mismatch", str(H2, "let s: Curve = nurbs(1, (0, 0) m, 0, (1, 0) m, 1)\n"));
     expect_id("geometry_space", str(H, "let s: Curve = nurbs(1, (0, 0, 0) m, 1, (1, 0, 0) m, 1)\n"));
     expect_id("nondim_unit", "model m: 2d, nondim\nlet a: Real = 1 m\n");
-    // Gaps G7, G12, G29, G30: these are valid.
     expect_clean("G7 re, imag, arg, conj", str(H, "let w: Complex<Real> = 1 + 2*im\nlet a: Real = re(w) + imag(w) + abs(w)\nlet b: Angle = arg(conj(w))\n"));
     expect_clean("G12 atan, atan2", str(H, "let a: Angle = atan(0.5) + atan2(1 m, 2 m)\n"));
     expect_clean("G29 a negative degC", str(H, "let a: Temperature = -5 degC\n"));
     expect_clean("a vector with a unit, a number and a name", str(H, "let h: Length = 1 m\nlet p: Vector<Length> = (0.5, h, 0) m\n"));
     expect_clean("G30 a real exponent", str(H, "param q: Real = 3.0\nlet a: Real = 0.5^(2/q)\n"));
-    // Gap G14: exponents in halves (spec §6.1).
     expect_clean("G14 exponents in halves", str(H, "let a: Length = 25 mm\nlet k: Pressure*Length^0.5 = 1 MPa*sqrt(a)\n",
                                                  "let j: Pressure*Length^0.5 = 1051.27 MPa*mm^0.5\nlet c: Length^-1.5 = 1/a^1.5\n"));
     expect_id("unit_fractional", str(H, "let a: Length = 1 m\nlet c: Real = sqrt(sqrt(a))\n"));
@@ -257,7 +241,6 @@ fn test_types() {
 }
 
 fn test_physics() {
-    // skein help std prints the templates, with no model line.
     let std = check::std_text();
     let want = "template physics linear_elastic(b: Vector<Force/Volume> = 0) solves u: Vector<Length> {";
     if std.len < want.len || std[..want.len] != want {
@@ -281,7 +264,6 @@ fn test_physics() {
     expect_id("assumption_conflict", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume finite_strain\n}\n"));
     expect_id("assumption_space", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_stress(1 mm)\n}\n"));
     expect_id("assumption_invalid", str(elastic, "physics s on b solves u: Vector<Length> {\n    material steel\n    assume incompressible\n    eq div(hooke(E, nu, strain(u))) = 0\n}\n"));
-    // mean and integral in the eq of a global unknown (spec §10.5, gap G15).
     expect_clean("a mean stress sets a global mean strain", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) = 100 MPa\n}\n"));
     expect_clean("an integral in the eq of an ODE", str(elastic, "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nphysics pull solves F: Force {\n    eq F = integral(u.x*1 GPa/m, f)\n}\n"));
     expect_id("global_eq", str(elastic, "physics s on b solves u: Vector<Length>, ez: Real {\n    material steel\n    let sigma: Tensor2<Pressure> = hooke(E, nu, strain(u) + ez*outer((0, 0, 1), (0, 0, 1)))\n    eq div(sigma) = 0\n    eq mean(sigma.zz, b) + sigma.zz = 100 MPa\n}\n"));
@@ -303,7 +285,6 @@ fn test_conditions() {
     expect_id("bc_off_boundary", str(elastic, "bc b: u = 0\n"));
     expect_clean("G16 a point force", str(elastic, "let tip: Point = point((1, 1, 1) m)\nbc tip: sigma*n = (0, 0, -1) kN\n"));
     expect_clean("a bc on a face", str(elastic, "bc f: u = 0\nbc f: u.x = 0 m\n"));
-    // Gap G17: a rigid face, with the force and the moment on its point.
     let tip = "let c: Point = point((1, 1, 1) m)\nbc f: u = rigid(c)\n";
     expect_clean("G17 a rigid face with a force and a moment", str(elastic, tip, "bc c: sigma*n = (0, 0, -1) kN\nbc c: moment(sigma*n) = (0, 1, 0) kN*m\n"));
     expect_clean("G17 a fixed component and a force with 0 in it", str(elastic, tip, "bc c: u.x = 0\nbc c: sigma*n = (0, 0, -1) kN\n"));
@@ -340,7 +321,6 @@ fn test_conditions() {
     expect_id("inf_sup", str(H2, FLOW, "\nmethod flow: cg {\n    mesh: m1\n    order: { v: 1, p: 1 }\n    stabilize: none\n}\n"));
     expect_clean("a stable pair", str(H2, FLOW, "\nmethod flow: cg {\n    mesh: m1\n    order: { v: 1, p: 1 }\n    stabilize: supg_pspg\n}\n"));
     expect_id("order_too_low", str(H2, "let c: Surface = rect((0, 0) m, (1, 1) m)\nmesh m1 on c { size: 0.1 m }\nphysics plate on c solves w: Length {\n    eq lap(lap(w)) = 0 m^-3\n}\nmethod plate: cg {\n    mesh: m1\n    order: 1\n}\n"));
-    // G18: the element families and the quadrature (spec §13).
     let hex = str(H, SOLID, "\nmesh m2 on b {\n    size: 0.1 m\n    cell: hex\n}\nphysics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\n");
     expect_clean("C3D8I", str(hex, "method s: cg { mesh: m2, order: 1, family: incompatible }\n"));
     expect_clean("C3D20R", str(hex, "method s: cg { mesh: m2, order: 2, family: serendipity, quadrature: reduced }\n"));
@@ -356,7 +336,6 @@ fn test_conditions() {
     expect_ids("serendipity on tetrahedra", str(hex, "method s: cg { mesh: m1, order: 2, family: serendipity }\n"), "family_cell\n");
 }
 
-// Gap G20: quarter-point cells at a crack tip (spec §9.1).
 fn test_crack_tip() {
     let plate = "let b: Surface = rect((0, 0) mm, (10, 10) mm)\nlet f: Curve = boundary(b, y == 0 mm)\nlet c: Point = point((5, 0) mm)\nscales 10 mm, 210 GPa\nmaterial steel {\n    E: Pressure = 210 GPa\n    nu: Real = 0.3\n}\n";
     let solid = "physics s on b: linear_elastic solves u: Vector<Length> {\n    material steel\n    assume plane_strain(1 mm)\n}\nbc f: u = 0\n";
@@ -391,7 +370,6 @@ fn test_steps() {
     expect_clean("an eigenvalue above the default of a param count", str(elastic, "param nm: Int = 4\nstep go: modal(count: nm) {\n    bc f: u = 0\n}\nstudy g: grid {\n    nm: [4, 8]\n    expect f6: eigenvalue(6) == 10 Hz within 1%\n}\n"));
     expect_clean("a param mode number with a default above the count", str(elastic, "param m: Int = 6\nstep go: modal(count: 4) {\n    bc f: u = 0\n}\nstudy g: grid {\n    m: [1, 2, 3]\n    expect e: eigenvalue(m) == 10 Hz within 1%\n}\n"));
     expect_clean("an eigenvalue of the last buckling step, in an expect after a static step", str(elastic, "step go: buckling(count: 4) {\n    bc f: u = 0\n}\nstep two: static {\n    bc f: u = 0\n}\nexpect p1: eigenvalue(4) == 2 within 1%\n"));
-    // when: the first time at which a value gets to a level (spec §14.5).
     let shake = "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report t1 = when(max(norm(u), b), 1 mm)\n}\n";
     expect_clean("when in a report of a transient step", str(elastic, shake));
     expect_clean("when in an expect after a transient step", str(elastic, shake, "expect t1: when(max(norm(u), b), 2 mm) - when(max(norm(u), b), 1 mm) == 0.1 s within 5%\n"));
@@ -404,7 +382,6 @@ fn test_steps() {
     expect_id("rank_mismatch", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(norm(u), 1 mm)\n}\n"));
     expect_clean("when of a scalar reduced over a region", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(min(norm(u), b), 1 mm)\n}\n"));
     expect_id("not_constant", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    report when(max(norm(u), b), x)\n}\n"));
-    // G2: a damping ratio and rms over the frequencies of a harmonic step (spec §14.2, §14.5).
     let complex = str(H, SOLID, "\nphysics s on b: linear_elastic(rho*(0, 0, -9.81) m/s^2) solves u: Vector<Complex<Length>> {\n    material steel\n}\n");
     let random = "step go: harmonic(freq: [10, 20, 30] Hz, damping: 0.02) {\n    bc f: u = 0\n    report a = rms(omega^2*u.z at (1, 0, 0) m, 0.04/(1 Hz))\n}\n";
     expect_clean("G2 rms in a report of a harmonic step", str(complex, random));
@@ -413,17 +390,14 @@ fn test_steps() {
     expect_id("rms_step", str(complex, random, "step two: static {\n    bc f: u = 0\n}\nexpect a: rms(u.z at (1, 0, 0) m, 1 s) == 1 m within 5%\n"));
     expect_id("rank_mismatch", str(complex, "step go: harmonic(freq: [10] Hz) {\n    bc f: u = 0\n    report rms(u.z, 1 s)\n}\n"));
     expect_id("unit_mismatch", str(complex, "step go: harmonic(freq: [10] Hz, damping: 2 s) {\n    bc f: u = 0\n}\n"));
-    // G8: omega, the angular frequency of the step (spec §14.2).
     expect_clean("G8 omega in a load", str(complex, "let e: Surface = boundary(b, x == 1 m)\nstep go: harmonic(freq: [10] Hz) {\n    bc f: u = 0\n    bc e: sigma*n = (0, 0, 1) Pa*omega*1 s\n}\n"));
     expect_id("duplicate_name", str(H, "let omega: Frequency = 1 Hz\n"));
-    // G26: a PML (spec §13).
     let wave = str(H2, "let d: Surface = rect((0, 0) m, (2, 1) m)\nlet layer: Surface = rect((1.5, 0) m, (2, 1) m)\nmaterial air {\n    c: Velocity = 340 m/s\n}\nmesh m1 on d { size: 0.05 m }\nphysics a on d solves p: ");
     let wave_eq = " {\n    material air\n    eq div(grad(p)) + (omega/c)^2*p = 0\n}\n";
     expect_clean("G26 a pml", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 0.5 m } }\n"));
     expect_id("method_setting", str(wave, "Pressure", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 0.5 m } }\n"));
     expect_id("method_setting", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer } }\n"));
     expect_id("unit_mismatch", str(wave, "Complex<Pressure>", wave_eq, "method a: cg { mesh: m1, order: 2, pml: { region: layer, thickness: 2 s } }\n"));
-    // G4, G13 and G27: edge elements (spec §12.1, §13, §14.5).
     let em = "model m: 3d, SI\nscales 1 m, 1 V/m, 1 A, 1 ns\nlet b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet w: Surface = boundary(b, x == 0 m)\nlet s: Surface = boundary(b)\nlet g: Vector<Mass*Length/(Time^3*Current)> = (0, 1, 0) V/m\nmaterial air {\n    mu: Mass*Length/(Time^2*Current^2) = 1.25e-6 V*s/(A*m)\n    eps: Current^2*Time^4/(Mass*Length^3) = 8.85e-12 A*s/(V*m)\n}\nmesh m1 on b { size: 0.1 m }\nphysics e on b solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {\n    material air\n    let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu\n    let hf: Vector<Complex<Current/Length>> = im*hc/omega\n    eq curl(hc) - omega^2*eps*ef = 0\n}\n";
     let tone = "step go: harmonic(freq: [1 GHz]) {\n    bc w: cross(n, ef) = cross(n, g)\n    bc s: cross(n, hc) = im*omega/(1 m/s)/mu*ef\n    report far_field(ef, hf, s, (1, 0, 0))\n}\n";
     expect_clean("G4 and G13 a tangential bc, a natural cross(n, h) and far_field", str(em, "method e: cg { mesh: m1, order: 1, family: nedelec }\n", tone));
@@ -438,7 +412,6 @@ fn test_steps() {
     expect_id("allow_reason", str(H, "allow rigid_bodies: \"a reason\"\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"no_such_file.skn\", step: \"load\")\n"));
     expect_id("results_missing", str(H, "let g: Results = results(\"samples/01_cantilever.skn\", step: \"unload\")\n"));
-    // G34: a submodel for each case of a study.
     let global = "let g: Results = results(\"samples/01_cantilever.skn\", step: \"load\", case: ";
     expect_clean("G34 the case of results", str(H, "param L: Length = 150 mm\n", global, "L)\n"));
     expect_id("results_case", str(H, "let L: Length = 150 mm\n", global, "L)\n"));
@@ -446,7 +419,6 @@ fn test_steps() {
     expect_id("unit_mismatch", str(H, "param P: Length = 1 mm\n", global, "P)\n"));
     expect_id("expect_form", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nexpect e: b == 1 m within 1%\n"));
     expect_id("unit_mismatch", str(H, "let a: Length = 1 m\nexpect e: a == 1 m within 1 s\n"));
-    // G10: an expect of a step, checked at the end of the step.
     expect_clean("G10 an expect of a step", str(elastic, "step go: static {\n    bc f: u = 0\n    expect e: u.x at (1, 0, 0) m == 0 m within 1 mm\n}\n"));
     expect_clean("G10 an eigenvalue in an expect of a modal step", str(elastic, "step go: modal(count: 4) {\n    bc f: u = 0\n    expect f1: eigenvalue(1) == 10 Hz within 1%\n}\nstep two: static {\n    bc f: u = 0\n}\n"));
     expect_clean("G10 when in an expect of a transient step", str(elastic, "step go: transient(end: 1 s, dt: 1 ms) {\n    bc f: u = 0\n    expect t1: when(max(norm(u), b), 1 mm) == 0.1 s within 5%\n}\nstep two: static {\n    bc f: u = 0\n}\n"));
@@ -460,13 +432,10 @@ fn test_studies() {
     expect_id("study_param", str(H, "let D: Length = 1 m\nstudy s: grid {\n    D: [0.1, 0.2] m\n}\n"));
     expect_clean("a study", str(H, "param D: Length = 1 m in 0.1 m..2 m\nstudy s: grid {\n    D: [0.1, 0.2] m\n}\n"));
     expect_id("study_objective", str(H, "param D: Length = 1 m\nstudy s: minimize(drag) {\n    D: 0.1 m..0.2 m\n}\n"));
-    // G25: the stop rule and the first simplex of minimize are fractions of each range.
     let nm = "param D: Length = 1 m in 0.1 m..2 m\nstep go: static {\n    report r = D\n}\nstudy s: minimize(r, method: nelder_mead, max_cases: 50, ";
     expect_clean("G25 xtol and step", str(H, nm, "xtol: 0.001, step: 0.1) {\n    D: 0.1 m..2 m\n}\n"));
     expect_id("procedure_args", str(H, nm, "xtol: 1 mm) {\n    D: 0.1 m..2 m\n}\n"));
     expect_id("procedure_args", str(H, nm, "step: 1.5) {\n    D: 0.1 m..2 m\n}\n"));
-    // G1: a topology study needs an objective, a Surface, 0 < volume <= 1
-    // and a filter radius, and has no param.
     let tp = str(H2, "let s: Surface = rect((0, 0) m, (2, 1) m)\nlet e: Curve = boundary(s, x == 0 m)\nstep go: static {\n    report r = 1 J\n}\nstudy t: topology(objective: r, ");
     expect_clean("G1 a topology study", str(tp, "region: s, volume: 0.5, penalty: 3, filter: 0.1 m) {\n}\n"));
     expect_id("procedure_args", str(tp, "region: e, volume: 0.5, filter: 0.1 m) {\n}\n"));
@@ -476,22 +445,19 @@ fn test_studies() {
     expect_id("procedure_args", str(tp, "region: s, volume: 0.5, penalty: 0.5, filter: 0.1 m) {\n}\n"));
     expect_clean("G1 the solid of a topology study", str(tp, "region: s, volume: 0.5, filter: 0.1 m, threshold: 0.5) {\n}\n"));
     expect_id("procedure_args", str(tp, "region: s, volume: 0.5, filter: 0.1 m, threshold: 1) {\n}\n"));
-    // G10: an expect of a study, checked in each case, with a list of one
-    // value for each case of a grid or a zip.
     let d = str(H, "param D: Length = 1 m in 0.1 m..2 m\nparam k: Real = 1\n");
     expect_clean("G10 an expect of a grid", str(d, "study s: grid {\n    D: [0.1, 0.2] m\n    k: [1, 2, 3]\n    expect e: 2*D == [0.2, 0.2, 0.2, 0.4, 0.4, 0.4] m within [1%, 1%, 1%, 2 mm, 2 mm, 2 mm]\n}\n"));
     expect_clean("G10 an expect of a zip", str(d, "study s: zip {\n    D: [0.1, 0.2] m\n    k: [1, 2]\n    expect e: k == [1, 2] within 1%\n}\n"));
     expect_clean("G10 an expect of a minimize", str(d, "step go: static {\n    report r = D\n}\nstudy s: minimize(r) {\n    D: 0.1 m..2 m\n    expect e: D == 0.1 m within 1%\n}\n"));
     expect_ids("G10 a list of a grid of 6 cases", str(d, "study s: grid {\n    D: [0.1, 0.2] m\n    k: [1, 2, 3]\n    expect e: k == [1, 2] within 1%\n}\n"), "expect_cases\n");
     expect_ids("G10 a list of a sample", str(d, "study s: sample(n: 2, method: lhs, seed: 1) {\n    D: 0.1 m..0.2 m\n    expect e: D == 0.1 m within [1%, 2%]\n}\n"), "expect_cases\n");
+    expect_id("procedure_args", str(d, "study s: zip {\n    D: [0.1, 0.2] m\n    k: [1]\n}\n"));
     expect_ids("G10 a list in a unit of another dimension", str(d, "study s: zip {\n    D: [0.1, 0.2] m\n    expect e: D == [0.1, 0.2] s within 1%\n}\n"), "unit_mismatch\n");
     expect_id("scales_missing", "model m: 3d, SI\nlet a: Length = 1 m\n");
     expect_id("scales_dependent", "model m: 3d, SI\nlet a: Length = 1 m\nscales a, 2*a\n");
     expect_id("scales_incomplete", "model m: 3d, SI\nlet a: Length = 1 m\nlet r: Density = 1 kg/m^3\nscales a\n");
 }
 
-// The stage of the work of a case that each param reaches (spec §20.4),
-// also through a let.
 fn test_param_stages() {
     let text = str(H, """
         param w: Length = 1 m
@@ -535,7 +501,6 @@ fn test_param_stages() {
     }
 }
 
-// The JSON report holds no raw control byte, also for a tab in the model.
 fn test_output() {
     check::check_text("t.skn", str(H, SOLID, "\nbc f: sigma *\t2 = 0\n"));
     var out: u8[>..] = [];
@@ -553,7 +518,6 @@ fn test_output() {
     }
 }
 
-// The default methods of `src` (spec §13), one "physics,mesh,order,stabilize" per line.
 fn expect_chosen(what: u8[:], src: u8[:], want: u8[:]) {
     check::check_text("t.skn", src);
     var got: u8[>..] = [];
@@ -577,7 +541,6 @@ fn test_method_defaults() {
                   "h,m1,2,supg\n");
     expect_chosen("convection in a let", str(heat, "let w: Vector<Velocity> = (1, 0, 0) m/s\nphysics h on b solves T: Temperature {\n    material cu\n    let adv: Power/Volume = rho*c_p*dot(w, grad(T))\n    let net: Power/Volume = adv\n    eq net - div(k*grad(T)) = 0 W/m^3\n}\n"),
                   "h,m1,2,supg\n");
-    // The report: TOON and JSON.
     check::check_text("t.skn", str(H2, FLOW));
     var toon: u8[>..] = [];
     check::write_toon(toon);
@@ -593,7 +556,6 @@ fn test_method_defaults() {
     }
 }
 
-// The ids of the diagnostics of `skein lint` on `src`, one per line.
 fn lint_ids(src: u8[:]) -> u8[>..] {
     check::lint_text("t.skn", src);
     var out: u8[>..] = [];
@@ -604,7 +566,6 @@ fn lint_ids(src: u8[:]) -> u8[>..] {
     return out;
 }
 
-// `skein lint` on `src` gives exactly the ids `want`, one per line.
 fn expect_lints(what: u8[:], src: u8[:], want: u8[:]) {
     let got = lint_ids(src);
     if got == want { return; }
@@ -624,7 +585,6 @@ fn test_lint() {
     expect_lints("unused_field with a material of the unknown", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial solid {\n    k: Conductivity = 2 W/(m*K)*(1 + 0.002 K^-1*T)\n}\nmesh m1 on b { size: 0.2 m }\nphysics s on b solves T: Temperature = 400 K {\n    material solid\n    eq div(-k*grad(T)) = 0\n}\nstep go: static {\n    bc f: T = 300 K\n}\n"), "unused_field\n");
     expect_lints("a material of another physics uses the unknown", str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet f: Surface = boundary(b, x == 0 m)\nmaterial solid {\n    k: Conductivity = 2 W/(m*K)\n}\nmesh m1 on b { size: 0.2 m }\nphysics s on b solves T: Temperature = 400 K {\n    material solid\n    eq div(-k*grad(T)) = 0\n}\nmaterial steel {\n    E: Pressure = 200 GPa*(1 - 0.0001 K^-1*(T - 300 K))\n    nu: Real = 0.3\n}\nphysics e on b: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nstep go: static {\n    bc f: T = 300 K\n    bc f: u = 0\n    output u\n}\n"), "");
     expect_lints("a field in a report", str(elastic, "step go: static {\n    bc f: u = 0\n    report max(von_mises(sigma), b)\n}\n"), "");
-    // A load on a region before its birth, and after its death.
     let staged = str(H, "let b: Solid = box((0, 0, 0) m, (1, 1, 1) m)\nlet top: Solid = box((0, 0, 1) m, (1, 1, 2) m)\nlet all: Solid = b | top\nlet f: Surface = boundary(b, z == 0 m)\nlet lid: Surface = boundary(top, z == 2 m)\nmaterial steel {\n    E: Pressure = 200 GPa\n    nu: Real = 0.3\n}\nmesh m1 on all { size: 0.1 m }\nphysics s on all: linear_elastic solves u: Vector<Length> {\n    material steel\n}\nbc f: u = 0\n");
     expect_lints("load_no_cells before the birth", str(staged, "step one: static {\n    bc lid: sigma*n = (0, 0, -1) MPa\n    output u\n}\nstep two: static {\n    birth top\n}\n"), "load_no_cells\n");
     expect_lints("a load after the birth", str(staged, "step one: static {\n    output u\n}\nstep two: static {\n    birth top\n    bc lid: sigma*n = (0, 0, -1) MPa\n}\n"), "");
@@ -643,11 +603,9 @@ fn test_lint() {
     let steady = "\n}\nstep go: static {\n    bc lid: v = (1, 0) m/s\n    output v\n}\n";
     expect_lints("stabilization_missing", str(flow, "none", steady), "stabilization_missing\n");
     expect_lints("supg", str(flow, "supg", steady), "");
-    // An error stops the lint rules.
     expect_lints("an error first", str(H, "let a: Length = 1 s\n"), "unit_mismatch\n");
 }
 
-// The lint output: the class `lint`, and the count in the summary (command_line.md §6.1).
 fn test_lint_output() {
     let src = str(H, "let a: Length = 1 m\n");
     check::lint_text("t.skn", src);
@@ -665,7 +623,6 @@ fn test_lint_output() {
     }
 }
 
-// Each model passes `check` and `lint`, except a femahoy model with a `// blocked-by:` mark.
 fn test_corpus(dir: u8[:]) {
     var names: u8[>..] = [];
     guard list_dir(dir, names) else { return; }
@@ -697,15 +654,12 @@ fn test_shells() {
     expect_id("type_mismatch", str(H, "let D3: Real = laminate(ply_stiffness(1 Pa, 1 Pa, 1 Pa, 0.3), 0 deg, false, 1 mm, 1 mm, (1, 0, 0), (0, 0, 1), 3)\n", SHELL));
     expect_id("rank_mismatch", str(H, "let g: Real = tangent(1, (0, 0, 1))\n", SHELL));
     expect_id("rank_mismatch", str(H, SHELL, "\nstep more: static {\n    report argmax(w, wall)\n}\n"));
-    // Gap G32: a Surface or a Curve & a Solid keeps the lower dimension.
     let cut = "\nlet half: Solid = box((0, 0, -2) m, (1, 2, 2) m)\n";
     expect_clean("a Surface & a Solid", str(H, SHELL, cut, "let pad: Surface = wall & half\nlet short: Curve = ribs & half - box((0, 0, 0) m, (1, 1, 1) m)\n"));
     expect_id("geometry_dim", str(H, SHELL, cut, "let pad: Solid = wall & half\n"));
-    // Gap G35: copy(r) is the index of the copy of a pattern.
     expect_clean("copy of a pattern", str(H, SHELL, "\nlet x_r: Angle = copy(ribs)*45 deg\n",
         "step more: static {\n    bc tip: N*n = copy(ribs)*(1, 0, 0) kN/m\n}\n"));
     expect_id("type_mismatch", str(H, SHELL, "\nlet k: Real = copy(wall)\n"));
-    // The flux of along(F_b) stands only on a Point (§12.1).
     expect_clean("a beam force at a point", str(H, SHELL, "\nlet pt: Point = point((0, 0, 0) m)\n",
         "step more: static {\n    bc pt: F_b*n = (0, 0, 1) kN\n}\n"));
     expect_id("bc_form", str(H, SHELL, "\nstep more: static {\n    bc ribs: F_b*n = (0, 0, 1) kN/m\n}\n"));

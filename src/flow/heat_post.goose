@@ -1,6 +1,3 @@
-// The boundary conditions and the values of a thermal flow: the integral
-// and the mean of a function of the flow on a region, and its greatest value
-// on a line. heat.goose has the cell rows.
 import std;
 import math;
 namespace flow;
@@ -10,9 +7,6 @@ import .solve;
 import .post;
 import .heat;
 
-// --- the values on the boundary ------------------------------------------------
-
-// Fixes T on the nodes of the region.
 fn fix_temperature(value: f64) {
     guard thermal && cell_count() > 0 && fixed.len == dof_count() && region.len == node_count() else { abort("fix_temperature: clear_bcs on a thermal mesh"); }
     for n in node_count() {
@@ -22,8 +16,6 @@ fn fix_temperature(value: f64) {
     }
 }
 
-// Adds the outward flux q·n = value on the edges of the region to the rows
-// of T: ∮ N_a (q·n), divided by ρ c like the rows.
 fn add_heat_flux(flux: f64) {
     guard thermal && edge_load.len == dof_count() && region.len == node_count() else { abort("add_heat_flux: clear_bcs on a thermal mesh"); }
     let value = flux / capacity;
@@ -48,15 +40,14 @@ fn add_heat_flux(flux: f64) {
 
 fn int_part(c: i64) -> i64 { return if is_solid_cell(c) { 1 } else { 0 }; }
 
-// The flow at a point of a cell, in the scaled units.
 struct Local {
     vx: f64,
     vy: f64,
     p: f64,
     t: f64,
-    tx: f64,    // ∂T/∂x
+    tx: f64,
     ty: f64,
-    nx: f64,    // the outward normal of the edge, on a boundary
+    nx: f64,
     ny: f64,
 }
 
@@ -82,10 +73,6 @@ fn local_at(c: i64, l: f64[3]) -> Local {
     return f;
 }
 
-// The integral of F(Local) over the edges of the region, or with mean its
-// mean: the integral over their length. found is whether the select call
-// found a node of the region. F is integrated by the Gauss rule of 3
-// points on each edge.
 fn boundary_value<F>(found: bool, mean: bool) -> f64 {
     guard sol.len == dof_count() && region.len == node_count() && found else { abort("boundary_value: a solve, and a region that holds a node of the mesh"); }
     let gauss: f64[3] = [0.5 - 0.5 * sqrt(0.6), 0.5, 0.5 + 0.5 * sqrt(0.6)];
@@ -119,9 +106,6 @@ fn boundary_value<F>(found: bool, mean: bool) -> f64 {
     return if mean { total / length } else { total };
 }
 
-// The greatest value of F(Local) on the line from (x0, y0) to (x1, y1) in
-// the fluid cells, and whether the line meets a cell. Each cell takes
-// LINE_SAMPLES + 1 points on the part of the line in it.
 let LINE_SAMPLES = 8;
 
 fn line_max<F>(x0: f64, y0: f64, x1: f64, y1: f64) -> f64 {
@@ -157,4 +141,3 @@ fn line_max<F>(x0: f64, y0: f64, x1: f64, y1: f64) -> f64 {
     guard found else { abort("line_max: the line meets a cell of the fluid"); }
     return best;
 }
-

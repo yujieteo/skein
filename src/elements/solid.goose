@@ -1,25 +1,3 @@
-// The nonlinear solid of spec §10.6 on the simplex mesh: a law with state
-// at each integration point (material.goose), in the total Lagrangian
-// form on the reference mesh. A cell gives the internal force
-//
-//     f_int(a i) = ∫ F_iJ S_JK ∂N_a/∂X_K dV
-//
-// and, for a static step, the tangent ∫ Bᵀ D B + ∇N_a · S ∇N_b δ_ij dV,
-// with F = I and no second term at small strain.
-//
-// A static step takes `ramp` increments. Increment k moves the fixed
-// values from those of the end of the step before to those of the step,
-// and the loads likewise, by k / ramp. Each increment is Newton's method
-// with the skyline of direct.goose on the tangent, or CG and AMG
-// (solve.goose) when the skyline is too large: the first solve also
-// moves the fixed dofs, so the tangent predicts the change of the free
-// dofs. After the first increment, an increment starts from u plus the
-// change of u in the increment before, and its solves need less accuracy.
-// The state of each point changes only at the end of an increment.
-//
-// The explicit step is central_difference (explicit.goose) with the
-// internal force in place of K u, from the velocity of the unknown v of
-// the first-order form (spec §14.1). Each step updates the state.
 import std;
 import math;
 namespace elements;
@@ -35,36 +13,38 @@ import .contact;
 import solvers from "../solvers";
 
 let SOLID_NONE = 0;
-let SOLID_J2 = 1;           // J2 at small strain
-let SOLID_J2_FINITE = 2;    // J2 at finite strain, the multiplicative split
-let SOLID_ENERGY = 3;       // an energy of the program
+let SOLID_J2 = 1;
+let SOLID_J2_FINITE = 2;
+let SOLID_ENERGY = 3;
 
-let NEWTON_MAX = 30;        // the Newton iterations of an increment
-let NEWTON_TOL = 1.0e-9;    // the residual of the free dofs, relative to the forces
+let NEWTON_MAX = 30;
+let NEWTON_TOL = 1.0e-9;
+let CONTACT_BACKTRACKS = 4;
+let PREDICTED_CG_TOLERANCE = 1.0e-2;
+let FINITE_CHECK_STEPS = 100;
 
 var solid_law = SOLID_NONE;
 var j2 = J2 { lame: 0.0, shear: 0.0, yield0: 0.0, hard: 0.0 };
-var pt_state: f64[>..] = [];    // 6 per point: εp or Cp⁻¹ (Voigt), at the end of the last increment or step
+var pt_state: f64[>..] = [];
 var pt_alpha: f64[>..] = [];
-var trial_state: f64[>..] = []; // the same at the iterate of Newton's method
+var trial_state: f64[>..] = [];
 var trial_alpha: f64[>..] = [];
-var pt_stress: f64[>..] = [];   // 6 per point: σ, τ or S (Voigt) of the last evaluation
-var nl_u: f64[>..] = [];        // the displacement of the iterate
-var nl_start: f64[>..] = [];    // u at the start of the step
-var nl_target: f64[>..] = [];   // the fixed values of the step
-var nl_load: f64[>..] = [];     // the loads of the step
-var nl_last_load: f64[>..] = [];    // the loads of the end of the step before
-var nl_base: f64[>..] = [];     // u at the start of the increment
-var nl_step: f64[>..] = [];     // the change of u in the increment before
-var nl_dx: f64[>..] = [];       // the last Newton step of the free dofs
-var newton_steps = 0;           // the Newton iterations of the last static step
-var newton_direct = false;      // the step solves with the skyline
-var pt_s: f64[6] = [0.0; 6];    // the stress and the tangent of the last point
+var pt_stress: f64[>..] = [];
+var nl_u: f64[>..] = [];
+var nl_start: f64[>..] = [];
+var nl_target: f64[>..] = [];
+var nl_load: f64[>..] = [];
+var nl_last_load: f64[>..] = [];
+var nl_base: f64[>..] = [];
+var nl_step: f64[>..] = [];
+var nl_dx: f64[>..] = [];
+var newton_steps = 0;
+var newton_direct = false;
+var pt_s: f64[6] = [0.0; 6];
 var pt_d: f64[36] = [0.0; 36];
 
 fn point_total() -> i64 { return cell_count() * quad_count(dim); }
 
-// The law of the solid. J2 needs the elastic law first (set_elastic).
 fn set_solid(law: i64, yield0: f64, hard: f64) {
     guard physics == ELASTIC && law > SOLID_NONE && law <= SOLID_ENERGY && plane != PLANE_STRESS && cell_law.len == 0 &&
           (law == SOLID_ENERGY || yield0 > 0.0 && hard >= 0.0) else { abort("set_solid: an elastic physics, not plane stress, one law, and a yield stress > 0 and a hardening >= 0 for J2"); }
@@ -86,7 +66,6 @@ fn set_solid(law: i64, yield0: f64, hard: f64) {
     solid_arrays();
 }
 
-// The arrays of the dofs of the Newton iterations, at 0.
 fn solid_arrays() {
     let n = dof_total();
     solvers::zeros(nl_u, n);
@@ -99,8 +78,6 @@ fn solid_arrays() {
     solvers::zeros(nl_dx, n);
 }
 
-// The deformation gradient F = I + Σ u_l ⊗ ∇N_l of cell c, from the
-// gradients of the last cell_geometry.
 fn cell_defgrad(c: i64, u: f64[:]) -> f64[9] {
     var f = EYE;
     for l in per_cell {
@@ -112,8 +89,6 @@ fn cell_defgrad(c: i64, u: f64[:]) -> f64[9] {
     return f;
 }
 
-// The stress and the tangent of point q at F into pt_s and pt_d, from the
-// state of the end of the last increment, which the trial state gets.
 fn point_response<ENERGY>(q: i64, f: f64[9]) {
     var st: f64[6] = [0.0; 6];
     for k in 6 { st[k] = pt_state[6 * q + k]; }
@@ -136,8 +111,6 @@ fn point_response<ENERGY>(q: i64, f: f64[9]) {
     trial_alpha[q] = alpha;
 }
 
-// The principal values and directions of C = Fᵀ F. In 2d the direction
-// out of the plane comes last, so the first two are those of the plane.
 fn principal_c(f: f64[9]) -> f64[3], f64[9] {
     var c, e = sym_eigen(mat_mul(mat_t(f), f));
     guard dim == 2 else { return c, e; };
@@ -155,7 +128,6 @@ fn principal_c(f: f64[9]) -> f64[3], f64[9] {
     return c, e;
 }
 
-// Adds ∫ P ∇N_a dV of the first Piola-Kirchhoff stress P to fe.
 fn add_point_force(p: f64[9], dv: f64) {
     for l in per_cell {
         for i in ncomp {
@@ -166,11 +138,9 @@ fn add_point_force(p: f64[9], dv: f64) {
     }
 }
 
-// Adds ∫ Bᵀ D B dV, and with `finite` the term of the stress, at the last
-// point to ke.
 fn add_point_tangent(f: f64[9], dv: f64, finite: bool) {
     let m = per_cell * ncomp;
-    var b: f64[180] = [0.0; 180];  // b[m v + r] for the Voigt row v and the dof r
+    var b: f64[180] = [0.0; 180];
     var db: f64[180] = [0.0; 180];
     for l in per_cell {
         for i in ncomp {
@@ -209,8 +179,6 @@ fn add_point_tangent(f: f64[9], dv: f64, finite: bool) {
     }
 }
 
-// The internal force fe and, with `tangent`, the tangent ke of cell c at
-// the displacement u.
 fn solid_cell<ENERGY>(c: i64, u: f64[:], tangent: bool) {
     let m = per_cell * ncomp;
     if solid_law == SOLID_NONE {
@@ -231,8 +199,6 @@ fn solid_cell<ENERGY>(c: i64, u: f64[:], tangent: bool) {
     }
 }
 
-// The internal force K_e u_e - f_e of the linear law of cell c into fe,
-// with its K_e in ke.
 fn linear_cell(c: i64, u: f64[:]) {
     let m = per_cell * ncomp;
     cell_terms(c);
@@ -246,8 +212,6 @@ fn linear_cell(c: i64, u: f64[:]) {
     }
 }
 
-// The tangent in val and the internal force in `internal`, at nl_u, with
-// the terms of the contact and the rigid face (contact.goose).
 fn solid_assemble<ENERGY>() {
     let m = per_cell * ncomp;
     for &v in val { v = 0.0; }
@@ -265,12 +229,8 @@ fn solid_assemble<ENERGY>() {
     contact_terms(nl_u, internal, true);
 }
 
-// The energy of a law with no energy.
 fn no_energy(c: Hd[3]) -> Hd { return hd(0.0); }
 
-// A static step of the nonlinear solid in `ramp` increments, with the
-// energy ENERGY of the program for SOLID_ENERGY. False if an increment
-// does not converge.
 fn solve_solid<ENERGY>(ramp: i64) -> bool {
     if solid_law == SOLID_NONE && nl_u.len != sol.len { solid_arrays(); }
     guard (solid_law == SOLID_J2 || solid_law == SOLID_ENERGY || solid_law == SOLID_NONE && physics == ELASTIC) && ramp >= 1 && dofs_sized() && nl_u.len == sol.len else { abort("solve_solid: J2 at small strain, an energy or the linear law, ramp >= 1 and the arrays of the dofs"); }
@@ -317,18 +277,12 @@ fn solve_solid<ENERGY>(ramp: i64) -> bool {
     return done;
 }
 
-// The state of the end of the increment.
 fn commit_points() {
     for k in pt_state.len { pt_state[k] = trial_state[k]; }
     for q in pt_alpha.len { pt_alpha[q] = trial_alpha[q]; }
     commit_contact();
 }
 
-// Newton's method for the increment to the fraction lam of the step. its
-// gets the CG iterations. A solve takes the residual to 1e-4 of its start,
-// but the first solve of an increment with no prediction takes it to
-// CG_TOLERANCE: it moves the fixed dofs alone, and a coarse solve of that
-// can turn cells inside out.
 fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
     let n = sol.len;
     var last = 1.0e300;
@@ -348,12 +302,8 @@ fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
             if fixed[d] == 0 { r2 += load[d] * load[d]; }
         }
         if it > 0 && moved == 0.0 && sqrt(r2) <= NEWTON_TOL * sqrt(scale) { return true; }
-        // With contact, a step that does not lower the residual goes back
-        // by half, up to 4 times. Reason: with the symmetric tangent of
-        // slip, Newton's method cycled in the press step of
-        // contact-cattaneo. hyperelastic-tube diverges with it.
         let rel = sqrt(r2 / scale);
-        if contact_points() > 0 && it > 0 && moved == 0.0 && rel >= last && back < 4 {
+        if contact_points() > 0 && it > 0 && moved == 0.0 && rel >= last && back < CONTACT_BACKTRACKS {
             back++;
             for d in n {
                 nl_dx[d] *= 0.5;
@@ -363,7 +313,7 @@ fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
         }
         back = 0;
         last = rel;
-        cg_tolerance = if it == 0 && !predicted { CG_TOLERANCE } else { 1.0e-2 };
+        cg_tolerance = if it == 0 && !predicted { CG_TOLERANCE } else { PREDICTED_CG_TOLERANCE };
         let solved = if newton_direct { direct_solve(start) } else { cg_solve(start, 0, false) };
         cg_tolerance = CG_TOLERANCE;
         guard solved else { return false; };
@@ -380,10 +330,6 @@ fn increment<ENERGY>(lam: f64, predicted: bool, start: f64, its: i64&) -> bool {
     return false;
 }
 
-// --- the explicit step --------------------------------------------------------
-
-// The internal force of J2 at finite strain at the displacement u into
-// out, with the state of each point updated.
 fn explicit_force(u: f64[:], out: f64[:]) {
     for &v in out { v = 0.0; }
     let m = per_cell * ncomp;
@@ -413,10 +359,6 @@ fn explicit_force(u: f64[:], out: f64[:]) {
     commit_contact();
 }
 
-// The start of an explicit step of J2 at finite strain to the time `end`
-// with the step dt (dt <= 0 for the stable step of the elastic law): the
-// velocity v0 on the free dofs, and the acceleration. The GPU path
-// (src/gpu/) starts with it too.
 fn solid_explicit_start(end: f64, dt: f64, v0: f64[3]) -> bool {
     guard solid_law == SOLID_J2_FINITE else { abort("solid_explicit: set_solid of J2 at finite strain"); }
     guard cd_prepare(end, dt) else { return false; };
@@ -426,8 +368,6 @@ fn solid_explicit_start(end: f64, dt: f64, v0: f64[3]) -> bool {
     return true;
 }
 
-// The explicit step of J2 at finite strain from solid_explicit_start.
-// False if the state is not finite.
 fn solid_explicit(end: f64, dt: f64, v0: f64[3]) -> bool {
     let start = clock();
     guard solid_explicit_start(end, dt, v0) else { return false; };
@@ -445,9 +385,7 @@ fn solid_explicit(end: f64, dt: f64, v0: f64[3]) -> bool {
         cd_accel();
         for d in n { velocity[d] += 0.5 * h * accel[d]; }
         steps++;
-        // Reason: a step above the stable step gives NaN, and the steps of
-        // NaN are slow (the Taylor bar at 0.8 mm took 13 min to 40 us).
-        if steps % 100 == 0 || steps == cd_steps { finite = all_finite(sol); }
+        if steps % FINITE_CHECK_STEPS == 0 || steps == cd_steps { finite = all_finite(sol); }
     }
     guard state_sizes() == sizes else { abort("solid_explicit: a solve grows no array of the state (rule 3)"); }
     last_iterations = steps;

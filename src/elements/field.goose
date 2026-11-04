@@ -1,21 +1,3 @@
-// Field terms: the solution of one physics as a source, or a strain, of the
-// next physics on the same mesh.
-//
-// After a solve, `keep(slot)` holds the nodal solution as the field of
-// `slot`. A later physics adds a field term: an expression of the kept
-// fields, written as the postfix code of a small stack machine that the
-// assembly runs at each quadrature point:
-//
-//     OP_CONST a      push consts[a]
-//     OP_VAL a b      push component b of the field of slot a
-//     OP_GRAD a b     push d(component b / 4)/dx_(b % 4) of the field of slot a
-//     OP_COORD a      push the coordinate a of the point
-//     OP_ADD .. OP_SQRT   pop one or two values and push the result
-//
-// A term has a kind: FT_SOURCE adds ∫ s N_i to the heat source vector, and
-// FT_STRAIN is an isotropic strain θ that adds ∫ (3 λ + 2 μ) θ ∂p N_i to the
-// force of an elastic physics, and that the stress subtracts. The terms
-// belong to the physics: the next `heat` or `elastic` call clears them.
 import std;
 import math;
 namespace elements;
@@ -34,20 +16,19 @@ let OP_COORD = 3;
 let OP_ADD = 10;
 let OP_SUB = 11;
 let OP_MUL = 12;
-let OP_DIV = 13;
 let OP_NEG = 14;
 let OP_SQRT = 15;
 
 let KEEP_SLOTS = 8;
 
 var ft_kind: i64[>..] = [];
-var ft_law: i64[>..] = [];          // the law of the cells that term t acts on (stages.goose), or -1 for each cell
-var ft_code_at: i64[>..] = [0];     // the code of term t is ft_code[ft_code_at[t]..ft_code_at[t + 1]], 3 values for each instruction
+var ft_law: i64[>..] = [];
+var ft_code_at: i64[>..] = [0];
 var ft_const_at: i64[>..] = [0];
 var ft_code: i64[>..] = [];
 var ft_consts: f64[>..] = [];
 
-var kept_vals: f64[>..] = [];       // the field of slot s at node n, component p: kept_vals[s * 3 * nodes + 3 n + p]
+var kept_vals: f64[>..] = [];
 var kept_comps: i64[>..] = [];
 
 var ev_stack: f64[16];
@@ -63,7 +44,6 @@ fn clear_field_terms() {
     ft_consts.clear();
 }
 
-// Keeps the solution of the physics now as the field of `slot`.
 fn keep_field(slot: i64) {
     guard slot >= 0 && slot < KEEP_SLOTS && (physics == ELASTIC || physics == HEAT) && sol.len == dof_total() else { abort("keep_field: a slot, a heat or elastic physics and its solution"); }
     let nn = node_count();
@@ -79,14 +59,8 @@ fn keep_field(slot: i64) {
     }
 }
 
-// Adds a term of kind `kind` with the instructions `code` and the
-// constants `consts`.
 fn add_field_term(kind: i64, code: i64[:], consts: f64[:]) { add_field_term_in(-1, kind, code, consts); }
 
-// Adds a term that acts on the cells of law `law` only, as law 0 is the
-// material of the physics and each `add_law` after it adds one. A property
-// of the material that the term names (a coefficient of thermal expansion)
-// then has the value of its region.
 fn add_field_term_in(law: i64, kind: i64, code: i64[:], consts: f64[:]) {
     guard (kind == FT_SOURCE || kind == FT_STRAIN) && code.len % 3 == 0 && code.len > 0 else { abort("add_field_term: a kind and a code of 3 values for each instruction"); }
     guard kind != FT_SOURCE || physics == HEAT else { abort("add_field_term: a source needs a heat physics"); }
@@ -104,7 +78,6 @@ fn kept_at(slot: i64, n: i64, p: i64) -> f64 {
     return kept_vals[slot * 3 * node_count() + 3 * n + p];
 }
 
-// The value of term t at the point of the last cell_geometry of cell c.
 fn eval_term(t: i64, c: i64) -> f64 {
     var sp = 0;
     var i = ft_code_at[t];
@@ -149,9 +122,6 @@ fn eval_term(t: i64, c: i64) -> f64 {
     return ev_stack[0];
 }
 
-// The value of the postfix `code` with the constants `consts` at the point
-// x of a boundary facet, where the solution of the physics now is u (the
-// field of the slot KEEP_SLOTS). A gradient has no value on a facet.
 fn eval_facet_code(code: i64[:], consts: f64[:], x: f64[3], u: f64[3]) -> f64 {
     var sp = 0;
     var i = 0;
@@ -187,24 +157,19 @@ fn eval_facet_code(code: i64[:], consts: f64[:], x: f64[3], u: f64[3]) -> f64 {
     return ev_stack[0];
 }
 
-// The pressure-like factor of the isotropic strain θ: the stress of
-// -θ I is -(3 λ + 2 μ) θ in 3D, and -2 (λ + μ) θ in plane stress.
 fn strain_factor() -> f64 { return if dim == 3 { 3.0 * lame + 2.0 * shear } else { 2.0 * (lame + shear) }; }
 
-// The stress of the strain terms of cell c at the point of the last cell_geometry.
 fn strain_stress(c: i64) -> f64 {
     var s = 0.0;
     for t in ft_kind.len { if ft_kind[t] == FT_STRAIN && term_acts(t, c) { s += strain_factor() * eval_term(t, c); } }
     return s;
 }
 
-// Whether term t acts on cell c: it has no law, or the law of c is its law.
 fn term_acts(t: i64, c: i64) -> bool {
     guard ft_law[t] >= 0 else { return true; };
     return ft_law[t] == (if cell_law.len == 0 { 0 } else { cell_law[c] });
 }
 
-// Adds the field terms to the source fe of cell c, after cell_matrix.
 fn add_field_terms(c: i64) {
     for t in ft_kind.len {
         guard term_acts(t, c) else { continue; };

@@ -1,6 +1,3 @@
-// The cases and the table of `skein run --study` (spec §20, docs/command_line.md
-// §6.5). run.goose runs the cases. Each case is the model text with the case
-// values in place of the defaults of the varied `param` items.
 import std;
 import os;
 import math;
@@ -9,10 +6,6 @@ import syntax from "../syntax";
 import check from "../check";
 import .codegen;
 
-// --- the cases (spec §20.2) ----------------------------------------------------
-
-// A varied parameter: its name and the offsets of its default value in the
-// model text.
 struct Varied {
     name: u8[..64],
     lo: i64,
@@ -20,29 +13,22 @@ struct Varied {
 }
 
 var varied: Varied[>..];
-// The value text of parameter `p` in case `c` is `case_values[c * varied.len + p]`.
 var case_values: u8[..256][>..];
 var case_count = 0;
-// The `expect` lines of the study (spec §15.3). Case c appends
-// `case_expects[expect_at[c]..expect_at[c + 1]]` to its model text.
 var case_expects: u8[>..];
 var expect_at: i64[>..];
 
-// The ranges of a `minimize` study: param k varies from range_lo[k] to
-// range_hi[k] in the unit range_unit[k], from its default. z is the value
-// in 0..1 of the range. run.goose runs the loop.
 var range_lo: f64[>..];
 var range_hi: f64[>..];
 var range_unit: u8[..64][>..];
 var range_start: f64[>..];
-var simplex_search = false;   // method: nelder_mead, else gradient
+var simplex_search = false;
 var max_cases = 50;
 var xtol = 0.001;
 var first_step = 0.1;
 
 fn case_value(c: i64, p: i64) -> const u8[:] { return case_values[c * varied.len + p]; }
 
-// The `study` item named `name` of program `prog`, or -1.
 fn find_study(prog: i64, name: u8[:]) -> i64 {
     var c = syntax::nodes[prog].first;
     while c >= 0 {
@@ -52,7 +38,6 @@ fn find_study(prog: i64, name: u8[:]) -> i64 {
     return -1;
 }
 
-// The `param` item named `word` of program `prog`, or -1.
 fn find_param(prog: i64, word: u8[:]) -> i64 {
     var c = syntax::nodes[prog].first;
     while c >= 0 {
@@ -62,7 +47,6 @@ fn find_param(prog: i64, word: u8[:]) -> i64 {
     return -1;
 }
 
-// The named argument `word` of procedure `pr`, or -1.
 fn proc_arg(pr: i64, word: u8[:]) -> i64 {
     var a = syntax::nodes[pr].first;
     while a >= 0 {
@@ -72,8 +56,6 @@ fn proc_arg(pr: i64, word: u8[:]) -> i64 {
     return -1;
 }
 
-// The texts of the values of study entry `v`: each item of a list, with the
-// unit of the list after a bare number.
 fn list_texts(v: i64, out: u8[..256][>..]&) {
     if kind(v) != syntax::N_LIST {
         var t: u8[..256] = [];
@@ -93,8 +75,6 @@ fn list_texts(v: i64, out: u8[..256][>..]&) {
     }
 }
 
-// Reads the cases of study `s` of program `prog` into `varied` and
-// `case_values`. False on an error, and `syntax::errors` holds it.
 fn study_cases(prog: i64, s: i64) -> bool {
     varied.clear();
     case_values.clear();
@@ -108,8 +88,6 @@ fn study_cases(prog: i64, s: i64) -> bool {
         if kind(c) == syntax::N_SETTING { entries.push(c); }
         c = syntax::nodes[c].next;
     }
-    // A topology study varies the density of each cell, in one case
-    // (src/optim/gen.goose).
     if procedure == "topology" {
         case_count = 1;
         study_expects(body);
@@ -146,7 +124,6 @@ fn study_cases(prog: i64, s: i64) -> bool {
     } else if procedure == "sample" {
         good = sample_cases(pr, entries);
     } else if procedure == "minimize" && minimize_ranges(prog, pr, entries) {
-        // The loop of run.goose adds each case.
         case_count = 1;
         study_expects(body);
         case_count = 0;
@@ -161,8 +138,6 @@ fn study_cases(prog: i64, s: i64) -> bool {
     return good;
 }
 
-// The text in case `c` of the expected value or the `within` `v` of an
-// expect of a study: value c of a list, else `v`.
 fn case_text(v: i64, c: i64) -> u8[>..] {
     guard kind(v) == syntax::N_LIST else { return str(source_of(v)); };
     var texts: u8[..256][>..] = [];
@@ -170,8 +145,6 @@ fn case_text(v: i64, c: i64) -> u8[>..] {
     return str(texts[c]);
 }
 
-// The `expect` lines of each case of the study with the block `body`. The
-// checker gives each list of an expect one value for each case.
 fn study_expects(body: i64) {
     case_expects.clear();
     expect_at.clear();
@@ -189,10 +162,7 @@ fn study_expects(body: i64) {
     expect_at.push(case_expects.len);
 }
 
-// The cases of `grid` (the Cartesian product of the lists, with the last
-// entry the fastest) or of `zip` (value i of each list).
 fn list_cases(grid: bool, entries: i64[:]) -> bool {
-    // The values of entry e are texts[first[e]..first[e] + count[e]].
     var texts: u8[..256][>..] = [];
     var first: i64[>..] = [];
     var count: i64[>..] = [];
@@ -238,14 +208,11 @@ fn list_cases(grid: bool, entries: i64[:]) -> bool {
     return true;
 }
 
-// The Sobol direction numbers of dimensions 2 to 8 (Joe and Kuo, 2008):
-// the degree s, the polynomial a and the first s numbers m.
 let SOBOL_S = [1, 2, 3, 3, 4, 4, 5];
 let SOBOL_A = [0, 1, 1, 2, 1, 4, 2];
 let SOBOL_M = [[1, 0, 0, 0, 0], [1, 3, 0, 0, 0], [1, 3, 1, 0, 0], [1, 1, 1, 0, 0], [1, 1, 3, 3, 0],
                [1, 3, 5, 13, 0], [1, 1, 5, 5, 17]];
 
-// The 32 direction numbers of Sobol dimension `d`, from 0.
 fn sobol_directions(d: i64) -> i64[32] {
     var v = default<i64[32]>();
     for k in 0..32 { v[k] = 1 << (31 - k); }
@@ -263,10 +230,6 @@ fn sobol_directions(d: i64) -> i64[32] {
     return v;
 }
 
-// The points in [0, 1) of `sample(n, method, seed)`: `n` rows of `dims`
-// values. `lhs` takes one point in each of `n` strata of each dimension, in
-// a random order. `sobol` takes points 0 to n - 1 of the Sobol sequence,
-// with a random digital shift of each dimension.
 fn sample_points(n: i64, dims: i64, sobol: bool, seed: i64) -> f64[>..] {
     var r = rng { s: seed as! u64 };
     var t: f64[>..] = [];
@@ -278,7 +241,6 @@ fn sample_points(n: i64, dims: i64, sobol: bool, seed: i64) -> f64[>..] {
             var x = 0;
             for i in 0..n {
                 t[i * dims + d] = (x ^ shift) / 4294967296.0;
-                // The next point, in Gray code order, differs in the direction of the lowest zero bit of i.
                 var c = 0;
                 while ((i >> c) & 1) == 1 { c++; }
                 x ^= v[c];
@@ -293,8 +255,6 @@ fn sample_points(n: i64, dims: i64, sobol: bool, seed: i64) -> f64[>..] {
     return t;
 }
 
-// The value and the unit text of the literal `n`: a number, or `-` and a
-// number, with an optional unit. False for another expression.
 recursive fn literal(n: i64) -> f64, const u8[:], bool {
     if kind(n) == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
         let v, unit, ok = literal(syntax::nodes[n].first);
@@ -306,9 +266,6 @@ recursive fn literal(n: i64) -> f64, const u8[:], bool {
     return v, if u >= 0 { source_of(u) } else { "" }, true;
 }
 
-// The ranges, the start and the stop settings of `minimize(objective,
-// method: gradient, max_cases, xtol, step)`. Each range and the default of
-// its param are numbers in one unit. False on an error.
 fn minimize_ranges(prog: i64, pr: i64, entries: i64[:]) -> bool {
     let method = proc_arg(pr, "method");
     guard method >= 0 && kind(method) == syntax::N_NAME && (name(method) == "gradient" || name(method) == "nelder_mead") else {
@@ -348,8 +305,6 @@ fn minimize_ranges(prog: i64, pr: i64, entries: i64[:]) -> bool {
     return true;
 }
 
-// The cases of `sample(n: Int, method: lhs | sobol, seed: Int)`: each value
-// is `lo + t*(hi - lo)` for a point t in [0, 1), in the unit of the range.
 fn sample_cases(pr: i64, entries: i64[:]) -> bool {
     let fix = "write sample(n: 8, method: lhs, seed: 1), with method lhs or sobol";
     let n_arg = proc_arg(pr, "n");
@@ -370,7 +325,6 @@ fn sample_cases(pr: i64, entries: i64[:]) -> bool {
         syntax::error_at(tok(method), "procedure_args", str("sobol takes at most ", SOBOL_S.len + 1, " params"), "use method: lhs");
         return false;
     };
-    // The range of entry d is lows[d] to highs[d], in the unit units[d].
     var lows: f64[>..] = [];
     var highs: f64[>..] = [];
     var units: u8[..64][>..] = [];
@@ -404,14 +358,10 @@ fn sample_cases(pr: i64, entries: i64[:]) -> bool {
     return true;
 }
 
-// The model `text` of case `c`: the case values in place of the defaults,
-// and the `expect` lines of the study at the end.
 fn case_source(text: u8[:], c: i64) -> u8[>..] {
     return values_source(text, case_values[c * varied.len..(c + 1) * varied.len], case_expects[expect_at[c]..expect_at[c + 1]]);
 }
 
-// The model `text` with `values` in place of the defaults of the varied
-// params, and `tail` at the end.
 fn values_source(text: u8[:], values: u8[..256][:], tail: u8[:]) -> u8[>..] {
     var order: i64[>..] = [];
     for p in 0..varied.len { order.push(p); }
@@ -428,11 +378,6 @@ fn values_source(text: u8[:], values: u8[..256][:], tail: u8[:]) -> u8[>..] {
     return out;
 }
 
-// The model `text` of `path` with the value of each `--set name=value` of
-// `sets` in place of the default value of its `param` (spec §20.1). The
-// checker then checks the value as source text, with its type and its
-// range. False if a word is not name=value or names no param of the model
-// file: the message is on stderr.
 fn set_source(path: u8[:], text: u8[:], sets: const u8[:][:], out: u8[>..]&) -> bool {
     out.clear();
     let prog = syntax::parse_model(path, text);
@@ -484,47 +429,28 @@ fn set_source(path: u8[:], text: u8[:], sets: const u8[:][:], out: u8[>..]&) -> 
     return true;
 }
 
-// --- the memory ledger (spec §20.5) -------------------------------------------
-
-// The ledger of the study runner. The runner reads the budget once, at the
-// start of the study. A case starts only if its estimate fits in the
-// budget less the estimates of the cases that run, or if no case runs:
-// then the case checks itself before its assembly, and stops with a
-// message if it does not fit (solvers::memory_check). Reason: a case
-// reaches its peak late, at the setup of its solver, so the free memory at
-// its start does not show what the running cases take later. When the
-// program has more than one solve step, the estimate is that of its first
-// solve, and a later step can take more: then one case runs at a time
-// until a case gives its measured peak.
 struct Ledger {
-    budget: f64,    // the bytes for all cases, or 0 if they are not known
-    per_dof: f64,   // the bytes of a case for each dof of its mesh, or 0 if they are not known
-    source: i64,    // the case of per_dof, or -1
-    measured: bool, // per_dof is a measured peak, not an estimate
-    partial: bool,  // the estimate is that of the first of more than one solve step
-    used: f64,      // the sum of the estimates of the cases that run
-    most: i64,      // the most cases that ran at a time
+    budget: f64,
+    per_dof: f64,
+    source: i64,
+    measured: bool,
+    partial: bool,
+    used: f64,
+    most: i64,
 }
 
 fn new_ledger(budget: f64) -> Ledger {
     return Ledger { budget: budget, per_dof: 0.0, source: -1, measured: false, partial: false, used: 0.0, most: 0 };
 }
 
-// The estimate in bytes of a case with `dofs` dofs: the whole budget while
-// the ledger knows no case.
 fn case_need(l: Ledger, dofs: i64) -> f64 {
     return if l.per_dof > 0.0 { l.per_dof * dofs } else { l.budget };
 }
 
-// Whether a case of `need` bytes may start while `running` cases run.
 fn admits(l: Ledger, need: f64, running: i64) -> bool {
     return running == 0 || l.budget <= 0.0 || (l.measured || !l.partial) && l.used + need <= l.budget;
 }
 
-// Learns from case c of `dofs` dofs, which ended with the measured peak
-// `peak`. A larger peak for each dof takes the place of the estimate or of
-// a smaller peak. Reason: the bytes for each dof change with the dofs, so a
-// smaller peak of one case is not a bound for the other cases.
 fn learn(l: Ledger&, c: i64, dofs: i64, peak: f64) {
     guard peak > 0.0 && dofs > 0 else { return; };
     l.measured = true;
@@ -534,7 +460,6 @@ fn learn(l: Ledger&, c: i64, dofs: i64, peak: f64) {
     l.source = c;
 }
 
-// The value of the line "key: value" of the TOON `text`, or -1.
 fn toon_number(text: u8[:], key: u8[:]) -> f64 {
     for line in split(text, '\n') {
         if !starts_with(line, key) { continue; }
@@ -549,8 +474,6 @@ fn set1024(into: u8[..1024]&, s: u8[:]) {
     into.append(s[..min(s.len, 1024)]);
 }
 
-// The end of a case: its result record, with its standard output in
-// `outs[out_lo..out_hi]`.
 struct CaseEnd {
     ended: bool,
     built: bool,
@@ -563,8 +486,6 @@ struct CaseEnd {
 
 var outs: u8[>..];
 
-// The fields of the TOON row `line`, after its indent, with the quotes
-// and escapes taken off.
 fn toon_fields(line: u8[:]) -> u8[..512][>..] {
     var fields: u8[..512][>..] = [];
     var f: u8[..512] = [];
@@ -591,9 +512,6 @@ fn toon_fields(line: u8[:]) -> u8[..512][>..] {
     return fields;
 }
 
-// The columns of the table after `verify`: the named reports, then the
-// expects of the items and the steps, then the expects of the study.
-// `cells[c * columns.len + j]` is the value of column j in case c.
 var columns: u8[..64][>..];
 var report_columns = 0;
 var cells: u8[..256][>..];
@@ -604,7 +522,6 @@ fn add_column(t: i64) {
     columns.push(w);
 }
 
-// The named reports and the expects of program `prog` and of its study `s`.
 fn result_columns(prog: i64, s: i64) {
     columns.clear();
     cells.clear();
@@ -646,10 +563,6 @@ fn result_columns(prog: i64, s: i64) {
     }
 }
 
-// Reads the output of case `e`: it adds the value of each named report and
-// the result of each expect to `cells`. It gives the message of a failed
-// case, empty for a case that ran, and true when no verification record of
-// the case fails.
 fn read_case(e: CaseEnd) -> u8[>..], bool {
     var pass = true;
     var section: u8[..16] = [];
@@ -674,8 +587,6 @@ fn read_case(e: CaseEnd) -> u8[>..], bool {
         }
         if section == "verify" && f.len == 5 && f[2] == "fail" { pass = false; }
     }
-    // A program that printed its records stops with a non-zero status when
-    // a solve does not converge or a result file cannot be written.
     if e.ended && e.built && e.status != 0 { pass = false; }
     var msg: u8[>..] = [];
     if !e.ended {
@@ -689,13 +600,6 @@ fn read_case(e: CaseEnd) -> u8[>..], bool {
     return msg, pass;
 }
 
-// The table of study `study` (spec §20.6, command_line.md §6.5): one row
-// for each case, then the diagnostic `case_failed` for each case that
-// stopped. `at` is the token of the study, and `prog` the model. It puts
-// the TOON in `toon`, and what to print in `out`. The result is the exit
-// status (command_line.md §10). `best` is the best case of a minimize
-// study, or -1: only its verification records set the status, and `stop`
-// says why the loop stopped.
 fn study_table(study: u8[:], at: i64, jobs: i64, prog: i64, ends: CaseEnd[:], best: i64, stop: u8[:], json: bool, out: u8[>..]&, toon: u8[>..]&) -> i64 {
     result_columns(prog, find_study(prog, study));
     var verify: bool[>..] = [];

@@ -1,21 +1,11 @@
-// VTU output (VTK XML unstructured grid, ASCII), which ParaView reads.
-// Each cell is written with the VTK type of its cell type, and its nodes
-// in the order of its registry entry. A 27-node cell is written as its 8
-// linear sub-hexahedra, so the file holds all nodes with no cell type of
-// higher order. Each field of point_fields (fem.goose) is a point array.
 import std;
 import os;
 namespace runtime;
 import .fem;
 import .solve;
 
-// The VTK cell type of each cell type (fem.goose): triangle, quadratic
-// triangle, tetra, quadratic tetra, hexahedron, hexahedron (the sub-cells
-// of hex27), quad, line, hexahedron (hex8i) and quad.
 let VTK_TYPES: i64[10] = [5, 22, 10, 24, 12, 12, 9, 3, 12, 9];
 
-// The local nodes of sub-hexahedron (i, j, k) of a hex27 cell, in the VTK
-// order of a hexahedron.
 fn hex27_sub_cell(out: u8[>..]&, c: i64, i: i64, j: i64, k: i64) {
     guard c >= 0 && c < cell_count() && cell_type[c] as i64 == HEX27 && i >= 0 && j >= 0 && k >= 0 && i < 2 && j < 2 && k < 2 else { abort("hex27_sub_cell: a hex27 cell and a sub-cell"); }
     for dk in 2 {
@@ -26,8 +16,6 @@ fn hex27_sub_cell(out: u8[>..]&, c: i64, i: i64, j: i64, k: i64) {
     out.push('\n');
 }
 
-// The DataArrays of the cells of the mesh: a 27-node hexahedron is 8
-// hexahedra of 8 nodes.
 fn write_vtu_cells(out: u8[>..]&) {
     guard cell_start.len == cell_count() + 1 else { abort("write_vtu_cells: the cell arrays agree"); }
     out.append("<DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\n");

@@ -1,19 +1,3 @@
-// The Spalart-Allmaras model of turbulence (Spalart and Allmaras 1992) on
-// P1 cells: the cell residual of the mean flow and of the working
-// viscosity nt. The unknowns of a vertex are vx, vy, p and nt (mesh.goose).
-// With the kinematic viscosity ν = μ/ρ, the equations are
-//
-//     ρ (∇v) v - div(σ) = f,   div v = 0
-//     σ = -p I + 2 ρ (ν + ν_t) sym(∇v),   ν_t = nt fv1
-//     v·∇nt - div((ν + nt)/σ_sa ∇nt) - cb2/σ_sa |∇nt|² = cb1 S̃ nt - cw1 fw (nt/d)²
-//
-// with χ = nt/ν, fv1 = χ³/(χ³ + cv1³), fv2 = 1 - χ/(1 + χ fv1),
-// S̃ = max(Ω + fv2 nt/(κ² d²), cs Ω), r = min(nt/(S̃ κ² d²), 10),
-// g = r + cw2 (r⁶ - r) and fw = g ((1 + cw3⁶)/(g⁶ + cw3⁶))^(1/6). Ω is the
-// norm of the vorticity and d the wall distance of rans.goose. The momentum
-// rows and the pressure rows are those of rans.goose. The row of nt has
-// SUPG. A negative nt is 0 in the coefficients. The model is a physics of
-// any flow: a program gives the constants with spalart_constants.
 import std;
 import math;
 namespace flow;
@@ -31,7 +15,6 @@ var sa_cv1 = 7.1;
 var sa_cs = 0.3;
 var sa_cw1 = 0.1355 / (0.41 * 0.41) + 1.622 / 0.66666;
 
-// The start of the solve: v and nt at each vertex, scaled.
 var sa_start_v: f64[2] = [0.0, 0.0];
 var sa_start_nt = 0.0;
 
@@ -40,10 +23,8 @@ fn spalart_start(vx: f64, vy: f64, nt: f64) {
     sa_start_nt = nt;
 }
 
-// The local dof of nt of vertex a is N0 + a (the rows of v at 0..6, of p at 6..9).
 let N0 = 9;
 
-// Sets the constants of the model.
 fn spalart_constants(sigma: f64, kappa: f64, cb1: f64, cb2: f64, cw1: f64, cw2: f64, cw3: f64, cv1: f64, cs: f64) {
     guard sigma > 0.0 && kappa > 0.0 && cb1 > 0.0 && cw3 > 0.0 && cv1 > 0.0 else { abort("spalart_constants: sigma, kappa, cb1, cw3 and cv1 > 0"); }
     sa_sigma = sigma;
@@ -57,10 +38,9 @@ fn spalart_constants(sigma: f64, kappa: f64, cb1: f64, cb2: f64, cw1: f64, cw2: 
     sa_cw1 = cw1;
 }
 
-// The values of the model at a point.
 struct Spalart {
-    nut: f64,   // ν_t
-    s_t: f64,   // S̃
+    nut: f64,
+    s_t: f64,
     fw: f64,
 }
 
@@ -74,7 +54,6 @@ fn spalart(nt: f64, d: f64, omega: f64) -> Spalart {
     let fv2 = 1.0 - chi / (1.0 + chi * fv1);
     let k2d2 = sa_kappa * sa_kappa * dp * dp;
     let s_t = max(omega + fv2 * n / k2d2, sa_cs * omega);
-    // r is 10 where S̃ is 0 and nt is more than 0, so that fw has no jump there
     let r = min(n / (max(s_t, 1.0e-30) * k2d2), 10.0);
     let r3 = r * r * r;
     let g = r + sa_cw2 * (r3 * r3 - r);
@@ -84,16 +63,8 @@ fn spalart(nt: f64, d: f64, omega: f64) -> Spalart {
     return Spalart { nut: n * fv1, s_t: s_t, fw: fw };
 }
 
-// The residual r of the cell c at the local dofs u: vx, vy of 3 vertices at
-// 0..6, p at 6..9 and nt at 9..12.
 fn sa_residual(c: i64, u: f64[15], r: f64[15]&) { sa_rows(c, u, u, r); }
 
-// The residual with the production cb1 S̃ nt taken at the state ub. The
-// Jacobian takes ub = the state of the linearization, so the production is
-// explicit in the Newton step. Reason: S̃ nt is large near a wall (it holds
-// nt/(κ d)² there), and its derivative made the diagonal of the nt rows
-// negative: GMRES did not converge in 5000 iterations in the first step of
-// the channel at Re_τ = 395.
 fn sa_rows(c: i64, u: f64[15], ub: f64[15], r: f64[15]&) {
     guard turbulent && spalart_on && order == 1 && c >= 0 && c < cell_count() && wall_d.len == vertex_count else { abort("sa_residual: a Spalart-Allmaras P1 flow after clear_bcs"); }
     let g = geometry(c);
@@ -162,7 +133,6 @@ fn sa_point(c: i64, g: Geometry, l: f64[3], w: f64, u: f64[15], ub: f64[15], gv:
     }
 }
 
-// The production cb1 S̃ nt at the point l of the cell c at the state u.
 fn production(c: i64, g: Geometry, l: f64[3], u: f64[15]) -> f64 {
     var gv: f64[4] = [0.0; 4];
     var nt = 0.0;
@@ -179,8 +149,6 @@ fn production(c: i64, g: Geometry, l: f64[3], u: f64[15]) -> f64 {
     return sa_cb1 * t.s_t * max(nt, 0.0);
 }
 
-// The Jacobian k[15 a + b] = ∂r_a/∂u_b of the cell c at u, by forward
-// differences as in cell.goose, and its residual r.
 fn sa_jacobian(c: i64, u: f64[15], r: f64[15]&, k: f64[225]&) {
     sa_residual(c, u, r);
     var shifted = u;

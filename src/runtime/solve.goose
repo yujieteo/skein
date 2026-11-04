@@ -1,11 +1,3 @@
-// The dofs, the loads on face sets, the sparse matrix (CSR in three
-// arrays), the assembly over the cells of the mesh, the linear solver
-// interface with its first entry (CG with a Jacobi preconditioner), the
-// Newton interface, the reactions and the values at a point.
-//
-// The matrix holds all dofs, with the fixed dofs too, so that the
-// reactions are K u - f on the fixed dofs. The linear operator of a solve
-// is K on the free dofs: it holds its result at 0 on the fixed dofs.
 import std;
 import math;
 import os;
@@ -16,9 +8,9 @@ import .hex8i;
 import .lane_solvers;
 import solvers from "../solvers";
 
-var fixed: u8[>..] = [];            // 1 for each dof that is held at 0
-var load: f64[>..] = [];            // the external force on each dof
-var disp: f64[>..] = [];            // the value of each dof: the displacement of a solid
+var fixed: u8[>..] = [];
+var load: f64[>..] = [];
+var disp: f64[>..] = [];
 
 var row_start: i64[>..] = [];
 var col: i32[>..] = [];
@@ -27,17 +19,13 @@ var val: f64[>..] = [];
 var last_iterations = 0;
 var last_seconds = 0.0;
 
-let CG_TOLERANCE = 1.0e-10;   // the residual relative to the load
+let CG_TOLERANCE = 1.0e-10;
 
-// The linear solver and the preconditioner of the next solve, by name.
-// "cg" with "jacobi" is the built-in entry. The solvers lane gives the
-// others (lane_solvers.goose).
 var solver_name: u8[..64] = "cg";
 var preconditioner_name: u8[..64] = "jacobi";
 
 fn dof_total() -> i64 { return dofs_per_node * node_count(); }
 
-// Sets all dofs free, with no load and no solution, and clears the matrix.
 fn clear_dofs() {
     fixed.clear();
     load.clear();
@@ -65,7 +53,6 @@ fn clear_load_vector() {
     clear_solution();
 }
 
-// The sum of the loads on the dofs 0 to 2 of each node.
 fn load_sum() -> f64, f64, f64 {
     guard load.len == dof_total() else { abort("load_sum: the loads of the dofs"); }
     var s: f64[3] = [0.0, 0.0, 0.0];
@@ -75,7 +62,6 @@ fn load_sum() -> f64, f64, f64 {
     return s[0], s[1], s[2];
 }
 
-// Holds all dofs of the nodes of node set s at 0.
 fn fix_set(s: i64, first: i64, last: i64) {
     guard s >= 0 && s < set_is_face.len && !set_is_face[s] && first >= 0 && first < last && last <= dofs_per_node && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("fix_set: a node set, 0 <= first < last <= dofs_per_node and the dofs"); }
     for n in set_members(s) {
@@ -84,14 +70,8 @@ fn fix_set(s: i64, first: i64, last: i64) {
     clear_solution();
 }
 
-// --- loads -------------------------------------------------------------------------
-
 var face_w: f64[>..] = [];
 
-// Adds a uniform traction (force per area) (tx, ty, tz) + sn n on the
-// faces of face set s, with n the unit normal out of the body: the
-// consistent nodal forces of cell_face_weights. False, with a message, if
-// a cell type has no face routine.
 fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64, sn: f64) -> bool {
     guard s >= 0 && s < set_is_face.len && set_is_face[s] && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("add_set_traction: a face set and the dofs"); }
     let t: f64[3] = [tx, ty, tz];
@@ -110,9 +90,6 @@ fn add_set_traction(s: i64, tx: f64, ty: f64, tz: f64, sn: f64) -> bool {
     return true;
 }
 
-// Adds f = ∫ Bᵀ D ε_th dV of each cell with a thermal strain ε_th to the
-// load. With ε_th = s I, D ε_th = (3 λ + 2 μ) s I, so node a gets
-// ∫ (3 λ + 2 μ) s ∂N_a/∂x_k dV along x_k.
 fn add_thermal_load() {
     guard cell_strain.len == cell_count() && load.len == dof_total() && dofs_per_node == 3 else { abort("add_thermal_load: a material and the dofs of a solid"); }
     for c in cell_count() {
@@ -141,7 +118,6 @@ fn add_thermal_load() {
     clear_solution();
 }
 
-// The largest sum of the positive loads along one axis.
 fn positive_load() -> f64 {
     guard load.len == dof_total() else { abort("positive_load: the loads of the dofs"); }
     var s: f64[3] = [0.0, 0.0, 0.0];
@@ -151,7 +127,6 @@ fn positive_load() -> f64 {
     return max(s[0], max(s[1], s[2]));
 }
 
-// The area of the faces of face set s that have a face routine.
 fn set_area(s: i64) -> f64 {
     guard s >= 0 && s < set_is_face.len && set_is_face[s] else { abort("set_area: a face set"); }
     var area = 0.0;
@@ -163,7 +138,6 @@ fn set_area(s: i64) -> f64 {
     return area;
 }
 
-// Adds the force (fx, fy, fz) at the node nearest to (x, y, z).
 fn add_point_force(x: f64, y: f64, z: f64, fx: f64, fy: f64, fz: f64) {
     guard node_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("add_point_force: a mesh and its dofs"); }
     var best = 0;
@@ -180,15 +154,10 @@ fn add_point_force(x: f64, y: f64, z: f64, fx: f64, fy: f64, fz: f64) {
     clear_solution();
 }
 
-// --- the sparsity pattern ------------------------------------------------------
-
-// Two nodes are coupled if they share a cell. All dofs of a node have the
-// same columns, in increasing order.
 fn build_pattern() {
     guard dofs_per_node > 0 && cell_start.len == cell_count() + 1 && cell_nodes.len == cell_start[cell_count()] else { abort("build_pattern: the cell arrays agree"); }
     clear_matrix();
     let nodes = node_count();
-    // The cells of each node, in CSR.
     var first: i64[>..] = [];
     for i in nodes + 1 { first.push(0); }
     for n in cell_nodes { first[n + 1]++; }
@@ -228,7 +197,6 @@ fn build_pattern() {
     }
 }
 
-// The position of column c in row r.
 fn entry(r: i64, c: i64) -> i64 {
     guard r >= 0 && c >= 0 && r + 1 < row_start.len && c + 1 < row_start.len else { abort("entry: a row and a column of the matrix"); }
     var lo = row_start[r];
@@ -243,10 +211,6 @@ fn entry(r: i64, c: i64) -> i64 {
 
 var ke: f64[>..] = [];
 
-// Adds the element matrix of each cell into the matrix, on the pool of the
-// threads of the case (src/solvers/pool.goose) if it has more than one
-// thread. False, with a message, if a cell type has no element routine in
-// the registry.
 fn assemble() -> bool {
     guard cell_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("assemble: a mesh and its dofs"); }
     build_pattern();
@@ -273,9 +237,6 @@ fn assemble() -> bool {
     return true;
 }
 
-// A worker of the assembly: the element matrices of the cells of each
-// task, one after the other. Its copy of the mesh is the copy of the
-// globals at its spawn.
 thread_fn cell_worker() {
     var data: f64[>..] = [];
     loop {
@@ -291,8 +252,6 @@ thread_fn cell_worker() {
     }
 }
 
-// Adds the element matrices of the cells lo <= c < hi, one after the
-// other in m, into the matrix.
 fn add_cells(lo: i64, hi: i64, m: f64[:]) {
     var at = 0;
     for c in lo..hi {
@@ -302,7 +261,6 @@ fn add_cells(lo: i64, hi: i64, m: f64[:]) {
     }
 }
 
-// Adds the element matrix k of cell c into the matrix.
 fn add_cell(c: i64, k: f64[:]) {
     let dpn = dofs_per_node;
     let nn = cell_start[c + 1] - cell_start[c];
@@ -320,26 +278,11 @@ fn add_cell(c: i64, k: f64[:]) {
     }
 }
 
-// --- the linear solver interface -------------------------------------------------
-
-// A linear operator is a function op(x, y) that sets y = A x. A
-// preconditioner is a function pc(r, z) that sets z = M⁻¹ r. A Krylov
-// solver takes both as static function values, with this signature:
-//
-//     fn name<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64
-//
-// and a call passes the functions after the arguments, as in
-// `cg(b, x, tol, max_it, free_operator, jacobi)`.
-// It solves A x = b from the start value in x, until |b - A x| <= tol |b|,
-// and gives whether it converged and the number of iterations.
-
-// y = K x, on the workers of solvers::rows_start during a solve.
 fn multiply(x: f64[:], y: f64[:]) {
     guard x.len == y.len && row_start.len == y.len + 1 && col.len == val.len else { abort("multiply: x and y of the size of the matrix"); }
     solvers::rows_multiply(row_start, col, val, x, y);
 }
 
-// y = K x on the free dofs, and 0 on the fixed dofs.
 fn free_operator(x: f64[:], y: f64[:]) {
     guard fixed.len == y.len else { abort("free_operator: y of the size of the dofs"); }
     multiply(x, y);
@@ -348,8 +291,6 @@ fn free_operator(x: f64[:], y: f64[:]) {
 
 var inv_diag: f64[>..] = [];
 
-// z = D⁻¹ r on the free dofs, with D the diagonal of K, and 0 on the
-// fixed dofs. solve_free sets inv_diag.
 fn jacobi(r: f64[:], z: f64[:]) {
     guard inv_diag.len == r.len && z.len == r.len else { abort("jacobi: r, z and inv_diag of one size"); }
     for d in r.len { z[d] = inv_diag[d] * r[d]; }
@@ -369,8 +310,6 @@ fn zeros(n: i64) -> f64[>..] {
     return v;
 }
 
-// The preconditioned conjugate gradient method, for a symmetric positive
-// definite operator.
 fn cg<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
     guard x.len == b.len && max_it >= 0 else { abort("cg: x of the size of b and max_it >= 0"); }
     let n = b.len;
@@ -404,11 +343,9 @@ fn cg<OP, PC>(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
     return converged, it;
 }
 
-// Solves K x = b on the free dofs with the solver and the preconditioner
-// of solver_name and preconditioner_name. b must be 0 on the fixed dofs.
-// It sets last_iterations. It grows no array of the state (state_sizes).
 fn solve_free(b: f64[:], x: f64[>..]&) -> bool {
     guard b.len == x.len && b.len == fixed.len && row_start.len == b.len + 1 else { abort("solve_free: b and x of the size of the matrix"); }
+    for d in b.len { guard fixed[d] == 0 || b[d] == 0.0 else { abort("solve_free: b is 0 on the fixed dofs"); } }
     inv_diag.clear();
     for d in b.len { inv_diag.push(if fixed[d] == 0 { 1.0 / val[entry(d, d)] } else { 0.0 }); }
     let sizes = state_sizes();
@@ -430,8 +367,6 @@ fn solve_free(b: f64[:], x: f64[>..]&) -> bool {
     return found && converged;
 }
 
-// The length of each array of the state of the runtime. A solve grows none
-// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
 fn state_sizes() -> i64[30] {
     return [coords.len, cell_type.len, cell_start.len, cell_nodes.len, point_fields.len, set_names.len,
             set_is_face.len, set_start.len, set_items.len, fixed.len, load.len, disp.len, row_start.len,
@@ -440,7 +375,6 @@ fn state_sizes() -> i64[30] {
             condensed.len, mode_grad.len];
 }
 
-// Assembles the stiffness matrix and solves K u = f.
 fn solve_linear_static() -> bool {
     guard young > 0.0 && cell_count() > 0 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("solve_linear_static: a material, a mesh and its dofs"); }
     let start = clock();
@@ -457,17 +391,6 @@ fn solve_linear_static() -> bool {
     return converged;
 }
 
-// --- the Newton interface ----------------------------------------------------------
-
-// A nonlinear problem gives two functions as static function values:
-//
-//     res(u: f64[:], r: f64[:])   sets r = R(u), the residual, on all dofs
-//     jac(u: f64[:])              assembles K = ∂R/∂u into the matrix
-//
-// and a call passes them after the arguments: `newton(u, tol, max_it, res, jac)`.
-// newton solves R(u) = 0 on the free dofs from the start value in u, until
-// |R(u)| <= tol |R(u0)|, with the linear solver of solve_free. It gives
-// whether it converged and the number of Newton iterations.
 fn newton<RES, JAC>(u: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
     guard u.len == fixed.len && max_it >= 0 else { abort("newton: u of the size of the dofs and max_it >= 0"); }
     let n = u.len;
@@ -493,11 +416,6 @@ fn newton<RES, JAC>(u: f64[>..]&, tol: f64, max_it: i64) -> bool, i64 {
     return false, it;
 }
 
-// --- reactions -------------------------------------------------------------------
-
-// The force of the supports on the body: K u - f on the fixed dofs of the
-// nodes of node set s. With equilibrium, the reactions and the loads sum
-// to 0.
 fn set_reaction(s: i64) -> f64, f64, f64 {
     guard s >= 0 && s < set_is_face.len && !set_is_face[s] && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("set_reaction: a node set and the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
@@ -506,7 +424,6 @@ fn set_reaction(s: i64) -> f64, f64, f64 {
     return sum[0], sum[1], sum[2];
 }
 
-// The reaction on all fixed nodes. A node in two fixed sets counts once.
 fn fixed_reaction() -> f64, f64, f64 {
     guard fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("fixed_reaction: the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
@@ -515,7 +432,6 @@ fn fixed_reaction() -> f64, f64, f64 {
     return sum[0], sum[1], sum[2];
 }
 
-// Adds K u - f on the fixed dofs 0 to 2 of `node` to sum.
 fn add_node_reaction(node: i64, sum: f64[3]&) {
     guard node >= 0 && node < node_count() && row_start.len == fixed.len + 1 && fixed.len == dof_total() && load.len == fixed.len && disp.len == fixed.len else { abort("add_node_reaction: a node, the dofs and the matrix"); }
     for c in min(dofs_per_node, 3) {
@@ -527,13 +443,10 @@ fn add_node_reaction(node: i64, sum: f64[3]&) {
     }
 }
 
-// --- points ----------------------------------------------------------------------
-
 var point_n: f64[>..] = [];
 var point_dn: f64[>..] = [];
 var point_xi: f64[3] = [0.0, 0.0, 0.0];
 
-// Whether p is in the box that holds the nodes of cell c.
 fn in_cell_bounds(c: i64, p: f64[3]) -> bool {
     guard c >= 0 && c < cell_count() else { abort("in_cell_bounds: a cell"); }
     let first = cell_node(c, 0);
@@ -553,8 +466,6 @@ fn in_cell_bounds(c: i64, p: f64[3]) -> bool {
     return true;
 }
 
-// The reference point xi of p in the 3D cell c, by Newton's method from
-// xi = 0. False if it does not converge.
 fn reference_point(c: i64, p: f64[3], xi: f64[3]&) -> bool {
     guard c >= 0 && c < cell_count() else { abort("reference_point: a cell"); }
     let t = cell_type[c] as i64;
@@ -581,9 +492,6 @@ fn reference_point(c: i64, p: f64[3], xi: f64[3]&) -> bool {
     return false;
 }
 
-// The last 3D cell that holds (x, y, z), with the reference point in
-// point_xi and the shape functions there in point_n and point_dn, or -1. On a face between two cells of a lattice
-// mesh, the last cell is the cell on the high side of each axis.
 fn find_cell(x: f64, y: f64, z: f64) -> i64 {
     guard cell_start.len == cell_count() + 1 else { abort("find_cell: the cell arrays agree"); }
     let p: f64[3] = [x, y, z];
@@ -601,8 +509,6 @@ fn find_cell(x: f64, y: f64, z: f64) -> i64 {
     return -1;
 }
 
-// The dofs 0 to 2 at (x, y, z), interpolated in the cell of find_cell. A
-// point outside the 3D cells gives 0, 0, 0.
 fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
     guard disp.len == dof_total() else { abort("interpolate_u: the solution of the dofs"); }
     guard disp.len > 0 else { return 0.0, 0.0, 0.0; }
@@ -616,9 +522,6 @@ fn interpolate_u(x: f64, y: f64, z: f64) -> f64, f64, f64 {
     return u[0], u[1], u[2];
 }
 
-// The linear elastic stress at (x, y, z) from the gradient of the dofs 0
-// to 2 and the thermal strain in the cell of find_cell: xx, yy, zz, yz, xz and xy. A point
-// outside the 3D cells gives 0.
 fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
     guard disp.len == dof_total() else { abort("stress_at_point: the solution of the dofs"); }
     guard disp.len > 0 && dofs_per_node >= 3 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
@@ -629,7 +532,6 @@ fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
     var inv: f64[9] = [0.0; 9];
     let det = inverse3(jac, inv);
     guard det != 0.0 else { return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0; }
-    // g[3 k + s] = ∂u_k / ∂x_s
     var g: f64[9] = [0.0; 9];
     for a in point_n.len {
         let d = dofs_per_node * cell_node(c, a);
@@ -640,7 +542,6 @@ fn stress_at_point(x: f64, y: f64, z: f64) -> f64, f64, f64, f64, f64, f64 {
         }
     }
     if cell_type[c] as i64 == HEX8I { hex8i_add_modes(c, point_xi, det, g); }
-    // sigma = D (strain - the thermal strain).
     let lambda, mu = cell_lame(c);
     let tr = lambda * (g[0] + g[4] + g[8]) - (3.0 * lambda + 2.0 * mu) * cell_strain[c];
     return tr + 2.0 * mu * g[0], tr + 2.0 * mu * g[4], tr + 2.0 * mu * g[8],

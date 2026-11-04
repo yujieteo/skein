@@ -1,48 +1,31 @@
-// A direct solve of a sparse system with a symmetric pattern and no
-// lattice: the LU factors of A without pivoting, on a nested dissection
-// of the graph of A. It is the solve of the indefinite systems of the
-// wave and edge physics (a complex dof is 2 dofs, `block` = 2), where
-// GMRES with ILU(0) does not converge on a fine mesh. References: A.
-// George (1973), "Nested dissection of a regular finite element mesh",
-// SIAM J. Numer. Anal. 10, 345-363 (here with the level sets of a
-// breadth-first search as the separators), and T. A. Davis (2006), Direct
-// Methods for Sparse Linear Systems, chapters 4 and 6 (the elimination
-// tree, the pattern of each row, and the up-looking factorization).
-//
-// slu_plan orders the blocks of dofs and counts the entries of L and the
-// multiplies of the factorization, so that the caller checks the memory
-// and the time before slu_build sizes the factors. slu_factor puts the
-// values in. A pivot that is almost 0 takes the size 1e-14 of the largest
-// entry of its row, so the factor is a preconditioner of GMRES even for
-// a matrix that has no LU without pivoting.
 import std;
 import math;
 namespace solvers;
 
-let SLU_LEAF = 96;          // the blocks of a part that the dissection does not cut
-let SLU_PIVOT = 1.0e-14;    // the smallest pivot, relative to the largest entry of its row
-let SLU_RATE = 3.8e9;       // Reason: the multiplies and adds for each second of slu_factor on the desktop (waveguide_step at 1.4 mm: 186 s, waveguide_dielectric at 1.5 mm: 143 s)
+let SLU_LEAF = 96;
+let SLU_PIVOT = 1.0e-14;
+let SLU_RATE = 3.8e9;
 
-var slu_n = 0;                   // the dofs
-var slu_perm: i64[>..] = [];     // the dof of each place of the order
-var slu_inv: i64[>..] = [];      // the place of each dof
-var slu_lo_start: i64[>..] = []; // the entries below the diagonal of the permuted pattern, by row
+var slu_n = 0;
+var slu_perm: i64[>..] = [];
+var slu_inv: i64[>..] = [];
+var slu_lo_start: i64[>..] = [];
 var slu_lo_col: i32[>..] = [];
-var slu_parent: i64[>..] = [];   // the elimination tree
-var slu_count: i64[>..] = [];    // the entries of each column of L, then (for the rows) of each row
+var slu_parent: i64[>..] = [];
+var slu_count: i64[>..] = [];
 var slu_rowcount: i64[>..] = [];
-var slu_lc_start: i64[>..] = []; // L by columns: the rows of column k, and the columns of U by rows
+var slu_lc_start: i64[>..] = [];
 var slu_lc_row: i32[>..] = [];
-var slu_lr_start: i64[>..] = []; // L by rows: the columns of row i
+var slu_lr_start: i64[>..] = [];
 var slu_lr_col: i32[>..] = [];
-var slu_lval: f64[>..] = [];     // L, in the order of slu_lr_col
-var slu_uval: f64[>..] = [];     // U without the diagonal, in the order of slu_lc_row
+var slu_lval: f64[>..] = [];
+var slu_uval: f64[>..] = [];
 var slu_diag: f64[>..] = [];
 var slu_w: f64[>..] = [];
 var slu_x: f64[>..] = [];
-var slu_entries = 0;             // the entries of L (and of U)
-var slu_flops = 0.0;             // the multiplies and adds of slu_factor
-var slu_small = 0;               // the pivots that slu_factor replaced
+var slu_entries = 0;
+var slu_flops = 0.0;
+var slu_small = 0;
 
 fn slu_entry_count() -> i64 { return slu_entries; }
 fn slu_work() -> f64 { return slu_flops; }
@@ -53,16 +36,14 @@ fn slu_ints(v: i64[>..]&, n: i64, x: i64) {
     for i in n { v.push(x); }
 }
 
-// --- the order -----------------------------------------------------------------------------
-
-var dis_start: i64[>..] = [];    // the neighbours of each width
+var dis_start: i64[>..] = [];
 var dis_adj: i64[>..] = [];
-var dis_part: i64[>..] = [];     // the part that holds each width
+var dis_part: i64[>..] = [];
 var dis_level: i64[>..] = [];
 var dis_queue: i64[>..] = [];
-var dis_vs: i64[>..] = [];       // the blocks of the parts, one part after the other
-var dis_order: i64[>..] = [];    // the width at each place
-var dis_stack: i64[>..] = [];    // parts to cut: first in vs, end in vs, first place
+var dis_vs: i64[>..] = [];
+var dis_order: i64[>..] = [];
+var dis_stack: i64[>..] = [];
 
 fn slu_block_graph(row_start: i64[:], col: i32[:], width: i64) -> i64 {
     let nb = (row_start.len - 1) / width;
@@ -87,9 +68,6 @@ fn slu_block_graph(row_start: i64[:], col: i32[:], width: i64) -> i64 {
     return nb;
 }
 
-// The breadth-first search from `root` in the part `id` (the blocks
-// vs[s..e]). The queue holds the blocks that it reached, level by level.
-// Returns the number of blocks and the number of levels.
 fn dis_bfs(root: i64, id: i64, s: i64, e: i64) -> i64, i64 {
     for t in s..e { dis_level[dis_vs[t]] = -1; }
     dis_queue.clear();
@@ -112,8 +90,6 @@ fn dis_bfs(root: i64, id: i64, s: i64, e: i64) -> i64, i64 {
     return dis_queue.len, levels;
 }
 
-// The level that cuts the part in two: of the levels that leave 1/4 to
-// 3/4 of the blocks before them, the smallest.
 fn dis_separator(levels: i64, size: i64) -> i64 {
     var count: i64[>..] = [];
     slu_ints(count, levels, 0);
@@ -133,7 +109,6 @@ fn dis_separator(levels: i64, size: i64) -> i64 {
     return if best >= 0 { best } else { near };
 }
 
-// Puts the blocks of the queue at the places lo.. in the order of the queue.
 fn dis_leaf(s: i64, lo: i64) {
     for t in dis_queue.len {
         dis_vs[s + t] = dis_queue[t];
@@ -141,8 +116,6 @@ fn dis_leaf(s: i64, lo: i64) {
     }
 }
 
-// Cuts the part at the level `ls`: the blocks before it and after it go on the stack,
-// and the blocks of the level take the last places of the part.
 fn dis_cut(s: i64, lo: i64, ls: i64) {
     let size = dis_queue.len;
     var a = 0;
@@ -175,7 +148,6 @@ fn dis_cut(s: i64, lo: i64, ls: i64) {
     dis_stack.push(lo);
 }
 
-// Cuts one part (the blocks vs[s..e], from place lo) or orders it.
 fn dis_part_step(s: i64, e: i64, lo: i64, id: i64) {
     let size = e - s;
     for t in s..e { dis_part[dis_vs[t]] = id; }
@@ -183,7 +155,6 @@ fn dis_part_step(s: i64, e: i64, lo: i64, id: i64) {
     let far = dis_queue[reached - 1];
     reached, levels = dis_bfs(far, id, s, e);
     if reached < size {
-        // A part with 2 pieces: the reached blocks, and the others.
         for t in s..e {
             if dis_level[dis_vs[t]] < 0 { dis_queue.push(dis_vs[t]); }
         }
@@ -203,7 +174,6 @@ fn dis_part_step(s: i64, e: i64, lo: i64, id: i64) {
     dis_cut(s, lo, dis_separator(levels, size));
 }
 
-// The order of the nb blocks.
 fn slu_dissect(nb: i64) {
     slu_ints(dis_part, nb, -1);
     slu_ints(dis_level, nb, -1);
@@ -229,10 +199,6 @@ fn slu_dissect(nb: i64) {
     }
 }
 
-// --- the pattern of L ------------------------------------------------------------------------
-
-// The entries below the diagonal of the permuted pattern, from A and from
-// its transpose, by row (some twice).
 fn slu_lower(row_start: i64[:], col: i32[:]) {
     let n = slu_n;
     var fill: i64[>..] = [];
@@ -265,8 +231,6 @@ fn slu_lower(row_start: i64[:], col: i32[:]) {
     }
 }
 
-// Visits the columns of the pattern of row i of L: with `into` < 0 it counts
-// them, else it puts i in the column. Returns the entries of the row.
 fn slu_reach(i: i64, mark: i64[:], into: bool, at: i64[:]) -> i64 {
     var found = 0;
     mark[i] = i;
@@ -287,7 +251,6 @@ fn slu_reach(i: i64, mark: i64[:], into: bool, at: i64[:]) -> i64 {
     return found;
 }
 
-// The elimination tree, and the number of entries in each column and row of L.
 fn slu_tree() {
     let n = slu_n;
     var ancestor: i64[>..] = [];
@@ -318,9 +281,6 @@ fn slu_tree() {
     }
 }
 
-// Plans the factorization of A, with `width` dofs for each node of the
-// graph: the order, the entries of L and the work. False if A has no
-// rows.
 fn slu_plan(row_start: i64[:], col: i32[:], width: i64) -> bool {
     guard row_start.len > 1 && width > 0 && (row_start.len - 1) % width == 0 && row_start[row_start.len - 1] == col.len else {
         abort("slu_plan: row_start ends at col.len, and the rows are a whole number of blocks");
@@ -339,7 +299,6 @@ fn slu_plan(row_start: i64[:], col: i32[:], width: i64) -> bool {
     return true;
 }
 
-// Sizes the factors: L by columns and by rows.
 fn slu_build() {
     let n = slu_n;
     slu_lc_start.clear();
@@ -375,10 +334,6 @@ fn slu_build() {
     zeros(slu_x, n);
 }
 
-// --- the values -----------------------------------------------------------------------------
-
-// Row i of L and U from row i of A (the up-looking factorization). False if
-// a row of A is 0.
 fn slu_row(i: i64, row_start: i64[:], col: i32[:], val: f64[:]) -> bool {
     let r = slu_perm[i];
     var scale = 0.0;
@@ -409,7 +364,6 @@ fn slu_row(i: i64, row_start: i64[:], col: i32[:], val: f64[:]) -> bool {
     return true;
 }
 
-// Factors A. False if a row of A is 0.
 fn slu_factor(row_start: i64[:], col: i32[:], val: f64[:]) -> bool {
     guard slu_n == row_start.len - 1 && slu_diag.len == slu_n else { abort("slu_factor: slu_plan and slu_build come first, for this matrix"); }
     slu_small = 0;
@@ -419,7 +373,6 @@ fn slu_factor(row_start: i64[:], col: i32[:], val: f64[:]) -> bool {
     return true;
 }
 
-// z = A⁻¹ r with the factors.
 fn slu_apply(r: f64[:], z: f64[:]) {
     guard r.len == slu_n && z.len == slu_n else { abort("slu_apply: r and z have one entry for each dof"); }
     let n = slu_n;
@@ -437,7 +390,6 @@ fn slu_apply(r: f64[:], z: f64[:]) {
     for i in n { z[slu_perm[i]] = slu_x[i]; }
 }
 
-// Frees the arrays of the factors and of the plan.
 fn slu_free() {
     slu_n = 0;
     slu_entries = 0;

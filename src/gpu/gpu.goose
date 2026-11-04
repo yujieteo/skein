@@ -1,41 +1,3 @@
-// The GPU path of the page of `skein build --target wasm` (docs/roadmap.md,
-// phase 4.5). Only the program of the page imports this package: its
-// externs are the WebGPU calls of the page (GPU_C in
-// src/codegen/page.goose, and src/gpu/gpu.js), and the native profile run
-// of the page links stubs that report no GPU.
-//
-// The program of the page calls these functions in place of the solves of
-// the packages (src/codegen/build.goose, page_program):
-//
-//     central_difference   elements::central_difference: an explicit step,
-//                          on the GPU whenever the page has WebGPU
-//     explicit_solid       elements::explicit_solid: the same; both add
-//                          the contact (ct_pair and ct_kick)
-//     grid_transient       grid::solve_transient (ssprk3 of fv and dg): the
-//                          same
-//     solve                elements::solve: an implicit step, on the GPU
-//                          only with the control of the page on
-//                          (SKEIN_GPU_IMPLICIT=1), else the CPU solve;
-//                          the wave, edge and mixed physics and
-//                          radiation always use the CPU
-//     grid_static, modal,  grid::solve_static, elements::modal,
-//     buckling,            elements::buckling and meshless::solve_static:
-//     meshless_static      on the CPU; also elements::solve_contact, a
-//                          static step with contact, which the program
-//                          calls with no change
-//
-// Each falls back to the CPU solve when the page has no WebGPU. This
-// package sets up the GPU: it converts the arrays of the CPU solve to f32
-// buffers, makes a bind group for each kernel of kernels.wgsl, records the
-// dispatches, and reads the results back. The GPU keeps the state of the
-// steps between read-backs. Each solve appends its device to the record
-// `device` of the run.
-//
-// The implicit path is CG with the Jacobi preconditioner on the GPU, in
-// f32, inside a defect correction in f64 on the CPU: each pass solves
-// K d = r to INNER_RTOL, adds d to u and computes r = f - K u again, until
-// the residual of the CPU solve (elements::CG_TOLERANCE) holds. The result
-// thus has the accuracy of the CPU solve.
 import std;
 import math;
 import os;
@@ -55,15 +17,14 @@ extern fn skein_gpu_dispatch(group: i32, threads: i64);
 extern fn skein_gpu_submit();
 extern fn skein_gpu_read(buf: i32, at: i64, out: f32[:]) -> i32;
 
-let WG = 64;            // the workgroup size of kernels.wgsl
-let ROW_GROUPS = 65535; // the most workgroups in a row of a dispatch (gpu.js)
-let BATCH = 256;        // the steps of central_difference in one submit
-let CG_BATCH = 32;      // the cg iterations between two read-backs
-let INNER_RTOL = 1.0e-3;    // the residual of a pass of cg on the GPU, relative to its start
-let PASSES = 30;            // the most passes of the defect correction
-let CG_MAX = 20000;         // the most cg iterations of a pass
+let WG = 64;
+let ROW_GROUPS = 65535;
+let BATCH = 256;
+let CG_BATCH = 32;
+let INNER_RTOL = 1.0e-3;
+let PASSES = 30;
+let CG_MAX = 20000;
 
-// The bindings of kernels.wgsl.
 let B_P: i32 = 0;
 let B_ROWS: i32 = 1;
 let B_COLS: i32 = 2;
@@ -92,22 +53,17 @@ let B_CONN: i32 = 31;
 let B_PST: i32 = 32;
 let B_PF: i32 = 33;
 
-var ready = -1;                 // skein_gpu_ready, or -1 before the first solve
-var step: u8[..64] = [];        // the step that the program runs
+var ready = -1;
+var step: u8[..64] = [];
 var devices: u8[>..] = [];
 var device_count = 0;
-// The f32 copies of an upload or a read-back go through these chunks of
-// CHUNK values. Reason: the native profile run of the page has no GPU, so
-// it does not measure a growable array of this package, and a copy of the
-// matrix of sample 01 overran its data stack in the page.
 let CHUNK = 65536;
-var chunk: f32[65536] = [0.0; 65536];
-var ichunk: i32[65536] = [0; 65536];
-var fill = 0;           // the values in chunk or ichunk
-var fill_at = 0;        // the index in the buffer of chunk[0]
+var chunk: f32[CHUNK] = [0.0; CHUNK];
+var ichunk: i32[CHUNK] = [0; CHUNK];
+var fill = 0;
+var fill_at = 0;
 var fill_buf: i32 = -1;
 
-// The program of the page calls this at the start of each step.
 fn step_name(name: u8[:]) {
     step.clear();
     step.append(name[..min(name.len, 64)]);
@@ -118,8 +74,6 @@ fn note(solver: u8[:], on_gpu: bool) {
     device_count++;
 }
 
-// The record of the device of each solve, in TOON, after the records of
-// the run.
 fn records() -> u8[>..] { return str("device[", device_count, "]{step,solver,device}:\n", devices); }
 
 fn present() -> bool {
@@ -132,10 +86,6 @@ fn implicit_on() -> bool {
     return env("SKEIN_GPU_IMPLICIT", v) && v == "1";
 }
 
-// ---- buffers and dispatches ----
-
-// The writes of buffer b from its start: put or put_int each value, then
-// flush or flush_ints.
 fn put_start(b: i32) {
     fill_buf = b;
     fill = 0;
@@ -192,20 +142,16 @@ fn upload_cols(data: const i32[:]) -> i32 {
     return b;
 }
 
-// A bind group of `kernel`: binding pairs[2 k] is buffer pairs[2 k + 1].
 fn bind(kernel: u8[:], pairs: const i32[:]) -> i32 { return skein_gpu_bind(kernel, pairs); }
 
 fn dispatch(group: i32, threads: i64) { skein_gpu_dispatch(group, threads); }
 
-// The workgroups of a dispatch of n threads, with the empty ones of its
-// last row: the sums of the cg kernels have one pair for each.
 fn workgroups(n: i64) -> i64 {
     let g = max(1, (n + WG - 1) / WG);
     let x = min(g, ROW_GROUPS);
     return x * ((g + x - 1) / x);
 }
 
-// Reads buffer b back into out. False if the GPU failed.
 fn read(b: i32, out: f64[:]) -> bool {
     var at = 0;
     while at < out.len {
@@ -222,10 +168,6 @@ fn finite(v: f64[:]) -> bool {
     return true;
 }
 
-// ---- central_difference ----
-
-// The transient step central_difference of elements, on the GPU when the
-// page has WebGPU.
 fn central_difference(end: f64, dt: f64) -> bool {
     guard present() else {
         note("central_difference", false);
@@ -235,7 +177,6 @@ fn central_difference(end: f64, dt: f64) -> bool {
     let start = clock();
     guard elements::cd_prepare(end, dt) else { return false; };
     let n = elements::sol.len;
-    // the acceleration at the start, in f64 on the CPU
     solvers::rows_start(elements::row_start, elements::col, elements::val);
     elements::cd_force(elements::sol, elements::accel);
     solvers::rows_stop();
@@ -244,7 +185,6 @@ fn central_difference(end: f64, dt: f64) -> bool {
     let p = upload([n * 1.0, elements::cd_dt]);
     let rows = upload_ints(elements::row_start);
     let cols = upload_cols(elements::col);
-    // M⁻¹ K and M⁻¹ f, so that cd_kick fits in 8 buffers
     let vals = skein_gpu_buffer(4 * elements::val.len);
     put_start(vals);
     for d in n {
@@ -279,11 +219,6 @@ fn central_difference(end: f64, dt: f64) -> bool {
     return ok && finite(elements::sol);
 }
 
-// ---- explicit_solid ----
-
-// The (point, node) pairs of each node, for sd_kick: the pairs of node n
-// are pairs[starts[n]..starts[n + 1]], each as (point) * nodes of a cell +
-// (the node in the cell).
 fn node_points(starts: i64[>..]&, pairs: i64[>..]&) {
     let nn = elements::node_count();
     let pc = elements::per_cell;
@@ -311,8 +246,6 @@ fn node_points(starts: i64[>..]&, pairs: i64[>..]&) {
     }
 }
 
-// For each point, the gradients of the nodes of its cell (x, y and z)
-// and its volume, for sd_point.
 fn point_geometry() -> i32 {
     let nq = elements::quad_count(elements::dim);
     let pc = elements::per_cell;
@@ -332,7 +265,6 @@ fn point_geometry() -> i32 {
     return b;
 }
 
-// Cp⁻¹ (Voigt) and alpha of each point, for sd_point.
 fn point_state() -> i32 {
     let np = elements::pt_alpha.len;
     let b = skein_gpu_buffer(4 * 7 * np);
@@ -345,10 +277,6 @@ fn point_state() -> i32 {
     return b;
 }
 
-// The explicit step of J2 at finite strain of elements, on the GPU when
-// the page has WebGPU. Each step is cd_drift, sd_point (the forces of the
-// points) and sd_kick (their sums at the dofs). At the end the CPU takes
-// u, v and the state of the points back, and computes the forces again.
 fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool {
     guard present() else {
         note("explicit_solid", false);
@@ -416,10 +344,6 @@ fn explicit_solid(end: f64, dt: f64, vx: f64, vy: f64, vz: f64) -> bool {
     return ok && finite(elements::sol);
 }
 
-// ---- the contact of an explicit step ----
-
-// The bind groups of ct_pair and ct_kick, the buffer of the state of the
-// points (t and r of src/elements/contact.goose), and the points.
 struct ContactGroups {
     pair: i32,
     kick: i32,
@@ -427,8 +351,6 @@ struct ContactGroups {
     points: i64,
 }
 
-// The contact on the state buffers u, v and acc, with w = M⁻¹. No points
-// with no contact.
 fn contact_groups(u: i32, v: i32, a: i32, w: i32) -> ContactGroups {
     let np = elements::contact_points();
     guard np > 0 else { return ContactGroups { pair: -1, kick: -1, state: -1, points: 0 }; }
@@ -466,8 +388,6 @@ fn contact_groups(u: i32, v: i32, a: i32, w: i32) -> ContactGroups {
     return ContactGroups { pair: pair, kick: kick, state: state, points: np };
 }
 
-// The (point, slot) pairs of each node, for ct_kick: the pairs of node n
-// are pairs[starts[n]..starts[n + 1]], each as point * CT_SLOTS + slot.
 fn node_slots(starts: i64[>..]&, pairs: i64[>..]&) {
     let nn = elements::node_count();
     let s = elements::CT_SLOTS;
@@ -488,15 +408,12 @@ fn node_slots(starts: i64[>..]&, pairs: i64[>..]&) {
     }
 }
 
-// The dispatches of the contact after the kick of a step.
 fn contact_kick(ct: ContactGroups, n: i64) {
     guard ct.points > 0 else { return; }
     dispatch(ct.pair, ct.points);
     dispatch(ct.kick, n);
 }
 
-// Reads the state of the points back into the contact. False if the GPU
-// failed.
 fn contact_state(ct: ContactGroups) -> bool {
     guard ct.points > 0 else { return true; }
     var state: f64[>..] = [];
@@ -513,11 +430,6 @@ fn contact_state(ct: ContactGroups) -> bool {
     return true;
 }
 
-// ---- ssprk3 of fv and dg ----
-
-// The buffers of a transient grid solve: the stage kernels of each parity
-// of the step (the solution alternates between two buffers) and each
-// stage, and the kernels of fv before a stage, for each stage input.
 struct GridGroups {
     stages: i32[6],
     grads: i32[3],
@@ -525,7 +437,6 @@ struct GridGroups {
     minmax: i32[3],
 }
 
-// The parameters of a stage (c0, c1) of ssprk3 with the step k.
 fn grid_params(c0: f64, c1: f64, k: f64) -> i32 {
     let n = grid::dof_count() * 1.0;
     if grid::method == grid::DG { return upload([n, c0, c1, k]); }
@@ -535,9 +446,6 @@ fn grid_params(c0: f64, c1: f64, k: f64) -> i32 {
                    grid::flux * 1.0, grid::gradient * 1.0, grid::limiter * 1.0, kh * kh * kh, c0, c1, k, 1.0 / (grid::ct * grid::hx * grid::hy)]);
 }
 
-// The transient step of fv or dg (ssprk3), on the GPU when the page has
-// WebGPU. The source and the boundary values of each stage come from the
-// CPU (grid::stage_terms); the GPU does the rest of each stage.
 fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     guard present() else {
         note("ssprk3", false);
@@ -551,13 +459,11 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     skein_gpu_reset();
     let c0 = [0.0, 0.75, 1.0 / 3.0];
     let c1 = [1.0, 0.25, 2.0 / 3.0];
-    let at = [0.0, 1.0, 0.5];   // the time of each stage, in steps after the time of the step
+    let at = [0.0, 1.0, 0.5];
     var ps: i32[3] = [0; 3];
     for s in 3 { ps[s] = grid_params(c0[s], c1[s], k); }
-    // the solution in xs[0] or xs[1], and the second stage in xs[2]
     let xs = [upload(grid::sol), zeros(n), zeros(n)];
     let f = zeros(n);
-    // fv: the face values and then the source of each cell
     let gf = zeros(if fv { 5 * n } else { 1 });
     let fbc = upload_ints(grid::face_bc);
     let grad = zeros(2 * n);
@@ -573,8 +479,6 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     }
     let rows = upload_ints(grid::row_start);
     let cols = upload_cols(grid::col);
-    // dg: the rows of A scaled by the stage weight, so that rk_stage fits
-    // in 8 buffers
     let vals = skein_gpu_buffer(4 * grid::val.len);
     put_start(vals);
     for d in if fv { 0 } else { n } {
@@ -584,7 +488,6 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     for parity in 2 {
         let sol = parity;
         let other = 1 - parity;
-        // stage s reads ins[s] and writes outs[s]; the new solution is in `other`
         let ins = [sol, other, 2];
         let outs = [other, 2, other];
         for s in 3 {
@@ -623,8 +526,6 @@ fn grid_transient<SRC, BC>(end: f64, dt: f64) -> bool {
     return ok && done;
 }
 
-// The static step of fv or dg, the modal and buckling steps of elements,
-// and the static step of rkpm: on the CPU, with a record of the device.
 fn grid_static<SRC, BC>(rtol: f64) -> bool {
     note("gmres ilu0", false);
     return grid::solve_static(rtol, SRC, BC);
@@ -645,9 +546,6 @@ fn meshless_static<SRC, BC>() -> bool {
     return meshless::solve_static(SRC, BC);
 }
 
-// ---- the implicit solve ----
-
-// The buffers and the kernels of cg on the GPU.
 struct Cg {
     x: i32,
     r: i32,
@@ -657,7 +555,7 @@ struct Cg {
     update: i32,
     direction: i32,
     shift: i32,
-    sums: i32[3],    // the reduce of cg_start, cg_matvec and cg_update
+    sums: i32[3],
 }
 
 fn cg_setup(n: i64, dinv: f64[:]) -> Cg {
@@ -684,8 +582,6 @@ fn cg_setup(n: i64, dinv: f64[:]) -> Cg {
     return c;
 }
 
-// Solves K d = r on the free dofs on the GPU to INNER_RTOL, with d in out.
-// It gives the iterations, and false if the GPU failed or cg broke down.
 fn cg_pass(c: Cg, n: i64, r: f64[:], out: f64[:]) -> i64, bool {
     put_start(c.r);
     for x in r { put(x); }
@@ -714,8 +610,6 @@ fn cg_pass(c: Cg, n: i64, r: f64[:], out: f64[:]) -> i64, bool {
     return its, read(c.x, out);
 }
 
-// The static solve of elements: on the GPU with the control of the page
-// on, else elements::solve.
 fn solve() -> bool {
     let p = elements::physics;
     let gmres = p == elements::WAVE || p == elements::EDGE;
@@ -771,8 +665,6 @@ fn solve() -> bool {
     return ok && sqrt(rr) <= target;
 }
 
-// r = f - K u on the free dofs and 0 on the fixed dofs, in f64, with q for
-// K u. It gives r·r.
 fn residual(r: f64[:], q: f64[:]) -> f64 {
     elements::multiply(elements::sol, q);
     var rr = 0.0;

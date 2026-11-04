@@ -1,7 +1,3 @@
-// Newton's method for F(u) = 0, with a backtracking line search.
-// The caller gives the residual R(u, f), which sets f = F(u), and the
-// Jacobian J(u, val), which sets the values of dF/du on a fixed CSR
-// pattern. Each step solves J du = -F by GMRES with ILU(0).
 import std;
 import math;
 namespace solvers;
@@ -9,16 +5,11 @@ import .sparse;
 import .ilu;
 import .krylov;
 
-let NEWTON_RESTART = 50;            // m of GMRES(m) in each step
-let NEWTON_LINEAR_MAX = 5000;       // the GMRES iterations in each step
-let NEWTON_SUFFICIENT = 1.0e-4;     // the Armijo constant of the line search
-let NEWTON_HALVINGS = 20;           // the most halvings of a step
+let NEWTON_RESTART = 50;
+let NEWTON_LINEAR_MAX = 5000;
+let NEWTON_SUFFICIENT = 1.0e-4;
+let NEWTON_HALVINGS = 20;
 
-// Starts at `u`, and stops when the norm of F(u) is at most `tol`.
-// `history` gets the norm of F at the start and after each step.
-// `linear_rtol` is the tolerance of GMRES relative to the norm of F: a
-// small value keeps the quadratic convergence. Returns the number of
-// steps and true if it converged.
 fn newton<R, J>(row_start: i64[:], col: i32[:], val: f64[:], u: f64[:], tol: f64,
                 max_steps: i64, linear_rtol: f64,
                 history: f64[>..]&) -> i64, bool {

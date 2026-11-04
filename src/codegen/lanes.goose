@@ -1,27 +1,15 @@
-// A model of two physics in two lanes (for example a solid of hexahedra and a
-// composite shell): the text of the model becomes one model for each physics,
-// and `skein run` runs each in its own lane and merges the TOON.
-//
-// Reason: laminate_pagano has a solid and a shell in one model, and no lane
-// reads both. A lane reads only its physics, so each text keeps one physics,
-// its method and mesh, the steps lines that name its unknowns, and the lets
-// that these use.
 import std;
 namespace codegen;
 
-// The part lo..hi of the text of the model: a top-level item with the
-// comment lines above it, or the lines of the file above the first item.
 struct Item { lo: i64, hi: i64, keep: bool }
 
 fn is_word_byte(c: u8) -> bool {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
 }
 
-// True when the word `w` is in `s`, and `w` is not the key of a `key:`
-// (a bc target is also followed by a colon, and follows `bc`).
 fn has_name(s: u8[:], w: u8[:]) -> bool {
     var i = 0;
-    var prev = 0;      // the start of the previous word
+    var prev = 0;
     var prev_end = 0;
     while i < s.len {
         if is_word_byte(s[i]) {
@@ -46,7 +34,6 @@ fn has_name(s: u8[:], w: u8[:]) -> bool {
     return false;
 }
 
-// The word that starts `s` after the spaces, and the offset after it.
 fn first_word(s: u8[:], from: i64) -> u8[:], i64 {
     var i = from;
     while i < s.len && s[i] == ' ' { i++; }
@@ -55,7 +42,6 @@ fn first_word(s: u8[:], from: i64) -> u8[:], i64 {
     return s[i..j], j;
 }
 
-// The word that follows the word `w` in `s`, or an empty word.
 fn word_after(s: u8[:], w: u8[:]) -> u8[:] {
     var i = 0;
     while i < s.len {
@@ -76,11 +62,10 @@ fn word_after(s: u8[:], w: u8[:]) -> u8[:] {
     return s[0..0];
 }
 
-// The items of the text.
 fn items_of(text: u8[:]) -> Item[>..] {
     var out: Item[>..] = [];
     var starts: i64[>..] = [];
-    var pending = -1;     // the start of the comment lines above the next item
+    var pending = -1;
     var at = 0;
     while at < text.len {
         var e = at;
@@ -102,10 +87,8 @@ fn items_of(text: u8[:]) -> Item[>..] {
     return out;
 }
 
-// The keyword of an item and its name.
 fn item_head(text: u8[:], it: Item) -> u8[:], u8[:] {
     var at = it.lo;
-    // Skip the comment lines.
     while at < it.hi && text[at] == '/' {
         while at < it.hi && text[at] != '\n' { at++; }
         at++;
@@ -115,10 +98,8 @@ fn item_head(text: u8[:], it: Item) -> u8[:], u8[:] {
     return kw, name;
 }
 
-// The names that the physics item `it` defines: its unknowns and the lets of its body.
 fn physics_names(text: u8[:], it: Item, names: u8[:][>..]&) {
     let body = text[it.lo..it.hi];
-    // The unknowns: `name:` before a comma or the brace after `solves`.
     var s = 0;
     while s + 6 <= body.len && body[s..s + 6] != "solves" { s++; }
     var i = s + 6;
@@ -136,7 +117,6 @@ fn physics_names(text: u8[:], it: Item, names: u8[:][>..]&) {
             i++;
         }
     }
-    // The lets of the body.
     var at = 0;
     while at < body.len {
         var e = at;
@@ -161,8 +141,6 @@ fn mentions_any(s: u8[:], names: u8[:][:]) -> bool {
     return false;
 }
 
-// The statement of a step that names none of `gone`: a bc, an output, or any other
-// statement but an expect. It writes the statement to `out`.
 fn step_line(line: u8[:], gone: u8[:][:], out: u8[>..]&) {
     let w, after = first_word(line, 0);
     if w == "bc" {
@@ -196,9 +174,6 @@ fn step_line(line: u8[:], gone: u8[:][:], out: u8[>..]&) {
     out.push('\n');
 }
 
-// The end of the statement of a step that starts at `at`: its line and the lines after it
-// that have more indent or start with ) or ]. A line with no indent (the head of the step)
-// is a statement of its own.
 fn statement_end(text: u8[:], at: i64, hi: i64) -> i64 {
     var indent = 0;
     while at + indent < hi && text[at + indent] == ' ' { indent++; }
@@ -214,8 +189,6 @@ fn statement_end(text: u8[:], at: i64, hi: i64) -> i64 {
     return e;
 }
 
-// The text of an item without the statements of a step that name `gone`, and without the
-// expects of a step that do not have exactly one physics of `phys`.
 fn item_text(text: u8[:], its: Item[:], phys: i64[:], it: Item, gone: u8[:][:]) -> u8[>..] {
     var out: u8[>..] = [];
     let kw, _ = item_head(text, it);
@@ -238,7 +211,6 @@ fn item_text(text: u8[:], its: Item[:], phys: i64[:], it: Item, gone: u8[:][:]) 
     return out;
 }
 
-// The number of the physics `phys` whose unknowns or lets the text `s` names.
 fn owner_count(text: u8[:], its: Item[:], phys: i64[:], s: u8[:]) -> i64 {
     var owners = 0;
     for p in phys {
@@ -249,8 +221,6 @@ fn owner_count(text: u8[:], its: Item[:], phys: i64[:], s: u8[:]) -> i64 {
     return owners;
 }
 
-// The text of the model that keeps physics `k` of the physics items
-// `phys` and drops the others.
 fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
     var kept: u8[:][>..] = [];
     var dropped: u8[:][>..] = [];
@@ -258,7 +228,6 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
     var drop_methods: u8[:][>..] = [];
     var drop_meshes: u8[:][>..] = [];
     var keep_mesh: u8[:] = text[0..0];
-    // The mesh of each method.
     for p, j in phys {
         let _, name = item_head(text, its[p]);
         for it in its {
@@ -282,7 +251,6 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
                               owner_count(text, its, phys, text[its[it].lo..its[it].hi]) != 1) { drop = true; }
         its[it].keep = !drop;
     }
-    // The lets of geometry, the materials and the tables that no kept item uses.
     var changed = true;
     while changed {
         changed = false;
@@ -312,10 +280,6 @@ fn lane_text(text: u8[:], its: Item[>..]&, phys: i64[:], k: i64) -> u8[>..] {
     return out;
 }
 
-// The text of each physics of the model, one after the other in `buf` (`ends` has the end
-// of each), or none when the model has fewer than two physics. It gives the name of the
-// first expect that does not name the unknowns or the lets of exactly one physics, or an
-// empty name.
 fn lane_texts(text: u8[:], buf: u8[>..]&, ends: i64[>..]&) -> u8[:] {
     var its = items_of(text);
     var phys: i64[>..] = [];
@@ -347,9 +311,6 @@ fn lane_texts(text: u8[:], buf: u8[>..]&, ends: i64[>..]&) -> u8[:] {
     return bad;
 }
 
-// --- the merge of the TOON outputs -------------------------------------------
-
-// The count `N` in a header `key[N]...:`.
 fn header_count(line: u8[:]) -> i64 {
     var i = 0;
     while i < line.len && line[i] != '[' { i++; }
@@ -368,7 +329,6 @@ fn line_key(line: u8[:]) -> u8[:] {
     return line[..i];
 }
 
-// The text after the count: `]{cols}:` of a table header.
 fn header_tail(line: u8[:]) -> u8[:] {
     var i = 0;
     while i < line.len && line[i] != ']' { i++; }
@@ -388,13 +348,11 @@ fn number_after_colon(line: u8[:]) -> i64 {
     return n;
 }
 
-// The TOON of the lanes `outs` as one: the rows of tables with the same key and
-// columns join under one header, memory_checks add, and the estimates are the largest.
 fn merge_toon(outs: u8[:][:]) -> u8[>..] {
     var keys: u8[:][>..] = [];
-    var heads: u8[:][>..] = [];      // the first header of each key
-    var rows: u8[:][>..] = [];       // the rows of all keys
-    var row_key: i64[>..] = [];      // the key of each row
+    var heads: u8[:][>..] = [];
+    var rows: u8[:][>..] = [];
+    var row_key: i64[>..] = [];
     var counts: i64[>..] = [];
     var checks = 0;
     var estimate = 0;

@@ -1,19 +1,10 @@
-// The mesh and the state of the conservation laws: the triangles that
-// skein run meshes with src/mesher/, the sides of each cell, and the
-// state of N unknown components in each cell.
-//
-// Cell c has the vertices tri[3c], tri[3c+1] and tri[3c+2]. Side k of the
-// cell is the edge from vertex k to vertex (k + 1) % 3. Its outward
-// normal times its length is (side_nx, side_ny). A side on the boundary
-// has no neighbour (-1), and the generator gives it a mask of the
-// conditions that hold on it (side_mask, bit b for the bc line b).
 import std;
 import math;
 import os;
 namespace cons;
 
 let FV = 0;
-let UPWIND = 0;      // the flux of the system: the Rusanov flux with the spectral radius of the Jacobian
+let UPWIND = 0;
 let NONE = 0;
 let MINMOD = 1;
 let VAN_LEER = 2;
@@ -27,27 +18,23 @@ var tri: i64[>..] = [];
 var centre_x: f64[>..] = [];
 var centre_y: f64[>..] = [];
 var area: f64[>..] = [];
-var neighbour: i64[>..] = [];     // 3 for each cell
+var neighbour: i64[>..] = [];
 var side_nx: f64[>..] = [];
 var side_ny: f64[>..] = [];
-var side_mx: f64[>..] = [];       // the midpoint of each side
+var side_mx: f64[>..] = [];
 var side_my: f64[>..] = [];
 var side_mask: i64[>..] = [];
-var cell_region: u8[>..] = [];    // region_count flags for each cell
+var cell_region: u8[>..] = [];
 var region_count = 0;
 
-var comps = 0;                    // N: the components of the unknowns
-var sol: f64[>..] = [];           // comps for each cell
+var comps = 0;
+var sol: f64[>..] = [];
 var time = 0.0;
 var limiter = VAN_LEER;
-var gradient_kind = 0;
 
 fn cell_count() -> i64 { return cell_total; }
 fn dof_count() -> i64 { return cell_total * comps; }
 
-// Reads the mesh that skein run wrote in dir: the vertices, the triangles,
-// the masks of the sides and the flags of the cell regions. False if a file
-// is missing or does not fit the others.
 fn read_mesh(dir: const u8[:], regions: i64) -> bool {
     var a: u8[>..] = [];
     var b: u8[>..] = [];
@@ -81,7 +68,6 @@ fn read_mesh(dir: const u8[:], regions: i64) -> bool {
     return true;
 }
 
-// The centre, the area, the normals and the neighbours of each cell.
 fn build_sides() {
     centre_x.clear();
     centre_y.clear();
@@ -126,8 +112,6 @@ fn build_sides() {
     }
 }
 
-// Sets the number of components of the unknowns and the limiter, and sizes
-// the state.
 fn setup(n: i64, face_limiter: i64) {
     guard cell_total > 0 && n >= 1 && face_limiter >= NONE && face_limiter <= VAN_LEER else { abort("setup: a mesh, comps >= 1 and a limiter"); }
     comps = n;
@@ -138,8 +122,6 @@ fn setup(n: i64, face_limiter: i64) {
     size_solver();
 }
 
-// Sets the state to the field initial(x, y, k) of component k at the centre
-// of each cell.
 fn start<INIT>() {
     guard comps >= 1 && sol.len == dof_count() else { abort("start: setup"); }
     time = 0.0;

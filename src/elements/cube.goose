@@ -1,14 +1,9 @@
-// The cell kernels of the hexahedra of any order (8 or 20 nodes), by the loop over the
-// nodes of the cell: the same integrals as elastic_hex8 and heat_hex8 of kernels.goose
-// for each node count. The Gauss rule is cube_gauss (shape.goose).
 import std;
 namespace elements;
 import .shape;
 import .mesh;
 import .assemble;
 
-// The elastic stiffness and the body force of hexahedron c:
-// K(i p, j q) = ∫ λ ∂p Ni ∂q Nj + μ (∂q Ni ∂p Nj + δpq ∇Ni · ∇Nj) dV.
 fn elastic_cube(c: i64) {
     guard c >= 0 && c < cell_count() && physics == ELASTIC && dim == 3 && hex_cells && ncomp == 3 else { abort("elastic_cube: a cell, the elastic physics and hexahedra"); }
     let m = 3 * per_cell;
@@ -34,7 +29,6 @@ fn elastic_cube(c: i64) {
     }
 }
 
-// The conductivity and the source of hexahedron c: K(i, j) = ∫ k ∇Ni · ∇Nj dV.
 fn heat_cube(c: i64) {
     guard c >= 0 && c < cell_count() && physics == HEAT && dim == 3 && hex_cells && ncomp == 1 else { abort("heat_cube: a cell, the heat physics and hexahedra"); }
     for &v in ke { v = 0.0; }

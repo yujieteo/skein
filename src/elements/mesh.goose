@@ -1,11 +1,3 @@
-// The simplex mesh: P1 or P2 triangles in 2D, P1 or P2 tetrahedra in 3D.
-//
-// The mesh is unstructured: a list of node coordinates and a list of cells,
-// each with `per_cell` local nodes in the sequence of shape.goose. The
-// structured meshers below map a lattice of cells onto a box or onto a
-// plate with a quarter hole, and cut each lattice cell into simplices.
-// build_simplices takes the vertices and cells of another mesher, for
-// example the tri3 and tet4 mesh of src/mesher/.
 import std;
 import os;
 import math;
@@ -17,13 +9,13 @@ import .csg;
 var dim = 0;
 var order = 1;
 var per_cell = 0;
-var coords: f64[>..] = [];      // x, y and z of each node (z = 0 in 2D)
-var conn: i64[>..] = [];        // the nodes of each cell
+var coords: f64[>..] = [];
+var conn: i64[>..] = [];
 var bbox_lo: f64[3] = [0.0, 0.0, 0.0];
 var bbox_hi: f64[3] = [0.0, 0.0, 0.0];
-var cell_body: i64[>..] = [];   // the body of each cell of build_bodies (csg.goose), else empty
-var node_body: i64[>..] = [];   // the body of each node, likewise
-var body_shapes: i64[>..] = []; // the shape of each body
+var cell_body: i64[>..] = [];
+var node_body: i64[>..] = [];
+var body_shapes: i64[>..] = [];
 
 fn node_count() -> i64 { return coords.len / 3; }
 fn cell_count() -> i64 { return if per_cell > 0 { conn.len / per_cell } else { 0 }; }
@@ -33,28 +25,22 @@ fn node_x(n: i64, t: i64) -> f64 {
     return coords[3 * n + t];
 }
 
-// The tolerance of an equality on a coordinate: 1e-6 of the size of the
-// bounding box (spec §8.2).
+let GEOMETRY_TOLERANCE = 1.0e-6;
+
 fn geometry_tolerance() -> f64 {
     var size = 0.0;
     for t in 3 { size = max(size, bbox_hi[t] - bbox_lo[t]); }
-    return 1.0e-6 * size;
+    return GEOMETRY_TOLERANCE * size;
 }
 
-// --- the lattice -------------------------------------------------------------
-
-// The lattice of nodes has order * n + 1 points along an axis of n cells,
-// so a P2 midpoint node is a lattice point too. Node (i, j, k) has the
-// index i + lat[0] (j + lat[1] k).
 var lat: i64[3] = [1, 1, 1];
-var on_lattice = false;     // node n is lattice point n: a mesh of build_lattice
+var on_lattice = false;
 
 fn lattice_node(i: i64, j: i64, k: i64) -> i64 {
     guard i >= 0 && i < lat[0] && j >= 0 && j < lat[1] && k >= 0 && k < lat[2] else { abort("lattice_node: (i, j, k) in the lattice"); }
     return i + lat[0] * (j + lat[1] * k);
 }
 
-// The kind of map from the lattice to the geometry.
 let MAP_BOX = 0;
 let MAP_HOLE = 1;
 
@@ -62,7 +48,7 @@ var map_kind = MAP_BOX;
 var map_lo: f64[3] = [0.0, 0.0, 0.0];
 var map_hi: f64[3] = [0.0, 0.0, 0.0];
 var hole_r = 0.0;
-var radial: f64[>..] = [];      // the parameter 0 to 1 of each radial vertex row
+var radial: f64[>..] = [];
 
 fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     guard (d == 2 || d == 3) && (ord == 1 || ord == 2) else { abort("start_mesh: d is 2 or 3 and ord 1 or 2"); }
@@ -84,7 +70,6 @@ fn start_mesh(d: i64, ord: i64, lo: f64[3], hi: f64[3]) {
     body_shape = -1;
 }
 
-// The position of lattice point (i, j, k), which may be a midpoint.
 fn map_point(i: i64, j: i64, k: i64) -> f64[3] {
     guard i >= 0 && i < lat[0] && j >= 0 && j < lat[1] && k >= 0 && k < lat[2] && lat[0] > 1 && lat[1] > 1 && (map_kind == MAP_BOX || j / order < radial.len) else { abort("map_point: (i, j, k) in the lattice and a radial row for j"); }
     let s = i as f64 / (lat[0] - 1);
@@ -94,8 +79,6 @@ fn map_point(i: i64, j: i64, k: i64) -> f64[3] {
         let t = j as f64 / (lat[1] - 1);
         return [map_lo[0] + s * (map_hi[0] - map_lo[0]), map_lo[1] + t * (map_hi[1] - map_lo[1]), z];
     }
-    // The hole: s runs along the arc from the x axis to the y axis, and
-    // along the outer edges x = hi and y = hi; j runs out from the arc.
     let phi = 0.5 * PI * s;
     let ax = map_lo[0] + hole_r * cos(phi);
     let ay = map_lo[1] + hole_r * sin(phi);
@@ -105,9 +88,6 @@ fn map_point(i: i64, j: i64, k: i64) -> f64[3] {
     return [ax + t * (ox - ax), ay + t * (oy - ay), z];
 }
 
-// Puts a node at each lattice point. A midpoint node is the midpoint of its
-// edge, so each cell edge is straight, except on the arc of a hole, where
-// the node is on the arc.
 fn place_nodes() {
     guard lat[0] > 1 && lat[1] > 1 && lat[2] >= 1 && coords.len == 0 else { abort("place_nodes: a lattice of cells and no node yet"); }
     for k in lat[2] {
@@ -118,8 +98,6 @@ fn place_nodes() {
                     let p = map_point(i, j, k);
                     coords.append(p);
                 } else {
-                    // The edges of the cut cells go up along each axis (see
-                    // cut_cells), so the ends are -1 and +1 on each odd index.
                     let oi = i % 2;
                     let oj = j % 2;
                     let ok = k % 2;
@@ -132,7 +110,6 @@ fn place_nodes() {
     }
 }
 
-// The signed size of a simplex from its vertex nodes.
 fn signed_size(v: i64[4]) -> f64 {
     guard dim == 2 || dim == 3 else { abort("signed_size: dim is 2 or 3"); }
     var e: f64[9] = [0.0; 9];
@@ -144,8 +121,6 @@ fn signed_size(v: i64[4]) -> f64 {
         + e[2] * (e[3] * e[7] - e[4] * e[6]);
 }
 
-// Adds the simplex with the vertices at lattice offsets `off` (3 per
-// vertex, in cell units) from lattice cell corner (ci, cj, ck).
 fn add_simplex(ci: i64, cj: i64, ck: i64, off: i64[12]) {
     guard ci >= 0 && cj >= 0 && ck >= 0 && order * (ci + 1) < lat[0] && order * (cj + 1) < lat[1] && (dim == 2 || order * (ck + 1) < lat[2]) else { abort("add_simplex: cell (ci, cj, ck) in the lattice"); }
     var p: i64[12] = [0; 12];
@@ -170,10 +145,6 @@ fn add_simplex(ci: i64, cj: i64, ck: i64, off: i64[12]) {
     }
 }
 
-// Cuts each lattice cell into 2 triangles or 6 tetrahedra (Kuhn). Each
-// tetrahedron goes from corner (0, 0, 0) to corner (1, 1, 1) by one step
-// along each axis, so the diagonals of two cells agree on their shared face
-// and the mesh conforms.
 let KUHN: i64[3][6] = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
 
 fn cut_cells(nx: i64, ny: i64, nz: i64) {
@@ -207,9 +178,6 @@ fn build_lattice(nx: i64, ny: i64, nz: i64) {
     on_lattice = true;
 }
 
-// --- the meshers -------------------------------------------------------------
-
-// A box (3D) or a rectangle (2D, z ignored) with nx × ny × nz lattice cells.
 fn build_box(d: i64, ord: i64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
     guard nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && (d == 2 || hi[2] > lo[2]) else { abort("build_box: nx, ny and nz > 0 and hi > lo"); }
     start_mesh(d, ord, lo, hi);
@@ -217,8 +185,6 @@ fn build_box(d: i64, ord: i64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64
     build_lattice(nx, ny, nz);
 }
 
-// A box with nx × ny × nz hexahedra of order 1 (8 nodes, shape.goose): the
-// lattice of the nodes is that of the simplex mesh, and each lattice cell is one cell.
 fn build_hex_box(lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
     guard nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && hi[2] > lo[2] else { abort("build_hex_box: nx, ny and nz > 0 and hi > lo"); }
     start_mesh(3, 1, lo, hi);
@@ -237,9 +203,6 @@ fn build_hex_box(lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
     on_lattice = true;
 }
 
-// Turns the hexahedra of order 1 of the mesh (any grid of 8-node cells) into the
-// 20-node serendipity hexahedra of order 2: it adds the node at the midpoint of each
-// edge, once for the cells that share the edge. The edges stay straight.
 fn promote_hex() {
     guard hex_cells && per_cell == 8 && order == 1 else { abort("promote_hex: a mesh of 8-node hexahedra"); }
     let nv = node_count();
@@ -266,9 +229,6 @@ fn promote_hex() {
     on_lattice = false;
 }
 
-// The radial parameter of each vertex row: cells that grow from `fine` at
-// the hole by a factor `GRADE` up to `size`, then stay at `size`, scaled
-// to fill the length `span`.
 let GRADE = 1.25;
 
 fn grade_rows(span: f64, fine: f64, size: f64) {
@@ -290,10 +250,6 @@ fn grade_rows(span: f64, fine: f64, size: f64) {
     }
 }
 
-// A rectangle (2D) or a slab (3D) from lo to hi, less a hole of radius r
-// whose axis is z through the corner (lo.x, lo.y): the quarter model of a
-// plate with a round hole. The cells have the size `fine` at the hole and
-// grow to `size`.
 fn build_hole(d: i64, ord: i64, lo: f64[3], hi: f64[3], r: f64, size: f64, fine: f64) {
     guard r > 0.0 && r < min(hi[0] - lo[0], hi[1] - lo[1]) else { abort("build_hole: 0 < r < the sides of the plate"); }
     start_mesh(d, ord, lo, hi);
@@ -302,18 +258,12 @@ fn build_hole(d: i64, ord: i64, lo: f64[3], hi: f64[3], r: f64, size: f64, fine:
     let w = hi[0] - lo[0];
     let h = hi[1] - lo[1];
     grade_rows(sqrt(w * w + h * h) - r, fine, size);
-    // The cells along the arc are of size `fine` at the hole and of at
-    // most `size` on the outer edges. An even count puts a node on the
-    // corner (hi.x, hi.y).
     var around = max(ceil(0.5 * PI * r / fine) as i64, ceil((w + h) / size) as i64);
     around += around % 2;
     let layers = if d == 3 { max(ceil((hi[2] - lo[2]) / size - 1.0e-9) as i64, 1) } else { 1 };
     build_lattice(around, radial.len - 1, layers);
 }
 
-// The cells `vertices` (d + 1 nodes each, in positive orientation) on the
-// nodes `xyz` (x, y and z of each node). For order 2 it adds a node at the
-// midpoint of each edge, once for the cells that share the edge.
 fn build_simplices(d: i64, ord: i64, xyz: f64[:], vertices: i64[:]) {
     guard xyz.len >= 3 && xyz.len % 3 == 0 && vertices.len % (d + 1) == 0 && (vertices.len == 0 || (min(vertices) >= 0 && max(vertices) < xyz.len / 3)) else { abort("build_simplices: xyz holds the nodes and vertices d + 1 nodes of xyz for each cell"); }
     var lo: f64[3] = [0.0, 0.0, 0.0];
@@ -347,8 +297,6 @@ fn build_simplices(d: i64, ord: i64, xyz: f64[:], vertices: i64[:]) {
     }
 }
 
-// --- the shared mesh of a study (spec §20.4) ---------------------------------
-
 fn save_array<T>(dir: const u8[:], name: u8[:], a: const T[:]) -> bool { return write_file(str(dir, "/", name), to_bytes(a)); }
 
 fn load_array<T>(dir: const u8[:], name: u8[:], into: T[>..]&) -> bool {
@@ -360,7 +308,6 @@ fn load_array<T>(dir: const u8[:], name: u8[:], into: T[>..]&) -> bool {
     return ok;
 }
 
-// Writes the mesh in the files of the directory `dir`.
 fn save_mesh(dir: const u8[:]) -> bool {
     let sizes: i64[>..] = [dim, order, per_cell, body_shape];
     var bbox: f64[>..] = [];
@@ -371,7 +318,6 @@ fn save_mesh(dir: const u8[:]) -> bool {
            save_array(dir, "body_shapes", body_shapes);
 }
 
-// Reads the mesh that save_mesh wrote in the directory `dir`.
 fn load_mesh(dir: const u8[:]) -> bool {
     var sizes: i64[>..] = [];
     var bbox: f64[>..] = [];

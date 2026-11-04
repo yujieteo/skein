@@ -1,19 +1,3 @@
-// The explicit step `central_difference` of linear elasticity (spec §14.2):
-// M a = f - K u with the lumped mass M, from rest at u = 0 on the free dofs
-// and the prescribed values on the fixed dofs. Each step is the central
-// difference in the form of velocity Verlet, with one product K u:
-//
-//     v += dt/2 a;  u += dt v;  a = M⁻¹ (f - K u);  v += dt/2 a
-//
-// M is the consistent mass of eigen.goose with each diagonal scaled so
-// that each component keeps the total mass (Hinton, Rock and Zienkiewicz
-// 1976). All simplices of one order have the same ratio of the diagonal
-// to the total, so the global scale is the scale of each cell.
-//
-// The stable step is 2/ω_max. Gershgorin's bound on M⁻¹ K gives
-// ω_max² <= max_d Σ_e |K_de| / m_d, so 0.9 times 2/ω of that bound is
-// stable. The page of `skein build --target wasm` runs the same steps on
-// the GPU (src/gpu/): cd_prepare sets up both.
 import std;
 import math;
 import os;
@@ -26,18 +10,15 @@ import .stages;
 import .contact;
 import solvers from "../solvers";
 
-let CD_SAFETY = 0.9;    // the fraction of Gershgorin's stable step that `dt: stable` takes
+let CD_SAFETY = 0.9;
 
-var minv: f64[>..] = [];        // 1/m of each dof, 0 on the fixed dofs
+var minv: f64[>..] = [];
 var velocity: f64[>..] = [];
 var accel: f64[>..] = [];
-var force: f64[>..] = [];       // f of each free dof
+var force: f64[>..] = [];
 var cd_dt = 0.0;
 var cd_steps = 0;
 
-// Assembles K, f and the lumped mass, puts the state at rest, and sets the
-// step: dt, or the stable step for dt <= 0, shortened so that a whole
-// number of steps ends at `end`. False if a free dof has no mass.
 fn cd_prepare(end: f64, dt: f64) -> bool {
     guard physics == ELASTIC && dofs_sized() && density > 0.0 && end > 0.0 else { abort("cd_prepare: an elastic physics, a density > 0 and end > 0"); }
     assemble("simplex central_difference", 4);
@@ -54,7 +35,6 @@ fn cd_prepare(end: f64, dt: f64) -> bool {
         for e in row_start[d]..row_start[d + 1] { total[d % ncomp] += val_b[e]; }
         diagonal[d % ncomp] += val_b[entry(d, d)];
     }
-    // the rows of the contact terms
     var tie: f64[>..] = [];
     solvers::zeros(tie, n);
     contact_rows(tie);
@@ -76,20 +56,16 @@ fn cd_prepare(end: f64, dt: f64) -> bool {
     return true;
 }
 
-// K u and the contact forces at u into out, with the state of the
-// contact updated.
 fn cd_force(u: f64[:], out: f64[:]) {
     multiply(u, out);
     contact_terms(u, out, false);
     commit_contact();
 }
 
-// a = M⁻¹ (f - K u), from the product K u in accel.
 fn cd_accel() {
     for d in sol.len { accel[d] = minv[d] * (force[d] - accel[d]); }
 }
 
-// The steps of cd_prepare on the CPU. False if the state is not finite.
 fn cd_run() -> bool {
     let n = sol.len;
     let h = cd_dt;
@@ -111,7 +87,6 @@ fn cd_run() -> bool {
     return finite;
 }
 
-// The step to `end` with dt (dt <= 0 for the stable step) on the CPU.
 fn central_difference_cpu(end: f64, dt: f64) -> bool {
     let start = clock();
     var done = cd_prepare(end, dt);
