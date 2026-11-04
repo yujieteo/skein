@@ -100,7 +100,8 @@ def compare(base_dir: Path, head_dir: Path) -> tuple[int, list[str]]:
         relative = head_file.relative_to(head_dir)
         base_file = base_dir / relative
         if not base_file.exists():
-            if any(base_dir.glob(f"{relative.with_suffix('')}.*")):
+            others = [f for f in base_dir.glob(f"{relative.with_suffix('')}.*") if f.suffix != ".fail"]
+            if others:
                 reports.append(f"{relative}: the base made other outputs than the branch")
             continue
         compared += 1

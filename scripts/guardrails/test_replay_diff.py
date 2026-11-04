@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from replay_diff import differences
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from replay_diff import compare, differences
 
 
 def results(value: str, equilibrium: str = "2.0e-6 N") -> str:
@@ -51,3 +54,20 @@ def steps(value: str) -> str:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NewModel(unittest.TestCase):
+    def run_compare(self, base_names: list[str], head_names: list[str]) -> list[str]:
+        with TemporaryDirectory() as tmp:
+            base, head = Path(tmp) / "base", Path(tmp) / "head"
+            for directory, names in ((base, base_names), (head, head_names)):
+                directory.mkdir()
+                for name in names:
+                    (directory / name).write_text("x")
+            return compare(base, head)[1]
+
+    def test_a_model_that_the_base_cannot_build_is_new(self) -> None:
+        self.assertEqual(self.run_compare(["m.fail"], ["m.c"]), [])
+
+    def test_a_model_that_the_branch_cannot_build_is_reported(self) -> None:
+        self.assertEqual(len(self.run_compare(["m.c"], ["m.fail"])), 1)
