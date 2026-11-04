@@ -31,11 +31,21 @@ class ExpectTolerance(unittest.TestCase):
     def test_a_plain_limit_allows_only_rounding(self) -> None:
         self.assertEqual(differences(stress("301.2 MPa"), stress("301.2000001 MPa")), [])
 
+    def test_a_count_must_match_exactly(self) -> None:
+        self.assertEqual(len(differences(steps("1000000 steps"), steps("1000001 steps"))), 1)
+
 
 def stress(value: str) -> str:
     return (
         "verify[1]{stage,id,result,value,limit}:\n"
         f'  post,stress,pass,"{value}","301.2 MPa"\n'
+    )
+
+
+def steps(value: str) -> str:
+    return (
+        "verify[1]{stage,id,result,value,limit}:\n"
+        f'  solve,finite,pass,"{value}","each value finite"\n'
     )
 
 

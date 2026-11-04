@@ -35,10 +35,15 @@ def number_and_unit(field: str) -> tuple[float, str] | None:
     return (float(match.group(2)), match.group(1) + match.group(3)) if match else None
 
 
-def tolerance(row: dict[str, str], value: float) -> float:
+def is_real(field: str) -> bool:
+    match = NUMBER.match(field)
+    return match is not None and re.search(r"[.eE]", match.group(2)) is not None
+
+
+def tolerance(row: dict[str, str], value: float, real: bool) -> float:
     within = WITHIN.search(row.get("limit", ""))
     if not within:
-        return value * REPLAY_PLAIN_RTOL
+        return value * REPLAY_PLAIN_RTOL if real else 0.0
     amount = float(within.group(1))
     return abs(value) * amount / 100 if within.group(2) == "%" else amount
 
@@ -78,7 +83,8 @@ def differences(base: str, head: str) -> list[str]:
             if column in LEFT_OUT or value == other:
                 continue
             x, y = number_and_unit(value), number_and_unit(other)
-            if x and y and x[1] == y[1] and abs(x[0] - y[0]) <= tolerance(ra, max(abs(x[0]), abs(y[0]))):
+            real = is_real(value) or is_real(other)
+            if x and y and x[1] == y[1] and abs(x[0] - y[0]) <= tolerance(ra, max(abs(x[0]), abs(y[0])), real):
                 continue
             found.append(f"- {la}\n+ {lb}")
             break

@@ -6,9 +6,11 @@
 #   the generated C                  must be the same
 #   the solver results (skein run)   must agree within the tolerance that the
 #                                    model states (its `expect` and verify
-#                                    limits). A limit without `within` allows
-#                                    a relative difference of 1e-6. Seconds and
-#                                    memory peaks are left out.
+#                                    limits). A real number (with a decimal
+#                                    point or an exponent) under a limit with
+#                                    no `within` allows a relative difference
+#                                    of 1e-6. Integers must match exactly.
+#                                    Seconds and memory peaks are left out.
 #
 # The base is origin/main (main when there is no origin). The base is
 # extracted with git archive, so no worktree is made. A model that is not in
