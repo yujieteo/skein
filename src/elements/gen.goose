@@ -2062,6 +2062,11 @@ fn procedure(proc: i64, s: Step&) {
         return;
     }
     if physics == EDGE && p == "modal" {
+        if pml_g >= 0 {
+            unsupported(tok(proc), "a modal step of an edge physics does not take the pml in this generator",
+                        "remove the pml, or write step sweep: harmonic(freq: [10 GHz]) { ... }");
+            return;
+        }
         edge_modal_proc(proc, s);
         return;
     }
