@@ -1,6 +1,6 @@
 """Checks on the Goose source of Skein: comments, file and function size, dead code.
 
-    python3 -I scripts/guardrails/goose_source.py check   fail on a difference from limits.txt
+    python3 -I scripts/guardrails/goose_source.py check   fail on a comment, dead code, or a size above limits.txt
     python3 -I scripts/guardrails/goose_source.py write   write limits.txt from the source now
 
 The lexer follows the lexical rules of the Goose spec (line comments, nested
