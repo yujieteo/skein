@@ -33,17 +33,20 @@ fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
         if kind(c) == syntax::N_PHYSICS {
-            var unknowns = 0;
+            var velocity = false;
+            var pressure = false;
             var real = false;
             var u = first(c);
             while u >= 0 {
                 if kind(u) == syntax::N_UNKNOWN {
-                    unknowns++;
-                    if kind(child(u, 0)) == syntax::N_TYPE_NAME && name(child(u, 0)) == "Real" { real = true; }
+                    let t = child(u, 0);
+                    if kind(t) == syntax::N_TYPE_NAME && name(t) == "Real" { real = true; }
+                    if kind(t) == syntax::N_TYPE_NAME && name(t) == "Pressure" { pressure = true; }
+                    if kind(t) == syntax::N_TYPE_APPLY && name(t) == "Vector" && kind(first(t)) == syntax::N_TYPE_NAME && name(first(t)) == "Velocity" { velocity = true; }
                 }
                 u = next(u);
             }
-            if real && unknowns >= 3 { return true; }
+            if velocity && pressure && real { return true; }
         }
         c = next(c);
     }
@@ -583,7 +586,7 @@ fn method_item(n: i64) {
                 unsupported(tok(v), "the flux of the two-phase generator is upwind, linear_upwind or central", "write flux: linear_upwind");
             }
         } else if name(s) == "gradient" {
-            if w != "green_gauss" && w != "least_squares" { unsupported(tok(v), "the gradient of the two-phase generator is green_gauss or least_squares", "write gradient: green_gauss"); }
+            if w != "green_gauss" { unsupported(tok(v), str("the gradient '", w, "' is not in the two-phase generator: least_squares is unsupported, the gradient is green_gauss"), "write gradient: green_gauss"); }
         } else if name(s) == "pv_coupling" {
             if w != "rhie_chow" { unsupported(tok(v), "the pv_coupling of the two-phase generator is rhie_chow (the face flux of the fractional step)", "write pv_coupling: rhie_chow"); }
         } else if name(s) != "mesh" {

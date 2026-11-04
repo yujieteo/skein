@@ -29,6 +29,11 @@ fn face_fluxes(dt: f64) {
             continue;
         }
         let e, s = boundary_cell(f);
+        if side_kind[4 * e + s] >= 0 {
+            ui[f] = uf[f];
+            ustar[f] = uf[f];
+            continue;
+        }
         guard side_kind[4 * e + s] == OPEN else { continue; };
         ui[f] = vstar[2 * e + ax];
         ustar[f] = ui[f] + dt * (gravity[ax] + outward(s) * pres[e] / (0.5 * h * rho_c[e]));

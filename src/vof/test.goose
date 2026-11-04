@@ -82,6 +82,12 @@ fn test_advection() {
         if vof::alpha[c] < 0.0 || vof::alpha[c] > 1.0 { fail("advection: alpha leaves 0..1"); return; }
     }
     cx2 /= volume();
+    for c in vof::cell_count() {
+        if abs(vof::vel[2 * c] - 1.0) > 1.0e-6 || abs(vof::vel[2 * c + 1]) > 1.0e-6 {
+            fail(str("advection: the velocity of cell ", c, " is (", vof::vel[2 * c], ", ", vof::vel[2 * c + 1], "), not (1, 0)"));
+            return;
+        }
+    }
     if abs(volume() - before) > 0.01 * before { fail(str("advection: the volume goes from ", before, " to ", volume())); }
     if abs(cx2 - cx - 0.4) > 0.01 { fail(str("advection: the drop moves ", cx2 - cx, ", not 0.4")); }
     if smeared > 0.6 * 2.0 * PI * 0.15 * 0.0125 * 10.0 { fail(str("advection: the interface is smeared over an area of ", smeared)); }
