@@ -1,0 +1,61 @@
+// A TE10 wave of 10 GHz enters a WR-90 waveguide of 30 mm at z = 0 and leaves it into a PML
+// of 15 mm, on the second order edge elements of tetrahedra. The layer absorbs the wave, so
+// abs(E.y) is E0 on the axis along the whole guide. A reflection R would make it differ from
+// E0 by up to R.
+
+model pml_guide_tet: 3d, mm_N_MPa_s
+
+let a: Length = 22.86 mm
+let b: Length = 10.16 mm
+let Lg: Length = 30 mm
+let f0: Frequency = 10 GHz
+let E0: Power/(Current*Length) = 1 V/m
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+
+scales a, 1 V, 1 mA, 1/f0
+
+let beta: Length^-1 = sqrt((2*pi*f0)^2*mu0*eps0 - (pi/a)^2)
+let e10: Vector<Power/(Current*Length)> = (0, E0*sin(pi*x/a), 0)
+
+let world: Solid = box((0, 0, 0) mm, (a, b, 45 mm))
+let guide: Solid = box((0, 0, 0) mm, (a, b, Lg))
+let layer: Solid = world - guide
+let port_in: Surface = boundary(world, z == 0 mm)
+let xwalls: Surface = boundary(world, x == 0 mm || x == a)
+let ywalls: Surface = boundary(world, y == 0 mm || y == b)
+
+material air {
+    eps: Current^2*Time/(Power*Length) = eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+mesh m on world {
+    size: 4 mm
+    cell: tet
+}
+
+physics wave on world solves E: Vector<Complex<Power/(Current*Length)>> {
+    material air
+    let Hs: Tensor2<Complex<Current/(Length*Time)>> = -2*skew(grad(E))/mu
+    eq div(Hs) + eps*ddt2(E) = 0
+}
+
+method wave: cg {
+    mesh: m
+    order: 2
+    family: nedelec
+    pml: { region: layer, thickness: 15 mm }
+}
+
+bc xwalls: E.y = 0
+bc xwalls: E.z = 0
+bc ywalls: E.x = 0
+bc ywalls: E.z = 0
+bc port_in: Hs*n = im*beta/mu0*(E - dot(E, n)*n) - 2*im*beta/mu0*e10
+
+step response: harmonic(freq: [f0]) {
+    output E
+    expect amplitude_near: abs(E.y at (11.43, 5.08, 10) mm) == 1 V/m within 2%
+    expect amplitude_far: abs(E.y at (11.43, 5.08, 25) mm) == 1 V/m within 2%
+}

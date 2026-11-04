@@ -47,6 +47,7 @@ examples/elements/heated_bar_template_tet.skn
 examples/elements/kirsch_nurbs_tri.skn
 examples/elements/kirsch_plate_tri.skn
 examples/elements/pml_duct_tri.skn
+examples/elements/pml_guide_tet.skn
 examples/elements/radiation_annulus_tri.skn
 examples/elements/source_slab_tet.skn
 examples/elements/taylor_bar_tet.skn
@@ -83,6 +84,7 @@ examples/femahoy/grid_resistor_bar.skn
 examples/femahoy/grid_waveguide_dielectric.skn
 examples/femahoy/grid_waveguide_step.skn
 examples/femahoy/grid_waveguide_te10.skn
+examples/femahoy/optics_mie_cylinder.skn
 examples/femahoy/grid_kirsch_hole.skn
 examples/femahoy/grid_layered_wall.skn
 examples/femahoy/grid_lame_cylinder.skn

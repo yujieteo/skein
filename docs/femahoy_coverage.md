@@ -403,11 +403,25 @@ gives the roadmap phase that closes the gap:
   direct solve. It needs a faster solve of the 3D edge physics (a better
   ordering of the factor, or a multigrid for edge elements), and the PML in
   3D. The tree gauge is not the limit.
-  dipole_king_middleton needs a PML in 3D for the edge physics and the
-  integral of a field on a curve. The order 2 element it needs runs now.
-  optics_mie_cylinder needs a source that varies in space in the scalar wave
-  physics (`e_inc`), a PML on a layer that is not a box, the integral of a
-  field on a curve inside the mesh, and the `study` of a param.
+  optics_mie_cylinder runs and passes its four `expect` lines within 1 %
+  (Q 2.8582, 4.2972, 3.6230 and 2.5727 against 2.862930, 4.293232,
+  3.613747 and 2.582972; `skein run --study spectrum`, mesh of a_c/10:
+  the a_c/40 of femahoy has 3.2M dofs and stops at the direct solve limit).
+  It uses four mechanisms that every physics shares: the PML of the edge
+  and wave physics on any layer that is the body less a box
+  (`examples/elements/pml_guide_tet.skn` holds abs(E.y) within 0.4 % of E0
+  through the layer); `material a on r1, b on r2` for the scalar wave; a
+  source that varies in space (`wave_source`, a Complex function of x, y
+  and z, for each material); and `integral(f, c)` of a Complex function of
+  the unknown, its gradient and the normal n along a Curve inside the mesh
+  (a `line`, `boundary(circle(...))` or `boundary(rect(...))`;
+  `src/elements/curve.goose`).
+  dipole_king_middleton stays blocked. The PML of the edge physics in 3D
+  runs now. It needs the strip and the feed as faces inside the air for the
+  delta-gap `bc`: the box mesh has no interior surface, and `skein run`
+  stops at "this generator refines only the hole". Its mesh of 5 mm cells in
+  a 281 x 280 x 435 mm box is also far above the 68066 dofs that the direct
+  solve of the 3D edge physics takes in 15 minutes.
 - Not run yet, each for a large missing piece:
   warpage_2p5d_frame does not run. The pieces that it shares with
   laminate_pagano run now, for every physics (see the next item): the second

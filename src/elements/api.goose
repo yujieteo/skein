@@ -33,6 +33,7 @@ import .source;
 import .stages;
 import .eigen;
 import .wave;
+import .curve;
 import .harmonic;
 import .radiation;
 import .explicit;
@@ -245,6 +246,8 @@ fn wave(t: f64) { set_wave(t); }
 fn wave_terms(c_re: f64, c_im: f64, s_re: f64, s_im: f64, damping: f64) {
     set_wave_terms([c_re, c_im], [s_re, s_im], damping);
 }
+
+fn wave_source_in<S>(g: i64) { wave_source(g) { p => S(p) }; }
 
 // The diffusion nu of all cells of the wave physics (after wave_terms).
 fn wave_nu(nu: f64) { wave_material_all(nu); }

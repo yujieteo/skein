@@ -99,6 +99,7 @@ fn set_edge(nu: f64, c: f64[2], t: f64) {
         edge_mark.push(-1);
     }
     gauge_count = 0;
+    pml_shape = -1;
     clear_impedance();
 }
 
@@ -272,16 +273,41 @@ fn edge_cell(c: i64, me: f64[:], mass: bool) {
         let nu = if mass { 0.0 } else { edge_nu[c] };
         let cr = if mass { edge_m[2 * c] } else { edge_c[2 * c] };
         let ci = if mass { edge_m[2 * c + 1] } else { edge_c[2 * c + 1] };
+        var p: f64[3] = [0.0; 3];
+        for v in dim + 1 {
+            for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
+        }
+        let st = stretch(c, p, if mass || edge_c[2 * c] >= 0.0 { 0.0 } else { sqrt(-edge_c[2 * c] / edge_nu[c]) });
+        var inv: f64[6] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0];
+        var lam: f64[6] = [cr, ci, cr, ci, cr, ci];
+        for t in 3 {
+            let a1 = (t + 1) % 3;
+            let a2 = (t + 2) % 3;
+            let top = cmul([st[2 * a1], st[2 * a1 + 1]], [st[2 * a2], st[2 * a2 + 1]]);
+            let m = cdiv(top, [st[2 * t], st[2 * t + 1]]);
+            let iv = cdiv([1.0, 0.0], m);
+            inv[2 * t] = iv[0];
+            inv[2 * t + 1] = iv[1];
+            let cm = cmul([cr, ci], m);
+            lam[2 * t] = cm[0];
+            lam[2 * t + 1] = cm[1];
+        }
         for a in ne {
             for b in ne {
-                var k = 0.0;
-                var m = 0.0;
+                var kr = 0.0;
+                var ki = 0.0;
+                var mr = 0.0;
+                var mi = 0.0;
                 for t in 3 {
-                    k += cw[3 * a + t] * cw[3 * b + t];
-                    m += w[3 * a + t] * w[3 * b + t];
+                    let k = cw[3 * a + t] * cw[3 * b + t];
+                    let m = w[3 * a + t] * w[3 * b + t];
+                    kr += k * inv[2 * t];
+                    ki += k * inv[2 * t + 1];
+                    mr += m * lam[2 * t];
+                    mi += m * lam[2 * t + 1];
                 }
-                me[2 * (ne * a + b)] += (nu * k + cr * m) * dv;
-                me[2 * (ne * a + b) + 1] += ci * m * dv;
+                me[2 * (ne * a + b)] += (nu * kr + mr) * dv;
+                me[2 * (ne * a + b) + 1] += (nu * ki + mi) * dv;
             }
         }
     }

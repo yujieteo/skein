@@ -1401,6 +1401,7 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
             emit_edge_sources(out);
         }
     }
+    emit_pml(out);
     // The fixed values first, then the gauge, which keeps them.
     if complex_solid {
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }

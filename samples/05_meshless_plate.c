@@ -2346,7 +2346,11 @@ typedef struct {
     double elements_wave_damping_g8;
     gs_rhdr elements_wave_cell_terms_g8;
     gs_stack gs_gstk_elements_wave_cell_terms_g8;
+    gs_rhdr elements_wave_mark_g8;
+    gs_stack gs_gstk_elements_wave_mark_g8;
     int64_t elements_pml_shape_g8;
+    gs_rhdr elements_pml_flag_g8;
+    gs_stack gs_gstk_elements_pml_flag_g8;
     a3_f64 elements_pml_lo_g8;
     a3_f64 elements_pml_hi_g8;
     double elements_pml_h_g8;
@@ -2429,6 +2433,18 @@ typedef struct {
     gs_stack gs_gstk_elements_bucket_start_g8;
     gs_rhdr elements_bucket_items_g8;
     gs_stack gs_gstk_elements_bucket_items_g8;
+    int64_t elements_CURVE_LINE_g8;
+    int64_t elements_CURVE_CIRCLE_g8;
+    double elements_CURVE_FOUND_g8;
+    double elements_CURVE_NEAR_g8;
+    a3_f64 elements_loc_lo_g8;
+    a3_f64 elements_loc_step_g8;
+    a3_i64 elements_loc_n_g8;
+    gs_rhdr elements_loc_start_g8;
+    gs_stack gs_gstk_elements_loc_start_g8;
+    gs_rhdr elements_loc_items_g8;
+    gs_stack gs_gstk_elements_loc_items_g8;
+    int64_t elements_curve_missed_g8;
     double elements_DIRECT_WORK_g8;
     gs_rhdr elements_sky_position_g8;
     gs_stack gs_gstk_elements_sky_position_g8;
@@ -12673,7 +12689,7 @@ static uint8_t elements_plane_g8(int64_t axis_g, double value_g, int64_t gs_sp) 
         {
             t4.data = ((uint8_t *)gs_str98); t4.len = 46;
             t5 = t4;
-            gs_abort_msg(t5.data, t5.len, gs_file14, 451);
+            gs_abort_msg(t5.data, t5.len, gs_file14, 454);
         }
         L2:;
         t6.hole_g = 0;
@@ -12691,11 +12707,11 @@ static uint8_t elements_plane_g8(int64_t axis_g, double value_g, int64_t gs_sp) 
         t6.lr_g = 0;
         t8 = t6;
         int64_t t9 = (int64_t)GS_GL->elements_region_g8.len;
-        if (t9 >= 16) gs_abort(GS_E_CAPACITY, gs_file14, 452);
+        if (t9 >= 16) gs_abort(GS_E_CAPACITY, gs_file14, 455);
         elements_Part_g8 *t10 = (elements_Part_g8 *)(GS_GL->elements_region_g8.e + t9);
         *(elements_Part_g8 *)t10 = t8;
         GS_GL->elements_region_g8.len = (uint8_t)(t9 + 1);
-        int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file14, 453);
+        int64_t k_g = gs_sub_i64((int64_t)(((int64_t)GS_GL->elements_region_g8.len)), 1, gs_file14, 456);
         int64_t t11 = (int64_t)((uint64_t)((int64_t)((int64_t)(((GS_GL->elements_coords_g8.len))))) / (uint64_t)((int64_t)(3)));
         for (int64_t n_g = 0; n_g < t11; n_g++) {
             int64_t n_g_2 = n_g;
@@ -12729,7 +12745,7 @@ static uint8_t elements_plane_g8(int64_t axis_g, double value_g, int64_t gs_sp) 
     }
     L1:;
     return t0;
-    GS_UNREACHABLE(gs_file14, 420);
+    GS_UNREACHABLE(gs_file14, 423);
     uint8_t t22 = {0};
     return t22;
 }
@@ -24681,17 +24697,20 @@ static void gs_init_globals(void) {
     a3_f64 t184;
     a3_f64 t185;
     a3_i64 t186;
-    a6_i64 t187;
-    a6_i64 t188;
-    a9_f64 t189;
-    elements_J2_g8 t190;
-    a6_f64 t191;
-    a36_f64 t194;
-    a2_f64 t197;
-    a2_f64 t198;
-    a2_i64 t199;
-    a2_f64 t200;
-    a64_f64 t201;
+    a3_f64 t187;
+    a3_f64 t190;
+    a3_i64 t193;
+    a6_i64 t196;
+    a6_i64 t197;
+    a9_f64 t198;
+    elements_J2_g8 t199;
+    a6_f64 t200;
+    a36_f64 t203;
+    a2_f64 t206;
+    a2_f64 t207;
+    a2_i64 t208;
+    a2_f64 t209;
+    a64_f64 t210;
     gs_stack_init((&GS_GL->gs_gstk_argv_text_g));
     GS_GL->argv_text_g.base = (&GS_GL->gs_gstk_argv_text_g)->top;
     GS_GL->argv_text_g.len = 0;
@@ -26578,7 +26597,15 @@ static void gs_init_globals(void) {
     GS_GL->elements_wave_cell_terms_g8.base = (&GS_GL->gs_gstk_elements_wave_cell_terms_g8)->top;
     GS_GL->elements_wave_cell_terms_g8.len = 0;
     GS_GL->elements_wave_cell_terms_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_wave_mark_g8));
+    GS_GL->elements_wave_mark_g8.base = (&GS_GL->gs_gstk_elements_wave_mark_g8)->top;
+    GS_GL->elements_wave_mark_g8.len = 0;
+    GS_GL->elements_wave_mark_g8.len = 0;
     GS_GL->elements_pml_shape_g8 = -1;
+    gs_stack_init((&GS_GL->gs_gstk_elements_pml_flag_g8));
+    GS_GL->elements_pml_flag_g8.base = (&GS_GL->gs_gstk_elements_pml_flag_g8)->top;
+    GS_GL->elements_pml_flag_g8.len = 0;
+    GS_GL->elements_pml_flag_g8.len = 0;
     double t178 = 0.0;
     for (int64_t t179 = 0; t179 < 3; t179++) {
         t177.e[t179] = t178;
@@ -26737,6 +26764,34 @@ static void gs_init_globals(void) {
     GS_GL->elements_bucket_items_g8.base = (&GS_GL->gs_gstk_elements_bucket_items_g8)->top;
     GS_GL->elements_bucket_items_g8.len = 0;
     GS_GL->elements_bucket_items_g8.len = 0;
+    GS_GL->elements_CURVE_LINE_g8 = 0;
+    GS_GL->elements_CURVE_CIRCLE_g8 = 1;
+    GS_GL->elements_CURVE_FOUND_g8 = -1e-06;
+    GS_GL->elements_CURVE_NEAR_g8 = -0.1;
+    double t188 = 0.0;
+    for (int64_t t189 = 0; t189 < 3; t189++) {
+        t187.e[t189] = t188;
+    }
+    GS_GL->elements_loc_lo_g8 = t187;
+    double t191 = 1.0;
+    for (int64_t t192 = 0; t192 < 3; t192++) {
+        t190.e[t192] = t191;
+    }
+    GS_GL->elements_loc_step_g8 = t190;
+    int64_t t194 = 1;
+    for (int64_t t195 = 0; t195 < 3; t195++) {
+        t193.e[t195] = t194;
+    }
+    GS_GL->elements_loc_n_g8 = t193;
+    gs_stack_init((&GS_GL->gs_gstk_elements_loc_start_g8));
+    GS_GL->elements_loc_start_g8.base = (&GS_GL->gs_gstk_elements_loc_start_g8)->top;
+    GS_GL->elements_loc_start_g8.len = 0;
+    GS_GL->elements_loc_start_g8.len = 0;
+    gs_stack_init((&GS_GL->gs_gstk_elements_loc_items_g8));
+    GS_GL->elements_loc_items_g8.base = (&GS_GL->gs_gstk_elements_loc_items_g8)->top;
+    GS_GL->elements_loc_items_g8.len = 0;
+    GS_GL->elements_loc_items_g8.len = 0;
+    GS_GL->elements_curve_missed_g8 = 0;
     GS_GL->elements_DIRECT_WORK_g8 = 500000000.0;
     gs_stack_init((&GS_GL->gs_gstk_elements_sky_position_g8));
     GS_GL->elements_sky_position_g8.base = (&GS_GL->gs_gstk_elements_sky_position_g8)->top;
@@ -26858,30 +26913,30 @@ static void gs_init_globals(void) {
     GS_GL->elements_on_pressure_g8.base = (&GS_GL->gs_gstk_elements_on_pressure_g8)->top;
     GS_GL->elements_on_pressure_g8.len = 0;
     GS_GL->elements_on_pressure_g8.len = 0;
-    t187.e[0] = 0;
-    t187.e[1] = 1;
-    t187.e[2] = 2;
-    t187.e[3] = 0;
-    t187.e[4] = 1;
-    t187.e[5] = 0;
-    GS_GL->elements_VOIGT_I_g8 = t187;
-    t188.e[0] = 0;
-    t188.e[1] = 1;
-    t188.e[2] = 2;
-    t188.e[3] = 1;
-    t188.e[4] = 2;
-    t188.e[5] = 2;
-    GS_GL->elements_VOIGT_J_g8 = t188;
-    t189.e[0] = 1.0;
-    t189.e[1] = 0.0;
-    t189.e[2] = 0.0;
-    t189.e[3] = 0.0;
-    t189.e[4] = 1.0;
-    t189.e[5] = 0.0;
-    t189.e[6] = 0.0;
-    t189.e[7] = 0.0;
-    t189.e[8] = 1.0;
-    GS_GL->elements_EYE_g8 = t189;
+    t196.e[0] = 0;
+    t196.e[1] = 1;
+    t196.e[2] = 2;
+    t196.e[3] = 0;
+    t196.e[4] = 1;
+    t196.e[5] = 0;
+    GS_GL->elements_VOIGT_I_g8 = t196;
+    t197.e[0] = 0;
+    t197.e[1] = 1;
+    t197.e[2] = 2;
+    t197.e[3] = 1;
+    t197.e[4] = 2;
+    t197.e[5] = 2;
+    GS_GL->elements_VOIGT_J_g8 = t197;
+    t198.e[0] = 1.0;
+    t198.e[1] = 0.0;
+    t198.e[2] = 0.0;
+    t198.e[3] = 0.0;
+    t198.e[4] = 1.0;
+    t198.e[5] = 0.0;
+    t198.e[6] = 0.0;
+    t198.e[7] = 0.0;
+    t198.e[8] = 1.0;
+    GS_GL->elements_EYE_g8 = t198;
     GS_GL->elements_JACOBI_SWEEPS_g8 = 50;
     GS_GL->elements_SOLID_NONE_g8 = 0;
     GS_GL->elements_SOLID_J2_g8 = 1;
@@ -26890,11 +26945,11 @@ static void gs_init_globals(void) {
     GS_GL->elements_NEWTON_MAX_g8 = 30;
     GS_GL->elements_NEWTON_TOL_g8 = 1e-09;
     GS_GL->elements_solid_law_g8 = 0;
-    t190.lame_g = 0.0;
-    t190.shear_g = 0.0;
-    t190.yield0_g = 0.0;
-    t190.hard_g = 0.0;
-    GS_GL->elements_j2_g8 = t190;
+    t199.lame_g = 0.0;
+    t199.shear_g = 0.0;
+    t199.yield0_g = 0.0;
+    t199.hard_g = 0.0;
+    GS_GL->elements_j2_g8 = t199;
     gs_stack_init((&GS_GL->gs_gstk_elements_pt_state_g8));
     GS_GL->elements_pt_state_g8.base = (&GS_GL->gs_gstk_elements_pt_state_g8)->top;
     GS_GL->elements_pt_state_g8.len = 0;
@@ -26949,16 +27004,16 @@ static void gs_init_globals(void) {
     GS_GL->elements_nl_dx_g8.len = 0;
     GS_GL->elements_newton_steps_g8 = 0;
     GS_GL->elements_newton_direct_g8 = 0;
-    double t192 = 0.0;
-    for (int64_t t193 = 0; t193 < 6; t193++) {
-        t191.e[t193] = t192;
+    double t201 = 0.0;
+    for (int64_t t202 = 0; t202 < 6; t202++) {
+        t200.e[t202] = t201;
     }
-    GS_GL->elements_pt_s_g8 = t191;
-    double t195 = 0.0;
-    for (int64_t t196 = 0; t196 < 36; t196++) {
-        t194.e[t196] = t195;
+    GS_GL->elements_pt_s_g8 = t200;
+    double t204 = 0.0;
+    for (int64_t t205 = 0; t205 < 36; t205++) {
+        t203.e[t205] = t204;
     }
-    GS_GL->elements_pt_d_g8 = t194;
+    GS_GL->elements_pt_d_g8 = t203;
     GS_GL->elements_capacity_g8 = 0.0;
     gs_stack_init((&GS_GL->gs_gstk_elements_th_k_g8));
     GS_GL->elements_th_k_g8.base = (&GS_GL->gs_gstk_elements_th_k_g8)->top;
@@ -27025,21 +27080,21 @@ static void gs_init_globals(void) {
     GS_GL->meshless_point_start_g8.base = (&GS_GL->gs_gstk_meshless_point_start_g8)->top;
     GS_GL->meshless_point_start_g8.len = 0;
     GS_GL->meshless_point_start_g8.len = 0;
-    t197.e[0] = 0.0;
-    t197.e[1] = 0.0;
-    GS_GL->meshless_lo_g8 = t197;
-    t198.e[0] = 0.0;
-    t198.e[1] = 0.0;
-    GS_GL->meshless_hi_g8 = t198;
+    t206.e[0] = 0.0;
+    t206.e[1] = 0.0;
+    GS_GL->meshless_lo_g8 = t206;
+    t207.e[0] = 0.0;
+    t207.e[1] = 0.0;
+    GS_GL->meshless_hi_g8 = t207;
     GS_GL->meshless_JITTER_g8 = 0.15;
     gs_stack_init((&GS_GL->gs_gstk_meshless_support_g8));
     GS_GL->meshless_support_g8.base = (&GS_GL->gs_gstk_meshless_support_g8)->top;
     GS_GL->meshless_support_g8.len = 0;
     GS_GL->meshless_support_g8.len = 0;
     GS_GL->meshless_bucket_size_g8 = 0.0;
-    t199.e[0] = 0;
-    t199.e[1] = 0;
-    GS_GL->meshless_bucket_n_g8 = t199;
+    t208.e[0] = 0;
+    t208.e[1] = 0;
+    GS_GL->meshless_bucket_n_g8 = t208;
     gs_stack_init((&GS_GL->gs_gstk_meshless_bucket_start_g8));
     GS_GL->meshless_bucket_start_g8.base = (&GS_GL->gs_gstk_meshless_bucket_start_g8)->top;
     GS_GL->meshless_bucket_start_g8.len = 0;
@@ -27068,9 +27123,9 @@ static void gs_init_globals(void) {
     GS_GL->meshless_SMOOTH_g8 = 0;
     GS_GL->meshless_DOMAIN_g8 = 1;
     GS_GL->meshless_EDGE_g8 = 2;
-    t200.e[0] = 0.21132486540518713;
-    t200.e[1] = 0.7886751345948129;
-    GS_GL->meshless_GAUSS_2_g8 = t200;
+    t209.e[0] = 0.21132486540518713;
+    t209.e[1] = 0.7886751345948129;
+    GS_GL->meshless_GAUSS_2_g8 = t209;
     gs_stack_init((&GS_GL->gs_gstk_meshless_rec_start_g8));
     GS_GL->meshless_rec_start_g8.base = (&GS_GL->gs_gstk_meshless_rec_start_g8)->top;
     GS_GL->meshless_rec_start_g8.len = 0;
@@ -27268,11 +27323,11 @@ static void gs_init_globals(void) {
     GS_GL->result_count_g = 0;
     GS_GL->failed_g = 0;
     GS_GL->converged_g = 0;
-    double t202 = 0.0;
-    for (int64_t t203 = 0; t203 < 64; t203++) {
-        t201.e[t203] = t202;
+    double t211 = 0.0;
+    for (int64_t t212 = 0; t212 < 64; t212++) {
+        t210.e[t212] = t211;
     }
-    GS_GL->terms_g = t201;
+    GS_GL->terms_g = t210;
     gs_stack_init((&GS_GL->gs_gstk_fixed_values_g));
     GS_GL->fixed_values_g.base = (&GS_GL->gs_gstk_fixed_values_g)->top;
     GS_GL->fixed_values_g.len = 0;
@@ -27281,7 +27336,7 @@ static void gs_init_globals(void) {
 
 static void gs_program_init(int argc, char **argv) {
     if (gs_program_initialized) return;
-    gs_rt_init(argc, argv, 11, 366, 0);
+    gs_rt_init(argc, argv, 11, 370, 0);
     gs_qinit(&gs_q_solvers_CellData_g7);
     gs_qinit(&gs_q_solvers_CellJob_g7);
     gs_qinit(&gs_q_solvers_RowsY_g7);

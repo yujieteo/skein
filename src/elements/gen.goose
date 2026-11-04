@@ -1215,6 +1215,7 @@ fn surface(n: i64) {
     // The boundary of another shape of the model serves a `refine` only, which the mesher reads from the let.
     let whole = if syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { of };
     if whole != body_name && find_body(whole) < 0 && whole.len > 0 && find_geometry(whole) >= 0 { return; }
+    if syntax::child_count(v) == 2 && (is_call(arg(v, 0), "circle") || is_call(arg(v, 0), "rect")) { return; }
     // boundary(body): all faces of the body.
     let all = syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == body_name;
     if of != body_name && k < 0 && !all {
@@ -1322,8 +1323,8 @@ fn property(word: u8[:]) -> i64 {
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
-    if physics != ELASTIC && physics != HEAT && physics != EDGE && !wave_eddy && region_laws.len > 0 {
-        unsupported(tok(base), "a material on a region of a wave, edge or Darcy physics is not in this generator", "use one material");
+    if physics != ELASTIC && physics != HEAT && physics != EDGE && physics != WAVE && !wave_eddy && region_laws.len > 0 {
+        unsupported(tok(base), "a material on a region of a Darcy flow is not in this generator", "use one material");
     }
     for &w in region_laws {
         material_node = w.item;
@@ -1921,7 +1922,7 @@ fn method(n: i64) {
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
         } else if kind(s) == syntax::N_SETTING && name(s) == "couple" && source_of(first(s)) == "staggered" && multi() {
             // One physics after the other: the passes of this generator.
-        } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
+        } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && (physics == WAVE || physics == EDGE) {
             pml_setting(first(s));
         } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
             incompatible_family = true;
@@ -1933,7 +1934,7 @@ fn method(n: i64) {
             // family and gauge: gen_edge.goose
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this generator",
-                        "use only mesh, order, the pml of a wave physics, and the family and gauge: tree of edge elements");
+                        "use only mesh, order, the pml of a wave or edge physics, and the family and gauge: tree of edge elements");
         }
         s = next(s);
     }
@@ -2425,6 +2426,7 @@ fn wave_simple(e: i64) -> i64 {
 recursive fn wave_samples(e: i64) -> i64 {
     let k = kind(e);
     if k == syntax::N_AT { return if kind(child(e, 0)) == syntax::N_NAME && name(child(e, 0)) == unknown_name { 1 } else { -1 }; }
+    if is_call(e, "integral") && syntax::child_count(e) == 3 && is_curve(arg(e, 1)) { return 1; }
     if is_call(e, "mean") && syntax::child_count(e) == 3 && kind(arg(e, 0)) == syntax::N_NAME && name(arg(e, 0)) == unknown_name {
         return if kind(arg(e, 1)) == syntax::N_NAME && find_surf(name(arg(e, 1))) >= 0 { 1 } else { -1 };
     }
@@ -2646,7 +2648,7 @@ fn expect(n: i64, step: i64) {
     } else if wave_simple(left) >= 0 {
         comp = wave_simple(left);
         what = FIELD_WAVE;
-    } else if wave_part(left) >= 0 {
+    } else if wave_part(left) >= 0 || (physics == WAVE && wave_samples(left) >= 1 && kind(left) != syntax::N_AT) {
         comp = left;
         what = FIELD_WAVE_Z;
     }
@@ -3584,7 +3586,8 @@ fn harmonic_values() {
         for f in freqs[s.first_freq..s.first_freq + s.freq_count] {
             omega_now = 2.0 * PI * f;
             var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
-            if wave_s_node >= 0 { cval(wave_s_node); }
+            if wave_s_node >= 0 && !mentions_xyz(wave_s_node) { cval(wave_s_node); }
+            for w in region_laws { if !wave_eddy { wave_region_terms(w); } }
             if wave_eddy {
                 let nu, ce, se = eddy_terms();
                 c = ce;
@@ -3953,6 +3956,7 @@ let WAVE_PRELUDE = """
         return [re, im], found_re && found_im;
     }
 
+    fn wconj(a: f64[2]) -> f64[2] { return [a[0], -a[1]]; }
     fn wadd(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] + b[0], a[1] + b[1]]; }
     fn wsub(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] - b[0], a[1] - b[1]]; }
     fn wmul(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
@@ -4348,7 +4352,7 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     let f = freqs[s.first_freq + i];
     omega_now = 2.0 * PI * f;
     var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
-    var src = if wave_s_node >= 0 { cval(wave_s_node) } else { [0.0, 0.0] };
+    var src = if wave_s_node >= 0 && !mentions_xyz(wave_s_node) { cval(wave_s_node) } else { [0.0, 0.0] };
     var nu0 = 1.0;
     if wave_eddy { nu0, c, src = eddy_terms(); }
     var label: u8[>..] = [];
@@ -4361,16 +4365,8 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     }
     lit(out, s.damping);
     out.append(");\n");
-    if wave_eddy { emit_eddy_laws(out, nu0); }
-    if pml_g >= 0 {
-        format(out, "    elements::pml(", pml_g, ", ");
-        lits(out, pml_lo);
-        out.append(", ");
-        lits(out, pml_hi);
-        out.append(", ");
-        lit(out, pml_h);
-        out.append(");\n");
-    }
+    if wave_eddy { emit_eddy_laws(out, nu0); } else { emit_wave_laws(out); }
+    emit_pml(out);
     for b in active[s.first_bc..s.first_bc + s.bc_count] { emit_bc(out, b); }
     out.append("    solve(");
     quoted(out, label);
@@ -4390,6 +4386,109 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     }
     if !last { format(out, "    step_", s.name, "_", i + 2, "();\n"); }
     out.append("}\n\n");
+}
+
+fn emit_pml(out: u8[>..]&) {
+    guard pml_g >= 0 else { return; }
+    format(out, "    elements::pml(", pml_g, ", ");
+    lits(out, pml_lo);
+    out.append(", ");
+    lits(out, pml_hi);
+    out.append(", ");
+    lit(out, pml_h);
+    out.append(");\n");
+}
+
+fn wave_region_terms(w: Law) -> f64[4] {
+    let base = material_node;
+    material_node = w.item;
+    let c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
+    let src = if wave_s_node >= 0 && !mentions_xyz(wave_s_node) { cval(wave_s_node) } else { [0.0, 0.0] };
+    material_node = base;
+    return [c[0], c[1], src[0], src[1]];
+}
+
+fn emit_wave_laws(out: u8[>..]&) {
+    for w in region_laws {
+        let t = wave_region_terms(w);
+        format(out, "    cells(elements::wave_in(", w.g, ", 1.0");
+        for v in t {
+            out.append(", ");
+            lit(out, v);
+        }
+        out.append("), ");
+        quoted(out, w.label);
+        out.append(");\n");
+    }
+    guard wave_s_node >= 0 && mentions_xyz(wave_s_node) else { return; }
+    let base = material_node;
+    format(out, "    elements::wave_source_in(-1) { p => ");
+    emit_cs(out, wave_s_node);
+    out.append(" };\n");
+    for w in region_laws {
+        material_node = w.item;
+        format(out, "    elements::wave_source_in(", w.g, ") { p => ");
+        emit_cs(out, wave_s_node);
+        out.append(" };\n");
+    }
+    material_node = base;
+}
+
+recursive fn emit_cs(out: u8[>..]&, n: i64) {
+    let k = kind(n);
+    let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
+    if !mentions_xyz(n) {
+        let c = cval(n);
+        out.append("[");
+        lit(out, c[0]);
+        out.append(", ");
+        lit(out, c[1]);
+        out.append("]");
+    } else if k == syntax::N_NAME && axis_of(name(n)) >= 0 {
+        format(out, "[p[", axis_of(name(n)), "], 0.0]");
+    } else if k == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        emit_cs(out, codegen::find_value(name(n)));
+        codegen::depth--;
+    } else if k == syntax::N_NAME && property(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        emit_cs(out, property(name(n)));
+        codegen::depth--;
+    } else if k == syntax::N_UNARY && op == "-" {
+        out.append("wsub([0.0, 0.0], ");
+        emit_cs(out, first(n));
+        out.append(")");
+    } else if k == syntax::N_BINARY && (op == "+" || op == "-" || op == "*" || op == "/") {
+        out.append(if op == "+" { "wadd(" } else if op == "-" { "wsub(" } else if op == "*" { "wmul(" } else { "wdiv(" });
+        emit_cs(out, child(n, 0));
+        out.append(", ");
+        emit_cs(out, child(n, 1));
+        out.append(")");
+    } else if k == syntax::N_CALL && syntax::child_count(n) == 2 && kind(child(n, 0)) == syntax::N_NAME && position(["sin", "cos", "exp"], name(child(n, 0))) >= 0 && !mentions_im(arg(n, 0)) {
+        out.append("[");
+        emit_space(out, n, -1);
+        out.append(", 0.0]");
+    } else {
+        unsupported(tok(n), str("the expression '", source_of(n), "' is not in this generator"),
+                    "write + - * / of numbers, im, lets, properties, x, y, z, and sin, cos or exp of a real function of x, y and z");
+        out.append("[0.0, 0.0]");
+    }
+}
+
+recursive fn mentions_im(n: i64) -> bool {
+    if kind(n) == syntax::N_NAME && (name(n) == "im" || name(n) == "omega") { return true; }
+    if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
+        codegen::depth++;
+        let r = mentions_im(codegen::find_value(name(n)));
+        codegen::depth--;
+        return r;
+    }
+    var c = first(n);
+    while c >= 0 {
+        if mentions_im(c) { return true; }
+        c = next(c);
+    }
+    return false;
 }
 
 // The diffusion of the base material, and c, s and the diffusion of the
@@ -4458,6 +4557,14 @@ var wz_found: u8[>..] = [];
 // and the statements that sample the unknown in `pre`.
 recursive fn emit_wz(out: u8[>..]&, pre: u8[>..]&, z: i64) {
     let k = kind(z);
+    if is_call(z, "integral") && syntax::child_count(z) == 3 && is_curve(arg(z, 1)) {
+        let n = wz_count;
+        wz_count++;
+        emit_curve_integral(pre, n, z);
+        format(wz_found, " && wf", n);
+        format(out, "wz", n);
+        return;
+    }
     if k == syntax::N_AT || is_call(z, "mean") {
         let n = wz_count;
         wz_count++;
@@ -4497,6 +4604,144 @@ recursive fn emit_wz(out: u8[>..]&, pre: u8[>..]&, z: i64) {
     out.append(")");
 }
 
+
+
+struct Seg {
+    kind: i64,
+    a: f64[3],
+    b: f64[3],
+    r: f64,
+}
+
+fn curve_value(n: i64) -> i64 {
+    guard kind(n) == syntax::N_NAME else { return -1; }
+    let v = codegen::find_value(name(n));
+    if v >= 0 && is_call(v, "line") && syntax::child_count(v) == 3 { return v; }
+    for l in surface_lets {
+        if name(l) != name(n) { continue; }
+        let b = child(l, 1);
+        if is_call(b, "boundary") && syntax::child_count(b) == 2 && (is_call(arg(b, 0), "circle") || is_call(arg(b, 0), "rect")) { return b; }
+    }
+    return -1;
+}
+
+fn is_curve(n: i64) -> bool { return curve_value(n) >= 0; }
+
+fn curve_segments(n: i64) -> Seg[>..] {
+    var segs: Seg[>..] = [];
+    let v = curve_value(n);
+    guard v >= 0 else { return segs; }
+    if is_call(v, "line") {
+        segs.push(Seg { kind: 0, a: value(arg(v, 0)).v, b: value(arg(v, 1)).v, r: 0.0 });
+        return segs;
+    }
+    let shape = arg(v, 0);
+    if is_call(shape, "circle") {
+        segs.push(Seg { kind: 1, a: value(arg(shape, 0)).v, b: [0.0; 3], r: scalar_value(arg(shape, 1)) });
+        return segs;
+    }
+    let lo = value(arg(shape, 0)).v;
+    let hi = value(arg(shape, 1)).v;
+    let c: f64[3][4] = [[lo[0], lo[1], 0.0], [hi[0], lo[1], 0.0], [hi[0], hi[1], 0.0], [lo[0], hi[1], 0.0]];
+    for i in 4 { segs.push(Seg { kind: 0, a: c[i], b: c[(i + 1) % 4], r: 0.0 }); }
+    return segs;
+}
+
+recursive fn ci_free(e: i64) -> bool {
+    if kind(e) == syntax::N_NAME && (name(e) == unknown_name || name(e) == "n") { return false; }
+    var c = first(e);
+    while c >= 0 {
+        if !ci_free(c) { return false; }
+        c = next(c);
+    }
+    return true;
+}
+
+recursive fn emit_ci(out: u8[>..]&, e: i64) {
+    let k = kind(e);
+    if ci_free(e) {
+        let c = cval(e);
+        out.append("[");
+        lit(out, c[0]);
+        out.append(", ");
+        lit(out, c[1]);
+        out.append("]");
+        return;
+    }
+    if k == syntax::N_NAME && name(e) == unknown_name {
+        out.append("[s[0], s[1]]");
+        return;
+    }
+    if is_call(e, "dot") && syntax::child_count(e) == 3 {
+        var g = -1;
+        var m = -1;
+        if is_call(arg(e, 0), "grad") && source_of(arg(arg(e, 0), 0)) == unknown_name && source_of(arg(e, 1)) == "n" { g = arg(e, 0); m = arg(e, 1); }
+        if is_call(arg(e, 1), "grad") && source_of(arg(arg(e, 1), 0)) == unknown_name && source_of(arg(e, 0)) == "n" { g = arg(e, 1); m = arg(e, 0); }
+        if g >= 0 && m >= 0 {
+            out.append("[s[2] * n[0] + s[3] * n[1] + s[4] * n[2], s[5] * n[0] + s[6] * n[1] + s[7] * n[2]]");
+            return;
+        }
+    }
+    if k == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME {
+        let f = name(child(e, 0));
+        if f == "conj" {
+            out.append("wconj(");
+            emit_ci(out, arg(e, 0));
+            out.append(")");
+            return;
+        }
+        for w, i in PARTS {
+            if f == w {
+                format(out, "[wave_pick(", i, ", ");
+                emit_ci(out, arg(e, 0));
+                out.append("), 0.0]");
+                return;
+            }
+        }
+    }
+    if k == syntax::N_UNARY && syntax::text(tok(e)) == "-" {
+        out.append("wsub([0.0, 0.0], ");
+        emit_ci(out, first(e));
+        out.append(")");
+        return;
+    }
+    let op = if k == syntax::N_BINARY { syntax::text(tok(e)) } else { "" };
+    guard op == "+" || op == "-" || op == "*" || op == "/" else {
+        unsupported(tok(e), str("the integrand '", source_of(e), "' is not in this generator"),
+                    str("write the unknown ", unknown_name, ", dot(grad(", unknown_name, "), n), re, imag, abs, arg and conj of them, joined by + - * / and constants"));
+        out.append("[0.0, 0.0]");
+        return;
+    };
+    out.append(if op == "+" { "wadd(" } else if op == "-" { "wsub(" } else if op == "*" { "wmul(" } else { "wdiv(" });
+    emit_ci(out, child(e, 0));
+    out.append(", ");
+    emit_ci(out, child(e, 1));
+    out.append(")");
+}
+
+fn emit_curve_integral(pre: u8[>..]&, n: i64, z: i64) {
+    let segs = curve_segments(arg(z, 1));
+    format(pre, "        var wz", n, ": f64[2] = [0.0, 0.0];\n        var wf", n, " = true;\n");
+    for sg in segs {
+        var length = sg.r * 2.0 * PI;
+        if sg.kind == 0 {
+            length = 0.0;
+            for t in 3 { length += (sg.b[t] - sg.a[t]) * (sg.b[t] - sg.a[t]); }
+            length = sqrt(length);
+        }
+        let count = max(16, ceil(2.0 * length / mesh_size) as! i64);
+        format(pre, "        {\n            let ci, ok = elements::curve_integral(", sg.kind, ", [");
+        lits(pre, sg.a);
+        pre.append("], [");
+        lits(pre, sg.b);
+        pre.append("], ");
+        lit(pre, sg.r);
+        format(pre, ", ", count, ") { p, n, s => ");
+        emit_ci(pre, arg(z, 0));
+        format(pre, " };\n            wz", n, " = wadd(wz", n, ", ci);\n            if !ok { wf", n, " = false; }\n        }\n");
+    }
+}
+
 // `let v, found_v = <part of z>;`, with z an expression of samples.
 fn emit_wave_z(out: u8[>..]&, var_name: u8[:], z: i64, part: i64) {
     var pre: u8[>..] = [];
@@ -4531,7 +4776,7 @@ fn emit_change(out: u8[>..]&, ch: Change) {
 // `let v, found = <sample at p>;`
 fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3]) {
     if what == FIELD_WAVE_Z {
-        emit_wave_z(out, var_name, arg(comp, 0), wave_part(comp));
+        emit_wave_z(out, var_name, if wave_part(comp) >= 0 { arg(comp, 0) } else { comp }, max(wave_part(comp), 0));
         return;
     }
     if what == FIELD_WAVE {
