@@ -34,7 +34,6 @@ fn write_square(dir: u8[:], n: i64) -> bool {
     for t in tri { mask.push(1); }
     var flags: u8[>..] = [];
     for t in tri.len / 3 { flags.push(1); }
-    // make_dir makes one level, and a fresh clone has no .skein yet.
     for c, i in dir {
         if c == '/' && i > 0 { make_dir(dir[..i]); }
     }
