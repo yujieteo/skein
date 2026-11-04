@@ -61,7 +61,7 @@ physics flow on tank solves v: Vector<Velocity>, p: Pressure, alpha: Real = inte
     eq ddt(alpha) + div(alpha*v) = 0
 }
 
-// femahoy also uses MULES with interface compression. Skein has no such flux.
+// femahoy uses MULES with interface compression. Skein uses the HRIC flux.
 method flow: fv {
     mesh: m
     gradient: green_gauss

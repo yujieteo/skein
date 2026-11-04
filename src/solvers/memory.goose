@@ -105,6 +105,10 @@ struct MemoryPath {
 //     cons ssprk3         counted, not measured: the state, the gradients, the Jacobians and
 //                         the stages of src/cons/ are sized before the check, so the RSS at the
 //                         check holds them. No threads.
+//     vof cg amg          the 64 of box cg amg, not measured: the AMG levels of the pressure
+//                         matrix of src/vof/, built again for each step. The state, the face
+//                         arrays and the matrix are sized before the check, so the RSS at the
+//                         check holds them. No threads.
 //     meshless skyline lu sample 05, 14,342 dofs, 15,389,813 entries of the profile, on
 //                         2026-11-01: 14.5 (U and L, 8 bytes each). The check is before the
 //                         factors are sized; the check of the solve counts 0 entries. No
@@ -144,6 +148,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "grid gmres ilu0", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "grid ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "cons ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "vof cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "meshless skyline lu", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex mixed cg", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "radiation dense", entry_bytes: 32.0, dof_bytes: 0.0, thread_bytes: 0.0 },
