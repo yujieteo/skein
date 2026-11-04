@@ -417,9 +417,8 @@ gives the roadmap phase that closes the gap:
   the unknown, its gradient and the normal n along a Curve inside the mesh
   (a `line`, `boundary(circle(...))` or `boundary(rect(...))`;
   `src/elements/curve.goose`). The edge physics and the Darcy flow integrate
-  along a `line` with the same curve integral. The wave and edge physics
-  share one PML wave number, defined in
-  [skein_spec.md §13](skein_spec.md#13-methods).
+  along a `line` with the same curve integral. The PML of the wave and edge
+  physics follows the rule of [skein_spec.md §13](skein_spec.md#13-methods).
 - dipole_king_middleton stays blocked. The PML of the edge physics in 3D
   runs now. It needs the strip and the feed as faces inside the air for the
   delta-gap `bc` on faces inside the mesh. That `bc` is missing: the box

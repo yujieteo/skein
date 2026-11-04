@@ -1628,9 +1628,11 @@ stretch. An outgoing wave decays in the layer, and the reflection of the
 layer at normal incidence is 10⁻⁶ before the discretization. The outer
 faces of the layer keep their own conditions. `region` and `thickness`
 are both required, and the physics needs a `Complex` unknown, a scalar
-one or an edge (`nedelec`) one [`method_setting`]. Reason: the antenna,
-the eddy current and the optics models of femahoy need an open boundary (gap G26), and a
-first-order absorbing condition reflects a wave that is not normal to it.
+one or an edge (`nedelec`) one [`method_setting`]. In this generator, a
+`modal` step of an edge physics does not take the `pml`, and `skein run`
+refuses the model. Reason: the antenna, the eddy current and the optics
+models of femahoy need an open boundary (gap G26), and a first-order
+absorbing condition reflects a wave that is not normal to it.
 
 A setting that does not belong to the kind is an error
 [`method_setting`]. The checker tests the method against the physics:
@@ -1876,6 +1878,11 @@ text as the column name.
 `integral(f, r)` has the dimension of `f` times `Length^k`, where `k` is
 the topological dimension of `r`. In a `2d` model with no thickness, a force
 on a curve is thus `Force/Length`, the force per unit depth.
+
+In a physics of a `Complex` unknown (a wave or an edge physics) and in a
+Darcy flow, `c` in `integral(f, c)` may be a `Curve` inside the mesh, such as
+a `line`. The integral then runs along `c`, and `f` is a function of the
+unknown and its gradient.
 
 ---
 
