@@ -18,7 +18,7 @@ let MODULE_BASE_MB = 64;
 let WASM_C_STACK_MB = 8;
 
 fn page_lane(prog: i64) -> bool {
-    guard !shells_gen::claims(prog) && !flow_gen::claims(prog) && !cons_gen::claims(prog) else { return false; };
+    guard !shells_gen::claims(prog) && !flow_gen::claims(prog) && !cons_gen::claims(prog) && !vof_gen::claims(prog) else { return false; };
     guard grid_gen::claims(prog) else { return true; };
     var c = syntax::nodes[prog].first;
     while c >= 0 {

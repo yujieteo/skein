@@ -9,6 +9,7 @@ import shells.gen;
 import flow.gen;
 import grid.gen;
 import cons.gen;
+import vof.gen;
 import optim.gen;
 import ode.gen;
 import check from "../check";
@@ -50,11 +51,13 @@ let LANE_GRID = 4;
 let LANE_OPTIM = 5;
 let LANE_CONS = 6;
 let LANE_ODE = 7;
+let LANE_VOF = 8;
 
 fn read_model(prog: i64) -> i64 {
     if ode_gen::claims(prog) { return if ode_gen::read(prog) { LANE_ODE } else { -1 }; }
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
     if elements_gen::family_claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
+    if vof_gen::claims(prog) { return if vof_gen::read(prog) { LANE_VOF } else { -1 }; }
     if flow_gen::claims(prog) { return if flow_gen::read(prog) { LANE_FLOW } else { -1 }; }
     if cons_gen::claims(prog) { return if cons_gen::read(prog) { LANE_CONS } else { -1 }; }
     if grid_gen::claims(prog) { return if grid_gen::read(prog) { LANE_GRID } else { -1 }; }
@@ -73,6 +76,7 @@ fn dof_estimate(lane: i64) -> i64 {
     if lane == LANE_FLOW { return flow_gen::dof_estimate(); }
     if lane == LANE_GRID { return grid_gen::dof_estimate(); }
     if lane == LANE_CONS { return cons_gen::dof_estimate(); }
+    if lane == LANE_VOF { return vof_gen::dof_estimate(); }
     if lane == LANE_OPTIM { return optim_gen::dof_estimate(); }
     if lane == LANE_ODE { return ode_gen::dof_estimate(); }
     if lane == LANE_SIMPLEX { return elements_gen::dof_estimate(); }
@@ -84,6 +88,7 @@ fn step_count(lane: i64) -> i64 {
     if lane == LANE_FLOW { return flow_gen::steps.len; }
     if lane == LANE_GRID { return grid_gen::steps.len; }
     if lane == LANE_CONS { return cons_gen::steps.len; }
+    if lane == LANE_VOF { return vof_gen::steps.len; }
     if lane == LANE_OPTIM { return optim_gen::steps.len; }
     if lane == LANE_ODE { return ode_gen::steps.len; }
     if lane == LANE_SIMPLEX { return elements_gen::steps.len; }
@@ -92,7 +97,7 @@ fn step_count(lane: i64) -> i64 {
 
 fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&) -> bool {
     let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" }
-                                           else if lane == LANE_FLOW { "../src/flow" } else if lane == LANE_GRID { "../src/grid" } else if lane == LANE_CONS { "../src/cons" }
+                                           else if lane == LANE_FLOW { "../src/flow" } else if lane == LANE_GRID { "../src/grid" } else if lane == LANE_CONS { "../src/cons" } else if lane == LANE_VOF { "../src/vof" }
                                            else if lane == LANE_OPTIM { "../src/optim" } else if lane == LANE_ODE { "../src/ode" } else { "../src/runtime" });
     if lane == LANE_FLOW {
         guard flow_gen::write_mesh(results_dir) else { return false; }
@@ -100,6 +105,8 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     } else if lane == LANE_CONS {
         guard cons_gen::write_mesh(results_dir) else { return false; }
         cons_gen::generate(runtime_path, results_dir, program);
+    } else if lane == LANE_VOF {
+        vof_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_GRID {
         grid_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_OPTIM {
@@ -466,7 +473,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         };
         model.clear();
         model.append(model_name);
-        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW && lane != LANE_GRID && lane != LANE_CONS && lane != LANE_OPTIM && lane != LANE_ODE {
+        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW && lane != LANE_GRID && lane != LANE_CONS && lane != LANE_VOF && lane != LANE_OPTIM && lane != LANE_ODE {
             share.stages = check::STAGE_MESH - max(stage, check::STAGE_POST);
             format(share.dir, ".skein/studies/", model, "/", study, "/shared");
             shell(str("rm -rf ", shell_quoted(share.dir)));
