@@ -401,9 +401,9 @@ gives the roadmap phase that closes the gap:
   11 %, 10 % and 36 %), and GMRES does not converge in 200 iterations. The
   expect needs 6 %. A mesh of 9 mm has 646k dofs and needs about 16 hours of
   direct solve. It needs a faster solve of the 3D edge physics (a better
-  ordering of the factor, or a multigrid for edge elements), and the PML in
-  3D. The tree gauge is not the limit.
-  optics_mie_cylinder runs and passes its four `expect` lines within 1 %
+  ordering of the factor, or a multigrid for edge elements). The tree gauge
+  is not the limit.
+- optics_mie_cylinder runs and passes its four `expect` lines within 1 %
   (Q 2.8582, 4.2972, 3.6230 and 2.5727 against 2.862930, 4.293232,
   3.613747 and 2.582972; `skein run --study spectrum`). The Mie mesh is
   a_c/10. femahoy used res40 (a_c/40), which has 3.2M dofs and stops at the
@@ -417,10 +417,10 @@ gives the roadmap phase that closes the gap:
   the unknown, its gradient and the normal n along a Curve inside the mesh
   (a `line`, `boundary(circle(...))` or `boundary(rect(...))`;
   `src/elements/curve.goose`). The edge physics and the Darcy flow integrate
-  along a `line` with the same curve integral. The wave number k of the PML
-  has one definition for the wave and edge physics. A lossy c uses Re(c)
-  for k, and the stretch does not use Im(c).
-  dipole_king_middleton stays blocked. The PML of the edge physics in 3D
+  along a `line` with the same curve integral. The wave and edge physics
+  share one PML wave number, defined in
+  [skein_spec.md §13](skein_spec.md#13-methods).
+- dipole_king_middleton stays blocked. The PML of the edge physics in 3D
   runs now. It needs the strip and the feed as faces inside the air for the
   delta-gap `bc` on faces inside the mesh. That `bc` is missing: the box
   mesh has no interior surface, and `skein run` stops at "this generator

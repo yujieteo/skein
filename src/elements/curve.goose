@@ -10,15 +10,15 @@ import .edge;
 
 let CURVE_LINE = 0;
 let CURVE_CIRCLE = 1;
-let CURVE_FOUND = -1.0e-6;    
-let CURVE_NEAR = -0.1;        
+let CURVE_FOUND = -1.0e-6;
+let CURVE_NEAR = -0.1;
 
 var loc_lo: f64[3] = [0.0; 3];
 var loc_step: f64[3] = [1.0; 3];
 var loc_n: i64[3] = [1; 3];
 var loc_start: i64[>..] = [];
 var loc_items: i64[>..] = [];
-var curve_missed = 0;         
+var curve_missed = 0;
 
 fn loc_bucket(t: i64, x: f64) -> i64 {
     return clamp(floor((x - loc_lo[t]) / loc_step[t]) as! i64, 0, loc_n[t] - 1);
