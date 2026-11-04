@@ -6215,13 +6215,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
             t14.len = t16;
             t21.data = (uint8_t *)((t14.base)); t21.len = (t14.len);
             t22 = t21;
-<<<<<<< HEAD
-            gs_abort_msg(t22.data, t22.len, gs_file9, 112);
-||||||| 24b39c9
-            gs_abort_msg(t22.data, t22.len, gs_file9, 251);
-=======
-            gs_abort_msg(t22.data, t22.len, gs_file9, 256);
->>>>>>> b37dc43
+            gs_abort_msg(t22.data, t22.len, gs_file9, 113);
             t141 = t14.base;
             GS(gs_sp + 0)->top = t141;
         }
@@ -6237,13 +6231,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         goto L0;
     }
     L0:;
-<<<<<<< HEAD
-    GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file9, 135);
-||||||| 24b39c9
-    GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file9, 288);
-=======
-    GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file9, 293);
->>>>>>> b37dc43
+    GS_GL->solvers_memory_checks_g7 = gs_add_i64(GS_GL->solvers_memory_checks_g7, 1, gs_file9, 136);
     probe_g.base = GS(gs_sp + 0)->top; probe_g.len = 0;
     probe_g.len = 0;
     t30.data = ((uint8_t *)gs_str84); t30.len = 18;
@@ -6362,13 +6350,7 @@ static void solvers_memory_check_g7(void *name_g_data, int64_t name_g_len, int64
         t72.len = t74;
         t79.data = (uint8_t *)((t72.base)); t79.len = (t72.len);
         t80 = t79;
-<<<<<<< HEAD
-        gs_abort_msg(t80.data, t80.len, gs_file9, 112);
-||||||| 24b39c9
-        gs_abort_msg(t80.data, t80.len, gs_file9, 251);
-=======
-        gs_abort_msg(t80.data, t80.len, gs_file9, 256);
->>>>>>> b37dc43
+        gs_abort_msg(t80.data, t80.len, gs_file9, 113);
         t139 = t72.base;
     }
     L62:;
@@ -6597,13 +6579,7 @@ static double solvers_resident_bytes_g7(int64_t gs_sp) {
     }
     L2:;
     return t0;
-<<<<<<< HEAD
-    GS_UNREACHABLE(gs_file9, 104);
-||||||| 24b39c9
-    GS_UNREACHABLE(gs_file9, 239);
-=======
-    GS_UNREACHABLE(gs_file9, 244);
->>>>>>> b37dc43
+    GS_UNREACHABLE(gs_file9, 105);
     double t13 = {0};
     return t13;
 }
@@ -6696,13 +6672,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
         int64_t t31 = line_g.len;
         int64_t t32 = (key_g.len);
         int64_t t33 = t31;
-<<<<<<< HEAD
-        if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 51);
-||||||| 24b39c9
-        if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 175);
-=======
-        if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 180);
->>>>>>> b37dc43
+        if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 52);
         s_g_2.data = t30 + t32; s_g_2.len = t33 - t32;
         {
             s_g_4 = s_g_2;
@@ -6779,16 +6749,8 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
             uint8_t *t66 = field_g.data;
             int64_t t67 = field_g.len;
             int64_t t68 = 0;
-<<<<<<< HEAD
-            int64_t t69 = gs_sub_i64((int64_t)((field_g.len)), 3, gs_file9, 52);
-            if (t68 < 0 || t69 < t68 || t69 > t67) gs_abort(GS_E_SLICE, gs_file9, 52);
-||||||| 24b39c9
-            int64_t t69 = gs_sub_i64((int64_t)((field_g.len)), 3, gs_file9, 176);
-            if (t68 < 0 || t69 < t68 || t69 > t67) gs_abort(GS_E_SLICE, gs_file9, 176);
-=======
-            int64_t t69 = gs_sub_i64((int64_t)((field_g.len)), 3, gs_file9, 181);
-            if (t68 < 0 || t69 < t68 || t69 > t67) gs_abort(GS_E_SLICE, gs_file9, 181);
->>>>>>> b37dc43
+            int64_t t69 = gs_sub_i64((int64_t)((field_g.len)), 3, gs_file9, 53);
+            if (t68 < 0 || t69 < t68 || t69 > t67) gs_abort(GS_E_SLICE, gs_file9, 53);
             field_g.data = t66 + t68; field_g.len = t69 - t68;
         }
         L57:;
@@ -6810,13 +6772,7 @@ static double solvers_proc_kb_g7(void *text_g_data, int64_t text_g_len, void *ke
     double t72;
     t72 = -1.0;
     return t72;
-<<<<<<< HEAD
-    GS_UNREACHABLE(gs_file9, 48);
-||||||| 24b39c9
-    GS_UNREACHABLE(gs_file9, 172);
-=======
-    GS_UNREACHABLE(gs_file9, 177);
->>>>>>> b37dc43
+    GS_UNREACHABLE(gs_file9, 49);
     double t73 = {0};
     return t73;
 }
@@ -7090,13 +7046,7 @@ static double solvers_path_bytes_g7(solvers_MemoryPath_g7 p_g, int64_t entries_g
     {
         t2.data = ((uint8_t *)gs_str105); t2.len = 66;
         t3 = t2;
-<<<<<<< HEAD
-        gs_abort_msg(t3.data, t3.len, gs_file9, 116);
-||||||| 24b39c9
-        gs_abort_msg(t3.data, t3.len, gs_file9, 258);
-=======
-        gs_abort_msg(t3.data, t3.len, gs_file9, 263);
->>>>>>> b37dc43
+        gs_abort_msg(t3.data, t3.len, gs_file9, 117);
     }
     L0:;
     double bytes_g = ((double)((double)(((double)((double)(p_g.entry_bytes_g)) * (double)((double)(entries_g))))) + (double)(((double)((double)(((double)((double)(p_g.dof_bytes_g)) + (double)(((double)((double)(8.0)) * (double)((double)(vectors_g))))))) * (double)((double)(dofs_g)))));
@@ -7108,13 +7058,7 @@ static double solvers_path_bytes_g7(solvers_MemoryPath_g7 p_g, int64_t entries_g
     double t5;
     t5 = ((double)((double)(((double)((double)(bytes_g)) + (double)(((double)((double)(p_g.thread_bytes_g)) * (double)((double)(entries_g))))))) + (double)(((double)((double)(((double)((double)(1500000.0)) + (double)(((double)((double)(2.0)) * (double)((double)(mesh_g))))))) * (double)((double)(threads_g)))));
     return t5;
-<<<<<<< HEAD
-    GS_UNREACHABLE(gs_file9, 115);
-||||||| 24b39c9
-    GS_UNREACHABLE(gs_file9, 257);
-=======
-    GS_UNREACHABLE(gs_file9, 262);
->>>>>>> b37dc43
+    GS_UNREACHABLE(gs_file9, 116);
     double t6 = {0};
     return t6;
 }
@@ -7237,13 +7181,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     int64_t t31 = (s_g.len);
     int64_t t32 = 3;
     int64_t t33 = t31;
-<<<<<<< HEAD
-    if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 73);
-||||||| 24b39c9
-    if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 202);
-=======
-    if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 207);
->>>>>>> b37dc43
+    if (t32 < 0 || t33 < t32 || t33 > t31) gs_abort(GS_E_SLICE, gs_file9, 74);
     t34.data = (uint8_t *)(t30) + t32; t34.len = t33 - t32;
     t35 = trim_g(t34.data, t34.len);
     dir_g = t35;
@@ -7539,13 +7477,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
         int64_t t134 = dir_g.len;
         int64_t t135 = 0;
         int64_t t136 = up_g;
-<<<<<<< HEAD
-        if (t135 < 0 || t136 < t135 || t136 > t134) gs_abort(GS_E_SLICE, gs_file9, 80);
-||||||| 24b39c9
-        if (t135 < 0 || t136 < t135 || t136 > t134) gs_abort(GS_E_SLICE, gs_file9, 209);
-=======
-        if (t135 < 0 || t136 < t135 || t136 > t134) gs_abort(GS_E_SLICE, gs_file9, 214);
->>>>>>> b37dc43
+        if (t135 < 0 || t136 < t135 || t136 > t134) gs_abort(GS_E_SLICE, gs_file9, 81);
         dir_g.data = t133 + t135; dir_g.len = t136 - t135;
     }
     L36:;
@@ -7556,13 +7488,7 @@ static double solvers_free_bytes_g7(int64_t gs_sp) {
     GS(gs_sp + 0)->top = t139;
     return t137;
     GS(gs_sp + 0)->top = t139;
-<<<<<<< HEAD
-    GS_UNREACHABLE(gs_file9, 66);
-||||||| 24b39c9
-    GS_UNREACHABLE(gs_file9, 195);
-=======
-    GS_UNREACHABLE(gs_file9, 200);
->>>>>>> b37dc43
+    GS_UNREACHABLE(gs_file9, 67);
     double t138 = {0};
     return t138;
 }
