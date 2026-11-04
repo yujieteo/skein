@@ -1,21 +1,3 @@
-// The code generator of the optim models: a Skein syntax tree to a Goose
-// program that calls src/optim/optim.goose.
-//
-// It takes the 2d models of the template linear_elastic with a mesh of
-// `cell: quad` on a `rect`: bilinear quadrilaterals on a grid of equal
-// rectangles, in plane stress or plane strain, with one material and one
-// static step. The conditions are `u = 0`, `u = (a, b)`, `u.x = a` and
-// `u.y = b` on a grid line `boundary(rect, x == a)`, on `boundary(rect)`
-// or on a `point(p)` that is a node, and `sigma*n = (tx, ty)` on a side
-// or at a point (a force). A report or an expect is a linear form of the
-// values of u at points: `k*(u.y at p) + c`, with k and c constant. A
-// `topology` study runs the loop of femahoy gap G1 (src/optim/topology.goose)
-// on the objective, a report of this form. A `minimize` study with
-// `method: gradient` gets dJ/dp from one adjoint solve and dv/dp, which
-// run.goose gives (emit_gradient). Each other construct gives an
-// error `unsupported` at its token, with a fix.
-//
-// The values are in the unit system of the header.
 import std;
 import math;
 namespace optim_gen;
@@ -40,15 +22,12 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 fn binary(n: i64, op: u8[:]) -> bool { kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == op }
 
-// Whether this generator takes the model: a 2d model of linear_elastic
-// with a mesh of cell: quad.
 fn claims(prog: i64) -> bool {
     var quad = false;
     var elastic = false;
     var c = first(prog);
     while c >= 0 {
         if kind(c) == syntax::N_HEADER && syntax::text(tok(child(c, 0))) != "2d" { return false; }
-        // A `method` item is for the simplex lane (src/elements/gen.goose): this generator has no method.
         if kind(c) == syntax::N_METHOD { return false; }
         if kind(c) == syntax::N_MESH {
             var s = first(child(c, 1));
@@ -72,8 +51,6 @@ fn claims(prog: i64) -> bool {
 let CURVE = 0;
 let POINT = 1;
 
-// A region of a bc: a grid line axis == value, the whole boundary
-// (axis -1), or a point.
 struct Region {
     name: u8[..64],
     kind: i64,
@@ -81,7 +58,6 @@ struct Region {
     at: f64[2],
 }
 
-// A bc: a fixed value of component comp (-1 for both), or a load.
 struct Bc {
     region: i64,
     load: bool,
@@ -89,7 +65,6 @@ struct Bc {
     v: f64[2],
 }
 
-// A linear form a u_comp(p) + b, and the unit of its value.
 struct Form {
     a: f64,
     comp: i64,
@@ -99,17 +74,17 @@ struct Form {
 }
 
 struct Report {
-    item: i64,       // the N_REPORTITEM
+    item: i64,
     form: Form,
 }
 
 struct Expect {
     node: i64,
     form: Form,
-    step: i64,       // -1 for an expect after the steps
+    step: i64,
 }
 
-var level = 0;   // skein verify convergence: the mesh has 2^level times the cells on each axis
+var level = 0;
 var shape_names: u8[..64][>..];
 var shape_nodes: i64[>..];
 var regions: Region[>..];
@@ -118,33 +93,28 @@ var global_bcs: i64[>..];
 var step_bcs: i64[>..];
 var reports: Report[>..];
 var expects: Expect[>..];
-var steps: u8[..64][>..];      // the name of the step: this generator has one
+var steps: u8[..64][>..];
 var output = false;
 var material_items: i64[>..];
 var material_node = -1;
 var unknown: u8[..64];
 var young = 0.0;
 var poisson = 0.0;
-var plane = 0;                 // optim::PLANE_STRESS
+var plane = 0;
 var thickness = 1.0;
 var lo: f64[2] = [0.0, 0.0];
 var hi: f64[2] = [0.0, 0.0];
 var cells: i64[2] = [0, 0];
 var domain = -1;
 
-// The topology study of the run (spec §20.2), or -1: run.goose sets it.
 var topology_study = -1;
-var objective = -1;            // its report, in `reports`
+var objective = -1;
 var volume = 0.0;
 var penalty = 3.0;
 var filter = 0.0;
 var most = 200;
-var threshold = 0.0;           // 0: no solid
+var threshold = 0.0;
 
-// The minimize study of the run with `method: gradient` (spec §20.2):
-// the name of its objective, a report, or "" for no gradient. dv/dp is
-// `chain[i * gradient_params.len + k]`, the derivative of design value i
-// (design_values) by param k. run.goose sets them, and reset keeps them.
 var gradient_objective: u8[..64] = [];
 var gradient_params: u8[..64][>..];
 var chain: f64[>..];
@@ -178,9 +148,6 @@ fn reset() {
     threshold = 0.0;
 }
 
-// --- values ---------------------------------------------------------------------
-
-// A scalar or a 2D vector in the unit system of the header.
 struct Vec {
     n: i64,
     v: f64[2],
@@ -239,9 +206,6 @@ fn find_name(names: u8[..64][:], word: u8[:]) -> i64 {
     return -1;
 }
 
-// The exponents of length, mass and time of expression n, in halves as
-// codegen::Unit, with u a Length. known is false for a construct that
-// this generator does not follow.
 recursive fn dims(n: i64) -> i64[3], bool {
     let k = kind(n);
     if k == syntax::N_NUMBER {
@@ -272,8 +236,6 @@ recursive fn dims(n: i64) -> i64[3], bool {
     return [0, 0, 0], false;
 }
 
-// The unit of the dimension d in the system of the header: the force to
-// the power of the mass, times the length to the rest. "" if it is not so.
 fn unit_text(d: i64[3], known: bool) -> u8[>..] {
     guard known && d[0] % 2 == 0 && d[1] % 2 == 0 && d[2] == -2 * d[1] else { return []; };
     let force = d[1] / 2;
@@ -290,7 +252,6 @@ fn unit_text(d: i64[3], known: bool) -> u8[>..] {
     return s;
 }
 
-// Whether expression n holds the unknown.
 recursive fn has_unknown(n: i64) -> bool {
     if kind(n) == syntax::N_NAME { return name(n) == unknown; }
     var c = first(n);
@@ -301,7 +262,6 @@ recursive fn has_unknown(n: i64) -> bool {
     return false;
 }
 
-// The linear form of expression n: a u_c(p) + b. False if n is not one.
 recursive fn linear(n: i64, f: Form&) -> bool {
     if !has_unknown(n) {
         f.a = 0.0;
@@ -336,7 +296,6 @@ recursive fn linear(n: i64, f: Form&) -> bool {
         f.b += s * g.b;
         return true;
     }
-    // One side is a constant: g, or f of a product.
     if f.comp < 0 {
         guard binary(n, "*") else { return false; };
         let k = f.b;
@@ -354,7 +313,6 @@ recursive fn linear(n: i64, f: Form&) -> bool {
 
 let FORM_FIX = "write a value of u at a point times a constant, for example -(u.y at (0 mm, 20 mm))*1 N";
 
-// The form of expression n, with its unit, or an error at n.
 fn form_of(n: i64) -> Form {
     var f = Form { a: 0.0, comp: -1, p: [0.0, 0.0], b: 0.0, unit: [] };
     if !linear(n, f) {
@@ -364,8 +322,6 @@ fn form_of(n: i64) -> Form {
     f.unit.append(unit_text(d, known));
     return f;
 }
-
-// --- the items ------------------------------------------------------------------
 
 fn header(n: i64) {
     set64(codegen::model_name, name(n));
@@ -381,7 +337,6 @@ fn header(n: i64) {
 
 let REGION_FIX = "write let left: Curve = boundary(beam, x == 0 mm), or let corner: Point = point((60, 0) mm)";
 
-// `let` and `param`: a rect, a boundary, a point, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
     var w: u8[..64] = [];
@@ -399,7 +354,6 @@ fn value_item(n: i64) {
     }
 }
 
-// `boundary(r)`, or `boundary(r, x == a)` or `y == a`: a grid line.
 fn boundary_region(w: u8[..64], v: i64) {
     var r = Region { name: w, kind: CURVE, axis: -1, at: [0.0, 0.0] };
     if syntax::child_count(v) > 2 {
@@ -491,7 +445,6 @@ fn physics_item(n: i64) {
 
 let BC_FIX = "write bc left: u.x = 0, bc corner: u = 0, or bc tip: sigma*n = (0, -1) N";
 
-// A `bc` item or statement. It gives its index in `bcs`, or -1.
 fn bc(n: i64) -> i64 {
     let r = child(n, 0);
     let target = child(n, 1);
@@ -558,12 +511,10 @@ fn step(n: i64) {
     }
 }
 
-// `expect e: form == v within w`.
 fn expect(n: i64, step: i64) {
     expects.push(Expect { node: n, form: form_of(child(n, 0)), step: step });
 }
 
-// The arguments of the topology study (spec §20.2).
 fn topology_args() {
     let pr = first(topology_study);
     var a = first(pr);
@@ -596,9 +547,6 @@ fn topology_args() {
     }
 }
 
-// True if f is a compliance: a u_c(p) + b with one load of the model, a
-// point load at p with only the component c, and a of its sign. Reason:
-// the optimality criteria update needs dJ/dx <= 0.
 fn compliance(f: Form) -> bool {
     var loads: i64[>..] = [];
     for b in global_bcs { if bcs[b].load { loads.push(b); } }
@@ -609,8 +557,6 @@ fn compliance(f: Form) -> bool {
     return r.kind == POINT && r.at[0] == f.p[0] && r.at[1] == f.p[1] && b.v[1 - f.comp] == 0.0 && f.a * b.v[f.comp] > 0.0;
 }
 
-// Reads the program `prog`. False on an error, and `syntax::errors` holds
-// it.
 fn read(prog: i64) -> bool {
     reset();
     var physics_node = -1;
@@ -662,15 +608,11 @@ fn read(prog: i64) -> bool {
     return ok();
 }
 
-// The report of the gradient objective, in `reports`, or -1.
 fn gradient_report() -> i64 {
     for r, i in reports { if syntax::nodes[r.item].aux >= 0 && syntax::text(syntax::nodes[r.item].aux) == gradient_objective { return i; } }
     return -1;
 }
 
-// The values that the adjoint gives the derivative of, in the order of
-// optim::input_gradient: E, nu, t, the 2 components of each load in the
-// order of the calls, then a and b of the objective a u_c(p) + b.
 fn design_values() -> f64[>..] {
     var v: f64[>..] = [young, poisson, thickness];
     for b in global_bcs { if bcs[b].load { v.push(bcs[b].v[0]); v.push(bcs[b].v[1]); } }
@@ -681,9 +623,6 @@ fn design_values() -> f64[>..] {
     return v;
 }
 
-// The values that a param of a gradient study must not change: the mesh,
-// the regions, the fixed values and the point of the objective. Reason:
-// the adjoint gives no derivative by them.
 fn frozen() -> u8[>..] {
     var s = str(lo[0], ",", lo[1], ",", hi[0], ",", hi[1], ",", cells[0], ",", cells[1], ",", plane, ";");
     for r in regions { format(s, r.kind, ",", r.axis, ",", r.at[0], ",", r.at[1], ";"); }
@@ -695,10 +634,7 @@ fn frozen() -> u8[>..] {
     return s;
 }
 
-// The dofs of the mesh.
 fn dof_estimate() -> i64 { return 2 * (cells[0] + 1) * (cells[1] + 1); }
-
-// --- the Goose program ----------------------------------------------------------
 
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
@@ -838,8 +774,6 @@ let PRELUDE = """
     }
 """;
 
-// The value of form f, as Goose: a at(comp, x, y, name) + b, or b for a
-// form with no u.
 fn emit_form(out: u8[>..]&, f: Form) {
     if f.comp < 0 {
         lit(out, f.b);
@@ -872,7 +806,6 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     out.append(");\n    }\n");
 }
 
-// The calls of bc b.
 fn emit_bc(out: u8[>..]&, b: Bc) {
     let r = regions[b.region];
     for comp in 2 {
@@ -975,9 +908,6 @@ fn emit_step(out: u8[>..]&, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
-// The derivative of the gradient objective by each param: one adjoint
-// solve gives the derivative by each design value, then the chain rule
-// with dv/dp. dJ/da is u_c(p), and dJ/db is 1.
 fn emit_gradient(out: u8[>..]&) {
     let f = reports[gradient_report()].form;
     let comp = max(f.comp, 0);
@@ -1006,9 +936,6 @@ fn emit_gradient(out: u8[>..]&) {
     out.append("    }\n");
 }
 
-// The check of the volume of the last design: within 1 % of the limit.
-// Reason: the bisection of the update holds the volume to 1e-3 of the
-// multiplier, and the last design is the one before the last update.
 fn emit_volume_check(out: u8[>..]&) {
     out.append("    {\n        let k = optim::history_volume.len;\n        let v = if k > 0 { optim::history_volume[k - 1] } else { 0.0 };\n");
     out.append("        check(\"post\", \"volume\", abs(v - ");
@@ -1020,15 +947,11 @@ fn emit_volume_check(out: u8[>..]&) {
     out.append(");\n    }\n");
 }
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the optim package from `optim_path`, and writes its VTU file in
-// `results_dir`.
 fn generate(optim_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     let src = optim_path[..optim_path.len - 5];
     out.append("// The values are in the unit system of the model header.\nimport std;\nimport os;\nimport math;\nimport optim from ");
     quoted(out, str(src, "optim"));
-    // The package imports the package solvers, beside it.
     out.append(";\nimport solvers from ");
     quoted(out, str(src, "solvers"));
     out.append(";\n");

@@ -1,30 +1,3 @@
-// The boundary-layer triangles of spec §9.1 (`layers wall: { first, ratio,
-// count }`) in 2D, for any shape and any wall curve.
-//
-// 1. The wall shape is meshed alone. Its boundary edges (those of one
-//    triangle) make one counter-clockwise loop, the wall polyline.
-// 2. Each node of the loop moves out of the wall along the bisector of the
-//    normals of its two edges. Layer k is at the distance
-//    first (1 + ratio + ... + ratio^(k-1)) from the wall, so the first
-//    layer has the height `first`. At a sharp convex corner, the bisector
-//    follows the wake.
-// 3. All nodes have the same number of layers K. K is at most `count`, and
-//    at most the number of layers whose height is not above the least
-//    spacing of the wall nodes (then the last cells are about isotropic).
-//    K is cut back to the largest value for which each layer is inside g,
-//    each cell has a positive area and the outer loop does not cross
-//    itself (a concave corner folds the layers).
-// 4. Each quad of two layers is cut in two triangles on its shorter
-//    diagonal, or on the other diagonal if that one is inverted.
-// 5. The outer loop becomes a polygon hole of the core mesh, with the size
-//    of the loop edges around it (refine_segment). A node that the core
-//    mesher adds on an edge of the loop is a hanging node: the top
-//    triangle of the layer on that edge is cut in a fan that holds it.
-//    The nodes of the two meshes are merged by position, with the
-//    tolerance 1e-9 times the diameter of g.
-//
-// The mesh is the normal mesh (mesh.goose). The work is bounded by
-// MAX_LAYER_NODES wall nodes, so the crossing test is at most 25 M tests.
 import std;
 import math;
 import dictionary;
@@ -37,17 +10,17 @@ import .tri;
 let MAX_LAYER_NODES = 5000;
 let MAX_LAYER_COUNT = 1000;
 
-var bl_wx: f64[>..] = [];      // the wall polyline, counter-clockwise
+var bl_wx: f64[>..] = [];
 var bl_wy: f64[>..] = [];
-var bl_nx: f64[>..] = [];      // the unit normal of each node, out of the wall
+var bl_nx: f64[>..] = [];
 var bl_ny: f64[>..] = [];
-var bl_lx: f64[>..] = [];      // layer k, node i: index k n + i
+var bl_lx: f64[>..] = [];
 var bl_ly: f64[>..] = [];
-var bl_ln = 0;                 // the nodes of a layer
-var bl_lk = 0;                 // the layers
-var bl_ex_edge: i64[>..] = []; // the hanging nodes: the edge of the outer loop,
-var bl_ex_node: i64[>..] = []; // the node of the core mesh,
-var bl_ex_at: f64[>..] = [];   // and the parameter along the edge
+var bl_ln = 0;
+var bl_lk = 0;
+var bl_ex_edge: i64[>..] = [];
+var bl_ex_node: i64[>..] = [];
+var bl_ex_at: f64[>..] = [];
 
 fn layers_fail(what: u8[:]) -> bool {
     write_stderr(str("mesh_2d_layers: ", what, "\n"));
@@ -64,7 +37,6 @@ fn times(d: dictionary<i64, i64>&, key: i64) -> i64 {
     return 0;
 }
 
-// The triangles of the mesh: its points and its nodes.
 fn read_mesh(xs: f64[>..]&, ys: f64[>..]&, ts: i64[>..]&) {
     xs.clear();
     ys.clear();
@@ -77,14 +49,12 @@ fn read_mesh(xs: f64[>..]&, ys: f64[>..]&, ts: i64[>..]&) {
     for c in cell_count() { for k in 3 { ts.push(cell_node(c, k)); } }
 }
 
-// How many triangles hold each edge.
 fn count_edges(ts: i64[:], d: dictionary<i64, i64>&) {
     for c in ts.len / 3 {
         for k in 3 { d.update(edge_key(ts[3 * c + k], ts[3 * c + (k + 1) % 3]), 0) { it += 1; }; }
     }
 }
 
-// Step 1: the wall polyline.
 fn wall_loop(wall: i64, size: f64) -> bool {
     guard mesh_2d(wall, size) else { return layers_fail("the wall did not mesh"); }
     var xs: f64[>..] = [];
@@ -123,7 +93,6 @@ fn wall_loop(wall: i64, size: f64) -> bool {
     return true;
 }
 
-// Step 2: the unit normal of each node, and the least spacing of the nodes.
 fn wall_normals() -> f64 {
     bl_nx.clear();
     bl_ny.clear();
@@ -148,7 +117,6 @@ fn wall_normals() -> f64 {
     return least;
 }
 
-// The layers of the heights first ratio^k, as far as the spacing `least`.
 fn layer_positions(first: f64, ratio: f64, count: i64, least: f64) -> i64 {
     var h = first;
     var off = 0.0;
@@ -174,10 +142,6 @@ fn layer_positions(first: f64, ratio: f64, count: i64, least: f64) -> i64 {
 
 fn lid(k: i64, i: i64) -> i64 { return k * bl_ln + i % bl_ln; }
 
-// Step 4: the diagonal of the quad between layers k - 1 and k at edge i:
-// 1 for A-C, 2 for B-D, 0 if neither cuts it in 2 positive triangles. The
-// nodes are A (k - 1, i), B (k - 1, i + 1), C (k, i + 1) and D (k, i); the
-// quad A D C B turns counter-clockwise.
 fn quad_split(k: i64, i: i64) -> i64 {
     let a = lid(k - 1, i);
     let b = lid(k - 1, i + 1);
@@ -192,7 +156,6 @@ fn quad_split(k: i64, i: i64) -> i64 {
     return 0;
 }
 
-// Whether layer k is inside g and its cells have a positive area.
 fn layer_ok(g: i64, k: i64) -> bool {
     for i in bl_ln {
         if phi(g, bl_lx[lid(k, i)], bl_ly[lid(k, i)], 0.0) >= 0.0 { return false; }
@@ -201,7 +164,6 @@ fn layer_ok(g: i64, k: i64) -> bool {
     return true;
 }
 
-// Whether the segments of layer k cross none other.
 fn loop_simple(k: i64) -> bool {
     for i in bl_ln {
         let a = lid(k, i);
@@ -218,7 +180,6 @@ fn loop_simple(k: i64) -> bool {
     return true;
 }
 
-// Step 3: cuts the layers back to those that are valid.
 fn valid_layers(g: i64, k0: i64) -> i64 {
     var k = 0;
     for layer in k0 {
@@ -232,8 +193,6 @@ fn valid_layers(g: i64, k0: i64) -> i64 {
     return k;
 }
 
-// Step 5: the core mesh, with the outer loop as a hole. The result is the
-// mesh, and the layers are not in it yet.
 fn core_mesh(g: i64, size: f64) -> bool {
     var xy: f64[>..] = [];
     for i in bl_ln {
@@ -257,7 +216,6 @@ fn cell_key(x: f64, y: f64, x0: f64, y0: f64, w: f64) -> i64 {
     return (floor((x - x0) / w) as! i64) * 4294967296 + (floor((y - y0) / w) as! i64);
 }
 
-// The node of the outer layer at (x, y) within tol, or -1.
 fn outer_node(grid: dictionary<i64, i64>&, x: f64, y: f64, x0: f64, y0: f64, w: f64, tol: f64) -> i64 {
     for dx in 3 {
         for dy in 3 {
@@ -270,8 +228,6 @@ fn outer_node(grid: dictionary<i64, i64>&, x: f64, y: f64, x0: f64, y0: f64, w: 
     return -1;
 }
 
-// The hanging nodes: the boundary nodes of the core that lie inside an
-// edge of the outer loop.
 fn find_hanging(cx: f64[:], cy: f64[:], onb: bool[:], nid: i64[:], tol: f64) {
     bl_ex_edge.clear();
     bl_ex_node.clear();
@@ -296,7 +252,6 @@ fn find_hanging(cx: f64[:], cy: f64[:], onb: bool[:], nid: i64[:], tol: f64) {
     }
 }
 
-// The core nodes on the boundary of the core.
 fn boundary_nodes(cn: i64, ct: i64[:]) -> bool[>..] {
     var count = dictionary<i64, i64> {};
     count_edges(ct, count);
@@ -320,7 +275,6 @@ fn add_tri(a: i64, b: i64, c: i64) {
     add_simplex(v);
 }
 
-// The core nodes on edge i of the outer loop, in order along it.
 fn chain(i: i64, nid: i64[:]) -> i64[>..] {
     var ids: i64[>..] = [];
     var at: f64[>..] = [];
@@ -342,8 +296,6 @@ fn chain(i: i64, nid: i64[:]) -> i64[>..] {
     return ids;
 }
 
-// The triangles of the quad between layers k - 1 and k at edge i. On the
-// outer layer, the top triangle is a fan over the hanging nodes of the edge.
 fn emit_quad(k: i64, i: i64, nid: i64[:]) {
     let a = lid(k - 1, i);
     let b = lid(k - 1, i + 1);
@@ -362,17 +314,12 @@ fn emit_quad(k: i64, i: i64, nid: i64[:]) {
     for s in run.len - 1 { add_tri(run[s], run[s + 1], apex); }
 }
 
-// Merges the layers and the core into the mesh.
 fn merge_layers(g: i64, tol: f64) {
     var cx: f64[>..] = [];
     var cy: f64[>..] = [];
     var ct: i64[>..] = [];
     read_mesh(cx, cy, ct);
     let b = bounds(g);
-    // The cell of the grid is twice the merge tolerance, so a cell holds at most
-    // one node of the outer loop, and the 3 x 3 search finds a node within tol.
-    // Reason: with a cell of 1e-6 of the diameter, two outer nodes near the
-    // sharp tip of an airfoil could share a cell, and the second one was lost.
     let w = 2.0 * tol;
     var grid = dictionary<i64, i64> {};
     for i in bl_ln { grid.insert(cell_key(bl_lx[lid(bl_lk, i)], bl_ly[lid(bl_lk, i)], b[0], b[1], w), i + 1); }
@@ -387,11 +334,6 @@ fn merge_layers(g: i64, tol: f64) {
     for k in 1..bl_lk + 1 { for i in bl_ln { emit_quad(k, i, nid); } }
 }
 
-// Meshes the 2D shape g with `count` layers of triangles on the boundary of
-// the shape `wall`, then the core of edge `size` (see the head of the file).
-// The first layer has the height `first`, and each next layer `ratio` times
-// the one before, at most `count` layers and as far as the spacing of the
-// wall nodes. False, with a message on stderr, if it cannot.
 fn mesh_2d_layers(g: i64, wall: i64, size: f64, first: f64, ratio: f64, count: i64) -> bool {
     guard size > 0.0 && first > 0.0 && ratio >= 1.0 && count >= 1 && count <= MAX_LAYER_COUNT else {
         return layers_fail("give size > 0, first > 0, ratio >= 1 and 1 to 1000 layers");

@@ -1,11 +1,3 @@
-// The written-out linear elastic law of a physics: `let sigma` is any
-// expression that is linear in `strain(u)`, for example the orthotropic
-// stiffness written out with `outer`, a thermal strain tensor, or the
-// engineering constants of a ply turned by its angle. The generator
-// evaluates the expression at the 6 unit strains and at the zero strain, so
-// that the law becomes one 6 x 6 stiffness and one initial stress for each
-// material (src/elements/assemble.goose, set_aniso). The same code serves
-// each physics that has an elastic flux, and each region with its own material.
 import std;
 import math;
 namespace elements_gen;
@@ -14,17 +6,16 @@ import codegen.codegen;
 import .gen;
 import .gen_solid;
 
+let BYTE_X = 120;
 let ANISO_FIX = "write the flux as a sum of + - * / of numbers, material properties, lets, strain(u), I, outer, tr, transpose, sym, dev, dot, ddot and hooke, and the members .xx .xy of a tensor";
 
-// A scalar (rank 0), a vector (rank 1, 3 components) or a tensor (rank 2,
-// 3 x 3 in rows) in the unit system of the header.
 struct Ten {
     rank: i64,
     v: f64[9],
 }
 
-var aniso_node = -1;        // the value of the flux let when the law is written out, or -1
-var probe_eps: f64[9] = [0.0; 9];   // strain(u) of the evaluation now
+var aniso_node = -1;
+var probe_eps: f64[9] = [0.0; 9];
 
 fn aniso_reset() {
     aniso_node = -1;
@@ -32,8 +23,6 @@ fn aniso_reset() {
 }
 
 fn t_scalar(x: f64) -> Ten { return Ten { rank: 0, v: [x, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }; }
-
-fn t_size(r: i64) -> i64 { return if r == 0 { 1 } else if r == 1 { 3 } else { 9 }; }
 
 fn t_eye() -> Ten { return Ten { rank: 2, v: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0] }; }
 
@@ -53,7 +42,6 @@ fn t_trans(a: Ten) -> Ten {
 
 fn t_trace(a: Ten) -> f64 { return a.v[0] + a.v[4] + a.v[8]; }
 
-// The physics let `word`, or -1.
 fn aniso_let(word: u8[:]) -> i64 {
     for l in solid_lets { if name(l) == word { return l; } }
     return -1;
@@ -66,8 +54,7 @@ fn member_index(w: u8[:], rank: i64) -> i64 {
     guard rank == 2 && w.len == 2 else { return -1; }
     var idx = 0;
     for k in 2 {
-        // x, y and z are the bytes 120, 121 and 122.
-        let a = w[k] as! i64 - 120;
+        let a = w[k] as! i64 - BYTE_X;
         if a < 0 || a > 2 { return -1; }
         idx = 3 * idx + a;
     }
@@ -246,7 +233,6 @@ recursive fn tcall(n: i64, depth: i64) -> Ten {
     return t_scalar(0.0);
 }
 
-// The stress of the strain probe_eps by the written-out law, in Voigt order.
 fn aniso_stress_now() -> f64[6] {
     let s = tval(aniso_node, 0);
     var r: f64[6] = [0.0; 6];
@@ -260,10 +246,6 @@ fn aniso_stress_now() -> f64[6] {
     return r;
 }
 
-// The stiffness c (the stress for each unit strain xx, yy, zz, xy, yz, xz, with
-// the tensor shear eps_xy = eps_yx = 1, in rows) and the stress s0 of the zero
-// strain of the law of the material now. A law that is not linear in strain(u)
-// is not in this generator.
 fn aniso_law(c: f64[36]&, s0: f64[6]&) {
     let vi: i64[6] = [0, 1, 2, 0, 1, 0];
     let vj: i64[6] = [0, 1, 2, 1, 2, 2];
@@ -280,7 +262,6 @@ fn aniso_law(c: f64[36]&, s0: f64[6]&) {
             big = max(big, abs(c[6 * v + w]));
         }
     }
-    // A second strain checks that the law is linear: the stress of the sum of the strains.
     probe_eps = [1.0, 0.25, 0.0, 0.25, 0.5, 0.0, 0.0, 0.0, -0.5];
     let s = aniso_stress_now();
     let e: f64[6] = [1.0, 0.5, -0.5, 0.25, 0.0, 0.0];
@@ -297,8 +278,6 @@ fn aniso_law(c: f64[36]&, s0: f64[6]&) {
     if dim == 2 && plane == PLANE_STRESS { condense_plane_stress(c, s0); }
 }
 
-// Plane stress: the stress zz is 0, so the strain zz leaves the law, which the
-// 2d cells use in the components xx, yy and xy.
 fn condense_plane_stress(c: f64[36]&, s0: f64[6]&) {
     let czz = c[14];
     if czz <= 0.0 || c[6 * 2 + 4] != 0.0 || c[6 * 2 + 5] != 0.0 {
@@ -318,7 +297,6 @@ fn condense_plane_stress(c: f64[36]&, s0: f64[6]&) {
     s0 = t;
 }
 
-// The parts of this generator that read lame and shear, and so not the written-out law.
 fn aniso_limits() {
     if contacts.len > 0 { unsupported(tok(aniso_node), "a contact of a written-out elastic law is not in this generator", "use hooke(E, nu, strain(u))"); }
     if rkpm_support > 0.0 { unsupported(tok(aniso_node), "the method rkpm of a written-out elastic law is not in this generator", "use method cg"); }

@@ -1,7 +1,3 @@
-// The language card that `skein help --llm` prints (docs/command_line.md,
-// docs/llm_test.md §2). It is the only Skein text that an LLM gets before it
-// writes a model, so it must stay true to the checker. Target: about 2000
-// tokens.
 namespace cli;
 
 let CARD = """

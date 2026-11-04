@@ -1,11 +1,3 @@
-// The linear elastic solid: the material, the Jacobian of a 3D cell, the
-// face weights of a hexahedron, and the registry entry of the 27-node
-// hexahedron (the triquadratic Lagrange cell). Its element routine,
-// hex27_stiffness, is in kernels.goose.
-//
-// The local node a of a hex27 cell is at (a % 3, a / 3 % 3, a / 9) on the
-// lattice of the reference points -1, 0 and 1 along each axis. Its local
-// face 2 r + side is the face ξ_r = -1 (side 0) or ξ_r = 1 (side 1).
 import std;
 import math;
 namespace runtime;
@@ -14,14 +6,10 @@ import .fem;
 var young = 0.0;
 var poisson = 0.0;
 
-// The material of each cell: E, nu and the isotropic thermal strain
-// alpha (T - T0). `material` sets them for all cells, and `material_box`
-// for the cells whose centre is in a box (api.goose).
 var cell_young: f64[>..] = [];
 var cell_poisson: f64[>..] = [];
 var cell_strain: f64[>..] = [];
 
-// The Lamé constants lambda and mu of the material of cell c.
 fn cell_lame(c: i64) -> f64, f64 {
     guard c >= 0 && c < cell_young.len && cell_poisson.len == cell_young.len else { abort("cell_lame: a cell with a material"); }
     let e = cell_young[c];
@@ -29,7 +17,6 @@ fn cell_lame(c: i64) -> f64, f64 {
     return e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu)), e / (2.0 * (1.0 + nu));
 }
 
-// The quadratic Lagrange function of node a (at -1, 0 and 1) at s.
 fn shape_1d(a: i64, s: f64) -> f64 {
     guard a >= 0 && a < 3 else { abort("shape_1d: 0 <= a < 3"); }
     if a == 0 { return 0.5 * s * (s - 1.0); }
@@ -57,8 +44,6 @@ fn hex27_shape(xi: f64[3], n: f64[>..]&, dn: f64[>..]&) {
     }
 }
 
-// The weights of local face f = 2 r + side of the hexahedron c, hex27 or
-// hex8i (cell_face_weights in fem.goose), by 3 × 3 Gauss points on the face.
 fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
     guard c >= 0 && c < cell_count() && (cell_type[c] as i64 == HEX27 || cell_type[c] as i64 == HEX8I) && f >= 0 && f < 6 && w.len == 0 else { abort("hex_face_weights: a hexahedron, a local face and an empty w"); }
     let t = cell_type[c] as i64;
@@ -66,8 +51,6 @@ fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
     let r = f / 2;
     let a = if r == 0 { 1 } else { 0 };
     let b = if r == 2 { 1 } else { 2 };
-    // ta × tb is along +ξ_r for r = 0 and 2, and along -ξ_r for r = 1. The
-    // face at side 0 looks to -ξ_r.
     var sign = if r == 1 { -1.0 } else { 1.0 };
     if f % 2 == 0 { sign = -sign; }
     for l in 4 * nn { w.push(0.0); }
@@ -78,7 +61,6 @@ fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
             xi[a] = GAUSS3_X[ga];
             xi[b] = GAUSS3_X[gb];
             cell_shape(t, xi, shape_n, shape_dn);
-            // The tangents ∂x/∂ξ_a and ∂x/∂ξ_b of the face.
             var ta: f64[3] = [0.0, 0.0, 0.0];
             var tb: f64[3] = [0.0, 0.0, 0.0];
             for l in nn {
@@ -88,8 +70,6 @@ fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
                     tb[s] += shape_dn[3 * l + b] * coords[3 * n + s];
                 }
             }
-            // The outward normal times the area per unit area of the
-            // reference square.
             let nx = sign * (ta[1] * tb[2] - ta[2] * tb[1]);
             let ny = sign * (ta[2] * tb[0] - ta[0] * tb[2]);
             let nz = sign * (ta[0] * tb[1] - ta[1] * tb[0]);
@@ -105,8 +85,6 @@ fn hex_face_weights(c: i64, f: i64, w: f64[>..]&) {
     }
 }
 
-// jac[3 r + s] = ∂x_s / ∂ξ_r in cell c, from the shape function
-// derivatives dn of cell_shape.
 fn cell_jacobian(c: i64, dn: f64[:], jac: f64[9]&) {
     guard c >= 0 && c < cell_count() && dn.len == 3 * (cell_start[c + 1] - cell_start[c]) else { abort("cell_jacobian: a cell and 3 derivatives for each node"); }
     for i in 9 { jac[i] = 0.0; }
@@ -118,8 +96,6 @@ fn cell_jacobian(c: i64, dn: f64[:], jac: f64[9]&) {
     }
 }
 
-// inv = jac⁻¹, so ∂N/∂x_s = Σr inv[3 s + r] ∂N/∂ξ_r. It gives the
-// determinant of jac, and leaves inv as it is if the determinant is 0.
 fn inverse3(jac: f64[9], inv: f64[9]&) -> f64 {
     let det = jac[0] * (jac[4] * jac[8] - jac[5] * jac[7])
         - jac[1] * (jac[3] * jac[8] - jac[5] * jac[6])
@@ -141,4 +117,4 @@ var quad_xi: f64[>..] = [];
 var quad_w: f64[>..] = [];
 var shape_n: f64[>..] = [];
 var shape_dn: f64[>..] = [];
-var grad: f64[>..] = [];      // the gradient of each shape function at a quadrature point
+var grad: f64[>..] = [];

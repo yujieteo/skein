@@ -1,0 +1,2 @@
+max_file_lines 4800
+max_function_lines 500

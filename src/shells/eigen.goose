@@ -1,19 +1,3 @@
-// The `modal` and `buckling` steps of the beams (spec §14.2): the lowest
-// eigenpairs of K x = λ B x by subspace iteration (K. J. Bathe, Finite
-// Element Procedures, 1996, §11.6).
-//
-//   modal      B = M, the consistent mass: λ = ω²
-//   buckling   B = -K_G, the geometric stiffness of the axial forces of the
-//              last static solve: λ is the load factor of its load
-//
-// K is the skyline LDLᵀ of solve.goose, with the supports of the model. Each
-// iteration is X̄ = K⁻¹ B X, then the Ritz pairs of the q vectors of X̄:
-// (X̄ᵀ B X̄) z = μ (X̄ᵀ K X̄) z, with μ = 1/λ. The largest μ give the lowest
-// λ, and X = X̄ Z. B can be indefinite (a beam in tension), but K is
-// positive definite, so the Ritz problem is a symmetric one.
-//
-// Only the beams have B. A shell cell can add its mass and its K_G to
-// `second` with the same layout later, 576 values for each cell.
 import std;
 import math;
 import os;
@@ -25,20 +9,17 @@ import solvers from "../solvers";
 
 let MODAL = 0;
 let BUCKLING = 1;
-let EIGEN_TOLERANCE = 1.0e-6;   // the residual of K⁻¹ B x - μ x in the K norm, relative to μ
+let EIGEN_TOLERANCE = 1.0e-6;
 let EIGEN_ITERATIONS = 100;
 
 var eigen_kind = MODAL;
-var eigenvalues: f64[>..] = [];  // λ of each mode of the last eigen solve: ω² or the load factor
-var mode_shapes: f64[>..] = [];  // mode k at dof_count() k, with xᵀ K x = 1
-var eigen_iterations = 0;        // the iterations of the last eigen solve
-var eigen_error: u8[>..] = [];   // why the last eigen solve failed, or ""
-var too_few = false;             // the last subspace found fewer positive μ than the count
-var second: f64[>..] = [];       // B of each beam in global dofs: 144 values for each beam
+var eigenvalues: f64[>..] = [];
+var mode_shapes: f64[>..] = [];
+var eigen_iterations = 0;
+var eigen_error: u8[>..] = [];
+var too_few = false;
+var second: f64[>..] = [];
 
-// The `count` lowest natural modes of the beams. Each beam section needs a
-// density (beam_density). False, with the reason in eigen_error, if K is
-// singular or the iteration does not converge.
 fn modes(count: i64) -> bool {
     guard count >= 1 && beams.len > 0 else { abort("modes: count >= 1, and a beam"); }
     for b in beams {
@@ -49,27 +30,21 @@ fn modes(count: i64) -> bool {
     return eigen_solve(MODAL, count);
 }
 
-// The `count` lowest buckling modes of the beams under the load of the last
-// solve. Call it after solve(), with the same supports.
 fn buckling(count: i64) -> bool {
-    guard count >= 1 && beams.len > 0 && disp.len == dof_count() else { abort("buckling: count >= 1, a beam, and a solution for each dof"); }
+    guard count >= 1 && beams.len > 0 && disp.len == dof_count() && !disp_is_mode else { abort("buckling: count >= 1, a beam, and a static solution for each dof (show_mode replaced it)"); }
     return eigen_solve(BUCKLING, count);
 }
 
-// Eigenvalue k (1 ..) of the last eigen solve, as Skein's eigenvalue(k):
-// the frequency ω/(2π) of a modal solve, the load factor of a buckling solve.
 fn eigenvalue(k: i64) -> f64 {
     guard k >= 1 && k <= eigenvalues.len else { abort("eigenvalue: 1 <= k <= the count of the last eigen solve"); }
     let l = eigenvalues[k - 1];
     return if eigen_kind == MODAL { sqrt(max(l, 0.0)) / (2.0 * PI) } else { l };
 }
 
-// Copies mode k (1 ..) into disp, for write_vtu, with its largest
-// displacement (or rotation, if it has no displacement) 1. It replaces the
-// static solution, so call buckling first.
 fn show_mode(k: i64) {
     guard k >= 1 && k * dof_count() <= mode_shapes.len && disp.len == dof_count() else { abort("show_mode: 1 <= k <= the count of the last eigen solve"); }
     let n = dof_count();
+    disp_is_mode = true;
     var big: f64[2] = [0.0, 0.0];
     for d in n {
         let v = mode_shapes[n * (k - 1) + d];
@@ -90,7 +65,6 @@ fn too_few_fail(count: i64) -> bool {
     return eigen_fail(str("fewer than ", count, " positive eigenvalues: the load puts no beam in compression?"));
 }
 
-// Assembles and factors K, makes B, and runs the subspace iteration.
 fn eigen_solve(kind: i64, count: i64) -> bool {
     let t0 = clock();
     eigen_kind = kind;
@@ -104,17 +78,12 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     var free = 0;
     for f in fixed { if f == 0 { free++; } }
     guard count <= free else { return eigen_fail(str(count, " modes, but only ", free, " free dofs")); };
-    // q vectors as Bathe: min(2 p, p + 8), at most the free dofs.
     var q = min(min(2 * count, count + 8), free);
     make_second(kind);
     let sizes = state_sizes();
     var ok = false;
     let first_q = q;
-    // An indefinite B (a beam in tension) can have negative μ of larger size
-    // than the positive μ, and then the q vectors find too few positive μ.
-    // Each try doubles q, up to the free dofs.
     while true {
-        // X, X̄ and B X: 3 q vectors, and B of each beam.
         solvers::memory_check("shell skyline ldlt", 0, n, 3 * q + (144 * beams.len + n - 1) / n, 0, ", or fewer modes");
         eigen_iterations = 0;
         ok = subspace(count, q, n);
@@ -127,7 +96,6 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     return ok;
 }
 
-// B of each beam into second: M, or -K_G of the axial force of disp.
 fn make_second(kind: i64) {
     guard beams.len > 0 && disp.len == dof_count() else { abort("make_second: a beam, and a solution for each dof"); }
     second.clear();
@@ -144,7 +112,6 @@ fn make_second(kind: i64) {
     }
 }
 
-// y = B x on the free dofs, 0 on the fixed dofs.
 fn apply_second(x: f64[:], y: f64[:]) {
     guard x.len == dof_count() && y.len == x.len && second.len == 144 * beams.len else { abort("apply_second: x and y have each dof, and B has each beam"); }
     for &v in y { v = 0.0; }
@@ -160,7 +127,6 @@ fn apply_second(x: f64[:], y: f64[:]) {
     }
 }
 
-// v = K⁻¹ v with the factors of factor() in sky.
 fn back_solve(v: f64[:]) {
     guard v.len == dof_count() && top.len == v.len else { abort("back_solve: v and the profile have each dof"); }
     let n = v.len;
@@ -177,7 +143,6 @@ fn back_solve(v: f64[:]) {
     }
 }
 
-// The start vectors: a fixed pseudo-random value on each free dof.
 fn start_vectors(q: i64, n: i64) -> f64[>..] {
     var x: f64[>..] = [];
     for i in q * n {
@@ -187,7 +152,6 @@ fn start_vectors(q: i64, n: i64) -> f64[>..] {
     return x;
 }
 
-// h[q i + j] = a_i · b_j of the q vectors of a and b, made symmetric.
 fn project(a: f64[:], b: f64[:], h: f64[:], q: i64, n: i64) {
     guard a.len == q * n && b.len == a.len && h.len == q * q else { abort("project: q vectors of n in a and b, and q × q in h"); }
     for i in q {
@@ -206,10 +170,6 @@ fn project(a: f64[:], b: f64[:], h: f64[:], q: i64, n: i64) {
     }
 }
 
-// The subspace iteration for the `count` lowest λ with q vectors. With x_i
-// a Ritz vector (x_iᵀ K x_i = 1, x_iᵀ B x_i = μ_i) and x̄_i = K⁻¹ B x_i, the
-// residual is |x̄_i - μ_i x_i|²_K = x̄_iᵀ B x_i - μ_i², which is diagonal i of
-// the next X̄ᵀ K X̄ = X̄ᵀ B X.
 fn subspace(count: i64, q: i64, n: i64) -> bool {
     guard count >= 1 && q >= count && n == dof_count() else { abort("subspace: 1 <= count <= q, and n is the dof count"); }
     too_few = false;
@@ -261,10 +221,6 @@ fn subspace(count: i64, q: i64, n: i64) -> bool {
     return true;
 }
 
-// The Ritz pairs of br z = μ kr z: μ in decreasing order into mu, and the
-// vectors z (column j, zᵀ kr z = I). With kr = L Lᵀ (Cholesky), it is
-// C v = μ v for C = L⁻¹ br L⁻ᵀ, and z = L⁻ᵀ v. False if kr is not
-// positive definite.
 fn ritz(kr: f64[:], br: f64[:], q: i64, mu: f64[>..]&) -> f64[>..], bool {
     guard kr.len == q * q && br.len == kr.len else { abort("ritz: kr and br are q × q"); }
     var l: f64[>..] = [];
@@ -279,7 +235,6 @@ fn ritz(kr: f64[:], br: f64[:], q: i64, mu: f64[>..]&) -> f64[>..], bool {
     }
     var c: f64[>..] = [];
     c.append(br);
-    // c = L⁻¹ c L⁻ᵀ: forward substitution on the columns, then on the rows.
     for col in q {
         for i in q {
             var s = c[q * i + col];
@@ -295,7 +250,6 @@ fn ritz(kr: f64[:], br: f64[:], q: i64, mu: f64[>..]&) -> f64[>..], bool {
         }
     }
     var v = jacobi_eigen(c, q, mu);
-    // z = L⁻ᵀ v: back substitution on each column.
     for col in q {
         for ii in q {
             let i = q - 1 - ii;
@@ -307,8 +261,6 @@ fn ritz(kr: f64[:], br: f64[:], q: i64, mu: f64[>..]&) -> f64[>..], bool {
     return v, true;
 }
 
-// The eigenvalues of the symmetric q × q matrix c into mu, in decreasing
-// order, and the eigenvectors (column j): cyclic Jacobi rotations.
 fn jacobi_eigen(c: f64[>..]&, q: i64, mu: f64[>..]&) -> f64[>..] {
     var v: f64[>..] = [];
     for i in q * q { v.push(if i / q == i % q { 1.0 } else { 0.0 }); }
@@ -330,7 +282,6 @@ fn jacobi_eigen(c: f64[>..]&, q: i64, mu: f64[>..]&) -> f64[>..] {
             }
         }
     }
-    // Sorts the pairs: the largest μ first.
     var order: i64[>..] = [];
     for i in q { order.push(i); }
     for i in q {
@@ -349,7 +300,6 @@ fn jacobi_eigen(c: f64[>..]&, q: i64, mu: f64[>..]&) -> f64[>..] {
     return z;
 }
 
-// c = Jᵀ c J and v = v J, with J the rotation of (p, r).
 fn rotate_pair(c: f64[>..]&, v: f64[>..]&, q: i64, p: i64, r: i64, cs: f64, sn: f64) {
     for k in q {
         let a = c[q * k + p];

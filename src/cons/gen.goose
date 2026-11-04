@@ -1,26 +1,3 @@
-// The code generator of the models of conservation laws: a Skein syntax
-// tree to a Goose program that calls src/cons/cons.goose.
-//
-// It takes the models with a method fv on a physics of more than one
-// unknown, or of a vector unknown, whose equations are the conservation
-// form `eq ddt(U) + div(F) = S`. U is a scalar, a vector or a tensor of 2
-// components on each axis. F, S and the conditions are written with the
-// lets of the physics: + - * / ^ of scalars, vectors (x, y) and tensors,
-// dot, outer, norm, transpose, tr, sym, ddot, I, n, x, y, t, and the
-// functions sqrt, exp, ln, sin, cos, tan, atan, abs, min and max. The
-// generator knows no physics: it writes the flux of the model as Goose.
-// The domain is a CSG shape of rect, circle and polygon, meshed with
-// triangles by src/mesher/. The steps are `transient(end:, dt:, scheme:
-// ssprk3)`. Each other construct gives an error `unsupported` at its token,
-// with a fix.
-//
-// A `bc region: U = value` is a condition on an unknown (the state outside
-// the side), and a `bc region: dot(F, n) = value` or `bc region: F*n =
-// value` is a condition on the flux of an equation, the flux through the
-// side. Its value is read at the state in the cell. A side with no
-// condition has the flux of the state in the cell. A condition that names
-// an unknown on a side of the flux gives the Rusanov flux of the state in
-// the cell and the state outside (src/cons/solve.goose).
 import std;
 import math;
 namespace cons_gen;
@@ -45,23 +22,17 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
     return n >= 0 && kind(n) == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME && name(child(n, 0)) == callee;
 }
 
-// The value of argument i of call n.
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 fn arg_count(n: i64) -> i64 { syntax::child_count(n) - 1 }
 
 fn binary(n: i64, op: u8[:]) -> bool { kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == op }
 
-// The source of n with no spaces.
 fn compact(n: i64) -> u8[>..] {
     var s: u8[>..] = [];
     for c in source_of(n) { if c != ' ' { s.push(c); } }
     return s;
 }
 
-// --- the claim ---------------------------------------------------------------
-
-// Whether this generator takes the model: a method fv on a physics that
-// solves more than one unknown or a vector unknown, with no template.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -93,39 +64,36 @@ fn system_physics(prog: i64, word: u8[:]) -> bool {
     return false;
 }
 
-// --- the model ----------------------------------------------------------------
-
 let SHAPE = 0;
 let BOUNDARY = 1;
 
 struct Named {
     name: u8[..64],
     kind: i64,
-    value: i64,     // the expression node
+    value: i64,
 }
 
 struct Unknown {
     name: u8[..64],
     rank: i64,
     offset: i64,
-    initial: i64,   // the node of the start value, or -1
+    initial: i64,
 }
 
-// ddt(U) + div(F) = S: the unknown, the flux node (or -1) and the node of S (or -1).
 struct Eq {
     unknown: i64,
     flux: i64,
     rhs: i64,
 }
 
-let BC_STATE = 0;   // a value of an unknown, or of a component of it
-let BC_FLUX = 1;    // the flux of the equation through the side
+let BC_STATE = 0;
+let BC_FLUX = 1;
 
 struct Bc {
-    region: i64,    // the node of the region
+    region: i64,
     kind: i64,
     unknown: i64,
-    comp: i64,      // the component, or -1 for all
+    comp: i64,
     value: i64,
 }
 
@@ -133,7 +101,7 @@ struct Step {
     name: u8[..64],
     end: f64,
     dt: f64,
-    first_bc: i64,      // the bcs that hold in the step: a range of `active`
+    first_bc: i64,
     bc_count: i64,
     output: bool,
 }
@@ -153,18 +121,18 @@ var bcs: Bc[>..];
 var active: i64[>..];
 var global_bcs: i64[>..];
 var steps: Step[>..];
-var output_nodes: i64[>..];       // the fields of the outputs
-var output_steps: i64[>..];       // the step of each
+var output_nodes: i64[>..];
+var output_steps: i64[>..];
 var expects: Expect[>..];
 var reports: i64[>..];
 var report_steps: i64[>..];
-var aggregates: i64[>..];        // the integral and mean calls of the reports and expects
-var cell_regions: i64[>..];      // the indices in `named` of the cells that an aggregate names
+var aggregates: i64[>..];
+var cell_regions: i64[>..];
 var physics_name: u8[..64];
 var domain = -1;
 var mesh_size = 0.0;
 var comps = 0;
-var limiter = 2;                 // cons::VAN_LEER
+var limiter = 2;
 var material_node = -1;
 
 fn reset() {
@@ -220,7 +188,6 @@ recursive fn is_shape(n: i64) -> bool {
     return (op == "-" || op == "|" || op == "&") && is_shape(child(n, 0)) && is_shape(child(n, 1));
 }
 
-// `a | b` of boundaries.
 recursive fn is_union(n: i64) -> bool {
     guard kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "|" else { return false; }
     return (named_of(child(n, 0), BOUNDARY) >= 0 || is_union(child(n, 0))) && (named_of(child(n, 1), BOUNDARY) >= 0 || is_union(child(n, 1)));
@@ -291,7 +258,6 @@ fn physics_item(n: i64) {
     if eqs.len != unknowns.len { unsupported(tok(n), "each unknown needs one eq with ddt of it", PHYSICS_FIX); }
 }
 
-// The rank of the unknown type: a scalar is 0, and Vector<..> is 1.
 fn unknown_item(c: i64) {
     let t = child(c, 0);
     var u = Unknown { name: [], rank: 0, offset: comps, initial: child(c, 1) };
@@ -305,7 +271,6 @@ fn unknown_item(c: i64) {
     unknowns.push(u);
 }
 
-// `eq ddt(U) + div(F) = S`.
 fn equation(c: i64) {
     var e = Eq { unknown: -1, flux: -1, rhs: child(c, 1) };
     terms(child(c, 0), c, e);
@@ -350,7 +315,6 @@ fn mesh_item(n: i64) {
         if kind(s) == syntax::N_SETTING && name(s) == "size" {
             mesh_size = codegen::eval(v).v[0];
         } else if kind(s) == syntax::N_SETTING && name(s) == "cell" && source_of(v) == "tri" {
-            // the cell
         } else {
             unsupported(tok(s), "the mesh setting is not in the generator of conservation laws", "use only size and cell: tri");
         }
@@ -387,8 +351,6 @@ fn method_item(n: i64) {
     }
 }
 
-// --- the steps ----------------------------------------------------------------------
-
 let STEP_FIX = "write step march: transient(end: 2 s, dt: 0.6 ms, scheme: ssprk3) { ... }";
 
 fn procedure(proc: i64, s: Step&) {
@@ -416,7 +378,6 @@ fn procedure(proc: i64, s: Step&) {
     if s.end <= 0.0 || s.dt < 0.0 { unsupported(tok(proc), "the step needs an end after the start, and dt >= 0 or stable (the Rusanov step is not stable above a limit that skein run tells)", STEP_FIX); }
 }
 
-// The region of a bc: a boundary that a let names, or `a | b` of them.
 recursive fn region_ok(r: i64) -> bool {
     if named_of(r, BOUNDARY) >= 0 { return true; }
     return binary(r, "|") && region_ok(child(r, 0)) && region_ok(child(r, 1));
@@ -424,7 +385,6 @@ recursive fn region_ok(r: i64) -> bool {
 
 let BC_FIX = "write bc inlet: rho = 1.4 kg/m^3, or bc wall: dot(mom, n) = 0, with the flux of the eq on the left";
 
-// A `bc` item or statement. It gives its index in `bcs`, or -1.
 fn bc(n: i64) -> i64 {
     let region = child(n, 0);
     let target = child(n, 1);
@@ -500,7 +460,6 @@ fn step(n: i64) {
         }
         c = next(c);
     }
-    // The conditions of the step replace the global ones with the same region, target and kind.
     s.first_bc = active.len;
     for g in global_bcs {
         var replaced = false;
@@ -516,25 +475,20 @@ fn same_target(a: Bc, b: Bc) -> bool {
     return compact(a.region) == compact(b.region) && a.kind == b.kind && a.unknown == b.unknown && a.comp == b.comp;
 }
 
-// --- the mini tensor algebra ---------------------------------------------------------
-
-// A value of the model written as Goose: its rank (0 scalar, 1 vector, 2
-// tensor) and the temporaries that hold its components.
 struct T {
     rank: i64,
     v: i64[4],
 }
 
-var body: u8[>..];                    // the lets of the function that the emitter writes
+var body: u8[>..];
 var temps = 0;
 var memo_names: u8[..64][>..];
 var memo_values: T[>..];
-var in_flux = false;                  // the function has no x, y and t
+var in_flux = false;
 var depth = 0;
 
 fn count_of(rank: i64) -> i64 { return if rank == 0 { 1 } else if rank == 1 { 2 } else { 4 }; }
 
-// A new temporary with the Goose expression text.
 fn temp(text: u8[:]) -> i64 {
     temps++;
     format(body, "    let t", temps, " = ", text, ";\n");
@@ -569,7 +523,6 @@ fn combine(a: T, b: T, op: u8[:], n: i64) -> T {
     return r;
 }
 
-// a times b: a scalar by anything, a tensor by a vector or a tensor.
 fn times(a: T, b: T, n: i64) -> T {
     if a.rank == 0 || b.rank == 0 {
         let s = if a.rank == 0 { a } else { b };
@@ -581,7 +534,6 @@ fn times(a: T, b: T, n: i64) -> T {
     return contract(a, b, n);
 }
 
-// The matrix product, the matrix by a vector, and the vector by a matrix. The dot of 2 vectors is a scalar.
 fn contract(a: T, b: T, n: i64) -> T {
     if a.rank == 1 && b.rank == 1 {
         var r = make(0);
@@ -619,7 +571,6 @@ fn memo_find(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The state u[k] of an unknown.
 fn state_of(i: i64) -> T {
     let u = unknowns[i];
     var r = make(u.rank);
@@ -705,7 +656,6 @@ recursive fn emit_vector(n: i64) -> T {
     return r;
 }
 
-// `v.x` and `v.y` of a vector, and `T.xx` to `T.yy` of a tensor.
 recursive fn emit_member(n: i64) -> T {
     let a = emit(first(n));
     let w = name(n);
@@ -792,9 +742,6 @@ recursive fn emit_call(n: i64) -> T {
     return rank_error(n, "the function is not in the generator of conservation laws");
 }
 
-// --- the mesh file ------------------------------------------------------------------
-
-// The point (x, y) of a vector node with its unit, in SI.
 fn point2(n: i64) -> f64[2] {
     var p: f64[2] = [0.0, 0.0];
     var f = 1.0;
@@ -843,7 +790,6 @@ recursive fn mentions_xy(n: i64) -> bool {
     return false;
 }
 
-// The value of a scalar expression of x and y at a point.
 recursive fn number_at(n: i64, x: f64, y: f64) -> f64 {
     if !mentions_xy(n) { return codegen::eval(n).v[0]; }
     let k = kind(n);
@@ -865,7 +811,6 @@ recursive fn number_at(n: i64, x: f64, y: f64) -> f64 {
     return 0.0;
 }
 
-// Whether the condition n holds at (x, y), with the tolerance tol for ==, <= and >=.
 recursive fn holds(n: i64, x: f64, y: f64, tol: f64) -> bool {
     if kind(n) == syntax::N_UNARY && syntax::text(tok(n)) == "!" { return !holds(first(n), x, y, tol); }
     if kind(n) == syntax::N_BINARY {
@@ -884,7 +829,6 @@ recursive fn holds(n: i64, x: f64, y: f64, tol: f64) -> bool {
     return false;
 }
 
-// Whether the point (x, y) is on the region r (a boundary, or `a | b`).
 recursive fn on_region(r: i64, x: f64, y: f64, tol: f64) -> bool {
     if binary(r, "|") { return on_region(child(r, 0), x, y, tol) || on_region(child(r, 1), x, y, tol); }
     var v = named[named_of(r, BOUNDARY)].value;
@@ -897,7 +841,6 @@ recursive fn on_region(r: i64, x: f64, y: f64, tol: f64) -> bool {
     }
     guard arg_count(v) >= 2 else { return true; }
     let cond = arg(v, 1);
-    // A shape: the side is on its edge. Else a condition of x and y.
     let edge = named_of(cond, SHAPE);
     if edge >= 0 { return abs(mesher::phi(mesher_shape(cond), x, y, 0.0)) <= tol; }
     return holds(cond, x, y, tol);
@@ -906,10 +849,6 @@ recursive fn on_region(r: i64, x: f64, y: f64, tol: f64) -> bool {
 var cells = 0;
 var vertices = 0;
 
-// Meshes the domain of the model that `read` read, and writes the mesh in
-// the directory dir: the vertices, the triangles, the bcs that hold on each
-// side, and the cells of each region. It gives an error, and false, if the
-// mesher does not finish or a file cannot be written.
 fn write_mesh(dir: u8[:]) -> bool {
     mesher::clear_shapes();
     mesher::clear_refines();
@@ -973,7 +912,6 @@ fn write_mesh(dir: u8[:]) -> bool {
     return true;
 }
 
-// Marks the sides that two cells share.
 fn mark_inner(tri: i64[:], inner: u8[>..]&) {
     var keys: i64[>..] = [];
     let nv = vertices;
@@ -993,9 +931,6 @@ fn mark_inner(tri: i64[:], inner: u8[>..]&) {
     }
 }
 
-// The cells of the mesh, from the area of the domain and the size of the
-// mesh: the mesher makes about 2 / (√3 h²/2) cells for each unit of area. The
-// area is that of the bounding box of the shape, which is more.
 fn dof_estimate() -> i64 {
     mesher::clear_shapes();
     let area = box_area(named[domain].value);
@@ -1026,9 +961,6 @@ recursive fn box_area(n: i64) -> f64 {
     return if op == "-" { a } else if op == "|" { a + b } else { min(a, b) };
 }
 
-// --- reading the model ----------------------------------------------------------------
-
-// Whether a result expression holds integral or mean, and registers each.
 recursive fn register_results(e: i64) {
     if is_call(e, "integral") || is_call(e, "mean") {
         let r = named_of(arg(e, 1), SHAPE);
@@ -1105,8 +1037,6 @@ fn read_steps(prog: i64, at: i64) {
     for r in reports { register_results(first(r)); }
 }
 
-// Writes the functions into a scratch, and evaluates the regions at a point,
-// so that the errors of the model come from `read`.
 fn check_functions() {
     var scratch: u8[>..] = [];
     emit_functions(scratch, "");
@@ -1116,9 +1046,7 @@ fn check_functions() {
     mesher::clear_shapes();
 }
 
-// --- the emitters --------------------------------------------------------------------
-
-var normal_ok = true;     // n is the unit normal of a side in the function
+var normal_ok = true;
 
 fn begin(flux_only: bool, normal: bool) {
     body.clear();
@@ -1130,7 +1058,6 @@ fn begin(flux_only: bool, normal: bool) {
     normal_ok = normal;
 }
 
-// Starts a block of a function with its own lets.
 fn begin_block() {
     body.clear();
     memo_names.clear();
@@ -1140,7 +1067,6 @@ fn begin_block() {
 
 fn is_zero(n: i64) -> bool { return kind(n) == syntax::N_NUMBER && codegen::eval(n).v[0] == 0.0; }
 
-// The value of node n with the rank wanted. A literal 0 is a zero of any rank.
 fn emit_ranked(n: i64, rank: i64) -> T {
     if n < 0 || is_zero(n) {
         var z = make(rank);
@@ -1198,10 +1124,6 @@ fn emit_initial(out: u8[>..]&) {
     format(out, "fn initial(x: f64, y: f64, k: i64) -> f64 {\n    let t = 0.0;\n", body, tail, "    return 0.0;\n}\n\n");
 }
 
-// The state outside the sides and the flux of a step. Each condition is a
-// function of its own, so that no generated function passes 60 lines (rule 4
-// of the Power of Ten), and ghost_<step> and wall_<step> call those of the
-// bits that the mask of the side sets.
 fn emit_conditions(out: u8[>..]&, si: i64) {
     let s = steps[si];
     var ghost: u8[>..] = [];
@@ -1234,7 +1156,6 @@ fn emit_aggregates(out: u8[>..]&) {
     }
 }
 
-// The fields of the output of step si, as one function of the field and the component.
 fn emit_output(out: u8[>..]&, si: i64) {
     let s = steps[si];
     begin(false, false);
@@ -1253,7 +1174,6 @@ fn emit_output(out: u8[>..]&, si: i64) {
     format(out, "fn out_", s.name, "(u: f64[:], x: f64, y: f64, i: i64, k: i64) -> f64 {\n", body, tail, "    return 0.0;\n}\n\n");
 }
 
-// The names of the fields of the output, and their component counts.
 fn output_names(si: i64, names: u8[>..]&, counts: u8[>..]&) {
     begin(false, false);
     var i = 0;
@@ -1281,10 +1201,6 @@ fn emit_functions(out: u8[>..]&, results_dir: u8[:]) {
     }
 }
 
-// --- results ------------------------------------------------------------------------------
-
-// The Goose expression of the SI value of result e: a number, integral and
-// mean of a field on a region, + - * / ^ and atan, tan, sqrt and abs of them.
 recursive fn emit_result(out: u8[>..]&, e: i64) {
     if is_call(e, "integral") || is_call(e, "mean") {
         for a, i in aggregates {
@@ -1346,8 +1262,6 @@ fn emit_report(out: u8[>..]&, step: u8[:], r: i64) {
     out.append(", \"\"));\n    }\n");
 }
 
-// One check for an expect. The value is in SI, and the unit of the right
-// side is for the text only.
 fn emit_expect(out: u8[>..]&, x: Expect) {
     let n = x.node;
     let want = codegen::eval(child(n, 1)).v[0];
@@ -1405,7 +1319,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
-// The part of the generated program that is the same for each model.
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
     var reports: u8[>..] = [];
@@ -1495,14 +1408,10 @@ let PRELUDE = """
 
 let LIMITER_CONSTANTS = ["cons::NONE", "cons::MINMOD", "cons::VAN_LEER"];
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the cons package from `cons_path`, reads the mesh that
-// `write_mesh` wrote in `results_dir`, and writes its VTU files there.
 fn generate(cons_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     out.append("// The values are in SI.\nimport std;\nimport os;\nimport math;\nimport cons from ");
     quoted(out, cons_path);
-    // The cons package imports the package solvers, beside it.
     out.append(";\nimport solvers from ");
     quoted(out, str(cons_path[..cons_path.len - 4], "solvers"));
     out.append(";\n");

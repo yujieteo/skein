@@ -1,35 +1,25 @@
-// `skein run` (docs/command_line.md §5) for the first slice: parse the
-// model, generate a Goose program, build it with goose to a native
-// executable and run it. The program prints the reports in TOON and writes
-// the VTU files.
-//
-//     .skein/build/<model>/main.goose    the generated program
-//     .skein/build/<model>/<model>       the executable
-//     .skein/results/<model>/<step>.vtu  the results of each step
-//     .skein/build/<model>/set/<words>/  the program of a run with --set
-//     .skein/results/<model>/set/<words>/ the results of a run with --set
 import std;
 import os;
 namespace codegen;
 import syntax from "../syntax";
 import fmt.fmt;
 import .codegen;
-import elements.gen;   // skein-elements: the simplex models
-import shells.gen;     // skein-shells: the shell models
-import flow.gen;       // skein-flow: the flow models
-import grid.gen;       // skein-p4-grid: the fv and dg models
-import cons.gen;       // skein-fh-cfd: the systems of conservation laws with fv
-import vof.gen;        // skein-fh-vof: two fluids with a volume fraction
+import elements.gen;
+import shells.gen;
+import flow.gen;
+import grid.gen;
+import cons.gen;
+import vof.gen;
 import meshless.gen;
-import optim.gen;      // skein-p5-optim: the quad models of linear_elastic, and topology
-import ode.gen;        // skein-ode: the physics of global unknowns (ODE and DAE)
+import optim.gen;
+import ode.gen;
 import check from "../check";
 import .study;
 import .split;
 import .lanes;
 import .status;
 
-import solvers from "../solvers";   // the memory budget of a study
+import solvers from "../solvers";
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -38,7 +28,6 @@ extern "libc.so.6" {
 
 let USAGE = "usage: skein run <file.skn> [--set name=value]... [--study <name> [--jobs k] [--format toon|json]]\n";
 
-// Runs `command` in the shell, and gives its exit status.
 fn shell(command: u8[:]) -> i64 {
     var c: u8[>..] = [];
     c.append(command);
@@ -55,7 +44,6 @@ fn make_dirs(path: u8[:]) -> bool {
     return make_dir(path);
 }
 
-// The generators of `read_model`.
 let LANE_BOX = 0;
 let LANE_SIMPLEX = 1;
 let LANE_SHELL = 2;
@@ -67,20 +55,9 @@ let LANE_ODE = 7;
 let LANE_VOF = 8;
 let LANE_MESHLESS = 9;
 
-// Reads program `prog` with the generator that claims it. It gives that
-// generator, or -1 on an error, and `syntax::errors` holds the errors.
-// skein-elements: a simplex model goes to src/elements/gen.goose.
-// skein-shells: a shell model goes to src/shells/gen.goose.
-// skein-flow: a flow model goes to src/flow/gen.goose.
-// skein-fh-cfd: an fv model of a system of conservation laws goes to src/cons/gen.goose.
-// skein-fh-vof: a flow of two fluids with a volume fraction goes to src/vof/gen.goose, before flow claims a v and a p.
-// skein-p4-grid: an fv or dg model goes to src/grid/gen.goose.
-// skein-p5-optim: a quad model of linear_elastic goes to src/optim/gen.goose.
-// skein-ode: a physics of global unknowns goes to src/ode/gen.goose.
 fn read_model(prog: i64) -> i64 {
     if ode_gen::claims(prog) { return if ode_gen::read(prog) { LANE_ODE } else { -1 }; }
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
-    // Edge and face elements go to the simplex generator, before flow claims a q and a p.
     if elements_gen::family_claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
     if vof_gen::claims(prog) { return if vof_gen::read(prog) { LANE_VOF } else { -1 }; }
     if meshless_gen::claims(prog) { return if meshless_gen::read(prog) { LANE_MESHLESS } else { -1 }; }
@@ -90,8 +67,6 @@ fn read_model(prog: i64) -> i64 {
     if optim_gen::claims(prog) { return if optim_gen::read(prog) { LANE_OPTIM } else { -1 }; }
     if elements_gen::claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
     if read(prog) { return LANE_BOX; }
-    // A model of hexahedra that the box lane cannot read (a patch of a face, a region of a union of
-    // boxes, a heat law) goes to the generator of the simplex and hexahedron cells.
     if elements_gen::hex_claims(prog) {
         syntax::errors.clear();
         return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 };
@@ -99,8 +74,6 @@ fn read_model(prog: i64) -> i64 {
     return -1;
 }
 
-// The dofs of the mesh of the model that `read_model` read with generator
-// `lane`.
 fn dof_estimate(lane: i64) -> i64 {
     if lane == LANE_SHELL { return shells_gen::dof_estimate(); }
     if lane == LANE_FLOW { return flow_gen::dof_estimate(); }
@@ -114,8 +87,6 @@ fn dof_estimate(lane: i64) -> i64 {
     return codegen::dof_estimate();
 }
 
-// The steps of the model that `read_model` read with generator `lane`.
-// Each step solves.
 fn step_count(lane: i64) -> i64 {
     if lane == LANE_SHELL { return shells_gen::steps.len; }
     if lane == LANE_FLOW { return flow_gen::steps.len; }
@@ -129,15 +100,7 @@ fn step_count(lane: i64) -> i64 {
     return steps.len;
 }
 
-// Writes the program of the model that `read_model` read with generator
-// `lane`. The program puts its results in `results_dir`. In a study, it
-// writes or reads the stages of `share`. The shell, flow, grid, cons and vof
-// generators share none. For a flow model, it also meshes the domain and writes the
-// mesh in `results_dir` (src/flow/gen.goose). False, with an error on
-// stderr, if it cannot.
 fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&) -> bool {
-    // The skein executable is build/skein in the repository, so the runtime
-    // is in src/runtime beside it.
     let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" }
                                            else if lane == LANE_FLOW { "../src/flow" } else if lane == LANE_GRID { "../src/grid" } else if lane == LANE_CONS { "../src/cons" } else if lane == LANE_VOF { "../src/vof" } else if lane == LANE_MESHLESS { "../src/meshless" }
                                            else if lane == LANE_OPTIM { "../src/optim" } else if lane == LANE_ODE { "../src/ode" } else { "../src/runtime" });
@@ -164,7 +127,6 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     } else {
         generate(runtime_path, results_dir, share, program);
     }
-    // A generator can find an unsupported part only when it writes the code.
     if !ok() {
         fmt::write_errors();
         return false;
@@ -178,14 +140,10 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     return true;
 }
 
-// `skein run`. `args` are the words after `run`. It gives the exit status
-// (command_line.md §10).
 fn run(args: const u8[:][:]) -> i64 {
-    // A submodel finds this skein in $SKEIN_EXE (skein_run_command).
     var exe = str(resource_dir(), "skein");
     exe.push(0);
     setenv("SKEIN_EXE\0"[0], exe[0], 1);
-    // The indices in `args` of the model file and of the study name.
     var at = -1;
     var study_at = -1;
     var jobs = 0;
@@ -240,7 +198,6 @@ fn run(args: const u8[:][:]) -> i64 {
     let prog = syntax::parse_model(path, text);
     let lane = if prog >= 0 { read_model(prog) } else { -1 };
     if lane < 0 && prog >= 0 {
-        // Two physics that no one lane reads: one run for each physics.
         var buf: u8[>..] = [];
         var ends: i64[>..] = [];
         let bad = lane_texts(text, buf, ends);
@@ -253,7 +210,6 @@ fn run(args: const u8[:][:]) -> i64 {
             return run_lanes(path, buf, ends, sets);
         }
         if ends.len >= 2 {
-            // The errors of the model, and not of its lanes.
             let again = syntax::parse_model(path, text);
             if again >= 0 { read_model(again); }
         }
@@ -278,7 +234,6 @@ fn run(args: const u8[:][:]) -> i64 {
     }
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
-    // goose writes its progress on stdout, and stdout is for the TOON.
     let build = str(shell_quoted(goose), " build -q ", shell_quoted(source), " -o ", shell_quoted(exe), " 1>&2");
     if shell(build) != 0 {
         write_stderr(str("skein run: internal fault: goose cannot build '", source, "'. Please report it.\n"));
@@ -287,7 +242,6 @@ fn run(args: const u8[:][:]) -> i64 {
     return shell(shell_quoted(str("./", exe)));
 }
 
-// True when each text of `buf` (lanes.goose) reads, and no two go to the same generator.
 fn own_lanes(path: u8[:], buf: u8[:], ends: i64[:]) -> bool {
     var lanes: i64[>..] = [];
     for e, k in ends {
@@ -299,9 +253,6 @@ fn own_lanes(path: u8[:], buf: u8[:], ends: i64[:]) -> bool {
     return true;
 }
 
-// A model of two physics in two lanes (lanes.goose): each text has one
-// physics. Lane k builds in <build>/lane<k> and writes in <results>/lane<k>,
-// and the TOON of the lanes is one. The status is the largest of the lanes.
 fn run_lanes(path: u8[:], buf: u8[:], ends: i64[:], sets: const u8[:][:]) -> i64 {
     var outbuf: u8[>..] = [];
     var outends: i64[>..] = [];
@@ -327,7 +278,6 @@ fn run_lanes(path: u8[:], buf: u8[:], ends: i64[:], sets: const u8[:][:]) -> i64
         if !write_program(lane, results_dir, no_share(), program) { return 1; }
         let source = str(build_dir, "/main.goose");
         let exe = str(build_dir, "/", name);
-        // The model of the lane, for the reader of the program.
         if !write_file(str(build_dir, "/lane.skn"), t) { return 1; }
         if !write_file(source, program) {
             write_stderr(str("skein run: cannot write '", source, "'\n"));
@@ -355,51 +305,25 @@ fn run_lanes(path: u8[:], buf: u8[:], ends: i64[:], sets: const u8[:][:]) -> i64
     return status;
 }
 
-// `skein run --study` (spec §20, command_line.md §5, §6.5): the study
-// runner (spec §20.5). The model is checked once. The generator writes
-// one program for each case (study.goose), and contained Goose workers
-// build and run the cases, at most `--jobs` at a time, each when the
-// memory ledger admits it (study.goose).
-// The collector writes one table of the cases, in case order:
-//
-//     .skein/build/<model>/<study>/<case>/main.goose    the program of a case
-//     .skein/studies/<model>/<study>/<case>/             the results of a case
-//     .skein/studies/<model>/<study>/shared/             the shared stages
-//     .skein/studies/<model>/<study>.toon                the table
-//
-// Case 1 runs first and writes the stages that no varied param reaches
-// (spec §20.4), and each other case reads them. When the varied params
-// reach the physics or the loads, the mesh is shared. When they reach only
-// expect and report expressions, the mesh and the solution of each step
-// are shared, and each other case runs only the post-processing. The shell
-// generator shares no stage, because its mesh holds the section of each
-// cell.
-
-// A case record. The scheduler gives it to the worker as its argument, so
-// that the abort of a worker names its case.
 struct CaseJob {
     case: i64,
-    threads: i64,        // the threads of the case (spec §20.5)
-    budget: i64,         // the memory budget of the study in bytes, or 0 (SKEIN_MEMORY_BUDGET)
-    build: u8[..4096],   // the shell command that builds the program
-    exe: u8[..1024],     // the program, quoted for the shell
-    out: u8[..1024],     // the file of its standard output
-    err: u8[..1024],     // the file of its standard error
+    threads: i64,
+    budget: i64,
+    build: u8[..4096],
+    exe: u8[..1024],
+    out: u8[..1024],
+    err: u8[..1024],
 }
 
-// A result record.
 struct CaseResult {
     case: i64,
     built: bool,
     status: i64,
     seconds: f64,
-    err: u8[..1024],   // the start of its standard error, or the abort message
-    out: u8[>..],      // its standard output
+    err: u8[..1024],
+    out: u8[>..],
 }
 
-// The shell command that runs the program of `job` with the environment
-// `env` and the threads and the budget of the job, its standard output
-// to `out`.
 fn case_command(job: CaseJob, env: u8[:], out: u8[:]) -> u8[>..] {
     var s = str(env, "SKEIN_THREADS=", job.threads, " ");
     if job.budget > 0 { format(s, "SKEIN_MEMORY_BUDGET=", job.budget, " "); }
@@ -421,8 +345,6 @@ thread_fn case_worker(job: CaseJob) {
     qput(r);
 }
 
-// The end of a task: its case, its measured peak in bytes (or 0), and the
-// abort message of a contained worker that aborted.
 struct TaskEnd {
     case: i64,
     ended: bool,
@@ -430,8 +352,6 @@ struct TaskEnd {
     why: u8[..1024],
 }
 
-// Runs case_worker on `job` as a contained worker, and gives its end with
-// the peak_mb of its records.
 thread_fn task_worker(job: CaseJob) {
     var why: u8[>..] = [];
     var e = TaskEnd { case: job.case, ended: thread_wait(thread_spawn_contained(case_worker, job), why), peak: 0.0, why: [] };
@@ -441,12 +361,6 @@ thread_fn task_worker(job: CaseJob) {
     qput(e);
 }
 
-// Runs `jobs` in case order, at most `limit` at a time, each when the
-// ledger admits its estimate from `dofs[c]` (spec §20.5). A case that
-// starts when no case runs, and that no second case can join, has all
-// hardware threads and runs alone. Each other case has 1 thread. It writes the
-// ledger on stderr, learns from the peak of each case, and gives the end
-// of each case, in case order. It appends the outputs to `outs`.
 fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[>..] {
     var ends: CaseEnd[>..] = [];
     var need: f64[>..] = [];
@@ -458,7 +372,7 @@ fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[
     var next = 0;
     var running = 0;
     var ended = 0;
-    var wide = false;   // a case on more than 1 thread runs
+    var wide = false;
     loop {
         while next < jobs.len && running < limit && !wide {
             let c = jobs[next].case;
@@ -507,9 +421,6 @@ fn run_cases(jobs: CaseJob[:], dofs: i64[:], limit: i64, l: Ledger&) -> CaseEnd[
 
 fn mb(bytes: f64) -> i64 { return round(bytes / 1.0e6) as! i64; }
 
-// Builds the program of `job` and runs it with SKEIN_MEMORY_PROBE, so that
-// it prints the estimate of its first solve on 1 thread and stops. It
-// gives the estimate in bytes, or 0. The job then needs no build.
 fn probe_case(job: CaseJob&) -> f64 {
     guard shell(job.build) == 0 else { return 0.0; };
     set4096(job.build, "true");
@@ -525,8 +436,6 @@ fn set4096(into: u8[..4096]&, s: u8[:]) {
     into.append(s[..min(s.len, 4096)]);
 }
 
-// `skein run <path> --study <study>`, with the model `text`. `jobs` is the
-// `--jobs` value, or 0 for the default. The result is the exit status.
 fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i64 {
     check::check_text(path, text);
     if check::error_count() > 0 { return check::finish(json); }
@@ -550,7 +459,6 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     }
     var stage = -1;
     for p in varied { stage = max(stage, check::param_stage(prog, p.name)); }
-    // The program of each case.
     var goose: u8[>..] = [];
     if !env("GOOSE", goose) || goose.len == 0 { goose.append("goose"); }
     var case_jobs: CaseJob[>..] = [];
@@ -607,10 +515,6 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         set1024(job.err, err);
         case_jobs.push(job);
     }
-    // At most min(H, number of cases) cases at a time, or --jobs, and each
-    // when the ledger admits it (spec §20.5). A case has 1 thread when a
-    // second case can run beside it. Reason: on sample 01, 16 threads took
-    // 25% more memory than 1 thread, and the same time.
     let h = max(1, hardware_threads());
     let limit = min(if jobs > 0 { jobs } else { h }, case_count);
     let free = solvers::free_bytes();
@@ -620,13 +524,6 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     outs.clear();
     var first = if share.stages > 0 { 1 } else { 0 };
     if l.budget > 0.0 && limit > 1 && first == 0 {
-        // The cases with the fewest and the most dofs, which read no stage
-        // of case 1, and the larger bytes for each dof of the two. Reason:
-        // the bytes for each dof change with the dofs, in the two
-        // directions: the RSS before the solve and the GMRES restart of a
-        // wave solve do not grow with the dofs, and the skyline profile of a
-        // shell grows faster. On a PML duct study, the per-dof bytes of the
-        // largest case gave the smaller cases 30% to 39% less than their peaks.
         var small = 0;
         var big = 0;
         for d, c in dofs {
@@ -650,8 +547,6 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     }
     var ends = run_cases(case_jobs[..first], dofs, 1, l);
     ends.append(run_cases(case_jobs[first..], dofs, limit, l));
-    // The tokens of the cases replaced those of the model: read it again
-    // for the columns and the place of the study.
     let p = syntax::parse_model(path, text);
     let hash = syntax::source_hash();
     var printed: u8[>..] = [];
@@ -666,9 +561,6 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
     return status;
 }
 
-// --- minimize with gradients (spec §20.2) -----------------------------------------
-
-// The texts of the param values z, each in 0..1 of its range.
 fn range_texts(z: f64[:]) -> u8[..256][>..] {
     var out: u8[..256][>..] = [];
     for x, k in z {
@@ -679,9 +571,6 @@ fn range_texts(z: f64[:]) -> u8[..256][>..] {
     return out;
 }
 
-// Reads the model `text` with the param values z and `tail` on the optim
-// lane: the design values and the values that a param must not change.
-// False on an error, with the message written.
 fn read_design(path: u8[:], text: u8[:], z: f64[:], tail: u8[:]) -> f64[>..], u8[>..], bool {
     let cp = syntax::parse_model(path, values_source(text, range_texts(z), tail));
     let lane = if cp >= 0 { read_model(cp) } else { -1 };
@@ -694,15 +583,10 @@ fn read_design(path: u8[:], text: u8[:], z: f64[:], tail: u8[:]) -> f64[>..], u8
     return optim_gen::design_values(), optim_gen::frozen(), true;
 }
 
-// dv/dp of each design value v by each param p at z, by central
-// differences of the values that the generator reads, in the order
-// chain[i * params + k]. A difference of values that the model text gives
-// is exact for a value linear in p. False if a param changes the mesh, a
-// region, a fixed value or the point of the objective.
 fn design_chain(path: u8[:], text: u8[:], z: f64[:]) -> f64[>..], bool {
     let h = 1.0e-4;
     let np = z.len;
-    var rows: f64[>..] = [];   // rows[k * nv + i] = dv_i/dp_k
+    var rows: f64[>..] = [];
     var frozen: u8[>..] = [];
     for k in np {
         var zp: f64[>..] = [];
@@ -725,9 +609,6 @@ fn design_chain(path: u8[:], text: u8[:], z: f64[:]) -> f64[>..], bool {
     return chain, true;
 }
 
-// The objective `objective` and the gradient dJ/dz in the records of a
-// case. ran is false if a record is missing: the program of a case with a
-// fault prints no gradient, and a failed expect is not a fault.
 fn case_gradient(e: CaseEnd, objective: u8[:]) -> f64, f64[>..], bool {
     var j = 0.0;
     var found = false;
@@ -758,10 +639,6 @@ fn case_gradient(e: CaseEnd, objective: u8[:]) -> f64, f64[>..], bool {
     return j, g, found && got == varied.len && e.ended && e.built;
 }
 
-// Builds and runs case c of the minimize loop at z, with `tail` at the end
-// of the model text. It gives the end of the case, J and dJ/dz. ran is
-// false if the case gave no J or no gradient, and ok is false on an error
-// of the model, with the message written.
 fn gradient_case(path: u8[:], text: u8[:], study: u8[:], c: i64, z: f64[:], tail: u8[:], l: Ledger&) -> CaseEnd, f64, f64[>..], bool, bool {
     var none = CaseEnd { ended: false, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 };
     let chain, good = design_chain(path, text, z);
@@ -809,8 +686,6 @@ fn dot_of(a: f64[:], b: f64[:]) -> f64 {
     return s;
 }
 
-// The name of the objective of minimize `pr`: the first argument, or the
-// argument `objective`.
 fn objective_name(pr: i64) -> const u8[:] {
     var a = syntax::nodes[pr].first;
     while a >= 0 {
@@ -821,14 +696,6 @@ fn objective_name(pr: i64) -> const u8[:] {
     return "";
 }
 
-// `skein run --study` of a minimize study with method: gradient: a
-// projected gradient on z, the param values in 0..1 of their ranges. The
-// first step moves the param of the largest derivative by `step` of its
-// range, and each next step is that of Barzilai and Borwein, s.s / s.y. A
-// step that does not lower J by 1e-4 of its first-order estimate (Armijo)
-// is halved, after the cut of the bounds. The loop stops when a step moves no param by xtol of its
-// range, or after max_cases cases. Each case solves the step and its
-// adjoint once. The expects of the study then run in the best case.
 fn run_minimize(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json: bool) -> i64 {
     set64(optim_gen::gradient_objective, objective_name(syntax::nodes[s].first));
     optim_gen::gradient_params.clear();
@@ -873,8 +740,6 @@ fn run_minimize(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json:
             best = ends.len - 1;
             if largest(d) < xtol { stop = str("xtol"); break; }
         } else {
-            // Half the step that the bounds left. Reason: a long step
-            // that ends on a bound gives the same trial for each halving.
             alpha = 0.5 * min(alpha, largest(d) / max(largest(g), 1.0e-300));
         }
     }
@@ -899,10 +764,6 @@ fn run_minimize(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json:
     return status;
 }
 
-// --- minimize with Nelder-Mead (spec §20.2) ----------------------------------------
-
-// The value of the objective in the report records of a case: the first
-// report whose expression starts with `objective =`.
 fn case_objective(e: CaseEnd, objective: u8[:]) -> f64, bool {
     var section: u8[..16] = [];
     for line in split(outs[e.out_lo..e.out_hi], "\n") {
@@ -921,9 +782,6 @@ fn case_objective(e: CaseEnd, objective: u8[:]) -> f64, bool {
     return 0.0, false;
 }
 
-// Builds and runs case c at z with `tail` at the end of the model text. It
-// gives the end of the case and J. ran is false if the case gave no J, and
-// ok is false on an error of the model, with the message written.
 fn simplex_case(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], c: i64, z: f64[:], tail: u8[:], l: Ledger&) -> CaseEnd, f64, bool, bool {
     var none = CaseEnd { ended: false, built: false, status: 0, seconds: 0.0, err: [], out_lo: 0, out_hi: 0 };
     let cp = syntax::parse_model(path, values_source(text, range_texts(z), tail));
@@ -959,14 +817,12 @@ fn simplex_case(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], c: i64
     return ends[0], j, ran, true;
 }
 
-// The point a + t (b - a) of the cube 0..1, cut to the bounds.
 fn simplex_point(a: f64[:], b: f64[:], t: f64) -> f64[>..] {
     var r: f64[>..] = [];
     for x, k in a { r.push(min(1.0, max(0.0, x + t * (b[k] - x)))); }
     return r;
 }
 
-// The largest distance, on one param, of a point of the simplex from the best.
 fn simplex_size(pts: f64[:], n: i64, j: f64[:]) -> f64 {
     var best = 0;
     for v, i in j { if v < j[best] { best = i; } }
@@ -975,8 +831,6 @@ fn simplex_size(pts: f64[:], n: i64, j: f64[:]) -> f64 {
     return size;
 }
 
-// Evaluates z as the next case. It gives false if the loop ends: a failed
-// case or an error of the model, with `stop` and `fault` set.
 var case_points: f64[>..];
 
 fn simplex_eval(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], z: f64[:], ends: CaseEnd[>..]&, l: Ledger&, j: f64&, stop: u8[>..]&, fault: bool&) -> bool {
@@ -993,15 +847,6 @@ fn simplex_eval(path: u8[:], text: u8[:], study: u8[:], objective: u8[:], z: f64
     return true;
 }
 
-// `skein run --study` of a minimize study with method: nelder_mead: the
-// simplex search on z, the param values in 0..1 of their ranges. The first
-// simplex is the default and a step of `step` of the range along each
-// param (towards the range when the default is on a bound). A step is a
-// reflection (1), an expansion (2), a contraction (0.5) or a shrink (0.5),
-// and a point is cut to the bounds. The loop stops when each point of the
-// simplex is in `xtol` of the range from the best, or after max_cases
-// cases. Each case remeshes and solves the model. The expects of the study
-// then run in the best case.
 fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], json: bool) -> i64 {
     let objective = str(objective_name(syntax::nodes[s].first));
     let tail = str(case_expects[expect_at[0]..expect_at[1]]);
@@ -1067,7 +912,6 @@ fn run_nelder_mead(path: u8[:], text: u8[:], prog: i64, s: i64, study: u8[:], js
                 for k in n { pts[worst * n + k] = contracted[k]; }
                 js[worst] = j;
             } else {
-                // Shrink to the best point.
                 for i in 1..n + 1 {
                     if ends.len >= max_cases { break; }
                     let q = simplex_point(pts[order[0] * n..(order[0] + 1) * n], pts[order[i] * n..(order[i] + 1) * n], 0.5);

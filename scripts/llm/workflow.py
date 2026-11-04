@@ -24,6 +24,8 @@ DIR gets the files of each round and results-<path>.toon, or
 results-<path>-<request>.toon with --request.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -33,6 +35,9 @@ import time
 import uuid
 from datetime import date
 from pathlib import Path
+from typing import Any, cast
+
+Record = dict[str, str | int | float]
 
 REQUESTS = {
     "cantilever": ("a steel cantilever 1 m x 50 mm x 100 mm, E 210 GPa, "
@@ -58,7 +63,8 @@ SUFFIX = {"skein": ".skn", "inp": ".inp"}
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def ask_model(model, cwd, session, first, prompt):
+def ask_model(model: str, cwd: Path, session: str, first: bool,
+              prompt: str) -> tuple[str, dict[str, Any]]:
     """Sends one prompt. Returns the reply text and the usage record."""
     cmd = ["claude", "-p", "--output-format", "json", "--model", model,
            "--tools", "", "--setting-sources", "", "--strict-mcp-config",
@@ -66,34 +72,35 @@ def ask_model(model, cwd, session, first, prompt):
     cmd += ["--session-id", session] if first else ["--resume", session]
     out = subprocess.run(cmd + [prompt], cwd=cwd, capture_output=True,
                          text=True)
+    reply: dict[str, Any]
     try:
-        reply = json.loads(out.stdout)
+        reply = cast(dict[str, Any], json.loads(out.stdout))
     except ValueError:
         reply = {}
     if out.returncode or reply.get("is_error") or "result" not in reply:
         sys.exit(f"workflow: the model call failed (exit {out.returncode}): "
                  f"{reply.get('result') or out.stderr or out.stdout}")
-    return reply["result"], reply
+    return str(reply["result"]), reply
 
 
-def last_code_block(text):
-    blocks = re.findall(r"```[^\n]*\n(.*?)```", text, re.S)
+def last_code_block(text: str) -> str:
+    blocks: list[str] = re.findall(r"```[^\n]*\n(.*?)```", text, re.S)
     return blocks[-1] if blocks else text
 
 
-def tokens(reply):
-    u = reply["usage"]
+def tokens(reply: dict[str, Any]) -> tuple[int, int]:
+    u = cast(dict[str, int], reply["usage"])
     inp = (u["input_tokens"] + u.get("cache_creation_input_tokens", 0)
            + u.get("cache_read_input_tokens", 0))
     return inp, u["output_tokens"]
 
 
-def run(cmd, cwd):
+def run(cmd: list[str], cwd: Path) -> tuple[int, str]:
     out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     return out.returncode, out.stdout + out.stderr
 
 
-def skein_value(text):
+def skein_value(text: str) -> tuple[str, str]:
     """The first scalar length and the first reaction in the report records."""
     value = reaction = ""
     for line in text.splitlines():
@@ -108,13 +115,14 @@ def skein_value(text):
     return value, reaction
 
 
-def inp_value(text):
+def inp_value(text: str) -> tuple[str, str]:
     """The largest displacement component in job.dat, and the sum of the
     first block of forces (the reaction of the first set that prints RF)."""
     m = re.search(r"text results (\S+\.dat)", text)
     if not m or not Path(m.group(1)).exists():
         return "", ""
-    value, force, block, done = 0.0, [0.0, 0.0, 0.0], "", False
+    value, block, done = 0.0, "", False
+    force = [0.0, 0.0, 0.0]
     for line in Path(m.group(1)).read_text().splitlines():
         if " for set " in line and "time" in line:
             done = done or block == "f"
@@ -136,7 +144,7 @@ def inp_value(text):
     return (f"{value:.6g} deck units" if value else ""), reaction
 
 
-def value_ok(path, value, reference):
+def value_ok(path: str, value: str, reference: float) -> bool:
     """True when the magnitude of the value is within TOLERANCE of the
     reference in mm. The units of a deck are unknown, so a deck value
     passes in mm or in m."""
@@ -148,22 +156,35 @@ def value_ok(path, value, reference):
                <= TOLERANCE * reference for s in scales)
 
 
-def one_run(path, stem, n, args, card, request, reference):
+class Args(argparse.Namespace):
+    path: str
+    out: Path
+    request: str | None
+    runs: int
+    rounds: int
+    model: str
+    skein: Path
+    timeout: int
+
+
+def one_run(path: str, stem: str, n: int, args: Args, card: str,
+            request: str, reference: float | None) -> Record:
     work = args.out / f"{stem}-{n}"
     work.mkdir(parents=True, exist_ok=True)
     session = str(uuid.uuid4())
     prompt = "\n\n".join(x for x in (card, request, ASK[path]) if x)
-    record = {"path": path, "run": n, "first_try_pass": "no", "passed": "no",
+    record: Record = {"path": path, "run": n, "first_try_pass": "no", "passed": "no",
               "repair_rounds": 0, "input_tokens": 0, "output_tokens": 0}
     start = time.monotonic()
     output = ""
     for k in range(1, args.rounds + 1):
         record["repair_rounds"] = k - 1
         text, reply = ask_model(args.model, work, session, k == 1, prompt)
-        record["model"] = ",".join(reply.get("modelUsage", {})) or args.model
+        usage = cast(dict[str, Any], reply.get("modelUsage", {}))
+        record["model"] = ",".join(usage) or args.model
         i, o = tokens(reply)
-        record["input_tokens"] += i
-        record["output_tokens"] += o
+        record["input_tokens"] = int(record["input_tokens"]) + i
+        record["output_tokens"] = int(record["output_tokens"]) + o
         file = work / f"round-{k}{SUFFIX[path]}"
         file.write_text(last_code_block(text))
         if path == "skein":
@@ -182,7 +203,7 @@ def one_run(path, stem, n, args, card, request, reference):
         if status == 0:
             value = skein_value if path == "skein" else inp_value
             record["value"], record["reaction"] = value(output)
-            if reference is None or value_ok(path, record["value"],
+            if reference is None or value_ok(path, str(record["value"]),
                                              reference):
                 record["passed"] = "yes"
                 if k == 1:
@@ -203,7 +224,7 @@ FIELDS = ["path", "run", "model", "first_try_pass", "passed", "repair_rounds",
           "reaction"]
 
 
-def toon(records, request):
+def toon(records: list[Record], request: str) -> str:
     rows = [",".join(json.dumps(r.get(f, "")) if isinstance(r.get(f, ""), str)
                      else str(r.get(f, "")) for f in FIELDS) for r in records]
     head = f"runs[{len(records)}]{{{','.join(FIELDS)}}}:"
@@ -211,8 +232,9 @@ def toon(records, request):
                       head] + ["  " + r for r in rows]) + "\n"
 
 
-def main():
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def main() -> None:
+    p = argparse.ArgumentParser(
+        description=(__doc__ or "").splitlines()[0])
     p.add_argument("path", choices=["skein", "inp"])
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--request", choices=REQUESTS)
@@ -221,7 +243,7 @@ def main():
     p.add_argument("--model", default="claude-opus-5-5")
     p.add_argument("--skein", type=Path, default=ROOT / "build" / "skein")
     p.add_argument("--timeout", type=int, default=600, help="fh run, seconds")
-    args = p.parse_args()
+    args = p.parse_args(namespace=Args())
     args.out = args.out.resolve()
     args.skein = args.skein.resolve()
     card = ""
@@ -234,9 +256,10 @@ def main():
         reference = REFERENCE_MM[args.request]
         stem = f"{args.path}-{args.request}"
     else:
-        request, reference, stem = REQUEST, None, args.path
+        request, stem = REQUEST, args.path
+        reference = None
     results = args.out / f"results-{stem}.toon"
-    records = []
+    records: list[Record] = []
     for n in range(1, args.runs + 1):
         records.append(one_run(args.path, stem, n, args, card, request,
                                reference))

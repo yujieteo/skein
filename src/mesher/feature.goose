@@ -1,24 +1,3 @@
-// The sharp edges (feature curves) of a 3D shape (spec §9.2), found from φ
-// alone, so that one mechanism serves each kind of shape of the CSG tree.
-//
-// A sharp edge is a curve on the surface φ = 0 where the unit normal
-// ∇φ / |∇φ| jumps by more than sharp_angle. It is where 2 primitives meet,
-// or 2 sides of one primitive (a box, a polygon).
-//
-// 1. ridge_between: 2 points u and v on the surface, whose normals differ,
-//    have a sharp edge between them if the jump of the normal stays when
-//    the interval between them is halved again and again, each time to the
-//    half with the larger jump. A smooth surface loses the jump with the
-//    length of the interval. The last interval is of the order of the step
-//    of the differences, and the intersection of the tangent planes at its
-//    ends is the point of the edge, to second order in the interval.
-// 2. walk: from a point of the edge, steps along the tangent
-//    (the cross product of the 2 normals) by half the wanted size
-//    (refine.goose), then finds the edge again between 2 points on each
-//    side of the end of the step. It stops where the jump ends (a corner,
-//    where a third primitive cuts the edge), or when it returns to its
-//    start (a closed curve).
-// 3. Each curve is a list of samples, with the mean normal at each.
 import std;
 import math;
 namespace mesher;
@@ -26,32 +5,31 @@ import .geometry;
 import .refine;
 import .quality;
 
-var sharp_angle = 30.0;                 // degrees: a larger jump of the normal is a sharp edge (feature_angle, spec §9.1)
-var sharp_cos = 0.8660254037844387;     // cos of sharp_angle
-var pair_cos = 0.9135454576426009;      // cos of 0.8 sharp_angle: a pair of surface points in a cell with normals this far apart may have an edge between
+var sharp_angle = 30.0;
+var sharp_cos = 0.8660254037844387;
+var pair_cos = 0.9135454576426009;
 
-// Sets feature_angle, in degrees.
 fn set_feature_angle(degrees: f64) {
     guard degrees > 0.0 && degrees < 90.0 else { abort("set_feature_angle: an angle from 0 to 90 degrees"); }
     sharp_angle = degrees;
     sharp_cos = cos(radians(degrees));
     pair_cos = cos(radians(0.8 * degrees));
 }
-let FD = 1.0e-8;                        // the step of the differences, times the size of the shape
-let BISECT_STOP = 30.0;                 // steps of the differences in the last interval
-let CURVE_DIV = 2.0;                    // samples of a curve for each wanted size
+let FD = 1.0e-8;
+let BISECT_STOP = 30.0;
+let CURVE_DIV = 2.0;
 let MAX_SAMPLES = 100000;
 
 struct Ridge {
     found: bool,
-    x: f64[3],      // the point on the sharp edge
-    na: f64[3],     // the unit normals on the 2 sides
+    x: f64[3],
+    na: f64[3],
     nb: f64[3],
 }
 
-var curve_x: f64[>..] = [];             // x, y and z of each sample of each curve
-var curve_n: f64[>..] = [];             // the mean unit normal at each sample
-var curve_start: i64[>..] = [0];        // the first sample of each curve, and the number of samples
+var curve_x: f64[>..] = [];
+var curve_n: f64[>..] = [];
+var curve_start: i64[>..] = [0];
 var curve_closed: bool[>..] = [];
 
 fn clear_curves() {
@@ -77,13 +55,11 @@ fn sample_at(k: i64) -> f64[3] { return [curve_x[3 * k], curve_x[3 * k + 1], cur
 
 fn sample_normal(k: i64) -> f64[3] { return [curve_n[3 * k], curve_n[3 * k + 1], curve_n[3 * k + 2]]; }
 
-// The length of the diagonal of the bounding box of g.
 fn shape_scale(g: i64) -> f64 {
     let b = bounds(g);
     return sqrt((b[3] - b[0]) * (b[3] - b[0]) + (b[4] - b[1]) * (b[4] - b[1]) + (b[5] - b[2]) * (b[5] - b[2]));
 }
 
-// ∇φ at x, from central differences with the step eps.
 fn gradient3(g: i64, x: f64[3], eps: f64) -> f64[3] {
     var out: f64[3] = [0.0, 0.0, 0.0];
     for c in 3 {
@@ -96,9 +72,6 @@ fn gradient3(g: i64, x: f64[3], eps: f64) -> f64[3] {
     return out;
 }
 
-// The point x0 moved onto φ = 0 by Newton steps along ∇φ, and the unit
-// normal there. `d` is the size of the shape. False if ∇φ is 0 or the
-// steps do not settle.
 fn settle(g: i64, x0: f64[3], d: f64) -> f64[3], f64[3], bool {
     let eps = FD * d;
     var x = x0;
@@ -114,8 +87,6 @@ fn settle(g: i64, x0: f64[3], d: f64) -> f64[3], f64[3], bool {
     return x, n, false;
 }
 
-// The sharp edge between the surface points u and v, with unit normals nu
-// and nv.
 fn ridge_between(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -> Ridge {
     var r = Ridge { found: false, x: u, na: nu, nb: nv };
     var a = u;
@@ -137,8 +108,6 @@ fn ridge_between(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -
         }
     }
     guard dot3(na, nb) < sharp_cos else { return r; }
-    // The intersection of the tangent planes at a and b, nearest to the
-    // middle between them.
     let c = dot3(na, nb);
     let mid = axpy3(a, 0.5, sub3(b, a));
     let r1 = -dot3(na, sub3(mid, a));
@@ -155,10 +124,6 @@ fn ridge_between(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -
 
 fn angle_of(a: f64[3], b: f64[3]) -> f64 { return acos(clamp(dot3(a, b), -1.0, 1.0)); }
 
-// The sharp edge between the surface points u and v, if the normal at the
-// middle shows one: the larger of the 2 halves has a jump of more than
-// sharp_angle, and either it is more than 2.5 times the smaller, or the whole
-// jump is too large for a smooth surface in a lattice cell.
 fn find_ridge(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -> Ridge {
     var r = Ridge { found: false, x: u, na: nu, nb: nv };
     let m, nm, ok = settle(g, axpy3(u, 0.5, sub3(v, u)), d);
@@ -172,10 +137,6 @@ fn find_ridge(g: i64, u: f64[3], nu: f64[3], v: f64[3], nv: f64[3], d: f64) -> R
     return ridge_between(g, u, nu, v, nv, d);
 }
 
-// Steps along the sharp edge from the ridge point r0 (the unit normals na
-// and nb on its sides) in the direction dir (1 or -1), and appends the
-// points to `out` (3 numbers each) and the mean normals to `normals`.
-// True if the edge comes back to r0.
 fn walk(g: i64, r0: Ridge, dir: f64, size: f64, d: f64, out: f64[>..]&, normals: f64[>..]&) -> bool {
     var x = r0.x;
     var t = unit3(cross3(r0.na, r0.nb));
@@ -215,7 +176,6 @@ fn walk(g: i64, r0: Ridge, dir: f64, size: f64, d: f64, out: f64[>..]&, normals:
     return false;
 }
 
-// Traces the sharp edge through the ridge point r0 and stores it as a curve.
 fn trace_curve(g: i64, r0: Ridge, size: f64, d: f64) {
     var fwd: f64[>..] = [];
     var fwd_n: f64[>..] = [];
@@ -239,7 +199,6 @@ fn trace_curve(g: i64, r0: Ridge, size: f64, d: f64) {
     curve_closed.push(closed);
 }
 
-// Whether x is within tol of a sample of a curve.
 fn near_curve(x: f64[3], tol: f64) -> bool {
     for k in curve_x.len / 3 {
         if norm3(sub3(sample_at(k), x)) <= tol { return true; }

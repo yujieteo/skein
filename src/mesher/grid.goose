@@ -1,19 +1,9 @@
-// The structured grid of spec §9.2 on a union of axis-aligned boxes (3D)
-// or rects (2D): hex8 or quad4 cells. Each face of each box of the region,
-// and of each box of `planes` inside the bounds of the region, is a grid
-// plane. Between two neighbour planes, the grid has the fewest equal cells
-// that are not longer than the size. A cell of the lattice is in the mesh
-// if its centre is in a box of the region. Thus the cells fill the region
-// exactly, and no cell crosses a face of a box.
 import std;
 import math;
 namespace mesher;
 import .geometry;
 import .mesh;
 
-// Appends the lo and hi corners of each box of shape g to `out`, 6 numbers
-// for each box (z = 0 for a rect). False if g is not a union of boxes or of
-// rects.
 fn box_union(g: i64, out: f64[>..]&) -> bool {
     var todo: i64[>..] = [g];
     while todo.len > 0 {
@@ -36,8 +26,6 @@ fn box_union(g: i64, out: f64[>..]&) -> bool {
     return true;
 }
 
-// The grid lines along axis a, from lo to hi: the planes of `boxes` in
-// (lo, hi), and the equal cells of at most `size` between two of them.
 fn grid_lines(boxes: f64[:], a: i64, lo: f64, hi: f64, size: f64, out: f64[>..]&) {
     var cuts: f64[>..] = [lo, hi];
     for b in boxes.len / 6 {
@@ -58,9 +46,6 @@ fn grid_lines(boxes: f64[:], a: i64, lo: f64, hi: f64, size: f64, out: f64[>..]&
     }
 }
 
-// Meshes shape g with a grid of cells of at most `size`, with the planes
-// of g and of each shape of `planes` that is a union of boxes. False if g
-// is not a union of boxes or of rects.
 fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
     var region: f64[>..] = [];
     guard box_union(g, region) else { return false; };
@@ -74,9 +59,6 @@ fn mesh_grid(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
     return true;
 }
 
-// The grid lines of the planes of `boxes` in the bounds of g, and a cell
-// of the lattice where its centre is in a box of `region`, or where φ of g
-// is negative at its centre if `region` is empty.
 fn fill_lattice(g: i64, dim: i64, size: f64, boxes: f64[:], region: f64[:]) {
     let b = bounds(g);
     var lx: f64[>..] = [];
@@ -114,7 +96,6 @@ fn fill_lattice(g: i64, dim: i64, size: f64, boxes: f64[:], region: f64[:]) {
                 let z = if dim == 3 { 0.5 * (lz[k] + lz[k + 1]) } else { 0.0 };
                 let centre: f64[3] = [0.5 * (lx[i] + lx[i + 1]), 0.5 * (ly[j] + ly[j + 1]), z];
                 guard inside(centre) else { continue; };
-                // The VTK order: the face k counter-clockwise, then the face k + 1.
                 var nodes: i64[..8] = [node(i, j, k), node(i + 1, j, k), node(i + 1, j + 1, k), node(i, j + 1, k)];
                 if dim == 3 {
                     for n in [node(i, j, k + 1), node(i + 1, j, k + 1), node(i + 1, j + 1, k + 1), node(i, j + 1, k + 1)] {

@@ -1,36 +1,11 @@
-// The discontinuous Galerkin method (spec §17.4) on the grid of
-// rectangles: the matrix A and the right side b(t) of A u = b.
-//
-// The basis of a cell is P_i(ξ) P_j(η), 0 <= i, j <= p, with the Legendre
-// polynomials P_i on the reference square [-1, 1]². It is orthogonal, so
-// the mass matrix is diagonal. Dof b = i + (p + 1) j of cell c is
-// c (p + 1)² + b.
-//
-// With n the normal from the cell - to the cell +, [w] = w⁻ - w⁺ and
-// {w} = (w⁻ + w⁺)/2, the form of ct ddt(u) + div(a u) - d div(grad(u)) = f is
-//
-//   Σ_K ∫ d ∇u·∇v - (a·∇v) u
-//   + Σ_F ∫ F̂ [v] - {d ∇u·n}[v] - {d ∇v·n}[u] + σ [u][v]  =  Σ_K ∫ f v
-//
-// with the flux F̂ = a·n {u} + α/2 [u]: α = |a·n| (`upwind`, Roe) or |a|
-// (`lax_friedrichs`). The diffusion is the symmetric interior penalty form
-// (Arnold et al. 2002), with σ = penalty d (p + 1)²/h. On a face with the
-// value g, u⁺ = g, and the gradient of the cell is the mean: the condition
-// is weak (spec §17.4). A free face has no term.
-//
-// Each cell of the grid has the same size, so the matrix of each cell and
-// of each face of a side is the same: dg_blocks computes them once.
 import std;
 import math;
 namespace grid;
 import .mesh;
 import .solve;
 
-let MAX_BASIS = 16;    // (MAX_ORDER + 1)²
-let MAX_POINTS = 5;    // the Gauss points on each axis: p + 2
+let MAX_POINTS = 5;
 
-// The Gauss-Legendre points and weights on [-1, 1], n = 1 to 5 points:
-// those of n points start at GAUSS_FIRST[n - 1].
 let GAUSS_FIRST = [0, 1, 3, 6, 10];
 let GAUSS_X: f64[15] = [
     0.0,
@@ -51,7 +26,6 @@ fn points() -> i64 { return order + 2; }
 fn gauss_x(q: i64) -> f64 { return GAUSS_X[GAUSS_FIRST[points() - 1] + q]; }
 fn gauss_w(q: i64) -> f64 { return GAUSS_W[GAUSS_FIRST[points() - 1] + q]; }
 
-// P_i(x) and P_i'(x).
 fn legendre(i: i64, x: f64) -> f64, f64 {
     if i == 0 { return 1.0, 0.0; }
     if i == 1 { return x, 1.0; }
@@ -59,7 +33,6 @@ fn legendre(i: i64, x: f64) -> f64, f64 {
     return 0.5 * (5.0 * x * x * x - 3.0 * x), 0.5 * (15.0 * x * x - 3.0);
 }
 
-// The basis functions and their x and y derivatives at (ξ, η).
 struct Basis {
     v: f64[16],
     gx: f64[16],
@@ -81,8 +54,6 @@ fn basis(xi: f64, eta: f64) -> Basis {
     return b;
 }
 
-// The basis at the Gauss points of a cell, qi + points() qj, and of each
-// side, points() s + q, which basis_tables computes once for the method.
 var vol_basis: Basis[>..] = [];
 var side_basis: Basis[>..] = [];
 
@@ -100,24 +71,20 @@ fn basis_tables() {
     }
 }
 
-// The diagonal of the mass matrix of dof b of a cell.
 fn mass(b: i64) -> f64 {
     let m = order + 1;
     return 0.25 * hx * hy * (2.0 / (2 * (b % m) + 1)) * (2.0 / (2 * (b / m) + 1));
 }
 
-// The reference point (ξ, η) of side s at the face coordinate τ.
 fn side_point(s: i64, tau: f64) -> f64[2] {
     if s < 2 { return [NORMALS[2 * s], tau]; }
     return [tau, NORMALS[2 * s + 1]];
 }
 
-// The value of the flux coefficient α on side s.
 fn alpha(s: i64) -> f64 { return if flux == LAX_FRIEDRICHS { sqrt(ax * ax + ay * ay) } else { abs(normal_velocity(s)) }; }
 
 fn sigma(s: i64) -> f64 { return penalty * diffusivity * (order + 1) * (order + 1) / side_distance(s); }
 
-// The matrix of a cell: ∫ d ∇φ_b·∇φ_a - (a·∇φ_a) φ_b, row a and column b.
 fn volume_block(out: f64[:]) {
     let n = per_cell();
     for &v in out { v = 0.0; }
@@ -135,9 +102,6 @@ fn volume_block(out: f64[:]) {
     }
 }
 
-// The 4 matrices of an interior face of side s (1 or 3) of a cell: rows
-// of the cell - or +, columns of the cell - or +, in the sequence --, -+,
-// +-, ++.
 fn face_blocks(s: i64, out: f64[:]) {
     let n = per_cell();
     for &v in out { v = 0.0; }
@@ -173,7 +137,6 @@ fn face_blocks(s: i64, out: f64[:]) {
 
 fn opposite_side(s: i64) -> i64 { return s ^ 1; }
 
-// The matrix of a boundary face of side s with a value.
 fn boundary_block(s: i64, out: f64[:]) {
     let n = per_cell();
     for &v in out { v = 0.0; }
@@ -192,7 +155,6 @@ fn boundary_block(s: i64, out: f64[:]) {
     }
 }
 
-// Adds the n × n block at `at` of `blocks` to the cells row and column.
 fn add_block(row: i64, column: i64, blocks: f64[:], at: i64) {
     let n = per_cell();
     for a in n {
@@ -200,14 +162,13 @@ fn add_block(row: i64, column: i64, blocks: f64[:], at: i64) {
     }
 }
 
-// The matrix A in val.
 fn dg_matrix() {
     guard val.len == col.len && row_start.len == dof_count() + 1 else { abort("dg_matrix: the pattern of the dofs"); }
     for &v in val { v = 0.0; }
     let nn = per_cell() * per_cell();
     var vol: f64[256] = [0.0; 256];
-    var faces: f64[2048] = [0.0; 2048];      // the 4 blocks of sides 1 and 3
-    var bounds: f64[1024] = [0.0; 1024];     // the block of each side on the boundary
+    var faces: f64[2048] = [0.0; 2048];
+    var bounds: f64[1024] = [0.0; 1024];
     volume_block(vol[..nn]);
     face_blocks(1, faces[..4 * nn]);
     face_blocks(3, faces[4 * nn..8 * nn]);
@@ -230,14 +191,11 @@ fn dg_matrix() {
     }
 }
 
-// The point of cell c at the reference point (ξ, η).
 fn cell_point(c: i64, xi: f64, eta: f64) -> f64[2] {
     let p = centre(c);
     return [p[0] + 0.5 * hx * xi, p[1] + 0.5 * hy * eta];
 }
 
-// The right side b(t): ∫ f v, and on each face with a value g the terms
-// of g: -∫ d g ∇v·n + σ g v - (a·n - α)/2 g v.
 fn dg_rhs<SRC, BC>(t: f64, out: f64[:]) {
     guard out.len == dof_count() else { abort("dg_rhs: one entry for each dof"); }
     let n = per_cell();
@@ -269,7 +227,6 @@ fn dg_rhs<SRC, BC>(t: f64, out: f64[:]) {
     }
 }
 
-// The L2 projection of the field F(x, y) on each cell, in out.
 fn project_field<F>(out: f64[:]) {
     guard out.len == dof_count() && method == DG else { abort("project_field: dg, and one entry for each dof"); }
     let n = per_cell();

@@ -1,6 +1,3 @@
-// The `skein` command line (docs/command_line.md). Each command goes to the
-// module that owns it. The commands that have no module yet print that they
-// are not implemented.
 import std;
 import os;
 import syntax from "./syntax";
@@ -8,16 +5,16 @@ import fmt.fmt;
 import cli.card;
 import codegen.run;
 import codegen.build;
-import codegen.convergence;   // skein-p4-grid: skein verify convergence
+import codegen.convergence;
 import check from "./check";
 import md from "./md";
-import report from "./report";   // skein report
-import mesher.verify;   // mesher lane: skein verify
-import mesher.lint;     // skein lint, with the rules that need the mesh
-import mesher.stl;      // skein export
-import mesher from "./mesher";   // skein-flow: skein run meshes a flow model
-import runtime from "./runtime";   // mesher lane: the mesh type of the mesher
-import solvers from "./solvers";   // the runtime imports it
+import report from "./report";
+import mesher.verify;
+import mesher.lint;
+import mesher.stl;
+import mesher from "./mesher";
+import runtime from "./runtime";
+import solvers from "./solvers";
 
 let USAGE = """
     usage: skein <command> [options] [files]
@@ -76,7 +73,7 @@ fn main() {
         for a in args[3..] { rest.push(a); }
         exit(codegen::convergence(rest));
     }
-    if command == "verify" { exit(mesher::verify(args)); }   // mesher lane
+    if command == "verify" { exit(mesher::verify(args)); }
     if command == "export" { exit(mesher::export_command(args)); }
     if command == "md" {
         var rest: const u8[:][>..] = [];

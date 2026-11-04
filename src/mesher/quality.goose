@@ -1,13 +1,3 @@
-// mesh_quality (docs/checks.md): the worst cells of the mesh. In 2D, the
-// minimum and the maximum angle of a triangle. In 3D, the minimum and the
-// maximum dihedral angle of a tetrahedron. The aspect ratio is the
-// longest edge over the inradius, scaled so that an equilateral cell has 1.
-// For a quad or a hex cell, the angles are the angles between the 2 or 3
-// edges at each corner, and the aspect ratio is its longest edge over its
-// shortest edge. A cell is inverted if the edges at a corner turn the
-// wrong way (a cross product in 2D, a triple product in 3D). The volume of
-// a hex is the integral of the Jacobian of its trilinear map, with 2 Gauss
-// points along each axis, which is exact.
 import std;
 import math;
 namespace mesher;
@@ -17,14 +7,13 @@ import runtime from "../runtime";
 struct Quality {
     cells: i64,
     nodes: i64,
-    min_angle: f64,     // degrees
-    max_angle: f64,     // degrees
+    min_angle: f64,
+    max_angle: f64,
     max_aspect: f64,
-    measure: f64,       // the area in 2D, the volume in 3D
-    inverted: i64,      // cells of zero or negative measure
+    measure: f64,
+    inverted: i64,
 }
 
-// The limits of docs/checks.md: 3D 5 to 175 degrees, 2D at least 10.
 fn quality_passes(q: Quality) -> bool {
     if mesh_dim == 2 { return q.inverted == 0 && q.min_angle >= 10.0; }
     return q.inverted == 0 && q.min_angle >= 5.0 && q.max_angle <= 175.0;
@@ -39,7 +28,6 @@ fn cross3(a: f64[3], b: f64[3]) -> f64[3] {
 }
 fn norm3(a: f64[3]) -> f64 { return sqrt(dot3(a, a)); }
 
-// Adds the triangle of vertices v and longest edge `longest` to q.
 fn triangle_quality(v: f64[3][4], longest: f64, q: Quality&) {
     let area = 0.5 * cross3(sub3(v[1], v[0]), sub3(v[2], v[0]))[2];
     q.measure += area;
@@ -82,8 +70,6 @@ fn mesh_quality() -> Quality {
             let volume = dot3(sub3(v[1], v[0]), cross3(sub3(v[2], v[0]), sub3(v[3], v[0]))) / 6.0;
             q.measure += volume;
             if volume <= 0.0 { q.inverted++; continue; }
-            // n[i] is the outward normal of the face opposite vertex i, with
-            // the length of twice the face area.
             var n: f64[3][4] = default<f64[3][4]>();
             var faces = 0.0;
             for i in 4 {
@@ -110,11 +96,8 @@ fn mesh_quality() -> Quality {
     return q;
 }
 
-// The 3 neighbours of each corner of a hex8 in VTK order, so that the edges
-// to them, in this order, make a positive triple product.
 let HEX_CORNERS: i64[3][8] = [[1, 3, 4], [2, 0, 5], [3, 1, 6], [0, 2, 7], [7, 5, 0], [4, 6, 1], [5, 7, 2], [6, 4, 3]];
 
-// Adds quad4 or hex8 cell c to q.
 fn grid_cell_quality(c: i64, hex: bool, q: Quality&) {
     let k = if hex { 8 } else { 4 };
     var v: f64[3][8] = default<f64[3][8]>();
@@ -139,7 +122,6 @@ fn grid_cell_quality(c: i64, hex: bool, q: Quality&) {
             add_angle(angles, d, a);
         } else {
             if cross3(a, b)[2] <= 0.0 { inverted = true; }
-            // The shoelace sum: each corner adds x_i y_{i+1} - x_{i+1} y_i.
             measure += 0.5 * (v[i][0] * v[(i + 1) % 4][1] - v[(i + 1) % 4][0] * v[i][1]);
         }
     }
@@ -154,26 +136,21 @@ fn grid_cell_quality(c: i64, hex: bool, q: Quality&) {
     q.max_aspect = max(q.max_aspect, longest / shortest);
 }
 
-// Adds the angle between the edges a and b to q.
 fn add_angle(q: Quality&, a: f64[3], b: f64[3]) {
     let angle = degrees(acos(clamp(dot3(a, b) / (norm3(a) * norm3(b)), -1.0, 1.0)));
     q.min_angle = min(q.min_angle, angle);
     q.max_angle = max(q.max_angle, angle);
 }
 
-// The corners of a hex8 in VTK order, in the unit cube.
 let HEX_UNIT: f64[3][8] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
                            [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0]];
 
-// The volume of the trilinear hex with the corners v: the Jacobian at the
-// 2 × 2 × 2 Gauss points of the unit cube, each of weight 1/8.
 fn hex_volume(v: f64[3][8]) -> f64 {
     let g = 0.5 / sqrt(3.0);
     var volume = 0.0;
     for p in 8 {
         let x: f64[3] = [0.5 + (2.0 * HEX_UNIT[p][0] - 1.0) * g, 0.5 + (2.0 * HEX_UNIT[p][1] - 1.0) * g,
                          0.5 + (2.0 * HEX_UNIT[p][2] - 1.0) * g];
-        // j[a] is the derivative of the map along axis a of the cube.
         var j: f64[3][3] = default<f64[3][3]>();
         for n in 8 {
             var f: f64[3] = [0.0, 0.0, 0.0];
@@ -192,7 +169,6 @@ fn hex_volume(v: f64[3][8]) -> f64 {
     return volume;
 }
 
-// The mesh_quality record, in the TOON form of the run report.
 fn format(out: u8[>..]&, q: Quality) {
     let angle = if mesh_dim == 2 { "angle" } else { "dihedral" };
     format(out, "mesh_quality: ", if quality_passes(q) { "pass" } else { "FAIL" },

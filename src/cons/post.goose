@@ -1,13 +1,9 @@
-// The results of a conservation-law state: the integral and the mean of a
-// field on a region of cells, and a VTU file.
 import std;
 import math;
 import os;
 namespace cons;
 import .mesh;
 
-// The integral of F(u, x, y) on the cells of region r, with the value at
-// the centre of each cell. F reads the N values of the cell in u.
 fn integral<F>(r: i64) -> f64 {
     guard r >= 0 && r < region_count && sol.len == dof_count() else { abort("integral: a region and a state"); }
     var total = 0.0;
@@ -18,13 +14,11 @@ fn integral<F>(r: i64) -> f64 {
     return total;
 }
 
-// The mean of F on the cells of region r, weighted by the area.
 fn mean<F>(r: i64) -> f64 {
     let a = region_area(r);
     return integral(r, F) / a;
 }
 
-// The area of region r.
 fn region_area(r: i64) -> f64 {
     guard r >= 0 && r < region_count else { abort("region_area: a region"); }
     var total = 0.0;
@@ -32,7 +26,6 @@ fn region_area(r: i64) -> f64 {
     return total;
 }
 
-// The words of a text of names that ';' separates.
 fn field_names(names: const u8[:]) -> u8[..64][>..] {
     var words: u8[..64][>..] = [];
     var w: u8[..64] = [];
@@ -48,10 +41,6 @@ fn field_names(names: const u8[:]) -> u8[..64][>..] {
     return words;
 }
 
-// Writes the cells to a VTU file with the field F(u, x, y, i, k) of
-// component k of each of the fields that names holds (separated by ';').
-// counts gives the components of each field. A field of 2 components is a
-// vector.
 fn write_vtu<F>(path: const u8[:], names: const u8[:], counts: i64[:]) -> bool {
     let words = field_names(names);
     guard sol.len == dof_count() && words.len == counts.len else { abort("write_vtu: a state, and a count for each name"); }

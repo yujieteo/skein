@@ -1,27 +1,3 @@
-// The mesh of the flow solver: P1 or P2 triangles from the triangles that
-// skein run meshes with src/mesher/, the dofs of the velocity and the
-// pressure, the sparsity of the Jacobian, and the boundary regions.
-//
-// Nodes 0 to vertex_count - 1 are the vertices of the triangles. For order 2,
-// each edge then gets a node at its midpoint. Local node 3 + e of a cell is
-// on edge e, between local vertices EDGES[2 e] and EDGES[2 e + 1].
-//
-// The dofs follow the reverse Cuthill-McKee sequence of the nodes, so that
-// ILU(0) is near the full LU. The dofs of node n start at first_dof[n]:
-// vx, vy, and p for a vertex. Reason: with all the velocity dofs first,
-// GMRES(50) with ILU(0) did not converge in 5000 iterations on a P2
-// cavity of 24174 dofs. With the dofs of each node together and the
-// preconditioner of solve.goose, it converged.
-//
-// A turbulent flow (rans.goose) has P1 cells, and each vertex then has 5
-// dofs: vx, vy, p, k and w.
-//
-// A thermal flow (heat.goose) has a temperature T at each node: a vertex has
-// vx, vy, p and T, and an edge node has vx, vy and T. A cell of the mesh is
-// in the fluid (part 0) or in a solid (part 1). A solid cell has only the
-// rows of T, with its own conductivity, so that T is continuous across the
-// interface and the heat flux that leaves the solid goes into the fluid
-// (conjugate heat transfer).
 import std;
 import math;
 import dictionary;
@@ -30,47 +6,41 @@ namespace flow;
 
 let EDGES: i64[6] = [0, 1, 1, 2, 2, 0];
 
-var order = 1;          // the order of the velocity; the pressure has order 1
-var turbulent = false;  // the k-ω SST unknowns k and w, or the unknown nt of Spalart-Allmaras, at each vertex
-var spalart_on = false; // turbulent with the one unknown nt (sa.goose)
-var thermal = false;    // the temperature T at each node (heat.goose)
+var order = 1;
+var turbulent = false;
+var spalart_on = false;
+var thermal = false;
 var per_cell = 3;
 var vertex_count = 0;
-var coords: f64[>..] = [];      // x and y of each node
-var conn: i64[>..] = [];        // the per_cell nodes of each cell
-var on_boundary: u8[>..] = [];  // 1 for a node on the boundary of the mesh
-var first_dof: i64[>..] = [];   // the first dof of each node
-var twin: i64[>..] = [];        // the node whose dofs a node shares (periodic), or -1
+var coords: f64[>..] = [];
+var conn: i64[>..] = [];
+var on_boundary: u8[>..] = [];
+var first_dof: i64[>..] = [];
+var twin: i64[>..] = [];
 var dof_total = 0;
-let MAX_CELL_DOFS = 21; // P2 velocity, P1 pressure and P2 temperature
-var part: u8[>..] = [];         // 0 for a fluid cell, 1 for a solid cell (empty: all fluid)
-var edge_free: u8[>..] = [];    // 1 for the edge of a cell that no other cell of its part has
-var on_part_boundary: u8[>..] = []; // 1 for a node on the boundary of the solid cells
-var in_fluid: u8[>..] = [];     // 1 for a node of a fluid cell
-var region_part = 0;            // the part of the last select call
-var diameter = 0.0;             // of the bounding box
+let MAX_CELL_DOFS = 21;
+var part: u8[>..] = [];
+var edge_free: u8[>..] = [];
+var on_part_boundary: u8[>..] = [];
+var in_fluid: u8[>..] = [];
+var region_part = 0;
+var diameter = 0.0;
 
-// The sparsity of the Jacobian: CSR, with the columns of each row in
-// increasing order.
 var row_start: i64[>..] = [];
 var col: i32[>..] = [];
 
-// The region of the last select call: a flag for each node.
 var region: u8[>..] = [];
 
-// A turbulent flow has the unknowns k and w. Call it before the mesh.
 fn set_turbulent(on: bool) {
     turbulent = on;
     spalart_on = false;
 }
 
-// A turbulent flow with the Spalart-Allmaras unknown nt (sa.goose) in place of k and w.
 fn set_spalart(on: bool) {
     turbulent = on;
     spalart_on = on;
 }
 
-// A thermal flow has the unknown T. Call it before the mesh.
 fn set_thermal(on: bool) {
     guard !(on && turbulent) else { abort("set_thermal: a flow is thermal or turbulent"); }
     thermal = on;
@@ -83,7 +53,6 @@ fn edge_dofs() -> i64 { return if thermal { 3 } else { 2 }; }
 
 fn is_solid_cell(c: i64) -> bool { return part.len > 0 && part[c] != 0; }
 
-// The dof of T at node n of a thermal flow.
 fn tdof(n: i64) -> i64 {
     guard thermal && n >= 0 && n < first_dof.len else { abort("tdof: a thermal flow and n < node_count()"); }
     return first_dof[n] + (if n < vertex_count { 3 } else { 2 });
@@ -100,7 +69,6 @@ fn pdof(n: i64) -> i64 {
     return first_dof[n] + 2;
 }
 
-// The dof of k (which 0) or w (which 1) at vertex n of a turbulent flow.
 fn turbulence_dof(n: i64, which: i64) -> i64 {
     guard turbulent && n >= 0 && n < vertex_count && n < first_dof.len && (which == 0 || (which == 1 && !spalart_on)) else { abort("turbulence_dof: a turbulent flow, n < vertex_count and which 0 or 1"); }
     return first_dof[n] + 3 + which;
@@ -111,9 +79,6 @@ fn cell_node(c: i64, l: i64) -> i64 {
     return conn[per_cell * c + l];
 }
 
-// The dofs of cell c in the local sequence of cell.goose: vx and vy of
-// each node, then p of each vertex, then for a turbulent flow k and then w
-// of each vertex.
 fn cell_dofs(c: i64, dofs: i64[21]&) {
     guard c >= 0 && c < cell_count() else { abort("cell_dofs: c < cell_count()"); }
     for l in per_cell {
@@ -134,16 +99,11 @@ fn cell_dofs(c: i64, dofs: i64[21]&) {
 
 fn cell_dof_count() -> i64 { return 2 * per_cell + (if turbulent { if spalart_on { 6 } else { 9 } } else if thermal { 3 + per_cell } else { 3 }); }
 
-// Takes the vertices `xy` (x and y of each) and the triangles `tri` (3
-// vertices each), turns each triangle to positive orientation, and adds
-// the edge nodes for order 2.
 fn mesh_from_arrays(xy: f64[:], tri: i64[:], ord: i64) {
     var none: u8[>..] = [];
     mesh_from_parts(xy, tri, none[..], ord);
 }
 
-// The same with the part of each triangle: 0 for the fluid, 1 for a solid
-// (conjugate heat transfer). No parts: all triangles are fluid.
 fn mesh_from_parts(xy: f64[:], tri: i64[:], parts: u8[:], ord: i64) {
     guard (ord == 1 || ord == 2) && (ord == 1 || !turbulent) && xy.len % 2 == 0 && tri.len % 3 == 0 && tri.len > 0 else {
         abort("mesh_from_arrays: order 1 or 2 (1 for a turbulent flow), and triangles");
@@ -197,9 +157,6 @@ fn signed_area(v: i64[3]) -> f64 {
     return 0.5 * ((coords[2 * v[1]] - ax) * (coords[2 * v[2] + 1] - ay) - (coords[2 * v[1] + 1] - ay) * (coords[2 * v[2]] - ax));
 }
 
-// Reads the mesh that skein run wrote in the directory `dir`: the files
-// flow.xy and flow.tri, the bytes of the arrays of mesh_from_arrays. False
-// if it cannot read them.
 fn read_mesh(dir: const u8[:], ord: i64) -> bool {
     var a: u8[>..] = [];
     var b: u8[>..] = [];
@@ -218,10 +175,6 @@ fn read_mesh(dir: const u8[:], ord: i64) -> bool {
     return true;
 }
 
-// Marks the nodes of the edges of one cell, and sets the diameter. `count`
-// holds, for each edge and part (key 2 e + part), the cells of that part
-// that have the edge. A node is on the boundary of the fluid, or on the
-// boundary of the solid cells (on_part_boundary).
 fn mark_boundary(count: dictionary<i64, i64>&, mid: dictionary<i64, i64>&) {
     on_boundary.clear();
     on_part_boundary.clear();
@@ -268,8 +221,6 @@ fn mark_boundary(count: dictionary<i64, i64>&, mid: dictionary<i64, i64>&) {
     diameter = sqrt((hi[0] - lo[0]) * (hi[0] - lo[0]) + (hi[1] - lo[1]) * (hi[1] - lo[1]));
 }
 
-// The node graph: each two nodes of a cell are neighbours. CSR in
-// `start` and `next`.
 fn node_graph(start: i64[>..]&, next: i64[>..]&) {
     let n = node_count();
     var pairs: i64[>..] = [];
@@ -294,10 +245,6 @@ fn node_graph(start: i64[>..]&, next: i64[>..]&) {
     while start.len <= n { start.push(next.len); }
 }
 
-// The breadth-first sequence of the nodes from node `from`, with the
-// neighbours of each node in the order of their degrees (Cuthill and
-// McKee 1969). When the sequence ends before the last node, it starts
-// again at the first node that it did not reach.
 fn cuthill_mckee(from: i64, start: i64[:], next: i64[:], seq: i64[>..]&) {
     let n = node_count();
     var seen: u8[>..] = [];
@@ -309,7 +256,6 @@ fn cuthill_mckee(from: i64, start: i64[:], next: i64[:], seq: i64[>..]&) {
     var around: i64[>..] = [];
     while seq.len < n {
         if head == seq.len {
-            // another region: start at its first node
             var k = 0;
             while seen[k] != 0 { k++; }
             seq.push(k);
@@ -329,9 +275,6 @@ fn cuthill_mckee(from: i64, start: i64[:], next: i64[:], seq: i64[>..]&) {
     }
 }
 
-// Sets first_dof: the reverse Cuthill-McKee sequence from the last
-// node of a sequence from a node of the smallest degree, which is near
-// the edge of the mesh (George and Liu 1981).
 fn order_nodes() {
     let n = node_count();
     var start: i64[>..] = [];
@@ -359,10 +302,6 @@ fn order_nodes() {
     dof_total = d;
 }
 
-// Ties each node of the region to the boundary node at its position minus
-// (px, py): the two share their dofs (a `bloch` symmetry with k = 0,
-// spec §12). Call it before clear_bcs. False if a node of the region has
-// no such node.
 fn periodic(px: f64, py: f64) -> bool {
     guard region.len == node_count() && twin.len == node_count() && cell_count() > 0 else { abort("periodic: a mesh and a region"); }
     let tol = tolerance();
@@ -382,8 +321,6 @@ fn periodic(px: f64, py: f64) -> bool {
     return true;
 }
 
-// The CSR pattern: each dof of a cell couples with each dof of the cell.
-// The pairs of dofs are sorted as row n + column.
 fn build_pattern() {
     let n = dof_count();
     var pairs: i64[>..] = [];
@@ -409,12 +346,8 @@ fn build_pattern() {
     while row_start.len <= n { row_start.push(col.len); }
 }
 
-// The tolerance of a test of a coordinate: 1e-6 of the diameter (spec §8.2).
 fn tolerance() -> f64 { return 1.0e-6 * diameter; }
 
-// Selects the nodes on the boundary where P(x, y) holds. An edge node also
-// counts when P holds at both ends of its edge, so that a region on a
-// circle keeps the edge nodes on its chords. False if no node holds.
 fn select_boundary<P>() -> bool {
     guard region.len == node_count() && cell_count() > 0 else { abort("select_boundary: a mesh"); }
     var found = false;
@@ -434,10 +367,6 @@ fn select_boundary<P>() -> bool {
     return found;
 }
 
-// Selects the boundary nodes with a mark in `mask` (1 for each vertex of
-// the mesh, written by skein run for the region of a boundary of a shape
-// that a condition of x and y cannot name, such as a spline) where
-// P(x, y) holds. False if it selects none.
 fn select_masked<P>(mask: u8[:]) -> bool {
     guard region.len == node_count() && cell_count() > 0 && mask.len == vertex_count else { abort("select_masked: a mesh and a mask of its vertices"); }
     var found = false;
@@ -457,8 +386,6 @@ fn select_masked<P>(mask: u8[:]) -> bool {
     return found;
 }
 
-// Selects the nodes on the boundary of the solid cells where P(x, y) holds
-// (a thermal flow with a solid, heat.goose).
 fn select_solid_part<P>() -> bool {
     guard region.len == node_count() && cell_count() > 0 && part.len > 0 else { abort("select_solid_part: a mesh with solid cells"); }
     var found = false;
@@ -470,7 +397,6 @@ fn select_solid_part<P>() -> bool {
     return found;
 }
 
-// Selects the vertex at (x, y). False if no vertex is within tolerance().
 fn select_point(x: f64, y: f64) -> bool {
     guard region.len == node_count() && cell_count() > 0 else { abort("select_point: a mesh"); }
     region_part = 0;

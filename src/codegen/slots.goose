@@ -1,11 +1,6 @@
-// The slots of the program of the page (web.goose): the number literals
-// of a Goose program, and the values of the literals that change with
-// the params.
 import std;
 namespace codegen;
 
-// A number literal of a program: its bytes lo..hi, and whether it is an
-// f64 (with a point or an exponent).
 struct Literal {
     lo: i64,
     hi: i64,
@@ -15,10 +10,6 @@ struct Literal {
 fn is_ident_byte(c: u8) -> bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
 fn is_digit(c: u8) -> bool { return c >= '0' && c <= '9'; }
 
-// The number literals of the Goose program `text`, out of comments,
-// strings and characters. A `-` just before a digit is part of the literal
-// when no name or closing bracket is in front of it: the generator writes
-// a negative value so, and a subtraction with spaces.
 fn literals(text: u8[:]) -> Literal[>..] {
     var out: Literal[>..] = [];
     var i = 0;
@@ -54,8 +45,6 @@ fn literals(text: u8[:]) -> Literal[>..] {
     return out;
 }
 
-// Whether programs `a` and `b`, with the literals `la` and `lb`, differ
-// only in the literals.
 fn same_text(a: u8[:], la: Literal[:], b: u8[:], lb: Literal[:]) -> bool {
     guard la.len == lb.len else { return false; };
     var at_a = 0;
@@ -68,10 +57,6 @@ fn same_text(a: u8[:], la: Literal[:], b: u8[:], lb: Literal[:]) -> bool {
     return a[at_a..] == b[at_b..];
 }
 
-// The values of the slots `slots` (indices into the literals of `base`)
-// in the program `text`, into `f` and `i` in the sequence of the slots.
-// False, with a message on stderr, if `text` differs from `base` in
-// another place than a slot.
 fn slot_values(base: u8[:], slots: i64[:], text: u8[:], f: f64[>..]&, i: i64[>..]&) -> bool {
     let lb = literals(base);
     let lt = literals(text);
@@ -104,8 +89,6 @@ fn slot_values(base: u8[:], slots: i64[:], text: u8[:], f: f64[>..]&, i: i64[>..
     return true;
 }
 
-// The program of the page: `text` with each literal of `slots` replaced
-// by its slot.
 fn slot_program(text: u8[:], slots: i64[:]) -> u8[>..] {
     let ls = literals(text);
     var out: u8[>..] = [];
@@ -128,7 +111,6 @@ fn slot_program(text: u8[:], slots: i64[:]) -> u8[>..] {
     return out;
 }
 
-// The slots of the text `s`, indices with a comma between them.
 fn parse_slots(s: u8[:]) -> i64[>..] {
     var out: i64[>..] = [];
     var start = 0;

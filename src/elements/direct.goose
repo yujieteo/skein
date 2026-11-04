@@ -1,19 +1,3 @@
-// The direct solve of a Newton iteration of the nonlinear solid
-// (solid.goose): a skyline (profile) LDLᵀ factorization, as COLSOL in K. J.
-// Bathe, Finite Element Procedures, 1996, §8.2.3, in the reverse
-// Cuthill-McKee order of the nodes, as src/meshless/direct.goose.
-//
-// Reason: K of a nearly incompressible solid has a large condition number.
-// On examples/femahoy/hyperelastic_tube.skn (K/μ = 9654, 2640 dofs), CG
-// with AMG takes about 500 iterations for each Newton solve, and the model
-// takes 34 s on 1 thread. With this solve it takes 7 s.
-//
-// A static step uses it when the factorization takes at most DIRECT_WORK
-// multiplies, else CG with AMG. A fixed dof is a row and a column of the
-// identity, with a right side of 0. Node n is at position
-// sky_position[n] of the order, and dof d at row sky_row(d). Column j
-// holds the rows sky_top[j]..j of U = D Lᵀ, and row j the columns
-// sky_top[j]..j - 1 of L, at sky_start[j] + (i - sky_top[j]).
 import std;
 import math;
 namespace elements;
@@ -22,7 +6,7 @@ import .assemble;
 import .solve;
 import solvers from "../solvers";
 
-let DIRECT_WORK = 5.0e8;    // about 0.5 s of multiplies
+let DIRECT_WORK = 5.0e8;
 
 var sky_position: i64[>..] = [];
 var sky_top: i64[>..] = [];
@@ -32,12 +16,8 @@ var sky_lower: f64[>..] = [];
 
 fn sky_row(d: i64) -> i64 { return ncomp * sky_position[d / ncomp] + d % ncomp; }
 
-// The entries of the row of the first dof of node p: its degree.
 fn node_degree(p: i64) -> i64 { return row_start[ncomp * p + 1] - row_start[ncomp * p]; }
 
-// Appends to seq the nodes of the component of root, in the Cuthill-McKee
-// order: by level from root, and in each level by degree. It marks each
-// with stamp, and gives the last node.
 fn cuthill_nodes(root: i64, stamp: i64, mark: i64[>..]&, seq: i64[>..]&) -> i64 {
     var head = seq.len;
     seq.push(root);
@@ -60,8 +40,6 @@ fn cuthill_nodes(root: i64, stamp: i64, mark: i64[>..]&, seq: i64[>..]&) -> i64 
     return seq[seq.len - 1];
 }
 
-// The reverse Cuthill-McKee order of the nodes. Each component starts from
-// the last node of a first pass from its node of least degree.
 fn order_nodes() {
     let n = node_count();
     var mark: i64[>..] = [];
@@ -83,9 +61,6 @@ fn order_nodes() {
     for k in n { sky_position[seq[k]] = n - 1 - k; }
 }
 
-// The order and the skyline of the pattern of the step. False if the
-// factorization takes more than DIRECT_WORK multiplies: the step then
-// solves with CG and AMG.
 fn direct_setup() -> bool {
     guard skyline_layout(DIRECT_WORK) else { return false; }
     let n = sol.len;
@@ -95,9 +70,6 @@ fn direct_setup() -> bool {
     return true;
 }
 
-// The order and the profile of the pattern, with at most `limit` multiplies
-// to factor. False if it takes more. The harmonic step of harmonic.goose
-// has its own limit: it factors one complex matrix for each frequency.
 fn skyline_layout(limit: f64) -> bool {
     order_nodes();
     let n = sol.len;
@@ -119,18 +91,12 @@ fn skyline_layout(limit: f64) -> bool {
     return true;
 }
 
-// The sum of a[a0 + k] b[b0 + k] for k from lo to hi - 1.
 fn sky_dot(a: f64[:], a0: i64, b: f64[:], b0: i64, lo: i64, hi: i64) -> f64 {
     var s = 0.0;
     for k in lo..hi { s += a[a0 + k] * b[b0 + k]; }
     return s;
 }
 
-// K = L U in place, with the fixed dofs as rows of the identity, without
-// pivoting. A negative pivot is correct: the tangent of the first Newton
-// iteration of a step is indefinite when the fixed dofs move (the tube has
-// a pivot of -83 on a diagonal of 8299). False if a pivot is near 0
-// relative to its diagonal.
 fn sky_factor() -> bool {
     for &v in sky_upper { v = 0.0; }
     for r in sol.len {
@@ -156,9 +122,6 @@ fn sky_factor() -> bool {
     return true;
 }
 
-// The Newton solve of solve_solid: sol of the free dofs from
-// K sol = load, with sol of the fixed dofs as it is, as cg_solve. False
-// if a pivot is near 0.
 fn direct_solve(start: f64) -> bool {
     let n = sol.len;
     guard sky_start.len == n + 1 else { abort("direct_solve: direct_setup of the pattern"); }

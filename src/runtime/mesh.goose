@@ -1,23 +1,3 @@
-// The lattice mesher: a structured mesh of 27-node hexahedra of a box or
-// of a sector of an annulus, or of 8-node hexahedra with incompatible
-// modes of a box, in the unstructured mesh of fem.goose. It is one producer
-// of that mesh. The supports, the loads and the values at a point use only
-// the mesh and its named sets (solve.goose).
-//
-// The nodes are the points of a lattice with 2n + 1 points (hex27) or
-// n + 1 points (hex8i) along an edge of n cells, so node (i, j, k) of the
-// lattice has the index i + lx (j + ly k).
-// Cell (cx, cy, cz) has the index cx + nx (cy + ny cz).
-//
-// The lattice is uniform in its own coordinates (q0, q1, q2). For a box
-// they are x, y and z. For an annulus sector they are r, θ and z, and the
-// node of (r, θ, z) is at (cx + r cos θ, cy + r sin θ, z). The cells
-// are isoparametric, so a cell edge on an arc is a parabola through 3
-// nodes on the arc.
-//
-// Each face of the lattice has a node set and a face set: x0, x1, y0, y1,
-// z0 and z1 on a box, r0, r1, t0, t1, z0 and z1 on an annulus (the low and
-// the high face along each lattice axis).
 import std;
 import math;
 namespace runtime;
@@ -25,8 +5,8 @@ import .fem;
 import .solid;
 import .solve;
 
-var cells: i64[3] = [0, 0, 0];      // cells along x, y and z
-var lattice: i64[3] = [0, 0, 0];    // nodes along x, y and z: 2 cells + 1 (hex27) or cells + 1
+var cells: i64[3] = [0, 0, 0];
+var lattice: i64[3] = [0, 0, 0];
 
 let FACE_NAMES = ["x0", "x1", "y0", "y1", "z0", "z1"];
 let ANNULUS_FACE_NAMES = ["r0", "r1", "t0", "t1", "z0", "z1"];
@@ -41,7 +21,6 @@ fn box_cell(cx: i64, cy: i64, cz: i64) -> i64 {
     return cx + cells[0] * (cy + cells[1] * cz);
 }
 
-// t is HEX27 or HEX8I.
 fn build_box(t: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64,
              nx: i64, ny: i64, nz: i64) {
     guard t == HEX27 || t == HEX8I else { abort("build_box: t is HEX27 or HEX8I"); }
@@ -56,9 +35,9 @@ fn build_annulus(cx: f64, cy: f64, r0: f64, r1: f64, t0: f64, t1: f64, z0: f64, 
 
 fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3], nx: i64, ny: i64, nz: i64) {
     guard nx > 0 && ny > 0 && nz > 0 && hi[0] > lo[0] && hi[1] > lo[1] && hi[2] > lo[2] else { abort("build_lattice: counts > 0 and hi > lo on each axis"); }
-    let per = if t == HEX27 { 2 } else { 1 };   // lattice steps along a cell edge
+    let per = if t == HEX27 { 2 } else { 1 };
     mesh_clear();
-    var spacing: f64[3] = [0.0, 0.0, 0.0];   // the size of a cell in q
+    var spacing: f64[3] = [0.0, 0.0, 0.0];
     cells = [nx, ny, nz];
     for a in 3 {
         lattice[a] = per * cells[a] + 1;
@@ -87,7 +66,6 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
                     for l in 27 { nodes[l] = node_at(2 * cx + l % 3, 2 * cy + l / 3 % 3, 2 * cz + l / 9); }
                     add_cell(HEX27, nodes);
                 } else {
-                    // The corners in the order of HEX8_CORNERS (hex8i.goose).
                     var corners: i64[8] = [0; 8];
                     for l in 8 { corners[l] = node_at(cx + (l + 1) / 2 % 2, cy + l / 2 % 2, cz + l / 4); }
                     add_cell(HEX8I, corners);
@@ -101,7 +79,6 @@ fn build_lattice(t: i64, annulus: bool, cx: f64, cy: f64, lo: f64[3], hi: f64[3]
     clear_dofs();
 }
 
-// The node set and the face set of each of the 6 faces of the lattice.
 fn add_lattice_face_sets(annulus: bool) {
     guard cells[0] > 0 && cells[1] > 0 && cells[2] > 0 else { abort("add_lattice_face_sets: a lattice"); }
     let names = if annulus { ANNULUS_FACE_NAMES } else { FACE_NAMES };
@@ -131,9 +108,6 @@ fn add_lattice_face_sets(annulus: bool) {
     }
 }
 
-// The node at position (s, t) of the lattice of the face that is normal to
-// `axis` at lattice index `f`. s and t run over the two other axes in the
-// sequence x, y, z.
 fn face_node(axis: i64, f: i64, s: i64, t: i64) -> i64 {
     guard axis >= 0 && axis < 3 else { abort("face_node: 0 <= axis < 3"); }
     if axis == 0 { return node_at(f, s, t); }
@@ -148,12 +122,6 @@ fn other_axes(axis: i64) -> i64, i64 {
     return 0, 1;
 }
 
-// --- the grid of a union of boxes ----------------------------------------------
-
-// The grid lines along axis a of the union of `boxes` (x0, y0, z0, x1, y1,
-// z1 for each): each face of each box, and each point of `points` (x, y, z
-// for each), is a grid plane. Between two planes, the grid has the fewest
-// equal cells of at most `size` (spec §9.2, as src/mesher/grid.goose).
 fn grid_lines(boxes: f64[:], points: f64[:], a: i64, size: f64) -> f64[>..] {
     guard boxes.len > 0 && boxes.len % 6 == 0 && points.len % 3 == 0 && a >= 0 && a < 3 && size > 0.0 else {
         abort("grid_lines: a box, points of 3 values, 0 <= a < 3 and size > 0");
@@ -186,11 +154,6 @@ fn grid_lines(boxes: f64[:], points: f64[:], a: i64, size: f64) -> f64[>..] {
     return out;
 }
 
-// The grid mesher: 27-node hexahedra on the grid lines lx, ly and lz, which
-// need not be uniform. Cell (i, j, k) spans lx[i] to lx[i + 1], and so on.
-// It is in the mesh if its centre is in a box of `boxes`. The nodes are the
-// grid lines and the midpoints between them, and only the nodes of a cell
-// of the mesh are made.
 fn build_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
     guard lx.len >= 2 && ly.len >= 2 && lz.len >= 2 && boxes.len > 0 && boxes.len % 6 == 0 else { abort("build_grid: 2 grid lines on each axis and a box"); }
     mesh_clear();
@@ -201,7 +164,7 @@ fn build_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
     lattice = [px.len, py.len, pz.len];
     var ids: i64[>..] = [];
     for i in px.len * py.len * pz.len { ids.push(-1); }
-    var grid: i64[>..] = [];   // the cell of each cell of the grid, or -1
+    var grid: i64[>..] = [];
     var nodes: i64[27] = [0; 27];
     for k in cells[2] {
         for j in cells[1] {
@@ -229,7 +192,6 @@ fn build_grid(lx: f64[:], ly: f64[:], lz: f64[:], boxes: f64[:]) {
     clear_dofs();
 }
 
-// The grid lines `l` and the midpoint between each two of them.
 fn with_midpoints(l: f64[:]) -> f64[>..] {
     guard l.len >= 2 else { abort("with_midpoints: 2 grid lines"); }
     var out: f64[>..] = [l[0]];
@@ -241,7 +203,6 @@ fn with_midpoints(l: f64[:]) -> f64[>..] {
     return out;
 }
 
-// Whether the point p is in one of the boxes (x0, y0, z0, x1, y1, z1).
 fn in_boxes(boxes: f64[:], p: f64[3]) -> bool {
     guard boxes.len % 6 == 0 else { abort("in_boxes: 6 numbers for each box"); }
     for b in boxes.len / 6 {
@@ -254,9 +215,6 @@ fn in_boxes(boxes: f64[:], p: f64[3]) -> bool {
     return false;
 }
 
-// The node set and the face set of each bounding plane of the grid: the
-// faces there of the cells of the mesh. `grid` holds the cell of each cell
-// of the grid, or -1.
 fn add_grid_face_sets(grid: i64[:]) {
     guard grid.len == cells[0] * cells[1] * cells[2] else { abort("add_grid_face_sets: a cell or -1 for each cell of the grid"); }
     var faces: i64[>..] = [];
@@ -287,7 +245,6 @@ fn add_grid_face_sets(grid: i64[:]) {
     }
 }
 
-// The centre of cell c: the mean of its nodes.
 fn cell_centre(c: i64) -> f64[3] {
     guard c >= 0 && c < cell_count() else { abort("cell_centre: a cell"); }
     var p: f64[3] = [0.0, 0.0, 0.0];
@@ -299,8 +256,6 @@ fn cell_centre(c: i64) -> f64[3] {
     return p;
 }
 
-// Gives E, nu and the thermal strain to each cell whose centre is in the
-// box lo to hi, and gives the number of these cells.
 fn set_box_material(E: f64, nu: f64, strain: f64, lo: f64[3], hi: f64[3]) -> i64 {
     guard cell_young.len == cell_count() && cell_poisson.len == cell_count() && cell_strain.len == cell_count() else { abort("set_box_material: a material for each cell"); }
     var count = 0;
@@ -314,8 +269,8 @@ fn set_box_material(E: f64, nu: f64, strain: f64, lo: f64[3], hi: f64[3]) -> i64
     return count;
 }
 
-// Adds the node set `name` of the node at p, to 1e-9 of the size of the
-// mesh. False if no node is there.
+let POINT_TOLERANCE = 1.0e-9;
+
 fn add_point_set(name: const u8[:], p: f64[3]) -> bool {
     guard node_count() > 0 else { abort("add_point_set: a mesh"); }
     var lo: f64[3] = [coords[0], coords[1], coords[2]];
@@ -326,7 +281,7 @@ fn add_point_set(name: const u8[:], p: f64[3]) -> bool {
             hi[s] = max(hi[s], coords[3 * n + s]);
         }
     }
-    let tol = 1.0e-9 * max(hi[0] - lo[0], max(hi[1] - lo[1], hi[2] - lo[2]));
+    let tol = POINT_TOLERANCE * max(hi[0] - lo[0], max(hi[1] - lo[1], hi[2] - lo[2]));
     for n in node_count() {
         if abs(coords[3 * n] - p[0]) <= tol && abs(coords[3 * n + 1] - p[1]) <= tol && abs(coords[3 * n + 2] - p[2]) <= tol {
             add_node_set(name, [n]);

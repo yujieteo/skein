@@ -1,21 +1,10 @@
-// The pool of the threads in a case (spec §20.5): the assembly on blocks
-// of cells, and the product of the matrix and a vector on blocks of rows.
-// Goose threads share no memory and have no atomics or locks, so the
-// workers get their data as copies, and they give their results in
-// messages to the thread of the case. Each cell matrix and each row is the
-// same sum in the same order on each number of threads, and the thread of
-// the case adds the cell matrices in cell order. Thus the results do not
-// change with the thread count or with the order of the messages.
 import std;
 import os;
 namespace solvers;
 import .sparse;
 
-// The threads of the case, or 0 before the first call of case_threads.
 var threads = 0;
 
-// SKEIN_THREADS, which the study runner sets for each case, or all
-// hardware threads if it is not set (docs/command_line.md, `--threads`).
 fn case_threads() -> i64 {
     if threads == 0 {
         threads = max(1, hardware_threads());
@@ -28,27 +17,12 @@ fn case_threads() -> i64 {
     return threads;
 }
 
-// --- the assembly on blocks of cells --------------------------------------------
-
-// The cells of a task of the assembly. Reason: one message for each cell
-// costs more than the cell matrix of a tet4.
 let CELL_BLOCK = 16;
 
-// A task of the assembly: the cells lo <= c < hi. A task with lo < 0 stops
-// the worker.
 struct CellJob { lo: i64, hi: i64 }
 
-// The data of the cells of a task, one cell after the other, and the first
-// cell that has no element routine, or -1.
 struct CellData { lo: i64, bad: i64, data: f64[] }
 
-// Gives the tasks of `cells` cells to the `workers` workers that the
-// caller started, and calls add(lo, hi, data) for each task in cell order.
-// A worker takes a CellJob, and puts the CellData of its cells, at most
-// `size` values for each cell. At most 2 workers tasks are out at a time,
-// and task b waits in slot b % (2 workers) until the tasks before it are
-// added. Then the stop tasks end the workers. It gives the first cell
-// that has no element routine, or -1, and then it adds no task.
 fn gather_cells<ADD>(cells: i64, workers: i64, size: i64) -> i64 {
     guard cells >= 1 && workers >= 1 && size >= 1 else { abort("gather_cells: cells, workers and size >= 1"); }
     let tasks = (cells + CELL_BLOCK - 1) / CELL_BLOCK;
@@ -56,7 +30,7 @@ fn gather_cells<ADD>(cells: i64, workers: i64, size: i64) -> i64 {
     let stride = CELL_BLOCK * size;
     var store: f64[>..] = [];
     zeros(store, slots * stride);
-    var count: i64[>..] = [];   // the values in each slot, or -1 if it is empty
+    var count: i64[>..] = [];
     for s in slots { count.push(-1); }
     var next = 0;
     while next < min(slots, tasks) { put_cells(next, cells); next++; }
@@ -86,20 +60,11 @@ fn put_cells(task: i64, cells: i64) {
     qput(CellJob { lo: task * CELL_BLOCK, hi: min(cells, (task + 1) * CELL_BLOCK) });
 }
 
-// --- the product on blocks of rows -------------------------------------------------
-
-// The rows lo <= r < lo + row_start.len - 1 of a matrix, as the argument of
-// the spawn of a worker. row_start[0] is the start of row lo in the matrix.
 struct Rows { lo: i64, row_start: i64[], col: i32[], val: f64[] }
 
-// The vector x of a product. Two products in a row use the two types in
-// turn, and a worker takes one of each in turn. The next product starts
-// only after each worker gave its rows, so each worker takes exactly one
-// x of each product.
 struct XEven { stop: bool, x: f64[] }
 struct XOdd { stop: bool, x: f64[] }
 
-// The rows lo <= r < lo + y.len of a product.
 struct RowsY { lo: i64, y: f64[] }
 
 var rows_ids: i64[>..] = [];
@@ -120,9 +85,6 @@ thread_fn rows_worker(b: Rows) {
     }
 }
 
-// Starts case_threads() workers, each with a block of the rows of the
-// matrix. Together they hold one copy of the matrix. With one thread, it
-// starts none.
 fn rows_start(row_start: i64[:], col: i32[:], val: f64[:]) {
     guard rows_ids.len == 0 && row_start.len >= 1 && row_start[row_start.len - 1] == col.len && col.len == val.len else { abort("rows_start: no workers yet, and a matrix"); }
     let rows = row_start.len - 1;
@@ -138,8 +100,6 @@ fn rows_start(row_start: i64[:], col: i32[:], val: f64[:]) {
     rows_products = 0;
 }
 
-// y = A x, on the workers of rows_start, or on this thread if it started
-// none. A is the matrix of rows_start.
 fn rows_multiply(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[:]) {
     if rows_ids.len == 0 {
         multiply(row_start, col, val, x, y);
@@ -154,7 +114,6 @@ fn rows_multiply(row_start: i64[:], col: i32[:], val: f64[:], x: f64[:], y: f64[
     rows_products++;
 }
 
-// Stops the workers of rows_start.
 fn rows_stop() {
     for w in rows_ids.len { put_x(true, []); }
     for id in rows_ids { thread_wait(id); }

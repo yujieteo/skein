@@ -1,26 +1,9 @@
-// Tests of the flow solver. `./build.sh test` runs this program from the
-// root of the repository, and a non-zero exit status is a failure.
-//
-// Plane Poiseuille flow in a channel of length L and height H, driven by a
-// body force G along x, with v = 0 on the walls and v.y = 0 at the ends:
-// u = G/(2μ) y (H - y), v.y = 0, p = 0. The convection term (∇v) v is 0,
-// so Stokes and Navier-Stokes have the same solution. P2 velocity holds it
-// exactly. The force of each wall on the flow is -G H L / 2 along x.
-//
-// A cantilever of length 10 and height 1 in plane strain, held at x = 0,
-// with a shear load P at x = L on the solid of fsi.goose: the tip
-// deflection of Timoshenko's beam, P L³/(3 E' I) + P L/(κ G A), with
-// E' = E/(1 - ν²) and κ = 5/6.
-//
-// The gate of phase 3 is samples/02_cavity.skn, with an expect for each
-// row of Ghia et al. (1982), and samples/06_cylinder_sweep.skn.
-// scripts/generated_c.sh runs the two samples.
 import std;
 import math;
 import flow from "../flow";
 import mesher from "../mesher";
-import runtime from "../runtime";   // the mesher imports it
-import solvers from "../solvers";   // the runtime imports it
+import runtime from "../runtime";
+import solvers from "../solvers";
 
 var failures = 0;
 
@@ -36,8 +19,6 @@ let MU = 0.5;
 
 fn exact_u(y: f64) -> f64 { return G / (2.0 * MU) * y * (H - y); }
 
-// Solves the channel and gives the largest error of u at 9 points on the
-// line x = L/2, relative to the peak G H²/(8 μ).
 fn poiseuille(what: u8[:], order: i64, navier_stokes: bool, stab: i64, tolerance: f64) {
     mesher::clear_shapes();
     mesher::clear_refines();
@@ -80,12 +61,6 @@ fn poiseuille(what: u8[:], order: i64, navier_stokes: bool, stab: i64, tolerance
     if abs(fx - want) > tolerance * abs(want) { fail(str(what, ": the force of the top wall is ", fx, ", not ", want)); }
 }
 
-// A fully developed turbulent channel of half height 1 at Re_τ = 395,
-// driven by the body force ρ u_τ² / h with u_τ = 1, ρ = 1, ν = 1/395,
-// with the k-ω SST model. The ends are periodic: the mesh is half the
-// channel and its mirror, so that the nodes of the ends match. The DNS of
-// Moser, Kim and Mansour (1999) gives U_b+ = 17.55 and U_c+ = 20.1. SST
-// gives about 6% more on this mesh, and 5% more on a mesh of half the size.
 fn channel(sa: bool) {
     let len = 0.1;
     let hw = 1.0 / 395.0;
@@ -165,7 +140,6 @@ fn cantilever() {
     assert(flow::select_solid_boundary() { x, y => abs(x) <= 1.0e-9 });
     flow::fix_solid();
     if !flow::factor_solid() { fail("cantilever: the stiffness is not positive definite"); }
-    // the consistent load of a uniform shear on the edges at x = L
     var load: f64[>..] = [];
     var u: f64[>..] = [];
     solvers::zeros(load, 2 * flow::solid_nodes());
@@ -190,7 +164,18 @@ fn cantilever() {
     if !found || abs(tip - exact) > 0.02 * abs(exact) { fail(str("cantilever: the tip deflection is ", tip, ", not within 2% of ", exact)); }
 }
 
+fn quadrature_weights_sum_to_one_and_points_are_barycentric() {
+    var total = 0.0;
+    for q in 7 {
+        let l, w = flow::quad_point(q);
+        total += w;
+        if abs(l[0] + l[1] + l[2] - 1.0) > 1.0e-12 { fail(str("quad_point ", q, ": the barycentric coordinates do not sum to 1")); }
+    }
+    if abs(total - 1.0) > 1.0e-12 { fail(str("quad_point: the weights sum to ", total, ", not 1")); }
+}
+
 fn main() {
+    quadrature_weights_sum_to_one_and_points_are_barycentric();
     poiseuille("Stokes, P2/P1", 2, false, flow::NONE, 1.0e-6);
     poiseuille("Navier-Stokes, P2/P1, supg", 2, true, flow::SUPG, 1.0e-6);
     poiseuille("Navier-Stokes, P2/P1, supg_pspg_lsic", 2, true, flow::SUPG_PSPG_LSIC, 1.0e-6);

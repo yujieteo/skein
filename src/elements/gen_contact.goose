@@ -1,20 +1,3 @@
-// The part of the simplex generator for contact (spec §12.4) and the rigid
-// face (spec §12.1), on src/elements/contact.goose.
-//
-// `contact c: master, slave { friction: mu, enforce: penalty, stiffness:
-// kn, stick_stiffness: kt }` names two boundaries `boundary(A, ...)` and
-// `boundary(B, ...)` of two bodies A and B, and the body of the physics is
-// their union `A | B`. The mesher meshes each body alone, so the bodies
-// share no node (elements::mesh_bodies), and a boundary of a body holds
-// only its nodes. With no stick_stiffness, kt is kn.
-//
-// `bc face: u = rigid(p)` makes face a rigid face, and `bc p: moment(sigma*n)
-// = M` puts the moment M on it. `release r` in a step removes the bcs on r
-// from that step on.
-//
-// A static step with a contact or a rigid face is Newton's method on the
-// linear law (elements::solve_contact), or on the law of the nonlinear
-// solid; `static(ramp: n)` takes n increments.
 import std;
 import math;
 namespace elements_gen;
@@ -23,21 +6,20 @@ import codegen.codegen;
 import mesher from "../mesher";
 import .gen;
 
-let BC_RIGID = 6;   // `bc face: u = rigid(p)`: node is the boundary of p
-let BC_MOMENT = 7;  // `bc p: moment(sigma*n) = M`: v holds M
+let BC_RIGID = 6;
+let BC_MOMENT = 7;
 
 let CONTACT_FIX = "write contact c: block_face, pad_face { friction: 0.3, enforce: penalty, stiffness: 1e7 MPa/mm }, with block_face = boundary(block, y == 0 mm) and the body block | pad";
 
 struct Contact {
     name: u8[..64],
-    master: i64,    // the boundaries in surfs
+    master: i64,
     slave: i64,
     kn: f64,
     kt: f64,
     mu: f64,
 }
 
-// `release r` in step `step`.
 struct Release {
     step: i64,
     surf: i64,
@@ -45,8 +27,8 @@ struct Release {
 
 var contact_items: i64[>..];
 var contacts: Contact[>..];
-var body_names: u8[..64][>..];  // the bodies of the contacts
-var body_shapes: i64[>..];      // their shapes of the mesher
+var body_names: u8[..64][>..];
+var body_shapes: i64[>..];
 var releases: Release[>..];
 var has_rigid = false;
 
@@ -59,7 +41,6 @@ fn contact_reset() {
     has_rigid = false;
 }
 
-// Whether a static step solves with Newton's method for the ties.
 fn has_ties() -> bool { return contact_items.len > 0 || has_rigid; }
 
 fn find_body(word: u8[:]) -> i64 {
@@ -67,15 +48,11 @@ fn find_body(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The let of the boundary `word`, or -1.
 fn surface_let(word: u8[:]) -> i64 {
     for s in surface_lets { if name(s) == word { return s; } }
     return -1;
 }
 
-// The bodies of the contacts, from the first argument of the boundary of
-// each region, before the boundaries: the body of the physics is their
-// union. It also finds the bcs with rigid(p).
 fn contact_bodies(prog: i64) {
     find_rigid(prog);
     guard contact_items.len > 0 else { return; }
@@ -109,7 +86,6 @@ fn contact_bodies(prog: i64) {
     }
 }
 
-// The names of a | b | c into parts.
 recursive fn union_parts(n: i64, parts: i64[>..]&) {
     if kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == "|" {
         union_parts(child(n, 0), parts);
@@ -119,7 +95,6 @@ recursive fn union_parts(n: i64, parts: i64[>..]&) {
     }
 }
 
-// Sets has_rigid if a bc of the program or of a step has u = rigid(p).
 fn find_rigid(prog: i64) {
     var c = first(prog);
     while c >= 0 {
@@ -135,7 +110,6 @@ fn find_rigid(prog: i64) {
     }
 }
 
-// A contact item, after the boundaries.
 fn contact_item(n: i64) {
     var c = Contact { name: [], master: -1, slave: -1, kn: 0.0, kt: -1.0, mu: 0.0 };
     set64(c.name, name(n));
@@ -170,8 +144,6 @@ fn contact_item(n: i64) {
     contacts.push(c);
 }
 
-// `bc face: u = rigid(p)` and `bc p: moment(sigma*n) = M` into b. False if
-// the bc is neither.
 fn rigid_bc(target: i64, v: i64, b: Bc&) -> bool {
     guard physics == ELASTIC else { return false; }
     let fix = "write bc top: u = rigid(c) and bc c: moment(sigma*n) = M, with let c: Point";
@@ -195,7 +167,6 @@ fn rigid_bc(target: i64, v: i64, b: Bc&) -> bool {
     return true;
 }
 
-// `release r` of the step that step() reads.
 fn release(n: i64) {
     let s = region_surf(first(n));
     if s < 0 {
@@ -205,7 +176,6 @@ fn release(n: i64) {
     releases.push(Release { step: steps.len, surf: s });
 }
 
-// Removes the bcs that step i releases from set.
 fn release_bcs(i: i64, set: Bc[>..]&) {
     for r in releases {
         if r.step != i { continue; }
@@ -216,9 +186,6 @@ fn release_bcs(i: i64, set: Bc[>..]&) {
     }
 }
 
-// --- the program ---------------------------------------------------------------
-
-// The mesh of the bodies of the contacts, each alone.
 fn emit_bodies(out: u8[>..]&) {
     format(out, ", by the mesher, each body alone\n    if !elements::mesh_bodies(", dim, ", ", order, ", [");
     for g, i in body_shapes {
@@ -231,7 +198,6 @@ fn emit_bodies(out: u8[>..]&) {
     out.append("        exit(1);\n    }\n");
 }
 
-// The pairs of each contact.
 fn emit_contacts(out: u8[>..]&) {
     for c in contacts {
         format(out, "    // contact ", c.name, ": the master ", surfs[c.master].name, ", the slave ", surfs[c.slave].name, "\n");
@@ -248,7 +214,6 @@ fn emit_contacts(out: u8[>..]&) {
     }
 }
 
-// The calls of a BC_RIGID or a BC_MOMENT after its region.
 fn emit_rigid(out: u8[>..]&, b: Bc) {
     if b.kind == BC_RIGID {
         format(out, "    region(elements::rigid_face(), \"", surfs[b.surf].name, "\");\n");

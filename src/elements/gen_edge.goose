@@ -1,24 +1,3 @@
-// The part of the simplex generator for the edge physics of
-// `family: nedelec` and the Darcy flow of `family: raviart_thomas` (spec
-// §13), on P1 cells (src/elements/edge.goose and src/elements/mixed.goose).
-//
-// The edge physics: `let h = curl(u)/X` (or `X*curl(u)`, or `curl(u)`) and
-// `eq curl(h) + c*u = 0` for a vector u, Complex in `harmonic` steps. Its
-// bcs: `cross(n, u) = cross(n, g)` or `u = 0` (essential), and
-// `cross(n, h) = z*u` (natural). `gauge: tree` holds a spanning tree of the
-// cells with c = 0. `order: 2` gives the elements of degree 2 on the P1 cells
-// (src/elements/edge.goose). A `modal(count:, shift:)` step gives the
-// resonances of the physics (src/elements/edge_modal.goose), with a z of the
-// bc that depends on omega.
-//
-// The Darcy flow: `eq q + k*grad(p) = 0` and `eq div(q) = f`, in `static`
-// steps. Its bcs: `p = v` (natural in the mixed form), and `dot(q, n) = g`
-// (essential).
-//
-// A report or an expect is a Complex expression of constants, of points
-// (`hc.x at p`) and of line integrals (`integral(ef.x, c)` on a `line`), and
-// of `far_field(u, H, s, d)` on a boundary, with H a constant times curl(u),
-// and for the Darcy flow of `integral(dot(q, n), s)` on a boundary.
 import std;
 import math;
 namespace elements_gen;
@@ -26,39 +5,39 @@ import syntax from "../syntax";
 import codegen.codegen;
 import .gen;
 
-let EDGE = 3;       // as in src/elements/assemble.goose
-let DARCY = 4;      // MIXED there
+let EDGE = 3;
+let DARCY = 4;
 
 let EDGE_FIX = "write let h: Vector<...> = curl(u)/mu and eq curl(h) + c*u = 0, with family: nedelec";
 let DARCY_FIX = "write eq q + k*grad(p) = 0 and eq div(q) = f, with family: raviart_thomas";
 let PROBE_FIX = "write re, imag, abs or arg of + - * / of constants, F.x at a point, integral(F.x, c) on a line c, integral(dot(q, n), s), or far_field(u, hf*curl(u), s, d)";
 
-var family_word: u8[..64];          // "nedelec", "raviart_thomas" or ""
-var curl_name: u8[..64];            // h of the edge physics
-var curl_coef = -1;                 // X of h = curl(u)/X or X*curl(u), or -1
+var family_word: u8[..64];
+var curl_name: u8[..64];
+var curl_coef = -1;
 var curl_divides = false;
-var mass_terms: i64[>..];           // the coefficients of the terms c*u of the eq
+var mass_terms: i64[>..];
 var mass_signs: f64[>..];
-var mass_ddt2: i64[>..];            // 1 for a term c*ddt2(u): -omega^2*c in a harmonic step
-var skew_form = false;              // let h = -2*skew(grad(u))/X, eq div(h) + ...: h is curl(u)/X, and h*n is cross(n, h)
-var port_bc: i64[>..];              // the token of the bc of each source term of a natural condition
-var port_node: i64[>..];            // its vector field
-var port_const: i64[>..];           // its constant factor, or -1
+var mass_ddt2: i64[>..];
+var skew_form = false;
+var port_bc: i64[>..];
+var port_node: i64[>..];
+var port_const: i64[>..];
 var port_sign: f64[>..];
-var port_zbc: i64[>..];             // the token of a bc with a term z*(u - dot(u, n)*n), and the node of its z
+var port_zbc: i64[>..];
 
 var gauge_tree = false;
-var edge_rhs = -1;                  // the source s of eq curl(h) + c*u = s, or -1 for 0
-var edge_order = 1;                 // the order of the elements: 1, or 2 with `order: 2` (the mesh stays P1)
-var port_zsign: f64[>..];           // the sign of the term z*u of each bc of port_zbc
-var port_zf_bc: i64[>..];           // the factors of z: the token of the bc, the node and 1 for a divisor
+var edge_rhs = -1;
+var edge_order = 1;
+var port_zsign: f64[>..];
+var port_zf_bc: i64[>..];
 var port_zf_node: i64[>..];
 var port_zf_div: i64[>..];
-var darcy_k = -1;                   // k of q + k*grad(p) = 0
-var darcy_f = -1;                   // f of div(q) = f, or -1 for 0
-var physics_lets: i64[>..];         // the let items of the physics
-var probes: EdgeExpect[>..];        // the expects of the edge and Darcy physics
-var quiet = false;                  // a probe that is not in this generator sets probe_bad, and gives no error
+var darcy_k = -1;
+var darcy_f = -1;
+var physics_lets: i64[>..];
+var probes: EdgeExpect[>..];
+var quiet = false;
 var probe_bad = false;
 
 struct EdgeExpect {
@@ -106,8 +85,6 @@ fn probe_fail(at: i64, msg: u8[:], fix: u8[:]) {
     if quiet { probe_bad = true; } else { unsupported(at, msg, fix); }
 }
 
-// The family of the methods: nedelec and raviart_thomas need this part of
-// the generator. A model with one goes to this generator (src/codegen/run.goose).
 fn family_of(methods: i64[:]) -> const u8[:] {
     for m in methods {
         var s = first(child(m, 0));
@@ -132,7 +109,6 @@ fn family_claims(prog: i64) -> bool {
 
 fn is_vector_type(n: i64) -> bool { return kind(n) == syntax::N_TYPE_APPLY && syntax::text(tok(n)) == "Vector"; }
 
-// The physics block of the edge physics or of the Darcy flow.
 fn edge_physics(n: i64) {
     physics = if family_word == "nedelec" { EDGE } else { DARCY };
     var c = first(n);
@@ -160,8 +136,6 @@ fn edge_physics(n: i64) {
     }
 }
 
-// The unknown u of the edge physics, or q (flux_name) and p (unknown_name)
-// of the Darcy flow.
 fn edge_unknown(c: i64) {
     let vector = is_vector_type(child(c, 0)) ||
         kind(child(c, 0)) == syntax::N_TYPE_APPLY && syntax::text(tok(child(c, 0))) == "Complex" && is_vector_type(first(child(c, 0)));
@@ -177,16 +151,12 @@ fn edge_unknown(c: i64) {
     }
 }
 
-// The text of s with no space, newline or parenthesis.
 fn compact(s: u8[:]) -> u8[>..] {
     var r: u8[>..] = [];
     for ch in s { if ch != ' ' && ch != '\n' && ch != '\t' && ch != '(' && ch != ')' { r.push(ch); } }
     return r;
 }
 
-// `let h = curl(u)/X`, `X*curl(u)` or `curl(u)`, or the form of a stress
-// tensor, `-2*skew(grad(u))/X`, whose h*n is cross(n, curl(u)/X). Another
-// let is a value of the reports.
 fn curl_let(c: i64) {
     let v = child(c, 1);
     let cu = str("curl(", unknown_name, ")");
@@ -215,7 +185,6 @@ fn curl_let(c: i64) {
     }
 }
 
-// eq curl(h) + c1*u - c2*u ... = 0.
 fn curl_eq(c: i64) {
     var left = child(c, 0);
     let fix = EDGE_FIX;
@@ -237,7 +206,6 @@ fn curl_eq(c: i64) {
     }
 }
 
-// eq q + k*grad(p) = 0, or eq div(q) = f.
 fn darcy_eq(c: i64) {
     let left = child(c, 0);
     let right = child(c, 1);
@@ -256,7 +224,6 @@ fn darcy_eq(c: i64) {
     darcy_k = child(child(left, 1), 0);
 }
 
-// The settings family, order and gauge of the method.
 fn edge_method(s: i64) -> bool {
     guard kind(s) == syntax::N_SETTING else { return false; };
     if name(s) == "family" { return true; }
@@ -267,13 +234,11 @@ fn edge_method(s: i64) -> bool {
     return false;
 }
 
-// `cross(n, a)`: the node of a, else -1.
 fn crossed(n: i64) -> i64 {
     guard is_call(n, "cross") && syntax::child_count(n) == 3 && source_of(arg(n, 0)) == "n" else { return -1; };
     return arg(n, 1);
 }
 
-// A bc of the edge physics or of the Darcy flow on boundary s.
 fn edge_bc(n: i64, s: i64) -> i64 {
     let target = child(n, 1);
     let v = child(n, 2);
@@ -284,14 +249,12 @@ fn edge_bc(n: i64, s: i64) -> i64 {
               else { str("write bc inlet: ", unknown_name, " = 1 Pa, or bc wall: dot(", flux_name, ", n) = 0 m/s") };
     let tangent = crossed(target) >= 0 && source_of(crossed(target)) == unknown_name || t == unknown_name;
     if physics == EDGE && skew_form && t == str(curl_name, "*n") {
-        // Hs*n is cross(n, h): z*(u - dot(u, n)*n) is the impedance, the other terms a field.
         b.kind = BC_LOAD;
         port_terms(b, v, 1.0);
         bcs.push(b);
         return bcs.len - 1;
     } else if physics == EDGE && kind(target) == syntax::N_MEMBER && kind(first(target)) == syntax::N_NAME &&
               name(first(target)) == unknown_name && axis_of(name(target)) >= 0 && source_of(v) == "0" {
-        // u.y = 0 with u.z = 0 on a plane of x holds the tangent of u. emit_edge_bc checks the pair.
         b.comp = axis_of(name(target));
         b.node = -1;
     } else if physics == EDGE && tangent && source_of(v) == "0" {
@@ -315,9 +278,6 @@ fn edge_bc(n: i64, s: i64) -> i64 {
     return bcs.len - 1;
 }
 
-// The terms of the value n of Hs*n = n, with sign: z*(u - dot(u, n)*n) gives
-// the impedance z of the bc, and a vector field times a constant gives a
-// source.
 recursive fn port_terms(b: Bc, n: i64, sign: f64) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
@@ -331,8 +291,6 @@ recursive fn port_terms(b: Bc, n: i64, sign: f64) {
         return;
     }
     let tangential = compact(str(unknown_name, "-dot(", unknown_name, ", n)*n"));
-    // z*(u - dot(u, n)*n), z*u, or a product or a quotient with cross(n, cross(n, u)) = -(u - dot(u, n)*n):
-    // a product of factors that name no unknown and no x, y, z, and the tangent of u.
     if k == syntax::N_BINARY && (op == "*" || op == "/") && position(port_zbc, b.tok) < 0 {
         var nodes: i64[>..] = [];
         var divs: i64[>..] = [];
@@ -379,7 +337,6 @@ recursive fn port_terms(b: Bc, n: i64, sign: f64) {
     }
 }
 
-// The factors of a product and a quotient of nodes, with 1 in divs for a divisor.
 recursive fn flatten_product(n: i64, div: i64, nodes: i64[>..]&, divs: i64[>..]&) {
     if kind(n) == syntax::N_BINARY && (syntax::text(tok(n)) == "*" || syntax::text(tok(n)) == "/") {
         flatten_product(child(n, 0), div, nodes, divs);
@@ -390,8 +347,6 @@ recursive fn flatten_product(n: i64, div: i64, nodes: i64[>..]&, divs: i64[>..]&
     divs.push(div);
 }
 
-// The z of the bc with token t at omega_now, for the harmonic step and the
-// start value of the modal step: the product of its factors, with its sign.
 fn zcoef(t: i64) -> f64[2] {
     var z: f64[2] = [1.0, 0.0];
     let i = position(port_zbc, t);
@@ -403,7 +358,6 @@ fn zcoef(t: i64) -> f64[2] {
     return [port_zsign[i] * z[0], port_zsign[i] * z[1]];
 }
 
-// Whether n has omega, in itself or in a let.
 recursive fn mentions_omega(n: i64) -> bool {
     if kind(n) == syntax::N_NAME && name(n) == "omega" { return true; }
     if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
@@ -420,8 +374,6 @@ recursive fn mentions_omega(n: i64) -> bool {
     return false;
 }
 
-// The Goose expression of the Complex value of n as f64[2], with omega the
-// variable w.
 recursive fn emit_cz(out: u8[>..]&, n: i64) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
@@ -469,11 +421,9 @@ recursive fn emit_cz(out: u8[>..]&, n: i64) {
     }
 }
 
-// The z of the bc b at the variable w (omega) of a modal step.
 fn emit_zcoef(out: u8[>..]&, b: Bc) {
     let i = position(port_zbc, b.tok);
     if i < 0 && b.node >= 0 {
-        // cross(n, h) = z*u
         emit_cz(out, b.node);
         return;
     }
@@ -495,9 +445,6 @@ fn emit_zcoef(out: u8[>..]&, b: Bc) {
     format(out, ", 0.0], ", acc, ")");
 }
 
-// --- reports and expects ---------------------------------------------------------
-
-// Whether n holds a field: an `at`, an integral or far_field.
 recursive fn has_field(n: i64) -> bool {
     if kind(n) == syntax::N_AT || is_call(n, "integral") || is_call(n, "far_field") || is_call(n, "rms") || is_call(n, "eigenvalue") { return true; }
     if complex_solid && is_call(n, "mean") { return true; }
@@ -511,14 +458,11 @@ recursive fn has_field(n: i64) -> bool {
 
 let CPARTS = ["re", "imag", "abs", "arg", "conj"];
 
-// The physics let named `word`, or -1.
 fn physics_let(word: u8[:]) -> i64 {
     for l in physics_lets { if name(l) == word { return child(l, 1); } }
     return -1;
 }
 
-// Writes the Goose expression of the Complex value of n, as f64[2]. The
-// statements that select a boundary go to `pre`.
 recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
@@ -575,7 +519,6 @@ recursive fn emit_cx(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     }
 }
 
-// mean(u.x, s) of the Complex unknown on a boundary s that a let names.
 fn emit_mean(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let f = arg(n, 0);
     let r = arg(n, 1);
@@ -589,10 +532,8 @@ fn emit_mean(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     format(out, "mean_", n);
 }
 
-// The rms calls of the expression n, in the order of the program.
 var rms_nodes: i64[>..];
 
-// The number of the rms call n.
 fn rms_index(n: i64) -> i64 {
     for m, i in rms_nodes { if m == n { return i; } }
     if rms_nodes.len >= 16 { probe_fail(tok(n), "more than 16 rms calls", "use at most 16 rms calls in a model"); return 0; }
@@ -600,7 +541,6 @@ fn rms_index(n: i64) -> i64 {
     return rms_nodes.len - 1;
 }
 
-// The first rms call in the expression n, or -1.
 recursive fn find_rms(n: i64) -> i64 {
     if is_call(n, "rms") && syntax::child_count(n) == 3 { return n; }
     var c = first(n);
@@ -612,7 +552,6 @@ recursive fn find_rms(n: i64) -> i64 {
     return -1;
 }
 
-// integral(F.x, c) on a line c, or integral(dot(q, n), s) on a boundary s.
 fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let f = arg(n, 0);
     let r = arg(n, 1);
@@ -628,7 +567,6 @@ fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
         return;
     }
     if physics == EDGE && s >= 0 && is_call(f, "dot") && syntax::child_count(f) == 3 {
-        // The integral over a boundary of dot(u, g) or dot(g, g), with g a vector of x, y and z.
         let a = arg(f, 0);
         let b = arg(f, 1);
         let field = source_of(a) == unknown_name || source_of(b) == unknown_name;
@@ -666,7 +604,7 @@ fn emit_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     emit_field(out, f, value(arg(c, 0)).v, value(arg(c, 1)).v);
 }
 
-var region_names: u8[..64][>..];   // the regions of the integrals, and their shapes: a shape is made once
+var region_names: u8[..64][>..];
 var region_shapes: i64[>..];
 
 fn cached_region_shape(r: i64) -> i64 {
@@ -679,16 +617,11 @@ fn cached_region_shape(r: i64) -> i64 {
     return g;
 }
 
-// The material item of the region r: the one of the law `on r`, or the
-// base material.
 fn region_item(r: i64) -> i64 {
     for w in region_laws { if ends_with(w.label, str(" on ", source_of(r))) { return w.item; } }
     return material_node;
 }
 
-// integral(f, r) over the cells of a region r, with f linear in u and ddt(u) and
-// in the properties of the material of r: f = a u + b gives a I + b A, with I
-// the integral of u and A the area of r.
 fn emit_cell_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let f = arg(n, 0);
     let r = arg(n, 1);
@@ -720,11 +653,6 @@ fn emit_cell_integral(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     format(out, " * cells_", n, "[2]])");
 }
 
-// far_field(u, H, s, d) of the edge physics on a boundary s, with
-// H = hf*curl(u), into the medium of the physics: curl(curl(u)/mu) -
-// omega^2*eps*u = 0 has nu = 1/mu and c = -omega^2*eps, so k = sqrt(-c/nu)
-// and eta = omega*mu/k. The generator checks the medium only at an omega
-// of a step.
 fn emit_far_field(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     let r = arg(n, 2);
     let s = if kind(r) == syntax::N_NAME { find_surf(name(r)) } else { -1 };
@@ -750,8 +678,6 @@ fn emit_far_field(out: u8[>..]&, pre: u8[>..]&, n: i64) {
     format(out, "[far_", n, ", 0.0]");
 }
 
-// The constant hf of a field H = hf*curl(u): curl(u), a let of the physics,
-// and - * / of these with constants. False for another field.
 recursive fn curl_factor(n: i64) -> f64[2], bool {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
@@ -778,9 +704,6 @@ recursive fn curl_factor(n: i64) -> f64[2], bool {
     return [0.0, 0.0], false;
 }
 
-// Writes component F.x of a field at the point a (a == b), or its integral
-// on the line from a to b. F is u, curl(u), a let of the physics, or + - *
-// and / of these with constants.
 recursive fn emit_field(out: u8[>..]&, f: i64, a: f64[3], b: f64[3]) {
     if kind(f) == syntax::N_NAME && name(f) == unknown_name && physics == DARCY {
         emit_probe_sample(out, "darcy_", "", 3, a, b);
@@ -831,7 +754,6 @@ recursive fn emit_part(out: u8[>..]&, f: i64, comp: i64, a: f64[3], b: f64[3]) {
     }
 }
 
-// Whether n names the unknown, the flux or a let of the physics.
 recursive fn has_unknown(n: i64) -> bool {
     if kind(n) == syntax::N_NAME {
         return name(n) == unknown_name || name(n) == flux_name || physics_let(name(n)) >= 0;
@@ -844,7 +766,6 @@ recursive fn has_unknown(n: i64) -> bool {
     return false;
 }
 
-// `edge_point(curl, comp, x, y, z)` or `edge_segment(curl, comp, a, b)`.
 fn emit_probe_sample(out: u8[>..]&, kind_name: u8[:], curl: u8[:], comp: i64, a: f64[3], b: f64[3]) {
     let line = a[0] != b[0] || a[1] != b[1] || a[2] != b[2];
     format(out, kind_name, if line { "segment(" } else { "point(" }, curl, comp, ", ");
@@ -875,8 +796,6 @@ fn edge_expect(n: i64, step: i64) {
     probe_bad = false;
     emit_cx(probe, pre, left);
     quiet = false;
-    // An expect that this generator cannot evaluate stays, and the report
-    // says that it did not run.
     if probe_bad {
         var s: u8[..256] = [];
         codegen::set256(s, str(name(n), ": ", one_line(left), " is not in this generator"));
@@ -890,9 +809,6 @@ fn edge_expect(n: i64, step: i64) {
     probes.push(x);
 }
 
-// --- the program -------------------------------------------------------------------
-
-// The part of the program of a Complex vector unknown of the elastic physics.
 let HARMONIC_PRELUDE = """
     // Component comp of u at a point, as [re, im].
     fn solid_point(comp: i64, x: f64, y: f64, z: f64) -> f64[2] {
@@ -1037,8 +953,6 @@ let EDGE_PRELUDE = """
 
     """;
 
-// The Goose expression of a real function of the point p (f64[3]):
-// component j of a vector n, or the scalar n with j = -1.
 recursive fn emit_space(out: u8[>..]&, n: i64, j: i64) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
@@ -1139,15 +1053,12 @@ recursive fn is_vector(n: i64) -> bool {
     return false;
 }
 
-// The coefficients of the physics at the omega of the frequency that the
-// generator writes: ν, and c as re and im.
 fn edge_terms() -> f64, f64[2] {
     var nu = 1.0;
     if curl_coef >= 0 { nu = if curl_divides { 1.0 / scalar_value(curl_coef) } else { scalar_value(curl_coef) }; }
     var c: f64[2] = [0.0, 0.0];
     for t, i in mass_terms {
         let z = cval(t);
-        // ddt2 of a harmonic step is (im*omega)^2.
         let k = if mass_ddt2[i] != 0 { -omega_now * omega_now } else { 1.0 };
         c[0] += mass_signs[i] * k * z[0];
         c[1] += mass_signs[i] * k * z[1];
@@ -1164,7 +1075,6 @@ fn emit_edge_bc(out: u8[>..]&, b: Bc) {
         lit(out, scalar_value(b.node));
         out.append(");\n");
     } else if b.kind == BC_LOAD && physics == EDGE && skew_form {
-        // Hs*n = z*(u - dot(u, n)*n) + g: the impedance, then the source.
         let zi = position(port_zbc, b.tok);
         let z = if zi >= 0 { zcoef(b.tok) } else { [0.0, 0.0] };
         out.append("impedance(");
@@ -1214,9 +1124,6 @@ fn emit_edge_bc(out: u8[>..]&, b: Bc) {
     out.append(");\n    }\n");
 }
 
-// Whether bc k is the first of the bcs u.a = 0 of its boundary. The boundary
-// must be planes of one axis, and the bcs must hold the two other components,
-// so they hold the tangent of u.
 fn tangent_pair(list: Bc[:], k: i64) -> bool {
     var mask = 0;
     for b, i in list {
@@ -1236,7 +1143,6 @@ fn tangent_pair(list: Bc[:], k: i64) -> bool {
     return true;
 }
 
-// The source text of n on one line.
 fn one_line(n: i64) -> u8[>..] {
     var s: u8[>..] = [];
     var space = false;
@@ -1282,10 +1188,6 @@ fn emit_edge_expect(out: u8[>..]&, x: EdgeExpect) {
     out.append(");\n    }\n");
 }
 
-// The source s of eq curl(h) + c*u = s: for the base material and for each
-// material on a region, the cells of that material get the integral of s
-// with the properties of that material (the vector js of a coil, 0 in the
-// air). s is a real vector function of x, y and z.
 fn emit_edge_sources(out: u8[>..]&) {
     guard edge_rhs >= 0 else { return; }
     let base = material_node;
@@ -1310,8 +1212,6 @@ fn emit_edge_source_in(out: u8[>..]&, g: i64) {
     out.append("0.0, 0.0, 0.0] };\n");
 }
 
-// A step of the edge physics or of the Darcy flow: a function for each
-// frequency of a harmonic step, or one for a static step (omega 0).
 fn emit_edge_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
     if s.procedure == MODAL {
@@ -1323,16 +1223,12 @@ fn emit_edge_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     for i in count { emit_edge_case(out, si, i, results_dir); }
 }
 
-// The terms of the rms calls of step si at the frequency f: the value of
-// their function and the density of the PSD, for the trapezoidal rule of
-// rms_add.
 fn emit_rms_adds(out: u8[>..]&, si: i64, f: f64) {
     var calls: i64[>..] = [];
     for r in reports[steps[si].first_report..steps[si].first_report + steps[si].report_count] {
         let m = find_rms(r.expr);
         if m >= 0 { calls.push(m); }
     }
-    // An expect of no step reads the last harmonic step.
     var last = -1;
     for t, k in steps { if t.procedure == HARMONIC { last = k; } }
     for x in probes { if x.step == si || x.step < 0 && si == last { let m = find_rms(x.expr); if m >= 0 { calls.push(m); } } }
@@ -1401,7 +1297,6 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
             emit_edge_sources(out);
         }
     }
-    // The fixed values first, then the gauge, which keeps them.
     if complex_solid {
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }
@@ -1437,9 +1332,6 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
-// modal(count:, shift:) of the edge physics: the `count` resonances nearest
-// the shift (src/elements/edge_modal.goose). The shift is a frequency, kept
-// in freqs.
 fn edge_modal_proc(proc: i64, s: Step&) {
     let fix = "write step resonance: modal(count: 1, shift: 8 GHz) { ... }, with a term c*ddt2(u) in the eq";
     s.procedure = MODAL;
@@ -1468,8 +1360,6 @@ fn edge_modal_proc(proc: i64, s: Step&) {
     if !has_mass { unsupported(tok(proc), "a modal step needs a term c*ddt2(u) in the eq", fix); }
 }
 
-// The coefficient m (re and im) of the terms c*ddt2(u) at the material of
-// material_node: the matrix M of the eigenvalue problem.
 fn edge_mass_terms() -> f64[2] {
     var m: f64[2] = [0.0, 0.0];
     for t, i in mass_terms {
@@ -1481,12 +1371,9 @@ fn edge_mass_terms() -> f64[2] {
     return m;
 }
 
-// A modal step: the matrices at omega 0 (c without the term of ddt2), the
-// mass m of ddt2 on the cells, the conditions, then the resonances.
 fn emit_edge_modal(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     let s = steps[si];
     let step_bcs = active[s.first_bc..s.first_bc + s.bc_count];
-    // The z of each condition cross(n, h) = z*u as a function of omega.
     format(out, "// step ", s.name, ": modal\nfn wall_z_", s.name, "(g: i64, w: f64) -> f64[2] {\n");
     var group = 0;
     for b in step_bcs {
@@ -1577,12 +1464,15 @@ fn emit_edge_modal(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
-// The dofs of a mesh with `points` points: 2 for each edge of the edge
-// physics, and a facet and a cell of the Darcy flow. A mesh has about 7
-// edges, 12 facets and 6 cells for each point in 3d, and 3 edges and 2
-// cells in 2d.
+let EDGE_DOFS_PER_POINT_3D = 14;
+let EDGE_DOFS_PER_POINT_2D = 6;
+let EDGE2_DOFS_PER_POINT_3D = 78;
+let EDGE2_DOFS_PER_POINT_2D = 20;
+let DARCY_DOFS_PER_POINT_3D = 18;
+let DARCY_DOFS_PER_POINT_2D = 5;
+
 fn edge_dofs(points: i64) -> i64 {
-    if physics == EDGE && edge_order == 2 { return points * (if dim == 3 { 78 } else { 20 }); }
-    if physics == EDGE { return points * (if dim == 3 { 14 } else { 6 }); }
-    return points * (if dim == 3 { 18 } else { 5 });
+    if physics == EDGE && edge_order == 2 { return points * (if dim == 3 { EDGE2_DOFS_PER_POINT_3D } else { EDGE2_DOFS_PER_POINT_2D }); }
+    if physics == EDGE { return points * (if dim == 3 { EDGE_DOFS_PER_POINT_3D } else { EDGE_DOFS_PER_POINT_2D }); }
+    return points * (if dim == 3 { DARCY_DOFS_PER_POINT_3D } else { DARCY_DOFS_PER_POINT_2D });
 }

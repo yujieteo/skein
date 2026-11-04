@@ -1,12 +1,3 @@
-// `quad` cells on a 2D shape that is not a union of rects (spec §9.2):
-// Blossom-Quad after Remacle et al. (2012). The triangles of mesh_2d are
-// the vertices of a graph, with an edge between two neighbour triangles
-// when their quad has an acceptable quality. A matching of the largest
-// size in this graph (Edmonds 1965), started from the best pairs first,
-// gives the quads. A triangle with no partner stays.
-//
-// For the swept hex grid (sweep.goose), all_quads cuts each quad into 4
-// quads and each triangle into 3, so that no triangle stays.
 import std;
 import math;
 import dictionary;
@@ -16,13 +7,8 @@ import .mesh;
 import .tri;
 import runtime from "../runtime";
 
-// The lowest quality of a quad from two triangles: 1 - (2/π) times the
-// largest difference of a corner angle from π/2 (Remacle et al. 2012).
-// 0.25 accepts the corner angles from 22.5 to 157.5 degrees.
 let QUAD_QUALITY = 0.25;
 
-// The quality of the quad of points a, b, c, d in counter-clockwise order,
-// or -1 if it is not convex.
 fn quad_quality(q: i64[4]) -> f64 {
     var worst = 0.0;
     for i in 4 {
@@ -41,9 +27,6 @@ fn quad_quality(q: i64[4]) -> f64 {
     return 1.0 - 2.0 / PI * worst;
 }
 
-// The quad of triangle t and its neighbour u across their shared edge, in
-// counter-clockwise order. t goes r, p, q and u goes s, q, p, so the quad
-// is p, s, q, r.
 fn pair_quad(t: i64, u: i64) -> i64[4] {
     for k in 3 {
         let p = cell_node(t, k);
@@ -58,8 +41,6 @@ fn pair_quad(t: i64, u: i64) -> i64[4] {
     return [0, 0, 0, 0];
 }
 
-// The edges of the graph: for each triangle, its neighbours with an
-// acceptable quad. adj[start[t]..start[t + 1]] are the neighbours of t.
 fn quad_graph(start: i64[>..]&, adj: i64[>..]&, weight: f64[>..]&) {
     let n = point_count();
     var edge = dictionary<i64, i64> {};
@@ -85,8 +66,6 @@ fn quad_graph(start: i64[>..]&, adj: i64[>..]&, weight: f64[>..]&) {
     }
 }
 
-// The base of the blossom that holds v and w: the first vertex that both
-// alternating paths to the root reach.
 fn common_base(v: i64, w: i64, mate: i64[:], parent: i64[:], base: i64[:], seen: bool[>..]&) -> i64 {
     for i in seen.len { seen[i] = false; }
     var a = v;
@@ -105,8 +84,6 @@ fn common_base(v: i64, w: i64, mate: i64[:], parent: i64[:], base: i64[:], seen:
     return -1;
 }
 
-// Marks the blossom from v down to the base b, and points the parents of
-// the path to `child`.
 fn mark_blossom(v0: i64, b: i64, child0: i64, mate: i64[:], parent: i64[>..]&, base: i64[:], blossom: bool[>..]&) {
     var v = v0;
     var child = child0;
@@ -119,8 +96,6 @@ fn mark_blossom(v0: i64, b: i64, child0: i64, mate: i64[:], parent: i64[>..]&, b
     }
 }
 
-// Searches an augmenting path from the free vertex root (Edmonds 1965), and
-// flips it. True if it found one.
 fn augment(root: i64, start: i64[:], adj: i64[:], mate: i64[>..]&, parent: i64[>..]&, base: i64[>..]&,
            used: bool[>..]&, blossom: bool[>..]&, seen: bool[>..]&) -> bool {
     let n = mate.len;
@@ -172,8 +147,6 @@ fn augment(root: i64, start: i64[:], adj: i64[:], mate: i64[>..]&, parent: i64[>
     return false;
 }
 
-// The partner of each triangle, or -1: the best pairs first, then each
-// augmenting path.
 fn quad_matching(start: i64[:], adj: i64[:], weight: f64[:]) -> i64[>..] {
     let n = start.len - 1;
     var order: i64[>..] = [];
@@ -212,7 +185,6 @@ fn quad_matching(start: i64[:], adj: i64[:], weight: f64[:]) -> i64[>..] {
     return mate;
 }
 
-// Removes the cells of the mesh and keeps its points.
 fn clear_cells() {
     runtime::cell_type.clear();
     runtime::cell_start.clear();
@@ -220,8 +192,6 @@ fn clear_cells() {
     runtime::cell_nodes.clear();
 }
 
-// Merges the triangles of the mesh into quads, where a pair has an
-// acceptable quality.
 fn merge_quads() {
     var start: i64[>..] = [];
     var adj: i64[>..] = [];
@@ -244,17 +214,12 @@ fn merge_quads() {
     }
 }
 
-// Meshes the 2D shape g with quads and the triangles that stay. False as
-// mesh_2d.
 fn mesh_blossom(g: i64, size: f64) -> bool {
     let done = mesh_2d(g, size);
     merge_quads();
     return done;
 }
 
-// Cuts each quad of the mesh into 4 quads, and each triangle into 3, at
-// the midpoints of its edges and its centre. A midpoint of an edge on the
-// boundary of g moves onto the boundary.
 fn all_quads(g: i64) {
     let n = point_count();
     var cells: i64[>..] = [];

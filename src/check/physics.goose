@@ -1,5 +1,3 @@
-// The rules of physics blocks, templates, assumptions, conditions and
-// methods (spec §4.2, §10 to §13).
 import std;
 import dictionary;
 namespace check;
@@ -11,7 +9,6 @@ import .expr;
 import .typeexpr;
 import .items;
 
-// The node of the template `name` in the standard library, or -1.
 var std_prog = -1;
 
 fn find_template(name: u8[:]) -> i64 {
@@ -24,8 +21,6 @@ fn find_template(name: u8[:]) -> i64 {
     return -1;
 }
 
-// --- assumptions (spec §11.1) --------------------------------------------------------------
-
 let ASSUMPTIONS = [
     "small_strain", "finite_strain", "isotropic", "orthotropic", "plane_stress", "plane_strain",
     "incompressible", "compressible", "newtonian", "laminar", "turbulent", "boussinesq", "isothermal",
@@ -35,7 +30,6 @@ let CONFLICTS = [
     "incompressible", "compressible", "laminar", "turbulent", "boussinesq", "compressible",
 ];
 
-// The assumptions of the physics that the checker is in.
 var assumed: Name[>..];
 
 fn check_assume(n: i64) {
@@ -69,7 +63,6 @@ fn check_assume(n: i64) {
                 error(a.tok, "assumption_space", str("'", name, "' needs a 2d model"),
                       "write the model as 2d, or remove the assumption");
             }
-            // Only an explicit thickness makes integrals per body, not per depth.
             if (name == "plane_stress" || name == "plane_strain") && a.first >= 0 { thickness = true; }
             if name == "incompressible" { physics[cur_phys].incompressible = true; }
             assumed.push(key(name));
@@ -88,9 +81,6 @@ fn nearest_of(name: u8[:], names: const u8[:][:]) -> u8[>..] {
     return best;
 }
 
-// --- physics (spec §10) ----------------------------------------------------------------------
-
-// Records `div(F)`, `curl(F)` and `along(F)` in the equation of unknown `k` (spec §12.1).
 recursive fn note_fluxes(n: i64, k: i64) {
     let nd = syntax::nodes[n];
     if nd.kind == syntax::N_CALL {
@@ -108,8 +98,6 @@ recursive fn note_fluxes(n: i64, k: i64) {
     }
 }
 
-// Checks the statement `s` of a physics or a template. `eqs` counts the
-// equations.
 fn check_phys_stmt(s: i64, eqs: i64&) {
     let k = syntax::nodes[s];
     match k.kind {
@@ -162,10 +150,6 @@ fn check_phys_stmt(s: i64, eqs: i64&) {
     }
 }
 
-// --- global unknowns (spec §10.5) -----------------------------------------------------------
-
-// The global unknowns of a physics with a region: each one pairs with an eq
-// that has mean(f, r) or integral(f, r).
 var globals: i64[>..];
 
 fn is_reduction(n: i64) -> bool {
@@ -180,7 +164,6 @@ fn is_diff(n: i64) -> bool {
     return name == "grad" || name == "div" || name == "curl" || name == "strain";
 }
 
-// True if `n` has grad, div, curl or strain outside mean and integral.
 recursive fn has_diff(n: i64) -> bool {
     if is_reduction(n) { return false; }
     if is_diff(n) { return true; }
@@ -192,9 +175,6 @@ recursive fn has_diff(n: i64) -> bool {
     return false;
 }
 
-// True if `n` has mean or integral. The walk goes into the value of each
-// `let` that `n` names: a let of the physics before the statement `before`,
-// else a let of the model.
 recursive fn has_reduction(n: i64, before: i64) -> bool {
     if is_reduction(n) { return true; }
     let k = syntax::nodes[n];
@@ -213,8 +193,6 @@ recursive fn has_reduction(n: i64, before: i64) -> bool {
     return false;
 }
 
-// The last `let` of the current physics with the name `name` before the
-// statement `before`, or -1.
 fn let_before(name: str, before: i64) -> i64 {
     guard before >= 0 && cur_phys >= 0 else { return -1; }
     var found = -1;
@@ -226,9 +204,6 @@ fn let_before(name: str, before: i64) -> i64 {
     return if c == before { found } else { -1 };
 }
 
-// The token of the first field that `n` uses outside mean and integral, or
-// -1. A field is x, y, z, n, tau, an unknown that is not global, or grad, div,
-// curl or strain. The walk goes into the value of each `let`.
 recursive fn field_use(n: i64) -> i64 {
     if is_reduction(n) { return -1; }
     let k = syntax::nodes[n];
@@ -280,7 +255,6 @@ fn check_physics(n: i64) {
         if ck.kind == syntax::N_USES { uses = c; }
         c = ck.next;
     }
-    // The unknowns.
     physics[cur_phys].first = syms.len;
     c = k.first;
     while c >= 0 {
@@ -296,7 +270,6 @@ fn check_physics(n: i64) {
         }
         c = u.next;
     }
-    // The materials first: a `let` may use their properties.
     var whole = 0;
     var parts = 0;
     c = k.first;
@@ -324,8 +297,6 @@ fn check_physics(n: i64) {
         }
         c = syntax::nodes[c].next;
     }
-    // An eq with mean or integral, and with no grad, div, curl or strain
-    // outside them, makes its unknown global (spec §10.5).
     var k_eq = 0;
     c = k.first;
     while c >= 0 {
@@ -338,7 +309,6 @@ fn check_physics(n: i64) {
     var eqs = 0;
     if uses >= 0 {
         check_uses(uses, eqs);
-        // A shell is on a Surface and a beam is on a Curve (spec §4.3).
         let ut = syntax::nodes[uses].tok;
         let want = if tok_text(ut) == "reissner_mindlin" { 2 } else if tok_text(ut) == "timoshenko" { 1 } else { -1 };
         if want >= 0 && rty.kind == K_GEOM && rty.geo != want {
@@ -373,7 +343,6 @@ fn check_physics(n: i64) {
     cur_phys = -1;
 }
 
-// A physics that uses a template: its unknowns, arguments and statements (spec §4.2).
 fn check_uses(uses: i64, eqs: i64&) {
     let ut = syntax::nodes[uses].tok;
     let tm = find_template(tok_text(ut));
@@ -385,7 +354,6 @@ fn check_uses(uses: i64, eqs: i64&) {
     physics[cur_phys].template = tm;
     let p = physics[cur_phys];
     let mark = locals.len;
-    // The parameters, with the arguments of the model.
     var params = 0;
     var c = syntax::nodes[tm].first;
     while c >= 0 && syntax::nodes[c].kind == syntax::N_TPARAM {
@@ -414,15 +382,12 @@ fn check_uses(uses: i64, eqs: i64&) {
         i++;
         a = at.next;
     }
-    // The unknowns: the model names them, with the types of the template.
     var j = 0;
     while c >= 0 && syntax::nodes[c].kind == syntax::N_UNKNOWN {
         let tt = type_of(syntax::nodes[c].first, false);
         if j < p.count {
             let ms = syms[p.first + j];
             let mt = type_of(syntax::nodes[ms.node].first, false);
-            // A Complex unknown of the type of the template solves the same equations in complex
-            // numbers, for a harmonic step (spec §4.2).
             let complex = mt.num == NS_COMPLEX && tt.num == NS_REAL;
             if mt.kind != tt.kind || mt.dim != tt.dim || mt.rank != tt.rank || mt.num != tt.num && !complex {
                 error(ms.tok, "type_mismatch",
@@ -440,7 +405,6 @@ fn check_uses(uses: i64, eqs: i64&) {
         error(ut, "type_mismatch", str("the template '", tok_text(ut), "' solves ", j, " unknowns, not ", p.count),
               "name one unknown for each unknown of the template");
     }
-    // The statements, with each error at the template name.
     report_tok = ut;
     while c >= 0 {
         check_phys_stmt(c, eqs);
@@ -450,8 +414,6 @@ fn check_uses(uses: i64, eqs: i64&) {
     locals.resize(mark);
 }
 
-// True when physics `n` has an eq `div(v) = …` of an unknown and a
-// pressure unknown (spec §11.1, `incompressible`).
 fn has_continuity(n: i64) -> bool {
     var div_eq = false;
     var c = syntax::nodes[n].first;
@@ -475,13 +437,11 @@ fn has_continuity(n: i64) -> bool {
     return div_eq && pressure;
 }
 
-// The unknowns under two nested derivatives, for `order_too_low`.
 struct HighDeriv { phys: i64, sym: i64, tok: i64 }
 var high_derivs: HighDeriv[>..];
 
 let DERIVS = ["grad", "div", "curl", "lap"];
 
-// Walks `n`. `depth` counts the derivatives around it: `lap` counts 2.
 recursive fn note_high_derivs(n: i64, depth: i64) {
     let k = syntax::nodes[n];
     var d = depth;
@@ -500,8 +460,6 @@ recursive fn note_high_derivs(n: i64, depth: i64) {
     }
 }
 
-// `order_too_low`: a `cg` order under 2 for an unknown that the equations
-// differentiate more than twice (spec §13).
 fn order_too_low(p: i64, b: i64) {
     let order = setting(b, "order");
     guard order >= 0 else { return; };
@@ -528,9 +486,6 @@ fn order_too_low(p: i64, b: i64) {
     }
 }
 
-// --- boundary conditions (spec §12) ------------------------------------------------------
-
-// The unknown symbol of name node `n`, or -1.
 fn unknown_of(n: i64) -> i64 {
     if syntax::nodes[n].kind != syntax::N_NAME { return -1; }
     let s = visible.get(key(tok_text(syntax::nodes[n].tok)));
@@ -538,8 +493,6 @@ fn unknown_of(n: i64) -> i64 {
     return -1;
 }
 
-// The unknown of the flux `f` (an expression) of a div, or of a curl with
-// `curl`, or -1.
 fn flux_unknown(f: i64, curl: bool) -> i64 {
     let text = norm_text(f);
     for fl in fluxes {
@@ -548,7 +501,6 @@ fn flux_unknown(f: i64, curl: bool) -> i64 {
     return -1;
 }
 
-// For `cross(n, a)`, the node of a, else -1.
 fn tangent_of(n: i64) -> i64 {
     let k = syntax::nodes[n];
     guard k.kind == syntax::N_CALL && call_name(k.first) == "cross" else { return -1; };
@@ -560,7 +512,6 @@ fn tangent_of(n: i64) -> i64 {
     return syntax::nodes[a2].first;
 }
 
-// Whether the flux `f` comes from `along(F)` of a Curve physics.
 fn flux_on_curve(f: i64) -> bool {
     let text = norm_text(f);
     for fl in fluxes {
@@ -569,8 +520,6 @@ fn flux_on_curve(f: i64) -> bool {
     return false;
 }
 
-// For `F*n` or `dot(F, n)`, the node of F, and for `cross(n, F)` the node
-// of F and true. Else -1.
 fn flux_of(n: i64) -> i64, bool {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
@@ -592,7 +541,6 @@ fn flux_of(n: i64) -> i64, bool {
     return -1, false;
 }
 
-// For a call `name(a)` with one argument, the node of `a`, else -1.
 fn one_arg(n: i64, name: u8[:]) -> i64 {
     let k = syntax::nodes[n];
     guard k.kind == syntax::N_CALL && call_name(k.first) == name else { return -1; };
@@ -601,8 +549,6 @@ fn one_arg(n: i64, name: u8[:]) -> i64 {
     return syntax::nodes[a].first;
 }
 
-// A rigid face, `bc r: u = rigid(p)` (spec §12.1, gap G17): `u` is a whole
-// displacement, and `p` is a `Point`.
 fn check_rigid(rhs: i64, l: Ty, comp: u8[:], natural: bool) {
     let p = one_arg(rhs, "rigid");
     let pt = if p >= 0 { expr_ty(p) } else { any_ty() };
@@ -632,7 +578,6 @@ fn check_bc(n: i64) {
     var lhs = syntax::nodes[region].next;
     let rhs = syntax::nodes[lhs].next;
     let rt = region_ty(region);
-    // `moment(F*n) = M` on the point of a rigid face is the moment M about it.
     let moment = one_arg(lhs, "moment") >= 0;
     if moment { lhs = one_arg(lhs, "moment"); }
     var unknown = unknown_of(lhs);
@@ -642,8 +587,6 @@ fn check_bc(n: i64) {
         unknown = unknown_of(syntax::nodes[lhs].first);
         if unknown >= 0 { comp = key(tok_text(syntax::nodes[lhs].tok)); }
     }
-    // Gap G4: `cross(n, u) = g` holds the tangential part of u, as on a
-    // perfect conductor.
     if unknown < 0 && !moment && tangent_of(lhs) >= 0 { unknown = unknown_of(tangent_of(lhs)); }
     var curve = false;
     if unknown < 0 || moment {
@@ -666,8 +609,6 @@ fn check_bc(n: i64) {
     };
     cur_phys = syms[unknown].phys;
     let point = rt.kind == K_GEOM && rt.geo == 0;
-    // On the end Point of a Curve physics, `F*n = P` is the force P: n is
-    // the outward tangent, so F*n is F (spec §12.1).
     if curve && !point {
         cur_phys = -1;
         error(first_tok(lhs), "bc_form", str("'", node_text(lhs), "' of a Curve physics stands only on a Point"),
@@ -696,9 +637,7 @@ fn check_bc(n: i64) {
         if natural {
             var lt = l;
             if point && is_num(lt) && !curve {
-                // Gap G16: on a Point, `F*n = P` is the force P.
                 lt.dim = lt.dim + dim_pow(LENGTH, space - 1 + depth());
-                // Gap G17: the moment is a scalar in 2D, and a vector in 3D.
                 if moment {
                     lt.dim = lt.dim + LENGTH;
                     lt.rank = if space == 3 { 1 } else { 0 };
@@ -718,11 +657,9 @@ fn check_bc(n: i64) {
     for b in bcs {
         if b.step != cur_step || b.unknown != unknown || !same_region(b.region, region) { continue; }
         if b.comp.len > 0 && comp.len > 0 && b.comp != comp { continue; }
-        // A moment is on the turn of the point, not on its displacement.
         if (b.comp == "moment") != (comp == "moment") { continue; }
         let other = syntax::nodes[b.node];
         let orhs = syntax::nodes[syntax::nodes[other.first].next].next;
-        // On the point of a rigid(p), a force with 0 in the component of an essential condition does not fight it.
         if point && is_rigid_point(region) && b.natural != natural {
             let ec = if natural { b.comp } else { comp };
             let v, ok = rhs_value(if natural { rhs } else { orhs }, ec);
@@ -737,14 +674,10 @@ fn check_bc(n: i64) {
     bcs.push(Bc { step: cur_step, region: region, unknown: unknown, comp: comp, natural: natural, node: n });
 }
 
-// The components of a vector, in the order of its literal (spec §5.2).
 let COMPONENTS = ["x", "y", "z"];
 
 fn same_region(a: i64, b: i64) -> bool { norm_text(a) == norm_text(b) }
 
-// True when the right side `a` of a bc on component `ca` and the right
-// side `b` of a bc on component `cb` ("" for all components) give one
-// value on the components that they share.
 fn same_value(a: i64, ca: u8[:], b: i64, cb: u8[:]) -> bool {
     let va, oka = rhs_value(a, cb);
     let vb, okb = rhs_value(b, ca);
@@ -752,8 +685,6 @@ fn same_value(a: i64, ca: u8[:], b: i64, cb: u8[:]) -> bool {
     return ca != cb || norm_text(a) == norm_text(b);
 }
 
-// The constant value in SI of component `comp` of the right side `rhs`
-// ("" for all of it), and true when it is a constant.
 fn rhs_value(rhs: i64, comp: u8[:]) -> f64, bool {
     guard comp.len > 0 && syntax::nodes[rhs].kind == syntax::N_VECTOR else { return const_value(rhs); };
     let unit = syntax::child_of_kind(rhs, syntax::N_UNIT);
@@ -777,9 +708,6 @@ fn rhs_value(rhs: i64, comp: u8[:]) -> f64, bool {
     return 0.0, false;
 }
 
-// --- the free boundary report (command_line.md §6.2) -------------------------------------
-
-// True when a bc on unknown `u` before bc `i` has the region of bc `i`.
 fn seen_before(u: i64, i: i64) -> bool {
     for j in i {
         if bcs[j].unknown == u && same_region(bcs[j].region, bcs[i].region) { return true; }
@@ -787,7 +715,6 @@ fn seen_before(u: i64, i: i64) -> bool {
     return false;
 }
 
-// True when a bc on unknown `u` and component `comp` ("" for all) has the region `region`.
 fn has_bc(u: i64, region: i64, comp: u8[:]) -> bool {
     for b in bcs {
         if b.unknown == u && b.comp == comp && same_region(b.region, region) { return true; }
@@ -805,15 +732,12 @@ fn add_free(psym: i64, field: u8[:], region: u8[:], condition: u8[:]) {
     free.push(f);
 }
 
-// The text of expression `e`, in parentheses when it is not a name or a call.
 fn grouped(e: i64) -> u8[>..] {
     let k = syntax::nodes[e].kind;
     if k == syntax::N_NAME || k == syntax::N_CALL { return node_text(e); }
     return str("(", node_text(e), ")");
 }
 
-// A region with a bc on some components of an unknown gets the natural
-// condition on each other component (spec §12.3).
 fn free_boundary() {
     for p in physics {
         if p.region < 0 { continue; }
@@ -850,8 +774,6 @@ fn free_boundary() {
         }
     }
 }
-
-// --- methods (spec §13) --------------------------------------------------------------------
 
 let METHOD_KINDS = ["cg", "dg", "fv", "rkpm", "gfd", "ode"];
 let CG_SETTINGS = ["mesh", "order", "family", "stabilize", "quadrature", "couple", "pml", "gauge"];
@@ -909,9 +831,6 @@ fn check_method(n: i64) {
     if kind == "cg" { pml_setting(p, b); }
 }
 
-// `pml: { region: layer, thickness: 1 um }`: the absorbing layer of an
-// open boundary (spec §13, gap G26). Its stretch is complex, so the
-// physics needs a `Complex` unknown.
 fn pml_setting(p: i64, b: i64) {
     let v = setting(b, "pml");
     guard v >= 0 else { return; };
@@ -946,9 +865,6 @@ fn pml_setting(p: i64, b: i64) {
     }
 }
 
-// The word of setting `name` in block `b`, or `default` when the block does
-// not have it. A value that is not in `words` is `method_setting`, and it
-// gives "".
 fn setting_word(b: i64, name: u8[:], words: const u8[:][:], default: u8[:]) -> u8[>..] {
     let v = setting(b, name);
     guard v >= 0 else { return str(default); };
@@ -960,14 +876,9 @@ fn setting_word(b: i64, name: u8[:], words: const u8[:][:], default: u8[:]) -> u
     return w;
 }
 
-// `family_cell`: a serendipity cell needs order 2, an incompatible cell
-// needs order 1 and full quadrature, and both need quad or hex cells
-// (spec §13).
 fn family_cell(b: i64) {
     let family = setting_word(b, "family", FAMILIES, "lagrange");
     let quadrature = setting_word(b, "quadrature", QUADRATURES, "full");
-    // `gauge: tree` (gap G27) holds the edges of a spanning tree, so it is
-    // for edge elements only.
     let gauge = setting_word(b, "gauge", GAUGES, "");
     if gauge.len > 0 && family != "nedelec" {
         error(first_tok(setting(b, "gauge")), "method_setting", "gauge: tree is for the edge elements of family: nedelec",
@@ -1019,8 +930,6 @@ fn want_kind(n: i64, kind: i64, what: u8[:]) {
     }
 }
 
-// `inf_sup`: equal orders of velocity and pressure in `cg` with no
-// pressure stabilization.
 fn inf_sup(p: i64, b: i64, tok: i64) {
     let order = setting(b, "order");
     guard order >= 0 else { return; };
@@ -1058,10 +967,6 @@ fn inf_sup(p: i64, b: i64, tok: i64) {
     }
 }
 
-// `method_missing`: a physics with a region and no method needs exactly
-// one mesh on its region (spec §13). The checker has no geometry, so it
-// counts the meshes on the same region, or all meshes when no mesh names it.
-// A physics that takes the defaults goes to `chosen` for the check report.
 fn method_missing() {
     for p, i in physics {
         if p.has_method || p.region < 0 { continue; }
@@ -1089,8 +994,6 @@ fn method_missing() {
     }
 }
 
-// Adds the default method of physics `p` on the mesh named by `mesh_tok` to
-// `chosen` (spec §13).
 fn choose(p: i64, mesh_tok: i64) {
     let ph = physics[p];
     var c = Chosen { physics: [], mesh: [], order: [], stabilize: [] };
@@ -1118,8 +1021,6 @@ fn choose(p: i64, mesh_tok: i64) {
     chosen.push(c);
 }
 
-// The default `cg` order of unknown `u` (spec §13): 2, except 1 for a
-// pressure that pairs with a velocity under `incompressible` (Taylor-Hood).
 fn default_order(u: i64) -> i64 {
     let p = syms[u].phys;
     guard p >= 0 && physics[p].incompressible && is_pressure(syms[u].ty) else { return 2; };
@@ -1134,13 +1035,10 @@ fn is_velocity(t: Ty) -> bool { is_num(t) && t.rank == 1 && t.dim == LENGTH - TI
 
 fn is_pressure(t: Ty) -> bool { is_num(t) && t.rank == 0 && t.dim == FORCE - dim_pow(LENGTH, 2) }
 
-// True when the expression `n` has a convection term: `grad(a)*w`,
-// `w*grad(a)`, `dot(w, grad(a))` or `dot(grad(a), w)`, with `w` a name of
-// a vector of velocities and each side perhaps a product with other
-// factors (spec §13, the default `stabilize`). A name of a physics `let`
-// gives the convection terms of its value, to `depth` 16.
+let CONVECTION_DEPTH = 16;
+
 recursive fn convection(n: i64, depth: i64) -> bool {
-    guard n >= 0 && depth <= 16 else { return false; };
+    guard n >= 0 && depth <= CONVECTION_DEPTH else { return false; };
     let k = syntax::nodes[n];
     if k.kind == syntax::N_NAME {
         let s = visible.get(key(tok_text(k.tok)));
@@ -1168,8 +1066,6 @@ recursive fn convection(n: i64, depth: i64) -> bool {
     return false;
 }
 
-// True when the product `n` has a factor `grad(…)` (`grad` true) or a
-// velocity name (`grad` false).
 recursive fn factor(n: i64, grad: bool) -> bool {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_BINARY && syntax::tokens[k.tok].kind == syntax::TK_STAR {
@@ -1183,8 +1079,6 @@ fn is_grad(n: i64) -> bool {
     return k.kind == syntax::N_CALL && syntax::nodes[k.first].kind == syntax::N_NAME && tok_text(syntax::nodes[k.first].tok) == "grad";
 }
 
-// True when `n` is a name of a vector of velocities: a local of a template,
-// or a symbol of the model.
 fn velocity_name(n: i64) -> bool {
     guard syntax::nodes[n].kind == syntax::N_NAME else { return false; };
     let name = tok_text(syntax::nodes[n].tok);

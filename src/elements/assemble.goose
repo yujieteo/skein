@@ -1,17 +1,10 @@
-// The element routines of linear elasticity and heat conduction on the
-// simplex mesh, the assembly into a sparse matrix (CSR in three arrays),
-// the boundary conditions and the reactions.
-//
-// Each node has `ncomp` dofs: dim for elasticity, 1 for heat. Dof d is
-// component d % ncomp of node d / ncomp. The matrix holds all dofs, with the
-// fixed dofs too, so that the reactions are K u - f on the fixed dofs.
 import std;
 import math;
 namespace elements;
 import .shape;
 import .contact;
 import .mesh;
-import .kernels;   // cell_matrix
+import .kernels;
 import .csg;
 import .stages;
 import .field;
@@ -19,11 +12,13 @@ import solvers from "../solvers";
 
 let ELASTIC = 0;
 let HEAT = 1;
-let WAVE = 2;      // the complex scalar wave of wave.goose
-let EDGE = 3;      // the edge elements of edge.goose
-let MIXED = 4;     // the mixed Darcy flow of mixed.goose
+let WAVE = 2;
+let EDGE = 3;
+let MIXED = 4;
 
-// The plane assumption of an elastic 2D model.
+let FIXED_BC = 1;
+let FIXED_HELD = 2;
+
 let SOLID_3D = 0;
 let PLANE_STRESS = 1;
 let PLANE_STRAIN = 2;
@@ -31,27 +26,24 @@ let PLANE_STRAIN = 2;
 var physics = -1;
 var ncomp = 0;
 var plane = SOLID_3D;
-var thickness = 1.0;    // multiplies the integrals of a 2D model
-var lame = 0.0;         // lambda, or its plane stress value 2 lambda mu / (lambda + 2 mu)
-var lame_3d = 0.0;      // lambda of the 3D law, for sigma_zz in plane strain
-var shear = 0.0;        // mu
+var thickness = 1.0;
+var lame = 0.0;
+var lame_3d = 0.0;
+var shear = 0.0;
 var conductivity = 0.0;
-var source = 0.0;       // the heat source per volume
-var volume_force: f64[3] = [0.0; 3];   // the elastic body force per volume
-var aniso_on = false;               // the law is the written-out stiffness aniso_c and the stress aniso_s0, not lame and shear
-var aniso_c: f64[36] = [0.0; 36];   // the stress (xx, yy, zz, xy, yz, xz) for each strain component, with the tensor shears
-var aniso_s0: f64[6] = [0.0; 6];    // the stress of the zero strain (a thermal strain gives -C eps_th)
-var aniso_t: f64[81] = [0.0; 81];   // the same law as C[p a][q b], at 27 (p a) + 3 q + b
+var source = 0.0;
+var volume_force: f64[3] = [0.0; 3];
+var aniso_on = false;
+var aniso_c: f64[36] = [0.0; 36];
+var aniso_s0: f64[6] = [0.0; 6];
+var aniso_t: f64[81] = [0.0; 81];
 
-// A conductivity that depends on the temperature: k(T) on a uniform grid of
-// temperatures from curve_lo, with curve_step between the values, linear in
-// between and linear beyond the ends. Empty: the constant `conductivity`.
 var curve_lo = 0.0;
 var curve_step = 0.0;
 var curve_k: f64[>..] = [];
-var initial_value = 0.0;   // the temperature of the free nodes before the first step
-var state_valid = false;   // a step solved: `held` is its temperature, the start of a transient step
-var keep_factor = false;   // the direct solve keeps its factor between solves of the same matrix
+var initial_value = 0.0;
+var state_valid = false;
+var keep_factor = false;
 var factor_ready = false;
 
 var fixed: u8[>..] = [];
@@ -63,13 +55,11 @@ var row_start: i64[>..] = [];
 var col: i32[>..] = [];
 var val: f64[>..] = [];
 
-var harmonic_omega = 0.0;   // ω of the next solve of the elastic physics when a harmonic step sets it (harmonic.goose), else 0
-var other_dofs = 0;     // the dofs of an edge or a mixed physics, which are not on the nodes
+var harmonic_omega = 0.0;
+var other_dofs = 0;
 
 fn dof_total() -> i64 { return if physics == EDGE || physics == MIXED { other_dofs } else { ncomp * node_count() } }
 
-// Whether each array of the dofs has one entry for each dof, and the
-// matrix, if there is one, one row for each dof.
 fn dofs_sized() -> bool {
     return fixed.len == dof_total() && prescribed.len == fixed.len && load.len == fixed.len && sol.len == fixed.len &&
            (row_start.len == 0 || (row_start.len == fixed.len + 1 && assembled_source.len == fixed.len));
@@ -124,7 +114,6 @@ fn set_heat(k: f64, q: f64, t: f64) {
     source = q;
 }
 
-// Sets k(T) to the values `v` at the temperatures lo, lo + step, .. hi.
 fn set_conductivity_curve(lo: f64, hi: f64, v: f64[:]) {
     guard physics == HEAT && v.len >= 2 && hi > lo else { abort("set_conductivity_curve: a heat physics, 2 values and hi > lo"); }
     for k in v { guard k > 0.0 else { abort("set_conductivity_curve: k > 0 over the temperatures"); } }
@@ -134,16 +123,15 @@ fn set_conductivity_curve(lo: f64, hi: f64, v: f64[:]) {
     curve_k.append(v);
 }
 
-// k at temperature t from the curve.
 fn curve_value(t: f64) -> f64 {
     let n = curve_k.len;
     let x = (t - curve_lo) / curve_step;
     let i = min(max(floor(x) as! i64, 0), n - 2);
-    return curve_k[i] + (curve_k[i + 1] - curve_k[i]) * (x - i);
+    let k = curve_k[i] + (curve_k[i + 1] - curve_k[i]) * (x - i);
+    guard k > 0.0 else { abort(str("curve_value: the conductivity curve k(T) gives k = ", k, " at T = ", t, " K, and k must be > 0")); }
+    return k;
 }
 
-// The conductivity of cell c at the point of the last cell_geometry: k(T)
-// with T of the iterate in `sol`, else the constant.
 fn conductivity_at(c: i64) -> f64 {
     guard curve_k.len > 0 else { return conductivity; };
     var t = 0.0;
@@ -151,19 +139,15 @@ fn conductivity_at(c: i64) -> f64 {
     return curve_value(t);
 }
 
-// --- the geometry of a cell at a point ---------------------------------------
-
 var shp: f64[20];
 var dref: f64[60];
-var grad: f64[60];      // dN_l / dx_t at grad[3 l + t]
+var grad: f64[60];
 
 fn cell_node(c: i64, l: i64) -> i64 {
     guard c >= 0 && c < cell_count() && l >= 0 && l < per_cell else { abort("cell_node: c < cell_count() and l < per_cell"); }
     return conn[per_cell * c + l];
 }
 
-// The Jacobian jac[3 r + t] = dx_t / dxi_r of cell c from the dref that
-// shape() filled, and its determinant.
 fn cell_jacobian(c: i64, jac: f64[9]&) -> f64 {
     for l in per_cell {
         let n = cell_node(c, l);
@@ -177,11 +161,8 @@ fn cell_jacobian(c: i64, jac: f64[9]&) -> f64 {
          + jac[2] * (jac[3] * jac[7] - jac[4] * jac[6]);
 }
 
-// The inverse of the Jacobian of the last cell_geometry: jinv[3 t + r] = d xi_r / d x_t.
 var jinv: f64[9] = [0.0; 9];
 
-// Fills shp and grad at reference point xi of cell c, and gives the
-// determinant of the Jacobian.
 fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
     guard c >= 0 && c < cell_count() && per_cell <= shp.len && 3 * per_cell <= grad.len else { abort("cell_geometry: c < cell_count() and shp and grad hold the nodes of a cell"); }
     shape(dim, order, xi, shp, dref);
@@ -205,7 +186,6 @@ fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
         inv[8] = (jac[0] * jac[4] - jac[1] * jac[3]) / det;
     }
     assert(det > 0.0);
-    // inv = jac⁻¹, so dN/dx_t = Σr inv[3 t + r] dN/dxi_r
     jinv = inv;
     for l in per_cell {
         for t in 3 {
@@ -217,16 +197,9 @@ fn cell_geometry(c: i64, xi: f64[3]) -> f64 {
     return det;
 }
 
-// --- the cell matrix ---------------------------------------------------------
-
-// cell_matrix(c) of kernels.goose fills ke and fe for cell c.
-var ke: f64[3600];       // (per_cell ncomp)², row ncomp l + p for component p of node l
+var ke: f64[3600];
 var fe: f64[60];
 
-// --- the sparsity pattern and the assembly -----------------------------------
-
-// Two nodes are neighbours if they share a cell. The ncomp rows of a node
-// have the same columns, in increasing order.
 fn build_pattern() {
     guard per_cell > 0 && ncomp > 0 else { abort("build_pattern: a mesh and a physics"); }
     clear_matrix();
@@ -261,7 +234,6 @@ fn build_pattern() {
     }
 }
 
-// The position of column c in row r.
 fn entry(r: i64, c: i64) -> i64 {
     guard r >= 0 && r + 1 < row_start.len && c >= 0 && c + 1 < row_start.len else { abort("entry: r and c are rows of the matrix"); }
     var lo = row_start[r];
@@ -274,13 +246,8 @@ fn entry(r: i64, c: i64) -> i64 {
     return lo;
 }
 
-// The matrix, and the source vector added to `load`.
 var assembled_source: f64[>..] = [];
 
-// The matrix and the source vector, on the pool of the threads of the
-// case (src/solvers/pool.goose) if it has more than one thread. `path` and
-// `vectors` are the solution path and the vectors of its solver, for the
-// memory check after the pattern (solvers::memory_check).
 fn assemble(path: u8[:], vectors: i64) {
     guard physics >= 0 && dofs_sized() else { abort("assemble: a physics and the arrays of the dofs"); }
     build_pattern();
@@ -292,8 +259,6 @@ fn assemble(path: u8[:], vectors: i64) {
     add_films();
 }
 
-// Assembles the matrix again on its pattern, with the cell terms at the
-// iterate in `sol` (a conductivity k(T)) and the films. The loads stay.
 fn reassemble() {
     guard physics >= 0 && dofs_sized() && row_start.len > 0 else { abort("reassemble: a physics, the arrays of the dofs and a matrix"); }
     for e in val.len { val[e] = 0.0; }
@@ -302,8 +267,6 @@ fn reassemble() {
     add_films();
 }
 
-// Adds the matrix and the source of each live cell, on the pool of the threads of the case
-// if it has more than one thread.
 fn fill_cells() {
     let m = per_cell * ncomp;
     let workers = min(solvers::case_threads(), (cell_count() + solvers::CELL_BLOCK - 1) / solvers::CELL_BLOCK);
@@ -322,13 +285,9 @@ fn fill_cells() {
     for id in ids { thread_wait(id); }
 }
 
-// Whether the static solve of the pattern takes the direct solve of a
-// lattice (solvers/nested.goose): a solve on `path` of a static step, on a
-// mesh of build_lattice, when it pays (solvers::nested_pays). It makes the
-// memory check of the direct solve.
 var direct = false;
-var direct_path: u8[>..] = [];   // the path and the vectors of plan_direct,
-var direct_vectors = 0;          // for the memory check of its fallback
+var direct_path: u8[>..] = [];
+var direct_vectors = 0;
 
 fn plan_direct(path: u8[:], vectors: i64) -> bool {
     var place: i64[>..] = [];
@@ -342,30 +301,15 @@ fn plan_direct(path: u8[:], vectors: i64) -> bool {
     return direct;
 }
 
-// The bytes of the globals that each cell_worker copies at its spawn.
 fn worker_mesh_bytes() -> i64 {
     return 8 * (coords.len + conn.len + cell_law.len + birth_u.len) + dead.len + born.len;
 }
 
-// --- the incompatible modes of the hexahedron ----------------------------------
-//
-// The 8-node hexahedron with incompatible modes (Wilson et al. 1973, Taylor
-// et al. 1976) in the elements lane: the cell of `family: incompatible`.
-//
-// Each cell adds the modes P_m = 1 - s_m^2, with s = 2 xi - 1 on the lattice
-// cell [0, 1]^3, to each component of the displacement. The modes are
-// internal to the cell: this file condenses them out of ke, so that
-// ke = Kuu - Kua Kaa^-1 Kau. The gradient of a mode uses the Jacobian at the
-// centre of the cell times det0 / det, so the cell passes the patch test.
-// The volume force of the modes is not condensed.
-// Whether the elastic hexahedra have the incompatible modes.
 var incompatible_modes = false;
 
 let MODES = 9;
 let NODE_DOFS = 24;
 
-// The block (p, q) of the stiffness between two points with the gradients
-// a and b of their scalar functions.
 fn pair_block(a: f64[3], b: f64[3], p: i64, q: i64) -> f64 {
     if aniso_on {
         var w = 0.0;
@@ -379,13 +323,12 @@ fn pair_block(a: f64[3], b: f64[3], p: i64, q: i64) -> f64 {
     return v;
 }
 
-// Condenses the 9 mode dofs out of ke of the hexahedron c.
 fn condense_incompatible(c: i64) {
     guard physics == ELASTIC && dim == 3 && per_cell == 8 && ncomp == 3 else { abort("condense_incompatible: an elastic hexahedron"); }
     let det0 = cell_geometry(c, [0.5, 0.5, 0.5]);
     let inv0 = jinv;
     var kaa: f64[81] = [0.0; 81];
-    var kau: f64[216] = [0.0; 216];   // row 3 m + q of the mode, column 3 i + p of the node
+    var kau: f64[216] = [0.0; 216];
     for qp in quad_count(3) {
         let xi, w = quad_point(3, qp);
         let det = cell_geometry(c, xi);
@@ -411,7 +354,6 @@ fn condense_incompatible(c: i64) {
             }
         }
     }
-    // x = Kaa^-1 Kau, by Gauss elimination (Kaa is symmetric positive definite).
     var x: f64[216] = kau;
     for k in MODES {
         let piv = kaa[10 * k];
@@ -440,9 +382,6 @@ fn condense_incompatible(c: i64) {
     }
 }
 
-// The matrix and the source of cell c with the written-out law: the
-// stress is C : strain + s0, so K(i p, j q) = ∫ ∂a Ni C[p a][q b] ∂b Nj dV
-// and f(i p) = ∫ b_p Ni dV - ∫ s0[p a] ∂a Ni dV.
 fn aniso_cell(c: i64) {
     let m = per_cell * ncomp;
     for &v in ke { v = 0.0; }
@@ -466,15 +405,10 @@ fn aniso_cell(c: i64) {
     }
 }
 
-// The component (p, a) of the stress s0 of the zero strain.
 fn aniso_s0_tensor(p: i64, a: i64) -> f64 { return aniso_s0[voigt_of(p, a)]; }
 
-// The place of the symmetric component (i, j) in the order xx, yy, zz, xy, yz, xz.
 fn voigt_of(i: i64, j: i64) -> i64 { return if i == j { i } else if i + j == 1 { 3 } else if i + j == 3 { 4 } else { 5 }; }
 
-// Sets the written-out law c (the stress for each of the strains xx, yy, zz,
-// xy, yz, xz, with the tensor shear: eps_xy = eps_yx = 1) and the stress s0
-// of the zero strain.
 fn set_aniso(c: f64[36], s0: f64[6]) {
     aniso_on = true;
     aniso_c = c;
@@ -492,7 +426,6 @@ fn set_aniso(c: f64[36], s0: f64[6]) {
     }
 }
 
-// The stress component (i, j) of the strain with the displacement gradient du[3 a + t].
 fn aniso_stress(du: f64[9], i: i64, j: i64) -> f64 {
     let v = voigt_of(i, j);
     let e: f64[6] = [du[0], du[4], du[8], 0.5 * (du[1] + du[3]), 0.5 * (du[5] + du[7]), 0.5 * (du[2] + du[6])];
@@ -501,8 +434,6 @@ fn aniso_stress(du: f64[9], i: i64, j: i64) -> f64 {
     return s;
 }
 
-// The matrix ke and the source fe of cell c, with the law of its region.
-// A born cell adds K_e u_b on its nodes (stages.goose).
 fn cell_terms(c: i64) {
     let m = per_cell * ncomp;
     use_law(c);
@@ -518,10 +449,6 @@ fn cell_terms(c: i64) {
     }
 }
 
-// A worker of the assembly: the matrix and then the source of each cell of
-// each task, one cell after the other. Its copy of the mesh is the copy of
-// the globals at its spawn. A dead cell sends the values of the cell before
-// it, and add_cells skips it.
 thread_fn cell_worker() {
     let m = per_cell * ncomp;
     var data: f64[>..] = [];
@@ -538,8 +465,6 @@ thread_fn cell_worker() {
     }
 }
 
-// Adds the matrix and the source of the live cells lo <= c < hi, one cell
-// after the other in d.
 fn add_cells(lo: i64, hi: i64, d: f64[:]) {
     let m = per_cell * ncomp;
     for c in lo..hi {
@@ -549,7 +474,6 @@ fn add_cells(lo: i64, hi: i64, d: f64[:]) {
     }
 }
 
-// Adds the matrix k and the source f of cell c.
 fn add_cell(c: i64, k: f64[:], f: f64[:]) {
     let m = per_cell * ncomp;
     guard k.len == m * m && f.len == m else { abort("add_cell: the matrix and the source of the nodes of a cell"); }
@@ -566,13 +490,6 @@ fn add_cell(c: i64, k: f64[:], f: f64[:]) {
     }
 }
 
-// --- boundary regions --------------------------------------------------------
-
-// A region of the boundary: a union of parts. A part is the plane where
-// coordinate `axis` is `value`, the surface of the hole at distance
-// `radius` from the z axis through (cx, cy), the surface of the shape
-// `shape` of src/mesher/, or the one node `node`. On the mesh of a shape
-// (csg.goose), a plane holds only the nodes on the surface of that shape.
 struct Part {
     hole: bool,
     axis: i64,
@@ -581,15 +498,15 @@ struct Part {
     r: f64,
     shape: i64,
     node: i64,
-    rel: i64,     // 0: equal. Of `region_out` only: 2 holds the nodes at or past `value` (or `r`), 1 past it, -2 at or before it, -1 before it
-    la: i64,      // a plane only: the axis of a limit that cuts it, or -1
-    lv: f64,      // the value of that limit
-    lr: i64,      // its relation, as rel of region_out
+    rel: i64,
+    la: i64,
+    lv: f64,
+    lr: i64,
 }
 
 var region: Part[..16] = [];
-var region_out: Part[..8] = [];    // the parts whose nodes are not in the region
-var region_body = -1;               // the body of build_bodies that holds the region, or -1
+var region_out: Part[..8] = [];
+var region_body = -1;
 
 fn on_part(n: i64, k: i64) -> bool {
     guard n >= 0 && n < node_count() && k >= 0 && k < region.len else { abort("on_part: n < node_count() and k < region.len"); }
@@ -636,41 +553,31 @@ fn region_node_count() -> i64 {
     return count;
 }
 
-// Holds component `comp` (or all components if comp < 0) of each node of
-// the region at `v`.
 fn fix_region(comp: i64, v: f64) {
     guard physics >= 0 && comp >= -1 && comp < ncomp && dofs_sized() else { abort("fix_region: a physics, -1 <= comp < ncomp and the arrays of the dofs"); }
     for n in node_count() {
         if !on_region(n) { continue; }
         for p in ncomp {
             if comp >= 0 && p != comp { continue; }
-            fixed[ncomp * n + p] = 1;
+            fixed[ncomp * n + p] = FIXED_BC;
             prescribed[ncomp * n + p] = v;
         }
     }
 }
 
-// Holds component `comp` of each node of the region at VALUE(p), with p
-// the point of the node.
 fn fix_region_with<VALUE>(comp: i64) {
     guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("fix_region_with: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
     for n in node_count() {
         if !on_region(n) { continue; }
-        fixed[ncomp * n + comp] = 1;
+        fixed[ncomp * n + comp] = FIXED_BC;
         prescribed[ncomp * n + comp] = VALUE([node_x(n, 0), node_x(n, 1), node_x(n, 2)]);
     }
 }
 
-// Adds ∫ g Ni dA over the facets of the region to component p of node i,
-// for g = gv[p].
 fn add_region_load(gv: f64[3]) { add_facet_load(gv, 0.0); }
 
-// Adds the pressure p on the boundary facets of the region: the traction
-// -p n, with n the outward normal of the facet in the undeformed mesh.
 fn add_region_pressure(p: f64) { add_facet_load([0.0; 3], p); }
 
-// The unit outward normal of facet f of cell c at the point x, from the
-// tangents tan of the facet: it points away from the centre of the cell.
 fn facet_normal(c: i64, x: f64[3], tan: f64[6]) -> f64[3] {
     var nv: f64[3] = if dim == 2 { [tan[1], -tan[0], 0.0] } else {
         [tan[1] * tan[5] - tan[2] * tan[4], tan[2] * tan[3] - tan[0] * tan[5], tan[0] * tan[4] - tan[1] * tan[3]] };
@@ -685,7 +592,6 @@ fn facet_normal(c: i64, x: f64[3], tan: f64[6]) -> f64[3] {
     return [s * nv[0], s * nv[1], s * nv[2]];
 }
 
-// Adds the traction gv - p n on the boundary facets of the region.
 fn add_facet_load(gv: f64[3], p: f64) {
     guard physics >= 0 && ncomp <= gv.len && dofs_sized() else { abort("add_region_load: a physics and the arrays of the dofs"); }
     let fd = dim - 1;
@@ -698,7 +604,6 @@ fn add_facet_load(gv: f64[3], p: f64) {
             for qp in quad_count(fd) {
                 let xi, w = quad_point(fd, qp);
                 shape(fd, order, xi, fn_shape, fn_dref);
-                // The tangents dx/dxi_r of the facet.
                 var tan: f64[6] = [0.0; 6];
                 for l in fnodes {
                     let n = cell_node(c, facet_node(dim, f, l));
@@ -732,8 +637,6 @@ fn add_facet_load(gv: f64[3], p: f64) {
     }
 }
 
-// Adds the traction G(x) (force per area, a function of the program) at the point x
-// of each boundary facet of the region.
 fn add_region_traction_with<G>() {
     guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("add_region_traction_with: a physics and the arrays of the dofs"); }
     let fd = dim - 1;
@@ -774,9 +677,6 @@ fn add_region_traction_with<G>() {
     }
 }
 
-// Whether facet f of cell c is on the region. A facet with its vertices
-// on two parts can cut a corner of the body, so all vertices must be on
-// one part, and in the body of the region.
 fn region_facet(c: i64, f: i64) -> bool {
     if region_body >= 0 && cell_body[c] != region_body { return false; }
     for k in region.len {
@@ -787,14 +687,11 @@ fn region_facet(c: i64, f: i64) -> bool {
     return false;
 }
 
-// The shape functions of the nodes of facet f of cell c at its quadrature
-// point qp, in fn_shape, and the weight of the point times dA.
 fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[20]&) -> f64 {
     let fd = dim - 1;
     var fn_dref: f64[60] = [0.0; 60];
     let xi, w = quad_point(fd, qp);
     shape(fd, order, xi, fn_shape, fn_dref);
-    // The tangents dx/dxi_r of the facet.
     var tan: f64[6] = [0.0; 6];
     for l in node_count_of(fd, order) {
         let n = cell_node(c, facet_node(dim, f, l));
@@ -809,7 +706,6 @@ fn facet_point(c: i64, f: i64, qp: i64, fn_shape: f64[20]&) -> f64 {
     return w * sqrt(nx * nx + ny * ny + nz * nz);
 }
 
-// Adds the force f to each node of the region.
 fn add_node_force(f: f64[3]) {
     guard physics >= 0 && dofs_sized() else { abort("add_node_force: a physics and the arrays of the dofs"); }
     for n in node_count() {
@@ -818,8 +714,6 @@ fn add_node_force(f: f64[3]) {
     }
 }
 
-// The mean ∫ v dV / ∫ dV over the live cells of the field `what`,
-// component `comp`, as cell_field gives it.
 fn body_mean(what: i64, comp: i64) -> f64 {
     var sum = 0.0;
     var volume = 0.0;
@@ -835,9 +729,6 @@ fn body_mean(what: i64, comp: i64) -> f64 {
     return if volume > 0.0 { sum / volume } else { 0.0 };
 }
 
-// The mean of the field `what`, component `comp`, over the box from lo to hi: the points of
-// 4 × 4 × 4 midpoints of each live cell that are in the box, weighted by the volume that
-// each stands for.
 fn box_mean(what: i64, comp: i64, lo: f64[3], hi: f64[3]) -> f64 {
     var sum = 0.0;
     var volume = 0.0;
@@ -863,14 +754,10 @@ fn box_mean(what: i64, comp: i64, lo: f64[3], hi: f64[3]) -> f64 {
     return if volume > 0.0 { sum / volume } else { 0.0 / 0.0 };
 }
 
-// The facets of the film conditions dot(q, n) = h (T - T_inf) of the step:
-// the cell, the facet and h of each. The matrix of each is ∫ h Ni Nj dA.
 var film_cell: i64[>..] = [];
 var film_facet: i64[>..] = [];
 var film_h: f64[>..] = [];
 
-// Adds the condition dot(q, n) = h (T - t_inf) of a heat physics on the
-// facets of the region.
 fn add_film(h: f64, t_inf: f64) {
     guard physics == HEAT && h > 0.0 && dofs_sized() else { abort("add_film: a heat physics and h > 0"); }
     for c in cell_count() {
@@ -890,18 +777,11 @@ fn clear_films() {
     film_h.clear();
 }
 
-// The facets of the radiation to the surroundings dot(q, n) = c (T^4 - T_inf^4),
-// with c = eps sigma: the cell, the facet, c and T_inf of each. The heat
-// that leaves through a facet is nonlinear in T, so the solve of
-// solve.goose makes the Newton step of it (ambient_residual and
-// ambient_tangent).
 var amb_cell: i64[>..] = [];
 var amb_facet: i64[>..] = [];
 var amb_c: f64[>..] = [];
 var amb_t: f64[>..] = [];
 
-// Adds the facets of the region to the radiation with the coefficient c =
-// eps sigma and the surroundings at t_inf.
 fn add_ambient(c: f64, t_inf: f64) {
     guard physics == HEAT && c > 0.0 && t_inf >= 0.0 && dofs_sized() else { abort("add_ambient: a heat physics, c > 0 and t_inf >= 0"); }
     for cell in cell_count() {
@@ -922,15 +802,12 @@ fn clear_ambient() {
     amb_t.clear();
 }
 
-// The temperature of `sol` at the quadrature point shape fn_shape of facet f of cell c.
 fn facet_temperature(c: i64, f: i64, fn_shape: f64[20]&) -> f64 {
     var t = 0.0;
     for a in node_count_of(dim - 1, order) { t += fn_shape[a] * sol[cell_node(c, facet_node(dim, f, a))]; }
     return t;
 }
 
-// Adds to r the heat ∫ c (T^4 - T_inf^4) Ni dA that each node radiates, at
-// the temperature in `sol`.
 fn ambient_residual(r: f64[:]) {
     var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
@@ -945,7 +822,6 @@ fn ambient_residual(r: f64[:]) {
     }
 }
 
-// Adds ∫ 4 c T^3 Ni Nj dA of each facet to the entries of `m`, an array with the pattern of the matrix.
 fn ambient_tangent(m: f64[:]) {
     var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
@@ -963,8 +839,6 @@ fn ambient_tangent(m: f64[:]) {
     }
 }
 
-// The heat ∫ c (T^4 - T_inf^4) dA that the radiation facets of the region
-// take out of the body.
 fn region_ambient_heat() -> f64 {
     var fn_shape: f64[20] = [0.0; 20];
     var heat = 0.0;
@@ -980,8 +854,6 @@ fn region_ambient_heat() -> f64 {
     return heat;
 }
 
-// The heat ∫ h T dA that the film facets give, with T of the solution:
-// the part of a film condition that the load does not hold.
 fn film_heat() -> f64 {
     var fn_shape: f64[20] = [0.0; 20];
     var heat = 0.0;
@@ -995,7 +867,6 @@ fn film_heat() -> f64 {
     return heat;
 }
 
-// Adds ∫ h Ni Nj dA of each film facet to the matrix.
 fn add_films() {
     var fn_shape: f64[20] = [0.0; 20];
     let fnodes = node_count_of(dim - 1, order);
@@ -1020,14 +891,8 @@ fn clear_conditions() {
     for &v in sol { v = 0.0; }
 }
 
-// --- reactions -----------------------------------------------------------------
-
-// The internal force of each dof after a static step of the nonlinear
-// solid (solid.goose), in place of K u; empty after a linear solve.
 var internal: f64[>..] = [];
 
-// The force K u of dof d, or its internal force, and the sum of the sizes
-// of the terms of the sum K u (the size of its round-off).
 fn row_force(d: i64) -> f64, f64 {
     if internal.len == sol.len { return internal[d], abs(internal[d]); }
     var ku = 0.0;
@@ -1039,9 +904,6 @@ fn row_force(d: i64) -> f64, f64 {
     return ku, terms;
 }
 
-// The force of the supports on the body (or the heat that flows in through
-// them): K u - f on the fixed dofs of the region. With equilibrium, the
-// reactions and the applied loads sum to 0.
 fn region_reaction() -> f64[3] {
     guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("region_reaction: a physics and the arrays of the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
@@ -1050,19 +912,15 @@ fn region_reaction() -> f64[3] {
         if !on_region(n) { continue; }
         for p in ncomp {
             let d = ncomp * n + p;
-            if fixed[d] != 1 { continue; }
+            if fixed[d] != FIXED_BC { continue; }
             let ku, terms = row_force(d);
             sum[p] += ku - load[d] - assembled_source[d];
         }
     }
-    // The heat that the radiation to the surroundings takes out of the region is a reaction too.
     if physics == HEAT { sum[0] -= region_ambient_heat(); }
     return sum;
 }
 
-// The mean of component comp of the solution on the boundary facets of the
-// region, weighted by area: the weight of each node is the load of a
-// unit traction (add_region_load). The load stays as it was.
 fn region_mean(comp: i64) -> f64 {
     guard physics >= 0 && comp >= 0 && comp < ncomp && dofs_sized() else { abort("region_mean: a physics, 0 <= comp < ncomp and the arrays of the dofs"); }
     var kept: f64[>..] = [];
@@ -1080,25 +938,18 @@ fn region_mean(comp: i64) -> f64 {
     return if area > 0.0 { sum / area } else { 0.0 / 0.0 };
 }
 
-// The sum of the reactions on all fixed dofs.
 fn all_reaction() -> f64[3] {
     guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("all_reaction: a physics and the arrays of the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];
     guard row_start.len > 0 else { return sum; }
     for d in sol.len {
-        if fixed[d] != 1 { continue; }
+        if fixed[d] != FIXED_BC { continue; }
         let ku, terms = row_force(d);
         sum[d % ncomp] += ku - load[d] - assembled_source[d];
     }
     return sum;
 }
 
-// The scale of the check `equilibrium`: the larger of the sum of the sizes
-// of the nodal loads, sources and reactions, and the sum of the sizes of
-// the terms K_ij u_j on the fixed rows. Loads that cancel do not make the
-// first 0. The reactions keep it above 0 when only fixed values drive the
-// model. The second is the size of the round-off of K u, which is not 0
-// when one nonzero value at all fixed dofs drives nothing.
 fn load_magnitude() -> f64 {
     guard dofs_sized() else { abort("load_magnitude: the arrays of the dofs"); }
     var sum = 0.0;
@@ -1107,7 +958,7 @@ fn load_magnitude() -> f64 {
     guard row_start.len > 0 else { return sum; }
     var terms = 0.0;
     for d in sol.len {
-        if fixed[d] != 1 { continue; }
+        if fixed[d] != FIXED_BC { continue; }
         let ku, t = row_force(d);
         terms += t;
         sum += abs(ku - load[d] - assembled_source[d]);
@@ -1115,7 +966,6 @@ fn load_magnitude() -> f64 {
     return max(sum, terms);
 }
 
-// The sum of the applied loads and sources, by component.
 fn total_load() -> f64[3] {
     guard physics >= 0 && ncomp <= 3 && dofs_sized() else { abort("total_load: a physics and the arrays of the dofs"); }
     var sum: f64[3] = [0.0, 0.0, 0.0];

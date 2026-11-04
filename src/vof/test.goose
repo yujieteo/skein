@@ -21,8 +21,6 @@ fn stream_field(x: f64, y: f64) -> f64[2] { return [1.0, 0.0]; }
 
 fn half_filled(x: f64, y: f64) -> f64 { return if y < 0.5 { 1.0 } else { 0.0 }; }
 
-fn left_wall_x() -> bool { return true; }
-
 fn volume() -> f64 {
     var v = 0.0;
     for c in vof::cell_count() { v += vof::alpha[c] * vof::hx * vof::hy; }

@@ -1,7 +1,3 @@
-// VTU output (VTK XML unstructured grid, ASCII), which ParaView reads: the
-// shell cells as quads (4 quads for each 9-node cell) and the beams as lines,
-// with the displacement and the rotation of each node as point arrays, and
-// the point and cell arrays that the caller gives as XML.
 import std;
 import os;
 namespace shells;
@@ -35,7 +31,6 @@ fn write_vtu(path: const u8[:], w: const u8[:], theta: const u8[:], points: cons
         offset += 2;
         format(out, offset, "\n");
     }
-    // VTK types 9 (quad) and 3 (line).
     out.append("</DataArray>\n<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\n");
     for c in quads { out.append("9\n"); }
     for b in beams.len { out.append("3\n"); }
@@ -59,9 +54,6 @@ fn write_vtu(path: const u8[:], w: const u8[:], theta: const u8[:], points: cons
     return write_file(path, out);
 }
 
-// Writes the connectivity of shell cell c: one quad, or 4 quads for a
-// 9-node cell, so that each viewer of linear cells draws it. LATTICE9
-// gives the node of place (i, j) of the 3 × 3 nodes of the cell.
 let LATTICE9 = [0, 4, 1, 7, 8, 5, 3, 6, 2];
 
 fn write_quads(out: u8[>..]&, c: Shell) {

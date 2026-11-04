@@ -1,15 +1,3 @@
-// A structured mesh of a cylinder patch, on given lines of x and of θ. A
-// point of the patch is (x, R sin θ, R cos θ), so θ turns from +z to +y
-// about +x. The cell (i, j) is between the x lines i and i + 1 and the θ
-// lines j and j + 1. The cells have their top normal outward and the exact
-// normal of the cylinder as the director of each node.
-//
-// A grid of order 1 has MITC4 cells, and a grid of order 2 has MITC9 cells
-// with the mid-side and centre nodes at the middle of x and of θ. The nodes
-// are on a lattice of (order nx + 1) × (order nt + 1) points: the lattice
-// point (a, b) of cell (i, j) has order i <= a <= order (i + 1) and the
-// same for b. Each lattice point has a node, also a point that no cell
-// uses (fix_free_nodes holds it).
 import std;
 import math;
 namespace shells;
@@ -17,22 +5,21 @@ import .model;
 
 struct Grid {
     first_node: i64,
-    nx: i64,            // the cells along x
-    nt: i64,            // the cells along θ
-    order: i64,         // 1 or 2
-    x_fast: bool,       // the node number runs along x first
-    r: f64,             // the radius, or 1 for a flat plate (the lines in y are then lengths)
-    flat: bool,         // a plate in the plane z = z0 with the lines of x and of y
+    nx: i64,
+    nt: i64,
+    order: i64,
+    x_fast: bool,
+    r: f64,
+    flat: bool,
     z0: f64,
-    lines: i64,         // the x lines at grid_lines[lines..lines + nx + 1], then the θ lines
-    cells: i64,         // the cell (i, j) is grid_cells[cells + i + nx j]
+    lines: i64,
+    cells: i64,
 }
 
 var grids: Grid[>..] = [];
 var grid_lines: f64[>..] = [];
-var grid_cells: i64[>..] = [];     // a shell cell, or -1 for a cell that was left out
+var grid_cells: i64[>..] = [];
 
-// The node of lattice point (a, b) of grid g: a along x, b along θ.
 fn grid_node(g: i64, a: i64, b: i64) -> i64 {
     guard g >= 0 && g < grids.len && a >= 0 && a <= grids[g].order * grids[g].nx && b >= 0 && b <= grids[g].order * grids[g].nt else { abort("grid_node: 0 <= g < grids.len, 0 <= a <= order nx and 0 <= b <= order nt"); }
     let gr = grids[g];
@@ -40,20 +27,16 @@ fn grid_node(g: i64, a: i64, b: i64) -> i64 {
     return gr.first_node + k;
 }
 
-// The cell (i, j) of grid g, or -1 if the cell was left out.
 fn grid_cell(g: i64, i: i64, j: i64) -> i64 {
     guard g >= 0 && g < grids.len && i >= 0 && i < grids[g].nx && j >= 0 && j < grids[g].nt else { abort("grid_cell: 0 <= g < grids.len, 0 <= i < nx and 0 <= j < nt"); }
     return grid_cells[grids[g].cells + i + grids[g].nx * j];
 }
 
-// The x line i (axis 0) or the θ line i (axis 1) of grid g.
 fn grid_line(g: i64, axis: i64, i: i64) -> f64 {
     guard g >= 0 && g < grids.len && (axis == 0 || axis == 1) && i >= 0 && i <= (if axis == 0 { grids[g].nx } else { grids[g].nt }) else { abort("grid_line: 0 <= g < grids.len, axis 0 or 1, and 0 <= i <= nx or nt"); }
     return grid_lines[grids[g].lines + (if axis == 0 { 0 } else { grids[g].nx + 1 }) + i];
 }
 
-// The nodes of side `side` of grid g in sequence: side 0 is the first x
-// line, 1 the last x line, 2 the first θ line and 3 the last θ line.
 fn grid_side(g: i64, side: i64) -> i64[>..] {
     guard g >= 0 && g < grids.len && side >= 0 && side < 4 else { abort("grid_side: 0 <= g < grids.len, and 0 <= side < 4"); }
     let gr = grids[g];
@@ -67,8 +50,6 @@ fn grid_side(g: i64, side: i64) -> i64[>..] {
     return out;
 }
 
-// The cell i of the lines of grid g on axis `axis` that holds t: the last
-// line i with line i <= t, from 0 to the cell count - 1. A binary search.
 fn line_cell(g: i64, axis: i64, t: f64) -> i64 {
     var lo = 0;
     var hi = if axis == 0 { grids[g].nx } else { grids[g].nt };
@@ -79,10 +60,6 @@ fn line_cell(g: i64, axis: i64, t: f64) -> i64 {
     return lo;
 }
 
-// The cell (i, j) of grid g that holds the point (x, y, z), and the place of
-// the point in it, from 0 to 1 along x and along θ. False if the point is
-// farther than tol from the patch. For a grid of order 2 the place is also
-// that of the lattice: 0.5 is the middle node.
 fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, bool {
     guard g >= 0 && g < grids.len else { abort("grid_locate: 0 <= g < grids.len"); }
     let gr = grids[g];
@@ -90,7 +67,6 @@ fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, 
     let x1 = grid_line(g, 0, gr.nx);
     let t0 = grid_line(g, 1, 0);
     let span = grid_line(g, 1, gr.nt) - t0;
-    // θ from t0, in [0, 2π), or a little below 0 near t0.
     var d = y - t0;
     if !gr.flat {
         d = atan2(y, z) - t0;
@@ -107,26 +83,17 @@ fn grid_locate(g: i64, x: f64, y: f64, z: f64, tol: f64) -> i64, i64, f64, f64, 
     return i, j, fx, ft, off_x <= tol && off_t <= tol && off_r <= tol;
 }
 
-// The value of lattice point k on the lines v of a grid of order `order`:
-// a line, or the middle of two lines.
 fn lattice_value(v: f64[:], k: i64, order: i64) -> f64 {
     guard k >= 0 && k <= order * (v.len - 1) && (order == 1 || order == 2) else { abort("lattice_value: 0 <= k <= order (v.len - 1), and order 1 or 2"); }
     if k % order == 0 { return v[k / order]; }
     return 0.5 * (v[k / 2] + v[k / 2 + 1]);
 }
 
-// Makes the cylinder patch of radius r on the x lines xs and the θ lines ts
-// (rad), each ascending, with cells of order 1 (MITC4) or 2 (MITC9). Cell
-// (i, j) has the section cell_sections[i + nx j], or no cell for -1 (a
-// cutout), and the section axis (ax, ay, az). The node numbers run along
-// the shorter side of the lattice first, for a small profile.
 fn mesh_cylinder_lines(r: f64, xs: f64[:], ts: f64[:], order: i64, cell_sections: i64[:],
                        ax: f64, ay: f64, az: f64) -> i64 {
     return mesh_lines(r, false, 0.0, xs, ts, order, cell_sections, ax, ay, az);
 }
 
-// Makes the flat plate in the plane z = z0 on the x lines xs and the y lines ys, as
-// mesh_cylinder_lines. The director of each node is +z.
 fn mesh_plate_lines(z0: f64, xs: f64[:], ys: f64[:], order: i64, cell_sections: i64[:],
                     ax: f64, ay: f64, az: f64) -> i64 {
     return mesh_lines(1.0, true, z0, xs, ys, order, cell_sections, ax, ay, az);
@@ -165,7 +132,6 @@ fn mesh_lines(r: f64, flat: bool, z0: f64, xs: f64[:], ts: f64[:], order: i64, c
     return g;
 }
 
-// The shell cell (i, j) of grid g, with section s and section axis axis.
 fn grid_shell(g: i64, i: i64, j: i64, s: i64, axis: f64[3]) -> i64 {
     let o = grids[g].order;
     let a = o * i;
@@ -179,9 +145,6 @@ fn grid_shell(g: i64, i: i64, j: i64, s: i64, axis: f64[3]) -> i64 {
                        grid_node(g, a, b + 1), grid_node(g, a + 1, b + 1)], s, axis[0], axis[1], axis[2]);
 }
 
-// Makes the nodes and the MITC4 cells of the patch x0 ≤ x ≤ x1, t0 ≤ θ ≤ t1
-// (rad) with nx × nt equal cells, with the section and the section axis
-// (ax, ay, az) on each cell.
 fn mesh_cylinder(r: f64, x0: f64, x1: f64, t0: f64, t1: f64, nx: i64, nt: i64,
                  section: i64, ax: f64, ay: f64, az: f64) -> i64 {
     guard r > 0.0 && x1 > x0 && t1 > t0 && nx > 0 && nt > 0 && section >= 0 && section < sections.len else { abort("mesh_cylinder: r > 0, x1 > x0, t1 > t0, nx, nt > 0, and 0 <= section < sections.len"); }

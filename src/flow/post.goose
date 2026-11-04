@@ -1,4 +1,3 @@
-// Values of the solution at a point, and VTU output.
 import std;
 import math;
 import os;
@@ -12,24 +11,20 @@ import .rans;
 let VALUE_VX = 0;
 let VALUE_VY = 1;
 let VALUE_P = 2;
-let VALUE_UX = 3;   // the displacement of the solid (fsi.goose)
+let VALUE_UX = 3;
 let VALUE_UY = 4;
-let VALUE_T = 5;    // the temperature of a thermal flow (heat.goose)
+let VALUE_T = 5;
 
-// The barycentric coordinates of (x, y) in cell c.
 fn barycentric(c: i64, x: f64, y: f64) -> f64[3] {
     let g = geometry(c);
     var l: f64[3] = [0.0; 3];
     for k in 3 {
-        // L_k is 0 at the next vertex i and has the gradient gl[k].
         let i = cell_node(c, (k + 1) % 3);
         l[k] = g.gl[2 * k] * (x - coords[2 * i]) + g.gl[2 * k + 1] * (y - coords[2 * i + 1]);
     }
     return l;
 }
 
-// The value `what` (a VALUE_ constant, scaled) at (x, y), and whether a
-// cell holds the point.
 fn value_at(what: i64, x: f64, y: f64) -> f64, bool {
     if coupled && (what == VALUE_UX || what == VALUE_UY) { return solid_value_at(what - VALUE_UX, x, y); }
     guard ((what >= VALUE_VX && what <= VALUE_P) || (what == VALUE_T && thermal)) && cell_count() > 0 && sol.len == dof_count() else { abort("value_at: a value, and a solve"); }
@@ -56,11 +51,6 @@ fn value_at(what: i64, x: f64, y: f64) -> f64, bool {
     return 0.0, false;
 }
 
-// Writes the mesh, v and p, and k and w of a turbulent flow, to a VTU
-// file. The values are multiplied by the references: x_ref for the
-// coordinates, v_ref and p_ref for the fields, v_ref² for k and
-// v_ref/x_ref for w, so that the file is dimensional (spec §21.4). An edge node takes the
-// mean pressure of the ends of its edge.
 fn write_vtu(path: const u8[:], x_ref: f64, v_ref: f64, p_ref: f64) -> bool {
     guard sol.len == dof_count() else { abort("write_vtu: a solve"); }
     let nodes = node_count();
@@ -85,8 +75,6 @@ fn write_vtu(path: const u8[:], x_ref: f64, v_ref: f64, p_ref: f64) -> bool {
     out.append("</DataArray>\n<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\n");
     for c in cell_count() { format(out, per_cell * (c + 1), "\n"); }
     out.append("</DataArray>\n<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\n");
-    // VTK_TRIANGLE (5) or VTK_QUADRATIC_TRIANGLE (22), with the edge nodes
-    // in the sequence of mesh.goose.
     for c in cell_count() { format(out, if order == 1 { 5 } else { 22 }, "\n"); }
     out.append("</DataArray>\n</Cells>\n<PointData>\n");
     out.append("<DataArray type=\"Float64\" Name=\"v\" NumberOfComponents=\"3\" format=\"ascii\">\n");

@@ -1,10 +1,3 @@
-// The grid, the element and the conditions of the package optim. The grid
-// has nx x ny equal rectangles from (x0, y0). Node (i, j) is at
-// (x0 + i dx, y0 + j dy), and cell (i, j) has the nodes (i, j), (i + 1, j),
-// (i + 1, j + 1) and (i, j + 1), counter-clockwise. Cell (i, j) is
-// i ny + j, as in the 88 line code. The nodes run along the shorter side
-// first, so that the band of the matrix is narrow. Dof 2 n + c is
-// component c of node n.
 import std;
 import math;
 namespace optim;
@@ -20,19 +13,16 @@ var dx = 1.0;
 var dy = 1.0;
 var nx = 0;
 var ny = 0;
-var along_y = true;          // node (i, j) is i (ny + 1) + j, else j (nx + 1) + i
+var along_y = true;
 var young = 0.0;
 var poisson = 0.0;
 var thickness = 0.0;
 var plane = PLANE_STRESS;
-var k0: f64[64];             // the matrix of a cell for E = 1
-var density: f64[>..] = [];  // the density of each cell, 1 without a topology loop
-var penalty = 1.0;           // the SIMP power p
-let E_MIN = 1.0e-9;          // the modulus of a void cell, a fraction of E (Andreassen et al. 2011)
+var k0: f64[64];
+var density: f64[>..] = [];
+var penalty = 1.0;
+let E_MIN = 1.0e-9;
 
-// A load of a step: a force (fx, fy) at a point, or a traction (fx, fy)
-// on the boundary edges on the grid line `axis == value`, which acts on
-// the thickness.
 struct Load {
     point: bool,
     axis: i64,
@@ -43,21 +33,19 @@ struct Load {
 var fixed: u8[>..] = [];
 var fixed_value: f64[>..] = [];
 var loads: Load[>..] = [];
-var u: f64[>..] = [];        // the solution, with the fixed values
+var u: f64[>..] = [];
 
 fn node_count() -> i64 { return (nx + 1) * (ny + 1); }
 fn dof_count() -> i64 { return 2 * node_count(); }
 fn cell_count() -> i64 { return nx * ny; }
 fn node(i: i64, j: i64) -> i64 { return if along_y { i * (ny + 1) + j } else { j * (nx + 1) + i }; }
 
-// The nodes of cell c, counter-clockwise from its corner at the lowest x and y.
 fn cell_nodes(c: i64) -> i64[4] {
     let i = c / ny;
     let j = c % ny;
     return [node(i, j), node(i + 1, j), node(i + 1, j + 1), node(i, j + 1)];
 }
 
-// The grid of cx x cy rectangles from (xa, ya) to (xb, yb).
 fn mesh_rect(xa: f64, ya: f64, xb: f64, yb: f64, cx: i64, cy: i64) {
     guard xb > xa && yb > ya && cx >= 1 && cy >= 1 else { abort("mesh_rect: xb > xa, yb > ya, and cx, cy >= 1"); }
     x0 = xa;
@@ -73,7 +61,6 @@ fn mesh_rect(xa: f64, ya: f64, xb: f64, yb: f64, cx: i64, cy: i64) {
     clear_bcs();
 }
 
-// The material and the plane assumption: E, nu and the thickness t.
 fn elastic(E: f64, nu: f64, t: f64, which: i64) {
     guard nx > 0 && E > 0.0 && nu > -1.0 && nu < 0.5 && t > 0.0 && (which == PLANE_STRESS || which == PLANE_STRAIN) else { abort("elastic: a mesh, E > 0, -1 < nu < 0.5, t > 0 and a plane assumption"); }
     young = E;
@@ -83,7 +70,6 @@ fn elastic(E: f64, nu: f64, t: f64, which: i64) {
     k0 = cell_matrix(d_matrix(1.0, nu));
 }
 
-// The matrix D of the stresses (xx, yy, xy) from the strains (xx, yy, 2 xy).
 fn d_matrix(E: f64, nu: f64) -> f64[9] {
     if plane == PLANE_STRAIN {
         let f = E / ((1.0 + nu) * (1.0 - 2.0 * nu));
@@ -93,7 +79,6 @@ fn d_matrix(E: f64, nu: f64) -> f64[9] {
     return [f, f * nu, 0.0, f * nu, f, 0.0, 0.0, 0.0, f * 0.5 * (1.0 - nu)];
 }
 
-// The derivative of D by nu, for the gradient (adjoint.goose).
 fn d_by_nu(E: f64, nu: f64) -> f64[9] {
     let h = 1.0e-6;
     let a = d_matrix(E, nu + h);
@@ -103,7 +88,6 @@ fn d_by_nu(E: f64, nu: f64) -> f64[9] {
     return d;
 }
 
-// The matrix B (3 x 8) of a cell at (s, t) in [-1, 1]^2.
 fn b_matrix(s: f64, t: f64) -> f64[24] {
     let ds: f64[4] = [-(1.0 - t), 1.0 - t, 1.0 + t, -(1.0 + t)];
     let dt: f64[4] = [-(1.0 - s), -(1.0 + s), 1.0 + s, 1.0 - s];
@@ -119,7 +103,6 @@ fn b_matrix(s: f64, t: f64) -> f64[24] {
     return b;
 }
 
-// The matrix t ∫ Bᵀ D B of a cell, by 2 x 2 Gauss points.
 fn cell_matrix(d: f64[9]) -> f64[64] {
     var k: f64[64] = default<f64[64]>();
     let g = 1.0 / sqrt(3.0);
@@ -136,16 +119,13 @@ fn cell_matrix(d: f64[9]) -> f64[64] {
     return k;
 }
 
-// The modulus of cell c: E (E_MIN + (1 - E_MIN) x^p).
 fn cell_modulus(c: i64) -> f64 { return young * (E_MIN + (1.0 - E_MIN) * pow(density[c], penalty)); }
 
-// The 8 dofs of cell c.
 fn cell_dofs(c: i64) -> i64[8] {
     let n = cell_nodes(c);
     return [2 * n[0], 2 * n[0] + 1, 2 * n[1], 2 * n[1] + 1, 2 * n[2], 2 * n[2] + 1, 2 * n[3], 2 * n[3] + 1];
 }
 
-// aᵀ k b on the dofs of cell c, for the matrix k of a cell.
 fn cell_product(k: f64[64], c: i64, a: f64[:], b: f64[:]) -> f64 {
     let e = cell_dofs(c);
     var s = 0.0;
@@ -157,7 +137,6 @@ fn cell_product(k: f64[64], c: i64, a: f64[:], b: f64[:]) -> f64 {
     return s;
 }
 
-// Removes the conditions and the loads of the last step.
 fn clear_bcs() {
     fixed.clear();
     fixed_value.clear();
@@ -168,11 +147,8 @@ fn clear_bcs() {
     loads.clear();
 }
 
-// The tolerance of a point on a grid line: 1e-6 of the size of the grid.
 fn tolerance() -> f64 { return 1.0e-6 * max(nx * dx, ny * dy); }
 
-// Fixes component comp of each node on the grid line axis == value at v.
-// False if no node is on it.
 fn fix_line(axis: i64, value: f64, comp: i64, v: f64) -> bool {
     guard nx > 0 && (axis == X || axis == Y) && (comp == X || comp == Y) && fixed.len == dof_count() else { abort("fix_line: a mesh, clear_bcs, and an axis and a component X or Y"); }
     var found = false;
@@ -188,7 +164,6 @@ fn fix_line(axis: i64, value: f64, comp: i64, v: f64) -> bool {
     return found;
 }
 
-// The node at (x, y), or -1 if no node is there.
 fn node_at(x: f64, y: f64) -> i64 {
     let i = round((x - x0) / dx) as! i64;
     let j = round((y - y0) / dy) as! i64;
@@ -196,7 +171,6 @@ fn node_at(x: f64, y: f64) -> i64 {
     return node(i, j);
 }
 
-// Fixes component comp of the node at (x, y) at v. False if no node is there.
 fn fix_point(x: f64, y: f64, comp: i64, v: f64) -> bool {
     guard nx > 0 && (comp == X || comp == Y) && fixed.len == dof_count() else { abort("fix_point: a mesh, clear_bcs, and a component X or Y"); }
     let n = node_at(x, y);
@@ -206,8 +180,6 @@ fn fix_point(x: f64, y: f64, comp: i64, v: f64) -> bool {
     return true;
 }
 
-// The force (fx, fy) at the point (x, y) of the grid. False if the point
-// is outside the grid.
 fn point_load(x: f64, y: f64, fx: f64, fy: f64) -> bool {
     guard nx > 0 && fixed.len == dof_count() else { abort("point_load: a mesh and clear_bcs"); }
     let _, _, found = point_weights(x, y);
@@ -215,8 +187,6 @@ fn point_load(x: f64, y: f64, fx: f64, fy: f64) -> bool {
     return found;
 }
 
-// The traction (tx, ty) on the boundary edges on the line axis == value.
-// False if the line is not a side of the grid.
 fn edge_load(axis: i64, value: f64, tx: f64, ty: f64) -> bool {
     guard nx > 0 && (axis == X || axis == Y) && fixed.len == dof_count() else { abort("edge_load: a mesh, clear_bcs and an axis X or Y"); }
     let lo = if axis == X { x0 } else { y0 };
@@ -225,9 +195,6 @@ fn edge_load(axis: i64, value: f64, tx: f64, ty: f64) -> bool {
     return abs(value - lo) <= tolerance() || abs(value - hi) <= tolerance();
 }
 
-// The cell of the point (x, y), its nodes and their bilinear weights. A
-// point on the side of two cells takes the cell of lower index. found is
-// false outside the grid.
 fn point_weights(x: f64, y: f64) -> i64[4], f64[4], bool {
     let fx = (x - x0) / dx;
     let fy = (y - y0) / dy;
@@ -240,14 +207,12 @@ fn point_weights(x: f64, y: f64) -> i64[4], f64[4], bool {
     return cell_nodes(i * ny + j), [(1.0 - s) * (1.0 - t), s * (1.0 - t), s * t, (1.0 - s) * t], true;
 }
 
-// Adds the nodal forces of load l, times `scale`, to f.
 fn add_load(l: Load, scale: f64, f: f64[>..]&) {
     if l.point {
         let n, w, _ = point_weights(l.at[0], l.at[1]);
         for k in 4 { for c in 2 { f[2 * n[k] + c] += scale * w[k] * l.f[c]; } }
         return;
     }
-    // Each edge of length h on the line gives h t / 2 of the traction to each of its 2 nodes.
     let count = if l.axis == X { ny } else { nx };
     let h = if l.axis == X { dy } else { dx };
     let i = round((l.at[0] - (if l.axis == X { x0 } else { y0 })) / (if l.axis == X { dx } else { dy })) as! i64;
@@ -259,7 +224,6 @@ fn add_load(l: Load, scale: f64, f: f64[>..]&) {
     }
 }
 
-// The value of component comp of u at (x, y), bilinear in its cell.
 fn value_at(comp: i64, x: f64, y: f64) -> f64, bool {
     guard u.len == dof_count() && (comp == X || comp == Y) else { abort("value_at: a solve, and a component X or Y"); }
     let n, w, found = point_weights(x, y);

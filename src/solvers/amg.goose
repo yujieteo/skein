@@ -1,43 +1,3 @@
-// Smoothed aggregation AMG (Vaněk, Mandel and Brezina 1996), the
-// preconditioner of CG for a symmetric positive definite matrix (spec
-// §18.4, docs/implementation.md §6).
-//
-// amg_setup builds the levels. On each level:
-//
-// 1. The dofs are in blocks of `bs` dofs, one block for each node
-//    (bs = 3 for a 3D displacement). Node j is strong for node i if the
-//    sum of the squares of the block A_ij is more than θ² times
-//    sqrt(|A_ii|² |A_jj|²), with the same sums, or at least RELATIVE²
-//    times the largest sum of a block of row i. θ is THETA on the fine
-//    level and halves on each coarser level. The relative test keeps the
-//    coarse levels of P2 cells coarsening: their rows couple many nodes,
-//    each by a small part of the diagonal.
-// 2. The aggregates, in three passes: a node whose strong neighbours are
-//    all free makes an aggregate with them; a free node joins the
-//    aggregate of a strong neighbour; a node still free makes an aggregate
-//    with its free strong neighbours.
-// 3. The tentative prolongator P0 holds the near null space B on each
-//    aggregate: B of the rows of the aggregate is Q R (Gram-Schmidt), the
-//    columns of Q are the columns of P0 for the aggregate, and R is B of
-//    the coarse level. Each coarse node has a block of nb dofs, one for
-//    each column of B. For elasticity B is the rigid-body modes (nb = 6 in
-//    3D, 3 in 2D); amg_setup takes the constant of each component
-//    (nb = bs). A column that Gram-Schmidt finds dependent on the others
-//    is zero: its coarse dof has an empty row, which the last level holds
-//    at 0.
-// 4. P = (I - ω D⁻¹ A) P0, with ω = 4 / (3 ρ) and ρ the largest eigenvalue
-//    of D⁻¹ A, from power steps. The next level is Pᵀ A P.
-//
-// The levels stop at COARSE dofs or fewer, or when the aggregates do not
-// make the level smaller. A dense Cholesky factor solves the last level.
-// amg_apply is one V-cycle: a forward Gauss-Seidel sweep before the coarse
-// correction and a backward sweep after it, so the preconditioner is
-// symmetric. The levels are loops with a fixed maximum, not recursion
-// (docs/tradeoffs.md §6).
-//
-// The levels are the state of the package between amg_setup and the
-// calls of amg_apply. Each level l is in the flat arrays below, from the
-// offsets of level l.
 import std;
 import math;
 namespace solvers;
@@ -48,31 +8,33 @@ let AMG_COARSE = 600;
 let THETA = 0.08;
 let RELATIVE = 0.5;
 let POWER_STEPS = 15;
+let AMG_DIRECT_MAX = 3000;
+let LAST_SWEEPS = 10;
+let DEPENDENT = 1.0e-20;
 
 var amg_levels = 0;
-var amg_n: i64[>..] = [];       // the dofs of each level
-var amg_rs: i64[>..] = [];      // the row starts of level l from amg_rs_at[l]
+var amg_n: i64[>..] = [];
+var amg_rs: i64[>..] = [];
 var amg_rs_at: i64[>..] = [];
-var amg_col: i32[>..] = [];     // the entries of level l from amg_e_at[l] to amg_e_at[l + 1]
+var amg_col: i32[>..] = [];
 var amg_val: f64[>..] = [];
 var amg_e_at: i64[>..] = [];
-var amg_prs: i64[>..] = [];     // the prolongator from level l + 1 to level l, the same way
+var amg_prs: i64[>..] = [];
 var amg_prs_at: i64[>..] = [];
 var amg_pcol: i32[>..] = [];
 var amg_pval: f64[>..] = [];
 var amg_pe_at: i64[>..] = [];
-var amg_x: f64[>..] = [];       // the vectors of level l from amg_v_at[l]
+var amg_x: f64[>..] = [];
 var amg_b: f64[>..] = [];
 var amg_res: f64[>..] = [];
 var amg_diag: f64[>..] = [];
 var amg_v_at: i64[>..] = [];
-var amg_chol: f64[>..] = [];    // the dense Cholesky factor of the last level, by rows
+var amg_chol: f64[>..] = [];
 
 fn level_rs(l: i64) -> const i64[:] { return amg_rs[amg_rs_at[l]..amg_rs_at[l] + amg_n[l] + 1]; }
 fn level_col(l: i64) -> const i32[:] { return amg_col[amg_e_at[l]..amg_e_at[l + 1]]; }
 fn level_val(l: i64) -> const f64[:] { return amg_val[amg_e_at[l]..amg_e_at[l + 1]]; }
 
-// Appends a level of n dofs with the matrix (rs, col, val).
 fn push_level(n: i64, rs: i64[:], col: i32[:], val: f64[:]) {
     guard rs.len == n + 1 && col.len == val.len && rs[n] == col.len else { abort("push_level: n + 1 row starts that end at col.len"); }
     amg_n.push(n);
@@ -94,13 +56,11 @@ fn push_level(n: i64, rs: i64[:], col: i32[:], val: f64[:]) {
     amg_levels = amg_n.len;
 }
 
-// The strong neighbours of each node of level l: adj[adj_start[i]..adj_start[i + 1]].
 fn strong_graph(l: i64, bs: i64) -> i64[>..], i64[>..] {
     let rs = level_rs(l);
     let col = level_col(l);
     let val = level_val(l);
     let nodes = amg_n[l] / bs;
-    // The sum of squares of each block A_ij of node row i, in `sum`.
     var sum: f64[>..] = [];
     var seen: i64[>..] = [];
     for j in nodes {
@@ -134,8 +94,6 @@ fn strong_graph(l: i64, bs: i64) -> i64[>..], i64[>..] {
         }
         strong_start.push(strong.len);
     }
-    // Keep the strong pairs. The limit halves at each level, as in Vaněk,
-    // Mandel and Brezina: the coarse levels couple more nodes, each less.
     let theta = THETA * pow(0.5, l as f64);
     var adj_start: i64[>..] = [0];
     var adj: i64[>..] = [];
@@ -151,7 +109,6 @@ fn strong_graph(l: i64, bs: i64) -> i64[>..], i64[>..] {
     return adj_start, adj;
 }
 
-// The aggregate of each node of level l, and the count of aggregates.
 fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
     let nodes = amg_n[l] / bs;
     let adj_start, adj = strong_graph(l, bs);
@@ -189,7 +146,6 @@ fn aggregates(l: i64, bs: i64) -> i64[>..], i64 {
     return agg, count;
 }
 
-// The largest eigenvalue of D⁻¹ A of level l, from power steps.
 fn spectral_radius(l: i64) -> f64 {
     let n = amg_n[l];
     let d = amg_diag[amg_v_at[l]..amg_v_at[l] + n];
@@ -212,7 +168,6 @@ fn spectral_radius(l: i64) -> f64 {
     return max(rho, norm(x));
 }
 
-// C = A B for CSR A (rows of A) and B (nb columns).
 fn spmm(ars: i64[:], acol: i32[:], aval: f64[:], brs: i64[:], bcol: i32[:], bval: f64[:], nb: i64,
         crs: i64[>..]&, ccol: i32[>..]&, cval: f64[>..]&) {
     guard ars.len >= 1 && brs.len >= 1 && nb >= 0 else { abort("spmm: two CSR matrices"); }
@@ -241,7 +196,6 @@ fn spmm(ars: i64[:], acol: i32[:], aval: f64[:], brs: i64[:], bcol: i32[:], bval
     }
 }
 
-// The transpose of the CSR matrix (rs, col, val) with nc columns.
 fn transpose(rs: i64[:], col: i32[:], val: f64[:], nc: i64, trs: i64[>..]&, tcol: i32[>..]&, tval: f64[>..]&) {
     guard rs.len >= 1 && col.len == val.len else { abort("transpose: a CSR matrix"); }
     trs.clear();
@@ -266,8 +220,6 @@ fn transpose(rs: i64[:], col: i32[:], val: f64[:], nc: i64, trs: i64[>..]&, tcol
     }
 }
 
-// The dense Cholesky factor of the last level into amg_chol. False if the
-// level is not positive definite.
 fn factor_last() -> bool {
     let l = amg_levels - 1;
     let n = amg_n[l];
@@ -278,7 +230,6 @@ fn factor_last() -> bool {
     for i in n * n { amg_chol.push(0.0); }
     for r in n {
         for e in rs[r]..rs[r + 1] { amg_chol[n * r + col[e]] += val[e]; }
-        // The empty row of a dependent column of P0 (tentative) holds its dof at 0.
         if rs[r] == rs[r + 1] { amg_chol[n * r + r] = 1.0; }
     }
     for j in n {
@@ -316,9 +267,6 @@ fn clear_levels() {
     amg_v_at.clear();
 }
 
-// Builds the levels for the matrix (row_start, col, val) with dofs in
-// blocks of `bs`, and the constant of each component as the near null
-// space. False if the last level is not positive definite.
 fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
     var modes: f64[>..] = [];
     for r in row_start.len - 1 {
@@ -327,8 +275,6 @@ fn amg_setup(row_start: i64[:], col: i32[:], val: f64[:], bs: i64) -> bool {
     return amg_setup_modes(row_start, col, val, bs, modes, bs);
 }
 
-// The same with the near null space `modes`: nb values for each dof, by
-// rows.
 fn amg_setup_modes(row_start: i64[:], col: i32[:], val: f64[:], bs: i64, modes: f64[:], nb: i64) -> bool {
     guard bs >= 1 && nb >= 1 && row_start.len >= 2 && (row_start.len - 1) % bs == 0 && col.len == val.len &&
           modes.len == nb * (row_start.len - 1) else { abort("amg_setup_modes: a CSR matrix with the dofs in blocks, and nb modes of each dof"); }
@@ -359,7 +305,6 @@ fn amg_setup_modes(row_start: i64[:], col: i32[:], val: f64[:], bs: i64, modes: 
         ns.clear();
         ns.append(coarse);
         smooth(l, nc, p0rs, p0col, p0val, prs, pcol, pval);
-        // The next level: Pᵀ (A P).
         spmm(level_rs(l), level_col(l), level_val(l), prs, pcol, pval, nc, p0rs, p0col, p0val);
         transpose(prs, pcol, pval, nc, trs, tcol, tval);
         spmm(trs, tcol, tval, p0rs, p0col, p0val, nc, crs, ccol, cval);
@@ -372,14 +317,10 @@ fn amg_setup_modes(row_start: i64[:], col: i32[:], val: f64[:], bs: i64, modes: 
         push_level(nc, crs, ccol, cval);
         level_bs = nb;
     }
-    return amg_n[amg_levels - 1] > 3000 || factor_last();
+    return amg_n[amg_levels - 1] > AMG_DIRECT_MAX || factor_last();
 }
 
-// P0 of the aggregates `agg` of the nodes of a level with blocks of bs
-// dofs and the near null space ns (nb values for each dof), into p0. It
-// gives the near null space of the coarse level.
 fn tentative(agg: i64[:], count: i64, bs: i64, nb: i64, ns: f64[:], p0rs: i64[>..]&, p0col: i32[>..]&, p0val: f64[>..]&) -> f64[>..] {
-    // The nodes of each aggregate: a counting sort.
     var start: i64[>..] = [];
     for a in count + 1 { start.push(0); }
     for a in agg { start[a + 1]++; }
@@ -392,7 +333,6 @@ fn tentative(agg: i64[:], count: i64, bs: i64, nb: i64, ns: f64[:], p0rs: i64[>.
         nodes[fill[at]] = i;
         fill[at]++;
     }
-    // q[nb r + k]: column k of Q at dof r.
     var q: f64[>..] = [];
     q.append(ns);
     var coarse: f64[>..] = [];
@@ -417,7 +357,7 @@ fn tentative(agg: i64[:], count: i64, bs: i64, nb: i64, ns: f64[:], p0rs: i64[>.
             for i in nodes[start[a]..start[a + 1]] {
                 for c in bs { norm += q[nb * (bs * i + c) + k] * q[nb * (bs * i + c) + k]; }
             }
-            let keep = norm > 1.0e-20 * first && norm > 0.0;
+            let keep = norm > DEPENDENT * first && norm > 0.0;
             coarse[nb * (nb * a + k) + k] = if keep { sqrt(norm) } else { 0.0 };
             for i in nodes[start[a]..start[a + 1]] {
                 for c in bs { q[nb * (bs * i + c) + k] = if keep { q[nb * (bs * i + c) + k] / sqrt(norm) } else { 0.0 }; }
@@ -439,7 +379,6 @@ fn tentative(agg: i64[:], count: i64, bs: i64, nb: i64, ns: f64[:], p0rs: i64[>.
     return coarse;
 }
 
-// P = P0 - ω D⁻¹ A P0 of level l, with ω = 4 / (3 ρ(D⁻¹ A)).
 fn smooth(l: i64, nc: i64, p0rs: i64[:], p0col: i32[:], p0val: f64[:], prs: i64[>..]&, pcol: i32[>..]&, pval: f64[>..]&) {
     let n = amg_n[l];
     let omega = 4.0 / (3.0 * spectral_radius(l));
@@ -447,16 +386,19 @@ fn smooth(l: i64, nc: i64, p0rs: i64[:], p0col: i32[:], p0val: f64[:], prs: i64[
     let d = amg_diag[amg_v_at[l]..amg_v_at[l] + n];
     for r in n {
         for e in prs[r]..prs[r + 1] { pval[e] *= -omega / d[r]; }
-        // The columns of P0 are in the row of A P0: A has its diagonal.
         for f in p0rs[r]..p0rs[r + 1] {
+            var found = false;
             for e in prs[r]..prs[r + 1] {
-                if pcol[e] == p0col[f] { pval[e] += p0val[f]; }
+                if pcol[e] == p0col[f] {
+                    pval[e] += p0val[f];
+                    found = true;
+                }
             }
+            guard found else { abort("smooth: the row of A P0 must hold each column of the row of P0, so A needs its diagonal entry"); }
         }
     }
 }
 
-// One Gauss-Seidel sweep on level l, forward or backward.
 fn sweep(l: i64, forward: bool) {
     let n = amg_n[l];
     let rs = level_rs(l);
@@ -475,14 +417,12 @@ fn sweep(l: i64, forward: bool) {
     }
 }
 
-// The solve of the last level: the Cholesky factor, or sweeps if the level
-// is too large to factor.
 fn solve_last() {
     let l = amg_levels - 1;
     let n = amg_n[l];
     let at = amg_v_at[l];
     guard amg_chol.len == n * n else {
-        for k in 10 {
+        for k in LAST_SWEEPS {
             sweep(l, true);
             sweep(l, false);
         }
@@ -501,7 +441,6 @@ fn solve_last() {
     }
 }
 
-// z = M⁻¹ r: one V-cycle from z = 0.
 fn amg_apply(r: f64[:], z: f64[:]) {
     guard amg_levels > 0 && r.len == amg_n[0] && z.len == r.len else { abort("amg_apply: amg_setup, and r and z of the size of its matrix"); }
     for i in r.len {
@@ -515,7 +454,6 @@ fn amg_apply(r: f64[:], z: f64[:]) {
         sweep(l, true);
         multiply(level_rs(l), level_col(l), level_val(l), amg_x[at..at + n], amg_res[at..at + n]);
         for i in n { amg_res[at + i] = amg_b[at + i] - amg_res[at + i]; }
-        // b of level l + 1 = Pᵀ res.
         for i in amg_n[l + 1] {
             amg_b[next + i] = 0.0;
             amg_x[next + i] = 0.0;
@@ -546,15 +484,9 @@ fn amg_apply(r: f64[:], z: f64[:]) {
     for i in r.len { z[i] = amg_x[i]; }
 }
 
-// The levels that amg_keep (warm.goose) writes: the dofs of each level in
-// n, the matrices of the coarse levels (rs, col, val), the prolongators
-// (prs, pcol, pval) and the factor of the last level, each row start from
-// its own level. The matrix (row_start, col, val) is the fine level. False
-// if the arrays do not make the levels.
 fn amg_restore(row_start: i64[:], col: i32[:], val: f64[:], n: i64[:], rs: i64[:], cl: i32[:], vl: f64[:],
                prs: i64[:], pcol: i32[:], pval: f64[:], chol: f64[:]) -> bool {
     guard n.len >= 1 && n.len <= AMG_MAX_LEVELS && n[0] == row_start.len - 1 && col.len == val.len else { return false; }
-    // The sizes first, so that a file of another program fails here.
     var rows = 0;
     var entries = 0;
     var prows = 0;

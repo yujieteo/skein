@@ -12,11 +12,6 @@ fn locate(x: f64, y: f64) -> i64 {
     return i + nx * j;
 }
 
-fn alpha_at(x: f64, y: f64) -> f64, bool {
-    let c = locate(x, y);
-    return if c < 0 { 0.0 } else { alpha[c] }, c >= 0;
-}
-
 let FIELD_V = 1;
 let FIELD_P = 2;
 let FIELD_ALPHA = 4;

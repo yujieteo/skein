@@ -1,13 +1,9 @@
-// The state of one run of the checker: the diagnostics, the symbols and
-// the facts about the model that the rules need.
 import std;
 import dictionary;
 namespace check;
 import syntax from "../syntax";
 import .dims;
 import .types;
-
-// --- diagnostics (docs/checks.md §1, docs/command_line.md §6.1) -----------------
 
 struct Diag {
     id: u8[..32],
@@ -17,20 +13,17 @@ struct Diag {
     col: i64,
     msg: u8[..512],
     fix: u8[..512],
-    lint: bool = false,   // a lint warning (docs/checks.md §3), else an error
+    lint: bool = false,
 }
 
 var diags: Diag[>..];
 
-// When it is a token, each error goes to it. The checker sets it while it
-// checks the source of a template for a physics of the model.
 var report_tok = -1;
 
-// Records the error `id` at token `tok`. `fix` is never empty.
 fn error(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) { add_diag(tok, id, msg, fix, false); }
 
-// Records the error or, when `lint` is true, the lint warning `id` at token `tok`.
 fn add_diag(tok: i64, id: u8[:], msg: u8[:], fix: u8[:], lint: bool) {
+    guard id.len <= 32 else { abort(str("add_diag: the id '", id, "' is longer than the 32 bytes of Diag.id")); }
     let at = if report_tok >= 0 { report_tok } else { tok };
     let k = syntax::tokens[max(at, 0)];
     for d in diags {
@@ -46,8 +39,6 @@ fn add_diag(tok: i64, id: u8[:], msg: u8[:], fix: u8[:], lint: bool) {
     diags.push(d);
 }
 
-// A name, kept inline: a global must not hold a slice of the source text,
-// because syntax::reset clears it.
 type Name = u8[..64];
 
 fn key(s: u8[:]) -> Name {
@@ -56,10 +47,7 @@ fn key(s: u8[:]) -> Name {
     return k;
 }
 
-// --- symbols ----------------------------------------------------------------------
-
-// The kinds of a symbol.
-let S_BUILTIN = 0;    // a built-in constant or function (Appendix A)
+let S_BUILTIN = 0;
 let S_LET = 1;
 let S_PARAM = 2;
 let S_FN = 3;
@@ -76,21 +64,18 @@ let S_EXPECT = 13;
 
 struct Sym {
     kind: i64,
-    tok: i64,         // the token of the name, or -1 for a built-in
-    node: i64,        // the declaration, or -1
+    tok: i64,
+    node: i64,
     ty: Ty,
-    has_val: bool,    // `val` is the constant value in SI
+    has_val: bool,
     val: f64,
-    phys: i64,        // the index in `physics` of an unknown, state or physics let, else -1
+    phys: i64,
 }
 
 var syms: Sym[>..];
-// The names that are visible now, and their symbols.
 var visible = dictionary<Name, i64> {};
-// Each name that the model file declares, and the token of its declaration.
 var declared = dictionary<Name, i64> {};
 
-// A name of a function parameter, a template parameter or a template unknown.
 struct Local {
     name: Name,
     ty: Ty,
@@ -98,88 +83,75 @@ struct Local {
 
 var locals: Local[>..<];
 
-// A material property.
 struct Prop {
-    mat: i64,      // the symbol of the material
+    mat: i64,
     tok: i64,
     ty: Ty,
 }
 
 var props: Prop[>..];
 
-// A physics block.
 struct Phys {
     sym: i64,
     node: i64,
-    region: i64,      // the region expression, or -1
-    template: i64,    // the N_TEMPLATE node of the standard library, or -1
-    first: i64,       // the symbol of the first unknown
-    count: i64,       // the number of unknowns
+    region: i64,
+    template: i64,
+    first: i64,
+    count: i64,
     has_method: bool,
     plastic: bool,
     incompressible: bool,
-    convective: bool, // an eq has a convection term, for the default `stabilize`
+    convective: bool,
 }
 
 var physics: Phys[>..];
-// The materials of each physics: pairs of a physics index and a material symbol.
 struct PhysMat { phys: i64, mat: i64 }
 var phys_mats: PhysMat[>..];
-// The fluxes: `div(F)` in equation `k` of a physics makes `F*n` a natural
-// condition for unknown `k`, and `curl(F)` makes `cross(n, F)` one (spec §12.1).
-// `along(F)` of a Curve physics does too, with `curve` set.
 struct Flux { phys: i64, node: i64, unknown: i64, curl: bool, curve: bool }
 var fluxes: Flux[>..];
-// The pairs (physics, property name) that already have a `material_prop_*` error.
 struct PropSeen { phys: i64, name: Name }
 var prop_seen: PropSeen[>..];
 
-// The unknowns of another model, for `results` (spec §15.1).
 struct ResultField { res: i64, name: Name, ty: Ty }
 var result_fields: ResultField[>..];
 var results_count = 0;
 
-// The boundary conditions, for `bc_conflict` and the free boundary report.
 struct Bc {
-    step: i64,        // the step index, or -1 at the top level
-    region: i64,      // the region expression
-    unknown: i64,     // the symbol of the unknown
-    comp: Name,       // the component, or ""
+    step: i64,
+    region: i64,
+    unknown: i64,
+    comp: Name,
     natural: bool,
     node: i64,
 }
 
 var bcs: Bc[>..];
-// The points `p` of each `rigid(p)` so far, by their text (gap G17).
 var rigid_points: u8[..64][>..];
 
-// The facts about the model.
-var space = 3;            // the space dimension: 1, 2 or 3. `axi` gives 2.
+var space = 3;
 var axi = false;
 var nondim = false;
 var has_scales = false;
-var thickness = false;    // 2D with a thickness (plane stress or strain), or `axi`
-var model_file = 0;
-var model_prog = -1;      // the N_PROGRAM of the model file
+var thickness = false;
+var model_prog = -1;
 var header_tok = 0;
-var cur_phys = -1;        // the physics that the checker is in, or -1
-var cur_step = -1;        // the step that the checker is in, or -1
-var cur_proc: u8[..32];   // the procedure of that step
-var last_proc: u8[..32];  // the procedure of the last step of the file
-var cur_count = -1;       // the count of a modal or buckling step, or -1 when it is not a constant
-var eig_proc: u8[..32];   // the procedure of the last modal or buckling step of the file
-var eig_count = -1;       // the count of that step
+var cur_phys = -1;
+var cur_step = -1;
+var cur_proc: u8[..32];
+var last_proc: u8[..32];
+var cur_count = -1;
+var eig_proc: u8[..32];
+var eig_count = -1;
 var step_count = 0;
-var setting_mode = false; // an undeclared name is a word (a setting value)
+var setting_mode = false;
 var in_expect = false;
 var in_report = false;
-var in_bc = false;        // a bc whose left side names no unknown
-var in_natural = false;   // the right side of a natural bc
-var last_reports: u8[..64][>..];   // the named reports of the last step
+var in_bc = false;
+var in_natural = false;
+var last_reports: u8[..64][>..];
 var scale_dims: i64[7][>..];
 var used_dims: i64[7][>..];
 
-// The default natural conditions, for the check report (command_line.md §6.2).
 struct Free {
     physics: u8[..64],
     field: u8[..64],
@@ -189,8 +161,6 @@ struct Free {
 
 var free: Free[>..];
 
-// The method that the checker chose for a physics with no method item, for
-// the check report (spec §13).
 struct Chosen {
     physics: u8[..64],
     mesh: u8[..64],
@@ -200,7 +170,6 @@ struct Chosen {
 
 var chosen: Chosen[>..];
 
-// Empties the state for a new file.
 fn reset_state() {
     diags.clear();
     syms.clear();
@@ -249,8 +218,6 @@ fn add_sym(kind: i64, tok: i64, node: i64, ty: Ty) -> i64 {
     return syms.len - 1;
 }
 
-// The text of the source from the first to the last token of node `n`,
-// with its brackets balanced.
 fn node_text(n: i64) -> const u8[:] {
     var a, b = span(n);
     let src = syntax::source;
@@ -272,7 +239,6 @@ fn node_text(n: i64) -> const u8[:] {
     return src[a..b];
 }
 
-// The text of node `n` with no white space, to compare two expressions.
 fn norm_text(n: i64) -> u8[>..] {
     var out: u8[>..] = [];
     for c in node_text(n) {

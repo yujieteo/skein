@@ -1,12 +1,3 @@
-// The lint rules of `skein lint` (docs/checks.md §3) that need no mesh.
-// Each one is a warning on a model with no error. `allow <id>: "reason"` in
-// the model turns a rule off. The rules that need the mesh, `bending_lock`
-// and `mesh_feature_small`, are in src/mesher/lint.goose and run only with
-// `--mesh`.
-//
-// `dt_unstable` estimates the stable limit of solids only, and
-// `stabilization_missing` needs a velocity in the `scales` line: flow
-// physics is phase 3 (docs/roadmap.md).
 import std;
 import dictionary;
 import math;
@@ -19,9 +10,7 @@ import .expr;
 import .items;
 import .steps;
 
-// The names that a part of the model uses.
 var used_names = dictionary<Name, i64> {};
-// The regions with no active cells in the current step, by their text.
 var dead = dictionary<Name, i64> {};
 
 fn lint_rules() {
@@ -34,7 +23,6 @@ fn lint_rules() {
     stabilization_missing();
 }
 
-// Records the lint warning `id` at token `tok`, unless an `allow` turns it off.
 fn warn(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
     var c = syntax::nodes[model_prog].first;
     while c >= 0 {
@@ -44,8 +32,6 @@ fn warn(tok: i64, id: u8[:], msg: u8[:], fix: u8[:]) {
     add_diag(tok, id, msg, fix, true);
 }
 
-// Adds each name of the subtree of `n` to `used_names`. With `targets`
-// false, the left side of a `bc` is not a use.
 recursive fn note_names(n: i64, targets: bool) {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_NAME { used_names.insert(key(tok_text(k.tok)), 1); }
@@ -58,8 +44,6 @@ recursive fn note_names(n: i64, targets: bool) {
     }
 }
 
-// `unused_let`: a `let` of the model, at the top level or in a physics,
-// that no name uses. A `let` of a `use` file is not a part of the model.
 fn unused_let() {
     used_names.clear();
     note_names(model_prog, true);
@@ -84,7 +68,6 @@ fn unused_let_at(n: i64) {
     warn(t, "unused_let", str("the let '", tok_text(t), "' has no use"), "remove it");
 }
 
-// `unused_material`: a material of the model that no physics assigns.
 fn unused_material() {
     var c = syntax::nodes[model_prog].first;
     while c >= 0 {
@@ -101,9 +84,6 @@ fn unused_material() {
     }
 }
 
-// `unused_field`: no part of the model outside a physics and the materials
-// that it assigns uses a name of it (an unknown, a state or a `let`), other
-// than as the left side of a `bc`. Then the solve of its unknowns gives nothing.
 fn unused_field() {
     for p, i in physics {
         used_names.clear();
@@ -131,14 +111,8 @@ fn unused_field() {
     }
 }
 
-// --- load_no_cells -----------------------------------------------------------------------
-
-// `load_no_cells`: a `bc` whose region has no active cells in a step. A
-// region is dead after a `death` and before its `birth`. A `birth` or a
-// `death` with `where` kills only a part, so it is not counted.
 fn load_no_cells() {
     dead.clear();
-    // A region whose first event is a birth is dead before it.
     var seen = dictionary<Name, i64> {};
     var c = syntax::nodes[model_prog].first;
     while c >= 0 {
@@ -175,8 +149,6 @@ fn load_no_cells() {
     }
 }
 
-// Calls `f(region, birth)` for each region of each `birth` and `death` of
-// step `step` that has no `where`.
 fn each_event<F>(step: i64) {
     var s = syntax::nodes[step].first;
     while s >= 0 {
@@ -202,9 +174,6 @@ fn dead_bc(bc: i64, step: i64, warned: dictionary<i64, i64>&) {
          "move the bc to the step of the birth of its region, or to a later step");
 }
 
-// True when region expression `n` has no active cells: a dead region, a
-// `let` of one, the boundary of one, a union of dead regions, or an
-// intersection or a difference with a dead region on the left.
 recursive fn region_dead(n: i64, depth: i64) -> bool {
     if depth > 16 { return false; }
     if dead.contains(key(norm_text(n))) { return true; }
@@ -230,9 +199,6 @@ recursive fn region_dead(n: i64, depth: i64) -> bool {
     return false;
 }
 
-// --- rules on the numbers of the model ---------------------------------------------------
-
-// The method item of physics `p`, or -1.
 fn method_of(p: i64) -> i64 {
     let name = tok_text(syms[physics[p].sym].tok);
     var c = syntax::nodes[model_prog].first;
@@ -243,7 +209,6 @@ fn method_of(p: i64) -> i64 {
     return -1;
 }
 
-// The displacement unknown (a vector of lengths) of physics `p`, or -1.
 fn displacement_of(p: i64) -> i64 {
     let ph = physics[p];
     for j in ph.count {
@@ -253,28 +218,26 @@ fn displacement_of(p: i64) -> i64 {
     return -1;
 }
 
-// The cell order of unknown `u` in the method `m` (spec §13: default 2).
 fn order_of(m: i64, u: i64) -> f64 {
     if m < 0 { return default_order(u); }
     let order = setting(syntax::nodes[m].first, "order");
-    if order < 0 { return 2.0; }
+    if order < 0 { return DEFAULT_ORDER; }
     if syntax::nodes[order].kind == syntax::N_RECORD {
         var c = syntax::nodes[order].first;
         while c >= 0 {
             let a = syntax::nodes[c];
             if a.aux >= 0 && tok_text(a.aux) == tok_text(syms[u].tok) {
                 let v, ok = const_value(a.first);
-                return if ok { v } else { 2.0 };
+                return if ok { v } else { DEFAULT_ORDER };
             }
             c = a.next;
         }
-        return 2.0;
+        return DEFAULT_ORDER;
     }
     let v, ok = const_value(order);
-    return if ok { v } else { 2.0 };
+    return if ok { v } else { DEFAULT_ORDER };
 }
 
-// The constant value of property `name` of material symbol `mat`, and true.
 fn prop_value(mat: i64, name: u8[:]) -> f64, bool {
     var c = syntax::nodes[syms[mat].node].first;
     while c >= 0 {
@@ -285,8 +248,6 @@ fn prop_value(mat: i64, name: u8[:]) -> f64, bool {
     return 0.0, false;
 }
 
-// The mesh item of physics `p`: the mesh that its method names, or else the
-// one mesh that a cg, dg or fv method with no `mesh` takes (spec §13), or -1.
 fn mesh_of(p: i64) -> i64 {
     var mesh = -1;
     let m = method_of(p);
@@ -307,8 +268,6 @@ fn mesh_of(p: i64) -> i64 {
     return mesh;
 }
 
-// The smallest constant cell size of the mesh of physics `p`: the `size`
-// and each `refine` and `crack_tip` of its mesh. False when it is unknown.
 fn cell_size(p: i64) -> f64, bool {
     let mesh = mesh_of(p);
     guard mesh >= 0 else { return 0.0, false; };
@@ -327,8 +286,6 @@ fn cell_size(p: i64) -> f64, bool {
     return h, ok && h > 0.0;
 }
 
-// `crack_tip_form` (spec §9.1): a crack tip moves the mid-side nodes, so
-// the displacement of each physics on the mesh needs order 2.
 fn crack_tip_order() {
     for p, i in physics {
         let u = displacement_of(i);
@@ -347,15 +304,15 @@ fn crack_tip_order() {
     }
 }
 
-// A value rounded to 3 significant digits, for a message.
 fn approx(v: f64) -> f64 {
     if v <= 0.0 { return v; }
     let scale = pow(10.0, floor(log10(v)) - 2.0);
     return round(v / scale) * scale;
 }
 
-// `volumetric_lock`: an order-1 displacement in `cg` or `dg`, with no
-// pressure unknown, and a material with `nu` above 0.49.
+let VOLUMETRIC_LOCK_NU = 0.49;
+let DEFAULT_ORDER = 2.0;
+
 fn volumetric_lock() {
     for p, i in physics {
         let u = displacement_of(i);
@@ -372,7 +329,7 @@ fn volumetric_lock() {
         for pm in phys_mats {
             if pm.phys != i { continue; }
             let nu, ok = prop_value(pm.mat, "nu");
-            if ok && nu > 0.49 {
+            if ok && nu > VOLUMETRIC_LOCK_NU {
                 let order = setting(syntax::nodes[m].first, "order");
                 warn(first_tok(order), "volumetric_lock",
                      str("the displacement '", tok_text(syms[u].tok), "' has order 1 and material ", tok_text(syms[pm.mat].tok),
@@ -384,9 +341,6 @@ fn volumetric_lock() {
     }
 }
 
-// `dt_unstable`: an explicit scheme with a `dt` above the estimated stable
-// limit of a solid, h/(q*c), for the smallest cell size h, the cell order q
-// and the largest P-wave speed c = sqrt(E*(1 - nu)/(rho*(1 + nu)*(1 - 2*nu))).
 fn dt_unstable() {
     var c = syntax::nodes[model_prog].first;
     while c >= 0 {
@@ -440,9 +394,6 @@ fn dt_unstable_step(step: i64) {
     }
 }
 
-// `stabilization_missing`: `stabilize: none` in a method whose cell
-// Reynolds number rho*U*h/mu or cell Peclet number rho*c_p*U*h/k is above
-// 1. U is the velocity of the `scales` line, and h the smallest cell size.
 fn stabilization_missing() {
     let speed = scale_velocity();
     guard speed > 0.0 else { return; };
@@ -473,7 +424,6 @@ fn stabilization_missing() {
     }
 }
 
-// The constant velocity of the `scales` line in m/s, or 0.
 fn scale_velocity() -> f64 {
     let sc = syntax::child_of_kind(model_prog, syntax::N_SCALES);
     guard sc >= 0 else { return 0.0; };

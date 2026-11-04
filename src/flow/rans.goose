@@ -1,31 +1,3 @@
-// The k-ω SST model of turbulence (Menter 1994) on P1 cells: the cell
-// residual of the mean flow, k and ω, and the treatment of the walls.
-//
-// The unknowns of a vertex are vx, vy, p, k and w (mesh.goose). With the
-// kinematic viscosity ν = μ/ρ, the equations are
-//
-//     ρ (∇v) v - div(σ) = f,   div v = 0
-//     σ = -p I + ρ (ν + ν_t) (∇v + ∇vᵀ)
-//     v·∇k = P_k - β* k ω + div((ν + σ_k ν_t) ∇k)
-//     v·∇ω = γ S² - β ω² + div((ν + σ_ω ν_t) ∇ω) + 2 (1 - F1) σ_ω2 ∇k·∇ω / ω
-//
-// with S² = 2 sym(∇v):sym(∇v), ν_t = a1 k / max(a1 ω, S F2) and
-// P_k = min(ν_t S², 10 β* k ω). Each constant φ of the k and ω equations
-// is F1 φ1 + (1 - F1) φ2. The residual has SUPG on each row and PSPG
-// on the pressure rows (cell.goose), with the effective viscosity. The
-// sources of k and ω have the vertex rule (lumped). Reason: with the
-// 7-point rule, the term β ω² of the cell at a wall holds the large wall
-// value of ω, and the ω row of the first vertex off the wall had no root.
-// The ω rows are divided by omega_scale, so that the norm of the residual
-// does not hold only the ω rows. Reason: in the channel at Re_τ = 395 the
-// wall ω was 1.2e6 in scaled units, and the ω rows held more than 1e6
-// times the norm of the momentum rows. Without the scale, the channel
-// took 51 steps, not 36.
-//
-// A wall is a boundary vertex with v = 0 fixed. The solve fixes k = 0 and
-// ω = 60 ν / (β1 d1²) there, with d1 the wall distance of the nearest
-// vertex off the wall (Menter 1994). The wall distance d of each vertex
-// is the distance to the nearest boundary edge between two wall vertices.
 import std;
 import math;
 namespace flow;
@@ -42,14 +14,13 @@ let SIGMA_K2 = 1.0;
 let SIGMA_W2 = 0.856;
 let BETA2 = 0.0828;
 let GAMMA2 = 0.4403;
-let OMEGA_FLOOR = 1.0e-8;   // scaled; the clip of ω in the coefficients
+let OMEGA_FLOOR = 1.0e-8;
 
-var omega_scale = 1.0;      // the ω rows are divided by it: the largest ω of a wall
-var wall_d: f64[>..] = [];  // the wall distance of each vertex
-var on_wall: u8[>..] = [];  // 1 for a wall vertex
-var wall_seed: u8[>..] = []; // 1 for a vertex of the region of wall_distance_region, else empty: the walls are the boundary vertices with v = 0
+var omega_scale = 1.0;
+var wall_d: f64[>..] = [];
+var on_wall: u8[>..] = [];
+var wall_seed: u8[>..] = [];
 
-// The sizes of wall_d and on_wall, before a solve.
 fn clear_walls() {
     wall_d.clear();
     on_wall.clear();
@@ -60,18 +31,12 @@ fn clear_walls() {
     }
 }
 
-// The wall distance of a turbulence model is the distance to the vertices of
-// the region of the last select call (`physics walldist`, `bc wall: d = 0`),
-// in place of the boundary vertices with v = 0.
 fn wall_distance_region() {
     guard turbulent && region.len == vertex_count && wall_d.len == vertex_count else { abort("wall_distance_region: a turbulent flow after clear_bcs and a select"); }
     wall_seed.clear();
     for n in vertex_count { wall_seed.push(region[n]); }
 }
 
-// Marks the walls from the fixed velocity dofs, sets wall_d, and gives
-// the value of ω at each wall vertex in omega_wall. False if the flow has
-// no wall.
 fn find_walls(fixed: u8[:], prescribed: f64[:], omega_wall: f64[:]) -> bool {
     guard wall_d.len == vertex_count && fixed.len == dof_count() && omega_wall.len == vertex_count else { abort("find_walls: clear_bcs on a turbulent flow"); }
     var any = false;
@@ -87,9 +52,6 @@ fn find_walls(fixed: u8[:], prescribed: f64[:], omega_wall: f64[:]) -> bool {
         for e in 3 {
             let a = cell_node(c, EDGES[2 * e]);
             let b = cell_node(c, EDGES[2 * e + 1]);
-            // A wall edge is a boundary edge of one cell, in either order. Reason:
-            // with a > b skipped, the edges of the wall that run from a higher
-            // to a lower vertex had no distance, and the d of the flap was 0.23.
             if on_wall[a] == 0 || on_wall[b] == 0 { continue; }
             for n in vertex_count {
                 if on_wall[n] == 0 { wall_d[n] = min(wall_d[n], segment_distance(n, a, b)); }
@@ -114,7 +76,6 @@ fn find_walls(fixed: u8[:], prescribed: f64[:], omega_wall: f64[:]) -> bool {
     return true;
 }
 
-// The distance from vertex n to the segment from vertex a to vertex b.
 fn segment_distance(n: i64, a: i64, b: i64) -> f64 {
     let ax = coords[2 * a];
     let ay = coords[2 * a + 1];
@@ -128,12 +89,11 @@ fn segment_distance(n: i64, a: i64, b: i64) -> f64 {
     return sqrt(dx * dx + dy * dy);
 }
 
-// The SST values at a point.
 struct Turbulence {
-    nut: f64,   // ν_t
+    nut: f64,
     f1: f64,
-    pk: f64,    // P_k
-    s2: f64,    // S²
+    pk: f64,
+    s2: f64,
 }
 
 fn sst(k: f64, w: f64, d: f64, s2: f64, cross: f64) -> Turbulence {
@@ -152,7 +112,6 @@ fn sst(k: f64, w: f64, d: f64, s2: f64, cross: f64) -> Turbulence {
     return Turbulence { nut: nut, f1: tanh_of(arg1 * arg1 * arg1 * arg1), pk: min(nut * s2, 10.0 * BETA_STAR * kp * wp), s2: s2 };
 }
 
-// tanh(x) for x >= 0.
 fn tanh_of(x: f64) -> f64 {
     let e = exp(-2.0 * x);
     return (1.0 - e) / (1.0 + e);
@@ -160,17 +119,13 @@ fn tanh_of(x: f64) -> f64 {
 
 fn blend(f1: f64, a: f64, b: f64) -> f64 { return f1 * a + (1.0 - f1) * b; }
 
-// The parameter of SUPG for a speed, a diffusivity and a reaction rate.
 fn supg_tau(h: f64, speed2: f64, nu: f64, react: f64) -> f64 {
     return 1.0 / sqrt(4.0 * speed2 / (h * h) + 16.0 * nu * nu / (h * h * h * h) + react * react);
 }
 
-// The local unknowns of a turbulent cell: vx, vy of 3 vertices at 0..6,
-// p at 6..9, k at 9..12 and w at 12..15.
 let K0 = 9;
 let W0 = 12;
 
-// The residual r of the turbulent cell c at the local dofs u.
 fn rans_residual(c: i64, u: f64[15], r: f64[15]&) {
     guard turbulent && order == 1 && c >= 0 && c < cell_count() && wall_d.len == vertex_count else { abort("rans_residual: a turbulent P1 flow after clear_bcs"); }
     let g = geometry(c);
@@ -206,7 +161,6 @@ fn rans_residual(c: i64, u: f64[15], r: f64[15]&) {
     }
 }
 
-// The terms of one quadrature point with barycentric l and weight w.
 fn rans_point(c: i64, g: Geometry, l: f64[3], w: f64, u: f64[15], gv: f64[4], gp: f64[2], gk: f64[2], gw: f64[2],
               s2: f64, div: f64, cross: f64, r: f64[15]&) {
     var v: f64[2] = [0.0; 2];
@@ -255,8 +209,6 @@ fn rans_point(c: i64, g: Geometry, l: f64[3], w: f64, u: f64[15], gv: f64[4], gp
     }
 }
 
-// The Jacobian k[15 a + b] = ∂r_a/∂u_b of the turbulent cell c at u, by
-// forward differences as in cell.goose, and its residual r.
 fn rans_jacobian(c: i64, u: f64[15], r: f64[15]&, k: f64[225]&) {
     rans_residual(c, u, r);
     var shifted = u;

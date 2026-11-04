@@ -1,17 +1,3 @@
-// The registration point of the solvers lane (src/solvers/): the linear
-// solvers and preconditioners other than cg with jacobi (solve.goose). It
-// solves K x = b on the free dofs, as solve_free does, and gives whether it
-// knows the pair of names, whether it converged and the iterations.
-//
-// "cg" with "amg" is CG with the smoothed aggregation AMG of
-// solvers/amg.goose, built on K with the couplings of the fixed dofs
-// removed, and with the near null space of the physics (rigid_setup).
-//
-// "gmres" with "ilu0" is GMRES(m) with ILU(0) on K with the fixed dofs as
-// identity rows and columns (solvers::constrain). It is for small models
-// only: the restart is fixed at GMRES_RESTART = 300, and each solve holds
-// about 301 basis vectors of n doubles. A finer mesh needs more iterations,
-// and the restart can then make GMRES stall.
 import std;
 namespace runtime;
 import .solve;
@@ -19,16 +5,8 @@ import .fem;
 import .mesh;
 import solvers from "../solvers";
 
-// m of GMRES(m). On the grid cantilever (src/solvers/test.goose) with
-// ILU(0), the residual estimate of GMRES is at the tolerance after 217
-// iterations, and the true residual is then 1.9 times larger. Restart
-// cycles of one iteration each then take it under the tolerance at 385
-// iterations. Each m from 250 to 390 gives these 385 iterations. A
-// restart at 100 or 200 stalls.
 let GMRES_RESTART = 300;
 
-// Whether the next cg with amg solve takes the direct solve of a lattice
-// (check_memory).
 var direct = false;
 
 fn solvers_solve(solver: u8[:], preconditioner: u8[:], b: f64[:], x: f64[>..]&, tol: f64,
@@ -57,16 +35,11 @@ fn solvers_solve(solver: u8[:], preconditioner: u8[:], b: f64[:], x: f64[>..]&, 
     return true, converged, its;
 }
 
-// z = M⁻¹ r of the AMG levels, and 0 on the fixed dofs.
 fn amg_precondition(r: f64[:], z: f64[:]) {
     solvers::amg_apply(r, z);
     for d in z.len { if fixed[d] != 0 { z[d] = 0.0; } }
 }
 
-// A page run takes the AMG levels and the solution of the last run if they
-// fit (solvers/warm.goose), and keeps its own for the next run. CG starts
-// from the multiple of the last solution with the least energy: a change
-// of the size of the loads alone then needs no iterations.
 fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 {
     var a: f64[>..] = [];
     a.append(val);
@@ -95,14 +68,6 @@ fn amg_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 
     return true, converged, its;
 }
 
-// The direct solve of a mesh on a lattice (solvers/nested.goose), on the
-// plan of check_memory. A page run takes the factor of the last run if K
-// is the same (solvers/warm.goose): a change of the loads alone then needs
-// only the two triangular solves. If the factor finds a pivot with no
-// stiffness (a matrix that is not SPD, or a large contrast of stiffness),
-// the solve takes the path of AMG and CG after its memory check.
-// Reason: a nearly incompressible solid has a pivot that the factor rejects,
-// and AMG with CG solved it before the direct solve.
 fn direct_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i64 {
     let key = solvers::warm_key();
     guard !solvers::nested_reuse(key, row_start, col, val, fixed, b, x) else { return true, true, 1; }
@@ -117,28 +82,14 @@ fn direct_solve(b: f64[:], x: f64[>..]&, tol: f64, max_it: i64) -> bool, bool, i
     return true, true, 1;
 }
 
-// The AMG levels of the matrix a, with the near null space of the physics
-// (solvers/modes.goose): the rigid-body modes of a solid (3 dofs for each
-// node) and the bending modes of a thin solid, the constant of each
-// component otherwise.
-// Reason: on warpage_thick_copper (44541 dofs, 1 cell through 20 um of
-// copper) the constant of each component needs 571 CG iterations and 21 s,
-// and the rigid-body modes need 88 iterations and 6.2 s.
 fn rigid_setup(a: f64[:]) -> bool {
     let modes, nb = solvers::near_null_space(mode_kind(), coords, 3, dofs_per_node, fixed);
     return solvers::amg_setup_modes(row_start, col, a, dofs_per_node, modes, nb);
 }
 
-// The near null space of the field: a solid has 3 dofs for each node.
 fn mode_kind() -> i64 { return if dofs_per_node == 3 { solvers::ELASTIC_MODES } else { solvers::SCALAR_MODES }; }
 
-// The memory check of a solve with solver_name and preconditioner_name,
-// after the pattern of `entries` entries (solvers::memory_check). The
-// vectors: r, z, p, q, b and inv_diag of cg, with Ax of a warm start and
-// the modes of the AMG and their copy, and the basis of gmres with rhs, r, z, b, inv_diag and the
-// i64 diag and `where` of ILU(0).
 fn check_memory(entries: i64) {
-    // A lattice mesh takes the direct solve when it pays (solvers::nested_pays).
     direct = preconditioner_name == "amg" && solver_name == "cg" && node_place.len == node_count() &&
              solvers::nested_plan(lattice, node_place, dofs_per_node, row_start, col) && solvers::nested_pays(2);
     if direct {
@@ -148,14 +99,11 @@ fn check_memory(entries: i64) {
     check_iterative_memory(entries);
 }
 
-// The memory check of the path of CG or GMRES with the preconditioner.
 fn check_iterative_memory(entries: i64) {
     let modes = if preconditioner_name == "amg" { solvers::mode_count(mode_kind(), coords, 3, dofs_per_node) } else { 0 };
     let vectors = if solver_name == "gmres" { GMRES_RESTART + 8 } else { 7 + 2 * modes };
-    // The coarse levels of 9 modes hold more for each entry than those of 6.
     let bending = if modes > 6 { " bending" } else { "" };
     let fix = if preconditioner_name == "jacobi" { "" } else { ", or write solve { linear: cg, precond: jacobi } in the step: it needs less memory, but it can need many more iterations" };
-    // The mesh that each cell_worker copies at its spawn.
     let mesh = 8 * (coords.len + cell_start.len + cell_nodes.len + cell_young.len + cell_poisson.len) + cell_type.len;
     solvers::memory_check(str("box ", solver_name, " ", preconditioner_name, bending), entries, dof_total(), vectors, mesh, fix);
 }

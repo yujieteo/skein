@@ -1,32 +1,3 @@
-// The 2D triangle mesher (spec §9.2): Delaunay refinement after Ruppert
-// (1995) and Shewchuk (2002), on a boundary sampled from the CSG tree.
-//
-// 1. Each boundary curve of a primitive (a line of a rect or a polygon, a
-//    circle, a span of the spline of a fill) is sampled. A sample is on the boundary of the whole shape
-//    when φ changes sign across the curve there. The ends of each piece on
-//    the boundary are found by bisection, then moved to the nearest true
-//    intersection with another curve; they are the corners and stay
-//    fixed. Each piece is cut into segments no longer than `size`. The
-//    boundary of each interface shape inside the shape is sampled the same
-//    way, as inner segments, so the triangles do not cross it.
-// 2. The Bowyer-Watson algorithm inserts the points into a Delaunay
-//    triangulation inside a large triangle.
-// 3. A segment is encroached if a point lies inside its diametral circle.
-//    Each encroached segment is split at the midpoint of its parameter on
-//    the true curve, or on a concentric shell next to a corner below
-//    60 degrees, until all segments are edges of the triangulation.
-// 4. Each triangle inside the polygon of the outer segments with an angle below
-//    MIN_ANGLE, or a circumradius above size / sqrt(3), gets a point at
-//    its circumcentre. With the targets of refine.goose, the wanted size
-//    at the circumcentre takes the place of size.
-//    If that point encroaches a segment, the segment is split instead. A
-//    triangle whose smallest angle is at a corner of 2 segments below
-//    MIN_ANGLE cannot reach it, so only its circumradius counts.
-//
-// `size` is the size far from each `refine` (spec §9.1). Near a refined
-// segment or circle, the size is the refine size plus (grade - 1) times
-// the distance, so that the size of two neighbour cells changes by at most
-// the factor `grade`.
 import std;
 import math;
 import dictionary;
@@ -35,15 +6,12 @@ import .geometry;
 import .mesh;
 import .refine;
 
-let MIN_ANGLE = 25.0;     // degrees; Ruppert's proof needs at most 20.7
+let MIN_ANGLE = 25.0;
 
 let LINE = 0;
 let ARC = 1;
 let SPAN = 2;
 
-// A boundary curve of a primitive. A line goes from (p0, p1) to (p2, p3).
-// An arc is a full circle of centre (p0, p1) and radius p2, from angle 0.
-// A span is span p3 of fill node p2, moved by (p0, p1).
 struct Curve {
     kind: i64,
     p: f64[4],
@@ -51,26 +19,20 @@ struct Curve {
 
 var curves: Curve[>..] = [];
 
-// The points: x and y of each. Points 0, 1 and 2 are the corners of the
-// large triangle.
 var px: f64[>..] = [];
 var py: f64[>..] = [];
-var vtri: i64[>..] = [];        // a live triangle at each point
-var corner: f64[>..] = [];      // the smallest angle of 2 segments at the point, degrees
+var vtri: i64[>..] = [];
+var corner: f64[>..] = [];
 
-// The triangles: 3 points, counter-clockwise, and the 3 neighbours. The
-// neighbour k is across the edge opposite point k, or -1.
 var tv: i64[>..] = [];
 var tn: i64[>..] = [];
 var talive: bool[>..] = [];
 var tfree: i64[>..<] = [];
-var tmark: i64[>..] = [];       // the cavity stamp
-var tin: bool[>..] = [];        // inside the polygon of the segments, by classify
+var tmark: i64[>..] = [];
+var tin: bool[>..] = [];
 var stamp = 0;
 var last_tri = 0;
 
-// The segments of the boundary: the 2 points, the curve and its parameter
-// at each point.
 struct Segment {
     a: i64,
     b: i64,
@@ -78,17 +40,13 @@ struct Segment {
     t0: f64,
     t1: f64,
     alive: bool,
-    inner: bool,    // on the boundary of an interface, inside the shape
+    inner: bool,
 }
 
 var segments: Segment[>..] = [];
-var interfaces: i64[>..] = [];  // the shapes of add_interface
-var fan: i64[>..] = [];         // scratch of insert, by point
+var interfaces: i64[>..] = [];
+var fan: i64[>..] = [];
 
-// --- the size --------------------------------------------------------------------
-
-// A `refine` on a segment from (p0, p1) to (p2, p3) (LINE), or on a circle
-// of centre (p0, p1) and radius p2 (ARC), with the size h there.
 struct Refine {
     kind: i64,
     p: f64[4],
@@ -97,8 +55,6 @@ struct Refine {
 
 var refines: Refine[>..] = [];
 
-// The calls before mesh_2d that set the refines and the grade. mesh_2d
-// keeps them.
 fn clear_refines() {
     refines.clear();
     grade = 1.3;
@@ -115,7 +71,6 @@ fn refine_circle(cx: f64, cy: f64, r: f64, h: f64) {
     refines.push(Refine { kind: ARC, p: [cx, cy, r, 0.0], h: h });
 }
 
-// The distance from (x, y) to refine k.
 fn refine_distance(k: i64, x: f64, y: f64) -> f64 {
     let p = refines[k].p;
     if refines[k].kind == ARC { return abs(sqrt((x - p[0]) * (x - p[0]) + (y - p[1]) * (y - p[1])) - p[2]); }
@@ -128,12 +83,6 @@ fn refine_distance(k: i64, x: f64, y: f64) -> f64 {
     return sqrt(dx * dx + dy * dy);
 }
 
-// The refines in groups of RGROUP consecutive ones, each with the box that
-// holds them and the least size. local_size skips a group whose box is so
-// far that no refine of it can lower the size, so a model with a refine on
-// each segment of a spline costs a few boxes for a point, not all
-// segments. Reason: the airfoil of examples/femahoy/naca23012_flap.skn
-// has 178 refines and 300 thousand cells.
 let RGROUP = 8;
 var rg_box: f64[>..] = [];
 var rg_h: f64[>..] = [];
@@ -159,7 +108,6 @@ fn prepare_sizes() {
     }
 }
 
-// The target edge length at (x, y).
 fn local_size(size: f64, x: f64, y: f64) -> f64 {
     var h = size;
     for q in rg_h.len {
@@ -173,8 +121,6 @@ fn local_size(size: f64, x: f64, y: f64) -> f64 {
     return h;
 }
 
-// The number of cells of edge local_size in the box b of g: the integral
-// of 1 / h² on a lattice of 200 × 200 points.
 fn cell_estimate(b: f64[6], size: f64) -> f64 {
     let w = b[3] - b[0];
     let h = b[4] - b[1];
@@ -188,13 +134,6 @@ fn cell_estimate(b: f64[6], size: f64) -> f64 {
     return sum * w * h / 40000.0;
 }
 
-// The cells of the bands round the refines, in closed form: the integral
-// of 1 / h² over the band at the distance d of a refine of the length L (a
-// segment, or the circumference of a circle) and the size h0, where the size
-// is h = h0 + slope d, from h0 up to size: (1 / slope) times the integral
-// over h of (2 L + 2 pi (h - h0) / slope) / h². The lattice of
-// cell_estimate is too coarse for a refine much smaller than its step. The
-// bands overlap, so this is not less than the cells.
 fn band_estimate(size: f64) -> f64 {
     let slope = if grade_given { grade - 1.0 } else { 0.4 };
     var sum = 0.0;
@@ -209,13 +148,7 @@ fn band_estimate(size: f64) -> f64 {
     return sum;
 }
 
-// --- the boundary ----------------------------------------------------------------
-
-// The boundary curves of g, each moved by (tx, ty): the sum of the moves
-// of the patterns above g. The reader has no pattern_polar of a 2D shape
-// (verify.goose).
 fn collect_curves(g: i64, tx: f64, ty: f64) -> bool {
-    // The nodes to walk, each with its move: a stack, with no recursion (rule 1).
     var todo: i64[>..] = [g];
     var moves: f64[>..] = [tx, ty];
     while todo.len > 0 {
@@ -242,8 +175,6 @@ fn collect_curves(g: i64, tx: f64, ty: f64) -> bool {
     return true;
 }
 
-// The boundary curves of node h with no parts, moved by (tx, ty). False
-// if h has no curves of this mesher.
 fn own_curves(g: i64, tx: f64, ty: f64) -> bool {
     let s = shapes[g];
     let p = s.p;
@@ -278,7 +209,6 @@ fn own_curves(g: i64, tx: f64, ty: f64) -> bool {
     return false;
 }
 
-// The cubics of span curve c (geometry.goose).
 fn span_of(c: i64) -> f64[12] { span(curves[c].p[2] as i64, curves[c].p[3] as i64) }
 
 fn curve_point(c: i64, t: f64) -> f64, f64 {
@@ -293,7 +223,6 @@ fn curve_point(c: i64, t: f64) -> f64, f64 {
     return p[0] + p[2] * cos(TAU * t), p[1] + p[2] * sin(TAU * t);
 }
 
-// The length of curve c. A span has the length of 16 chords.
 fn curve_length(c: i64) -> f64 {
     let p = curves[c].p;
     if curves[c].kind == LINE { return sqrt((p[2] - p[0]) * (p[2] - p[0]) + (p[3] - p[1]) * (p[3] - p[1])); }
@@ -311,9 +240,6 @@ fn curve_length(c: i64) -> f64 {
     return TAU * p[2];
 }
 
-// True if an earlier curve holds the point of curve c at t: a line on the
-// same line, the same circle, or the same span. That curve then has the
-// boundary there.
 fn covered(c: i64, t: f64, eps: f64) -> bool {
     let x, y = curve_point(c, t);
     let p = curves[c].p;
@@ -341,17 +267,11 @@ fn covered(c: i64, t: f64, eps: f64) -> bool {
 
 fn clear_interfaces() { interfaces.clear(); }
 
-// Keeps the boundary of shape h inside the shape of mesh_2d as edges of
-// the triangles: a boundary between two materials, or of a region that a
-// step kills or gives birth to (spec §14.3).
 fn add_interface(h: i64) {
     guard h >= 0 && h < shapes.len else { abort("add_interface: a shape"); }
     interfaces.push(h);
 }
 
-// True if curve c has the boundary of shape g at t, and no earlier curve
-// holds the point. With `inner`, true if c has the boundary of an
-// interface there, and g is on both sides.
 fn on_boundary(g: i64, c: i64, t: f64, eps: f64, inner: bool) -> bool {
     if covered(c, t, eps) { return false; }
     let a, b = sides(g, c, t, eps);
@@ -364,7 +284,6 @@ fn on_boundary(g: i64, c: i64, t: f64, eps: f64, inner: bool) -> bool {
     return false;
 }
 
-// Whether the points at eps on the two sides of curve c at t are in g.
 fn sides(g: i64, c: i64, t: f64, eps: f64) -> bool, bool {
     let x, y = curve_point(c, t);
     let p = curves[c].p;
@@ -388,9 +307,6 @@ fn sides(g: i64, c: i64, t: f64, eps: f64) -> bool, bool {
     return phi(g, x + eps * nx, y + eps * ny, 0.0) < 0.0, phi(g, x - eps * nx, y - eps * ny, 0.0) < 0.0;
 }
 
-// The points where the line through (x0, y0) along the unit vector
-// (ux, uy) meets the circle of centre (cx, cy) and radius r. A line within
-// eps of a tangent touches the circle at one point.
 fn line_circle(x0: f64, y0: f64, ux: f64, uy: f64, cx: f64, cy: f64, r: f64, eps: f64, out: f64[>..]&) {
     let b = (x0 - cx) * ux + (y0 - cy) * uy;
     let h = abs((x0 - cx) * uy - (y0 - cy) * ux);
@@ -402,11 +318,6 @@ fn line_circle(x0: f64, y0: f64, ux: f64, uy: f64, cx: f64, cy: f64, r: f64, eps
     }
 }
 
-// The parameter of curve c at the intersection with another curve that is
-// nearest to the point at t, or t if no intersection is within `reach`.
-// The ends of a piece from the bisection of on_boundary are only near the
-// true corner: up to eps / tan(angle), or sqrt(eps r) at a tangent. A span
-// has no intersection here: the end from the bisection stays.
 fn snap_end(c: i64, t: f64, eps: f64, reach: f64) -> f64 {
     let x, y = curve_point(c, t);
     let p = curves[c].p;
@@ -456,8 +367,6 @@ fn snap_end(c: i64, t: f64, eps: f64, reach: f64) -> f64 {
     return best;
 }
 
-// The point at (x, y), or a new one. `tol` merges the ends of two pieces:
-// the bisection puts an end up to eps / tan(angle) from the true corner.
 fn boundary_point(x: f64, y: f64, tol: f64) -> i64 {
     for i in 3..px.len {
         if abs(px[i] - x) <= tol && abs(py[i] - y) <= tol { return i; }
@@ -468,13 +377,10 @@ fn boundary_point(x: f64, y: f64, tol: f64) -> i64 {
     return px.len - 1;
 }
 
-// Cuts curve c from ta to tb into segments no longer than local_size:
-// the cuts are at equal steps of the integral of 1 / local_size, on 64
-// samples for each segment of `size`.
 fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64, inner: bool) {
     let length = curve_length(c) * (tb - ta);
     let m = max(64 * ceil(length / size) as i64, 64);
-    var steps: f64[>..] = [0.0];     // the integral at sample k
+    var steps: f64[>..] = [0.0];
     for k in m {
         let x, y = curve_point(c, ta + (tb - ta) * (k + 0.5) / m);
         steps.push(steps[k] + length / m / local_size(size, x, y));
@@ -484,19 +390,11 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64, inner: bool) {
     var tprev = ta;
     var k = 0;
     for i in n + 1 {
-        // the parameter where the integral is steps[m] i / n
         let want = steps[m] * i / n;
         while k < m - 1 && steps[k + 1] < want { k++; }
         let part = if steps[k + 1] > steps[k] { clamp((want - steps[k]) / (steps[k + 1] - steps[k]), 0.0, 1.0) } else { 0.0 };
         let t = if i == n { tb } else { ta + (tb - ta) * (k + part) / m };
         let x, y = curve_point(c, t);
-        // The end of a piece from the bisection is only near the corner of
-        // two curves, so it merges within tol. The end of a curve, and a
-        // point between, are exact, so they merge only within 1e-3 tol or
-        // a hundredth of a segment. Reason: tol is 1e-5 of the diameter,
-        // which is above the 2 mm segments of the outer polygon of
-        // mesh_2d_layers round an airfoil in a far field of 500 chords: the
-        // vertices of the polygon merged.
         let bisected = i == 0 && ta != 0.0 || i == n && tb != 1.0;
         let v = boundary_point(x, y, if bisected { tol } else { min(1.0e-3 * tol, 0.01 * length / n) });
         if i > 0 && v != prev {
@@ -507,11 +405,6 @@ fn add_piece(c: i64, ta: f64, tb: f64, size: f64, tol: f64, inner: bool) {
     }
 }
 
-// The state of curve c at t: 0 off the boundary (on_boundary), else 1,
-// plus 2^(k + 1) for each interface k that holds a point at eps from the
-// boundary of g there. Reason: an interface that ends on the boundary of
-// g (the flag of examples/flow/turek_hron_fsi1_tri.skn on its cylinder)
-// must end at a point of the boundary, or the refinement does not finish.
 fn piece_state(g: i64, c: i64, t: f64, eps: f64, inner: bool) -> i64 {
     guard on_boundary(g, c, t, eps, inner) else { return 0; }
     guard !inner else { return 1; }
@@ -523,23 +416,15 @@ fn piece_state(g: i64, c: i64, t: f64, eps: f64, inner: bool) -> i64 {
     return state;
 }
 
-// The pieces of each curve that are on the boundary of g, or with `inner`
-// on the boundary of an interface inside g. A piece ends where the state
-// of piece_state changes.
 fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
     let eps = 1.0e-7 * diameter;
     let tol = 100.0 * eps;
     let reach = 10.0 * sqrt(eps * diameter);
     for c in curves.len {
-        // A line shorter than 1e-3 of the diameter has 16 samples: the polygon
-        // of the outer layer of mesh_2d_layers has a line for each wall node
-        // (1000 for an airfoil at 2 mm), and each sample costs a phi over all
-        // of them.
         let short = curves[c].kind == LINE && curve_length(c) < 1.0e-3 * diameter;
         let m = if short { 16 } else { max(512, ceil(16.0 * curve_length(c) / size) as i64) };
         var on: i64[>..] = [];
         for i in m { on.push(piece_state(g, c, (i + 0.5) / m, eps, inner)); }
-        // The parameter between sample i and sample i + 1 where the state changes.
         fn change(i: i64) -> f64 {
             var lo = (i + 0.5) / m;
             var hi = (i + 1.5) / m;
@@ -563,7 +448,6 @@ fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
             }
             continue;
         }
-        // A circle: start at a change, if there is one.
         var start = -1;
         for i in m {
             if on[i] != on[(i + 1) % m] { start = i; break; }
@@ -585,7 +469,6 @@ fn sample_boundary(g: i64, size: f64, diameter: f64, inner: bool) {
     }
 }
 
-// Sets `corner` of each point of the sampled boundary.
 fn find_corners() {
     for v in px.len { corner.push(180.0); }
     for s in segments.len {
@@ -606,14 +489,10 @@ fn find_corners() {
     }
 }
 
-// --- predicates ------------------------------------------------------------------
-
 fn orient(a: i64, b: i64, x: f64, y: f64) -> f64 {
     return (px[b] - px[a]) * (y - py[a]) - (py[b] - py[a]) * (x - px[a]);
 }
 
-// > 0 if (x, y) is inside the circumcircle of the counter-clockwise
-// triangle t.
 fn incircle(t: i64, x: f64, y: f64) -> f64 {
     let a = tv[3 * t];
     let b = tv[3 * t + 1];
@@ -628,8 +507,6 @@ fn incircle(t: i64, x: f64, y: f64) -> f64 {
          - (bdx * bdx + bdy * bdy) * (adx * cdy - cdx * ady)
          + (cdx * cdx + cdy * cdy) * (adx * bdy - bdx * ady);
 }
-
-// --- the triangulation -------------------------------------------------------------
 
 fn new_triangle(a: i64, b: i64, c: i64) -> i64 {
     var t = 0;
@@ -663,7 +540,6 @@ fn kill_triangle(t: i64) {
     tfree.push(t);
 }
 
-// The triangle that holds (x, y), by a walk from the last new triangle.
 fn locate(x: f64, y: f64) -> i64 {
     var t = last_tri;
     if !talive[t] {
@@ -684,7 +560,6 @@ fn locate(x: f64, y: f64) -> i64 {
         }
         if !moved { return t; }
     }
-    // The walk cycled: search all triangles.
     for i in talive.len {
         guard talive[i] else { continue; }
         var inside = true;
@@ -696,7 +571,6 @@ fn locate(x: f64, y: f64) -> i64 {
     return t;
 }
 
-// Inserts the point (x, y) by Bowyer-Watson and returns its index.
 fn insert_point(x: f64, y: f64) -> i64 {
     let t0 = locate(x, y);
     px.push(x);
@@ -707,9 +581,6 @@ fn insert_point(x: f64, y: f64) -> i64 {
     return v;
 }
 
-// The cavity of point v from triangle t0: the triangles whose circumcircle
-// holds v, and that keep the cavity star-shaped from v. They have tmark
-// stamp.
 fn cavity_of(v: i64, t0: i64) -> i64[>..] {
     let x = px[v];
     let y = py[v];
@@ -728,8 +599,6 @@ fn cavity_of(v: i64, t0: i64) -> i64[>..] {
         }
         i++;
     }
-    // The cavity must be star-shaped from the point: a triangle with a
-    // boundary edge that does not face the point leaves the cavity.
     loop {
         var removed = false;
         for t in cavity {
@@ -751,7 +620,6 @@ fn cavity_of(v: i64, t0: i64) -> i64[>..] {
 
 fn insert_existing(v: i64, t0: i64) {
     let cavity = cavity_of(v, t0);
-    // The new triangles: one for each boundary edge of the cavity.
     var made: i64[>..] = [];
     for t in cavity {
         if tmark[t] != stamp { continue; }
@@ -786,8 +654,6 @@ fn insert_existing(v: i64, t0: i64) {
         }
         fan[a] = nt;
     }
-    // Triangle (a, b, v): across from a is (b, v), the triangle that starts
-    // at b. Across from b is (v, a), the triangle that ends at a.
     for nt in news {
         let b = tv[3 * nt + 1];
         let next = fan[b];
@@ -797,8 +663,6 @@ fn insert_existing(v: i64, t0: i64) {
     for nt in news { fan[tv[3 * nt]] = -1; }
 }
 
-// The triangle and the local index k such that the edge from a to b is
-// the edge opposite k, or -1, -1. a is not a corner of the large triangle.
 fn find_edge(a: i64, b: i64) -> i64, i64 {
     let first = vtri[a];
     var t = first;
@@ -809,7 +673,6 @@ fn find_edge(a: i64, b: i64) -> i64, i64 {
         }
         let next = tv[3 * t + (ia + 1) % 3];
         if next == b { return t, (ia + 2) % 3; }
-        // Turn about a: the neighbour across the edge from a to `next`.
         t = tn[3 * t + (ia + 2) % 3];
         if t < 0 || t == first { break; }
     }
@@ -822,8 +685,6 @@ fn encroaches(s: i64, x: f64, y: f64) -> bool {
     return (px[a] - x) * (px[b] - x) + (py[a] - y) * (py[b] - y) < 0.0;
 }
 
-// True if segment s is not an edge, or a point next to it is inside its
-// diametral circle.
 fn encroached(s: i64) -> bool {
     let a = segments[s].a;
     let b = segments[s].b;
@@ -841,14 +702,8 @@ fn encroached(s: i64) -> bool {
     return false;
 }
 
-// True if point v is a corner of 2 segments at less than `angle` degrees.
 fn sharp(v: i64, angle: f64) -> bool { return v < corner.len && corner[v] < angle; }
 
-// Splits segment s at its midpoint. A segment with one end at a corner
-// below 60 degrees, where midpoint splits of the 2 segments can encroach
-// each other without end, is split on a concentric shell: at a distance
-// of a power of 2 from the corner. Then the 2 segments at the corner get
-// the same length, and the split of one does not encroach the other.
 fn split_segment(s: i64) {
     let seg = segments[s];
     let sharp_a = sharp(seg.a, 60.0);
@@ -867,8 +722,6 @@ fn split_segment(s: i64) {
     segments.push(Segment { a: v, b: seg.b, curve: seg.curve, t0: tm, t1: seg.t1, alive: true, inner: seg.inner });
 }
 
-// Splits encroached segments until there are none. False if the point
-// budget runs out.
 fn recover_segments(budget: i64) -> bool {
     loop {
         var split = false;
@@ -883,13 +736,6 @@ fn recover_segments(budget: i64) -> bool {
     }
 }
 
-// --- refinement ------------------------------------------------------------------
-
-// Sets tin of each live triangle from the polygon of the segments, not
-// from φ: between a chord and its arc, φ has the wrong sign. A flood fill
-// starts at the triangles on the corners of the large triangle, which are
-// outside, and flips the side across each outer segment. The segments must be
-// edges of the triangulation.
 fn classify() {
     var seg: bool[>..] = [];
     var seen: bool[>..] = [];
@@ -931,8 +777,6 @@ fn classify() {
     }
 }
 
-// The circumcentre of t, the ratio of its circumradius to its shortest
-// edge, and the point opposite that edge, at the smallest angle.
 fn circumcentre(t: i64) -> f64, f64, f64, f64, i64 {
     let a = tv[3 * t];
     let b = tv[3 * t + 1];
@@ -954,9 +798,6 @@ fn circumcentre(t: i64) -> f64, f64, f64, f64, i64 {
     return px[a] + ux, py[a] + uy, r, r / sqrt(min(min(b2, c2), e2)), apex;
 }
 
-// Meshes the 2D shape g with triangles of edge length about `size`. False
-// if g holds a 3D shape, or if the refinement does not finish in its
-// budget of points; the mesh is then the last triangulation.
 fn mesh_2d(g: i64, size: f64) -> bool {
     clear_triangulation();
     prepare_sizes();
@@ -981,8 +822,6 @@ fn mesh_2d(g: i64, size: f64) -> bool {
     if interfaces.len > 0 { sample_boundary(g, size, diameter, true); }
     find_corners();
     for v in 3..px.len { insert_existing(v, locate(px[v], py[v])); }
-    // A budget of points: 20 times the points of a uniform mesh of the box,
-    // or of the cells of the box with the refines.
     let uniform = (ceil(w / size) + 2.0) * (ceil(h / size) + 2.0);
     let estimate = if refines.len > 0 { max(max(uniform, cell_estimate(b, size)), band_estimate(size)) } else { uniform };
     let budget = 20 * (estimate as! i64) + 100 * px.len;
@@ -1034,7 +873,6 @@ fn clear_triangulation() {
     fan.clear();
 }
 
-// The mesh: the triangles inside g, with their points renumbered.
 fn add_triangles() {
     classify();
     var index: i64[>..] = [];

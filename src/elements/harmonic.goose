@@ -1,27 +1,3 @@
-// The harmonic step of a real physics (spec §14.2): the steady response of
-// K u + ddt2 terms to a load of the form F exp(i ω t), with u a `Complex`
-// vector. This is the complex lift of the real assembly of the physics:
-// the matrix of the frequency is
-//
-//     A = (1 + 2 i ζ) K - ω² M,
-//
-// with K the stiffness (assemble.goose) and M the mass (eigen.goose). The
-// load is real. ζ is the damping ratio of each mode (the structural damping
-// of spec §14.2, as in wave.goose).
-//
-// K and M are symmetric, so A is complex symmetric. A skyline LDLᵀ with
-// complex entries (no conjugate, no pivoting) solves it, in the order of
-// direct.goose. A is indefinite for ω above the first mode, and the factor
-// of ω near a resonance has a small pivot: a pivot below 1e-12 of its
-// diagonal is a failure, as in direct.goose.
-//
-// Reason: the random vibration model of femahoy needs the response at 130
-// frequencies of a Complex vector u, and the modal sum of a LOBPCG run
-// would be a truncated answer to a question that the solver can answer.
-//
-// The real part of the response is in `sol` after the solve; harmonic_part
-// puts the imaginary part (1) or the real part (0) in `sol`, so that the
-// functions of post.goose (value_at, region_mean, write_vtu) read either.
 import std;
 import math;
 namespace elements;
@@ -33,17 +9,17 @@ import .solve;
 import .post;
 import solvers from "../solvers";
 
-let HARMONIC_WORK = 4.0e9;    // multiplies of one factorization: about 8 s
+let HARMONIC_WORK = 4.0e9;
+let PIVOT_TOLERANCE = 1.0e-12;
 
 var harmonic_damping = 0.0;
 var sol_re: f64[>..] = [];
 var sol_im: f64[>..] = [];
-var up_re: f64[>..] = [];     // the upper part of the profile, column by column as sky_upper
+var up_re: f64[>..] = [];
 var up_im: f64[>..] = [];
-var lo_re: f64[>..] = [];     // L, as sky_lower
+var lo_re: f64[>..] = [];
 var lo_im: f64[>..] = [];
 
-// The next solve of the elastic physics is the harmonic one, at ω and ζ.
 fn set_harmonic(omega: f64, damping: f64) {
     guard physics == ELASTIC && omega > 0.0 && damping >= 0.0 && density > 0.0 else {
         abort("set_harmonic: an elastic physics with a density, omega > 0 and damping >= 0");
@@ -52,26 +28,21 @@ fn set_harmonic(omega: f64, damping: f64) {
     harmonic_damping = damping;
 }
 
-// Puts part p (0 real, 1 imaginary) of the response in sol.
 fn harmonic_part(p: i64) {
     guard (p == 0 || p == 1) && sol_re.len == sol.len && sol_im.len == sol.len else { abort("harmonic_part: part 0 or 1 of a solved harmonic step"); }
     for d in sol.len { sol[d] = if p == 0 { sol_re[d] } else { sol_im[d] }; }
 }
 
-// Part p of component comp at a point, and whether a cell holds it.
 fn harmonic_at(p: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, bool {
     harmonic_part(p);
     return field_at(FIELD_VALUE, comp, x, y, z);
 }
 
-// Part p of the mean of component comp on the region of the last call that
-// selects one.
 fn harmonic_mean(p: i64, comp: i64) -> f64 {
     harmonic_part(p);
     return region_mean(comp);
 }
 
-// The sum of L[ai + k] U[bj + k], for k from lo to hi - 1, as re and im.
 fn sky_cdot(lr: f64[:], li: f64[:], a0: i64, ur: f64[:], ui: f64[:], b0: i64, lo: i64, hi: i64) -> f64, f64 {
     var re = 0.0;
     var im = 0.0;
@@ -82,14 +53,11 @@ fn sky_cdot(lr: f64[:], li: f64[:], a0: i64, ur: f64[:], ui: f64[:], b0: i64, lo
     return re, im;
 }
 
-// The quotient a / b of two complex numbers.
 fn quotient(ar: f64, ai: f64, br: f64, bi: f64) -> f64, f64 {
     let d = br * br + bi * bi;
     return (ar * br + ai * bi) / d, (ai * br - ar * bi) / d;
 }
 
-// A = L D Lᵀ in place, with the fixed dofs as rows of the identity. False
-// if a pivot is near 0 relative to its diagonal.
 fn harmonic_factor(omega: f64, damping: f64) -> bool {
     for &v in up_re { v = 0.0; }
     for &v in up_im { v = 0.0; }
@@ -126,13 +94,11 @@ fn harmonic_factor(omega: f64, damping: f64) -> bool {
         up_re[uj + j] -= sr;
         up_im[uj + j] -= si;
         let pivot = sqrt(up_re[uj + j] * up_re[uj + j] + up_im[uj + j] * up_im[uj + j]);
-        if !(pivot > 1.0e-12 * size) { return false; }
+        if !(pivot > PIVOT_TOLERANCE * size) { return false; }
     }
     return true;
 }
 
-// The right side in the order of the skyline: the load less A times the
-// fixed values, on the free rows.
 fn harmonic_rhs(br: f64[>..]&, bi: f64[>..]&) {
     let n = sol.len;
     for d in n { sol[d] = if fixed[d] != 0 { prescribed[d] } else { 0.0 }; }
@@ -153,8 +119,6 @@ fn harmonic_rhs(br: f64[>..]&, bi: f64[>..]&) {
     }
 }
 
-// The forward and backward substitution of the factor on (br, bi), then
-// sol_re, sol_im and sol (the real part).
 fn harmonic_back(br: f64[>..]&, bi: f64[>..]&) {
     let n = sol.len;
     for j in n {
@@ -184,8 +148,6 @@ fn harmonic_back(br: f64[>..]&, bi: f64[>..]&) {
     state_valid = true;
 }
 
-// Assembles K, M and the load, and solves A u = f at the omega and the
-// damping of set_harmonic. False if a pivot is near 0.
 fn harmonic_solve() -> bool {
     guard physics == ELASTIC && harmonic_omega > 0.0 && dofs_sized() else { abort("harmonic_solve: set_harmonic of an elastic physics and the arrays of the dofs"); }
     let start = clock();

@@ -1,6 +1,3 @@
-// The rules of the items (spec §3 to §22, in the order of §19): names,
-// declarations, materials, physics, conditions, methods, steps, results,
-// expectations, parameters, scales and studies.
 import std;
 import dictionary;
 import math;
@@ -13,9 +10,6 @@ import .expr;
 import .builtins;
 import .typeexpr;
 
-// --- names (spec §4) ---------------------------------------------------------------------
-
-// Adds a declaration to the namespace, or reports `duplicate_name`.
 fn declare(kind: i64, tok: i64, node: i64, ty: Ty) -> i64 {
     let name = tok_text(tok);
     let old = visible.get(key(name));
@@ -55,7 +49,6 @@ fn add_builtins() {
     }
 }
 
-// Each name that the model declares, for `use_before_decl` (spec §3.1).
 fn note(tok: i64) {
     if !declared.contains(key(tok_text(tok))) { declared.insert(key(tok_text(tok)), tok); }
 }
@@ -85,11 +78,8 @@ fn note_declarations(prog: i64) {
     }
 }
 
-// --- helpers -------------------------------------------------------------------------------
-
 fn child(n: i64, i: i64) -> i64 { syntax::child(n, i) }
 
-// Records the dimension of a declaration, for `scales_incomplete`.
 fn use_dim(t: Ty) {
     if t.kind != K_NUM || is_dimless(t.dim) { return; }
     for d in used_dims {
@@ -98,7 +88,6 @@ fn use_dim(t: Ty) {
     used_dims.push(t.dim);
 }
 
-// The type of a region expression: a geometry value.
 fn region_ty(n: i64) -> Ty {
     let t = expr_ty(n);
     if !is_any(t) && t.kind != K_GEOM {
@@ -109,7 +98,6 @@ fn region_ty(n: i64) -> Ty {
     return t;
 }
 
-// The type of a setting value: a word, an expression, a list or a range.
 fn setting_ty(n: i64) -> Ty {
     let saved = setting_mode;
     setting_mode = true;
@@ -118,7 +106,6 @@ fn setting_ty(n: i64) -> Ty {
     return t;
 }
 
-// The value of a setting with name `name` in block `b`, or -1.
 fn setting(b: i64, name: u8[:]) -> i64 {
     if b < 0 { return -1; }
     var c = syntax::nodes[b].first;
@@ -131,8 +118,6 @@ fn setting(b: i64, name: u8[:]) -> i64 {
     return -1;
 }
 
-// Checks the setting names of block `b`: a name outside `valid` is the
-// error `id`. Then checks the values.
 fn check_block(b: i64, valid: const u8[:][:], id: u8[:], what: u8[:]) {
     if b < 0 { return; }
     var c = syntax::nodes[b].first;
@@ -147,7 +132,6 @@ fn check_block(b: i64, valid: const u8[:][:], id: u8[:], what: u8[:]) {
     check_values(b);
 }
 
-// Checks the values of the settings of block `b`.
 fn check_values(b: i64) {
     if b < 0 { return; }
     var c = syntax::nodes[b].first;
@@ -172,15 +156,12 @@ fn join(names: const u8[:][:]) -> u8[>..] {
     return out;
 }
 
-// Reports `not_constant` for a varying value (spec §7.6).
 fn want_constant(n: i64, t: Ty, what: u8[:]) {
     if t.varying {
         error(first_tok(n), "not_constant", str(what, " must be a constant, but it varies in space or time"),
               "use a value that does not depend on x, y, z, t or a field");
     }
 }
-
-// --- the header (spec §3, §6.5) ------------------------------------------------------------
 
 fn check_header(h: i64) {
     header_tok = syntax::nodes[h].tok;
@@ -197,8 +178,6 @@ fn check_header(h: i64) {
         set_nondim(true);
     }
 }
-
-// --- param, let, fn, table, material (spec §5, §7.4, §10.2, §20.1) ---------------------------
 
 fn check_value_decl(n: i64, kind: i64) -> i64 {
     let k = syntax::nodes[n];
@@ -235,7 +214,6 @@ fn check_value_decl(n: i64, kind: i64) -> i64 {
     return s;
 }
 
-// `param_range`: the value `v` (SI) is outside the range node `r`.
 fn in_range(tok: i64, v: f64, r: i64, name: u8[:]) {
     let lo, oklo = const_value(syntax::nodes[r].first);
     let hi, okhi = const_value(syntax::nodes[syntax::nodes[r].first].next);
@@ -245,7 +223,6 @@ fn in_range(tok: i64, v: f64, r: i64, name: u8[:]) {
     }
 }
 
-// The range node of param symbol `s`, or -1.
 fn param_range_node(s: i64) -> i64 {
     var c = syntax::nodes[syntax::nodes[syms[s].node].first].next;
     while c >= 0 {
@@ -313,8 +290,6 @@ fn check_table(n: i64) {
     declare(S_TABLE, k.tok, n, kind_ty(K_DECL));
 }
 
-// The unknowns of each later physics that assigns material `mat`, as locals:
-// a property may name them (spec §3.1, §10.2). The physics reports a wrong type.
 fn later_unknowns(mat: u8[:]) {
     var item = syntax::nodes[model_prog].first;
     while item >= 0 {
@@ -334,7 +309,6 @@ fn later_unknowns(mat: u8[:]) {
     }
 }
 
-// True when physics node `p` assigns material `mat`.
 fn assigns(p: i64, mat: u8[:]) -> bool {
     var c = syntax::nodes[p].first;
     while c >= 0 {
@@ -378,8 +352,6 @@ fn check_material(n: i64) {
     locals.resize(mark);
 }
 
-// --- mesh and points (spec §9) -------------------------------------------------------------
-
 fn check_discretization(n: i64, kind: i64) {
     let k = syntax::nodes[n];
     region_ty(k.first);
@@ -395,8 +367,6 @@ fn check_discretization(n: i64, kind: i64) {
     declare(kind, k.tok, n, kind_ty(if kind == S_MESH { K_MESH } else { K_POINTS }));
 }
 
-// `crack_tip r: size` (spec §9.1): a Point of a 2D mesh and a constant Length.
-// check_values skips the entry: this function types it once.
 fn check_crack_tip(c: i64, kind: i64) {
     let region = syntax::nodes[c].first;
     let t = region_ty(region);

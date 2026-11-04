@@ -1,14 +1,8 @@
-// The texts of `skein build --target wasm` (build.goose): the parts of the
-// program of the page, the C of the profile and of the regions of
-// WebAssembly, and the solve of the page. The page is the page of
-// `skein report` (src/report).
 import std;
 namespace codegen;
 
-// The largest memory64 of V8, less the heap of the module.
 let MAX_MEMORY_MB = 15 * 1024;
 
-// A param with a range: a control of the page.
 struct Control {
     name: u8[..64],
     unit: u8[..64],
@@ -17,9 +11,6 @@ struct Control {
     value: f64,
 }
 
-// The imports of the program of the page. The modules come before the
-// packages, as in src/skein.goose: a package and a module of the same
-// directory need that sequence.
 let PAGE_IMPORTS = """
     import std;
     import os;
@@ -41,9 +32,6 @@ let PAGE_IMPORTS = """
 
     """;
 
-// The end of the program of the page. The arguments are the words of
-// `--set`. web_quality prints the device record of src/gpu/ and, for a
-// simplex mesh, the mesh_quality record after the records.
 let PAGE_MAIN = """
 
     fn web_quality() {
@@ -67,8 +55,6 @@ let PAGE_MAIN = """
 
     """;
 
-// The profile of the native run, on stderr: the resident MB of each data
-// stack region at the end, and the peak resident MB of the process.
 let PROFILE_C = """
 
     #include <sys/mman.h>
@@ -95,8 +81,6 @@ let PROFILE_C = """
 
     """;
 
-// The externs of src/gpu/gpu.goose in the native profile run: no GPU, so
-// each solve takes its CPU path.
 let GPU_STUB_C = """
 
     int32_t skein_gpu_ready(void) { return 0; }
@@ -111,11 +95,6 @@ let GPU_STUB_C = """
 
     """;
 
-// The externs of src/gpu/gpu.goose in the module: calls of the methods of
-// Module.skeinGpu (src/gpu/gpu.js), which the worker of the page sets when
-// it has a WebGPU device. The read-back waits for the GPU: JSPI suspends
-// the module during the wait (skein_gpu_js_read in JSPI_IMPORTS). The bytes are copied, since Goose packs its arrays
-// without alignment.
 let GPU_C = """
 
     #include <emscripten.h>
@@ -151,9 +130,6 @@ let GPU_C = """
 
     """;
 
-// The data stack regions of WebAssembly: region i has skein_region_mb[i]
-// MB of memory64, from malloc (whose memory nothing touched before), and
-// a canary gap behind it. Each end of the program checks the gaps.
 let WASM_C = """
     #define SKEIN_CANARY 0xA5
     #define SKEIN_GAP (64u << 10)
@@ -197,8 +173,6 @@ let WASM_C = """
 
     """;
 
-// Appends `s` as a JSON string, with `<` escaped so that it cannot end
-// the script element.
 fn json_string(out: u8[>..]&, s: u8[:]) {
     out.push('"');
     for c in s {
@@ -229,12 +203,6 @@ fn base64(out: u8[>..]&, s: u8[:]) {
     }
 }
 
-// The solve of a page, for the page of `skein build` and for the report
-// of `skein report` (src/report): the module `glue` of the model `model`
-// in base64 (empty if the model is too large), the controls PARAMS of
-// `params`, the memory MEMORY_MB of the run, `memory_mb`, the kernels
-// `wgsl` and the WebGPU calls `gpu_js` of src/gpu/, and skeinSolve. It is
-// two script elements.
 fn solve_html(model: u8[:], params: Control[:], glue: u8[:], memory_mb: i64, wgsl: u8[:], gpu_js: u8[:]) -> u8[>..] {
     var out: u8[>..] = "<script id=\"skein-module\" type=\"application/octet-stream\">";
     base64(out, glue);
@@ -259,13 +227,6 @@ fn solve_html(model: u8[:], params: Control[:], glue: u8[:], memory_mb: i64, wgs
     return out;
 }
 
-// The solve of the page (solve_html). skeinSolve(values, options) takes
-// the value of each param (in its unit) and gives the run. Each run has a
-// worker and a module of its own, so that a new value stops the run
-// before it, and the memory of a run goes back when it ends. With WebGPU
-// the worker gives the module a GPU device (src/gpu/gpu.js): the explicit
-// steps always use it, and the implicit solves use it when
-// options.implicitGpu is on.
 let SOLVE_JS = """
     // The loader of the module, in UTF-8 bytes.
     const MODULE = Uint8Array.from(atob(document.getElementById("skein-module").textContent.trim()), (c) => c.charCodeAt(0));

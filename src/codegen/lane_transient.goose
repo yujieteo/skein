@@ -1,5 +1,3 @@
-// The registration point of the transient lane (src/transient/) in the code
-// generator: the procedure transient (dispatch.goose).
 import std;
 namespace codegen;
 

@@ -1,29 +1,3 @@
-// A direct solve for a model of one grid (mesh.goose) with less memory
-// than the skyline: a multifrontal LDLᵀ factorization on a nested
-// dissection of the grid. References: A. George (1973), "Nested dissection
-// of a regular finite element mesh", SIAM J. Numer. Anal. 10, 345-363, and
-// I. S. Duff and J. K. Reid (1983), "The multifrontal solution of
-// indefinite sparse symmetric linear equations", ACM TOMS 9, 302-325.
-//
-// The skyline of a grid of order 2 has about 6 (2 m + 3) entries in each
-// column, with m the cells on the shorter side. At m = 130 and 720,000 dofs
-// that is about 18 GB. The dissection needs about O(n log n) entries.
-//
-// The dissection cuts the cells of the grid in two along the longer side,
-// on a line of the lattice between two cells, again and again down to
-// leaves of at most LEAF_CELLS × LEAF_CELLS cells. A cut line separates the
-// two halves: no cell has nodes on both sides of it. Each part of the tree
-// is a front. A front eliminates its nodes: the nodes of its cut line, or
-// all nodes of a leaf. Its border is the nodes on the sides of its cells
-// that are cut lines of the fronts above it. The front of a leaf adds the
-// stiffness of its cells and of its beams. The front of a cut adds the
-// update matrices (the Schur complements on the border) of its two parts.
-// Then it eliminates its nodes, keeps L and D, and gives its update matrix
-// to the front above it. The fronts run children first (the reverse of
-// the preorder of the tree), so the update matrices make a stack.
-//
-// A fixed dof keeps a 1 on the diagonal and no other entry, as in the
-// skyline. The fronts are dense, with all 6 dofs of each node.
 import std;
 import math;
 namespace shells;
@@ -36,35 +10,34 @@ import .mesh;
 import solvers from "../solvers";
 
 let LEAF_CELLS = 2;
-let PANEL = 48;         // the columns of a panel of the dense elimination
-let MAX_DEPTH = 64;     // the depth of the tree: about 2 log2 of the cells
+let PANEL = 48;
+let MAX_DEPTH = 64;
 
 struct Front {
-    i0: i64,            // the cells [i0, i1) × [j0, j1) of the grid
+    i0: i64,
     i1: i64,
     j0: i64,
     j1: i64,
-    nodes: i64,         // the nodes of the front at front_nodes[nodes..]: ne, then nb
-    ne: i64,            // the nodes that the front eliminates
-    nb: i64,            // the nodes of its border
-    factor: i64,        // the first value of the front in lfactor
+    nodes: i64,
+    ne: i64,
+    nb: i64,
+    factor: i64,
     leaf: bool,
 }
 
 var fronts: Front[>..] = [];
 var front_nodes: i64[>..] = [];
-var lfactor: f64[>..] = [];        // for each front: the rows of L and D of its nodes, then L of its border
-var front_buf: f64[>..] = [];      // the dense front, n × n row-major: its lower triangle
-var front_panel: f64[>..] = [];    // L times D of the columns of a panel: PANEL for each row of a front
-var front_stack: f64[>..] = [];    // the update matrices that wait for their front
-var front_map: i64[>..] = [];      // the place of each border dof of a child in its parent
-var front_pos: i64[>..] = [];      // the place of each node in the present front, or -1
-var kdiag: f64[>..] = [];          // the diagonal of K, for the singular check
-var leaf_beam_start: i64[>..] = [];    // the beams of front t are leaf_beams[leaf_beam_start[t]..leaf_beam_start[t + 1]]
+var lfactor: f64[>..] = [];
+var front_buf: f64[>..] = [];
+var front_panel: f64[>..] = [];
+var front_stack: f64[>..] = [];
+var front_map: i64[>..] = [];
+var front_pos: i64[>..] = [];
+var kdiag: f64[>..] = [];
+var leaf_beam_start: i64[>..] = [];
 var leaf_beams: i64[>..] = [];
-var front_entries = 0;             // the values of all arrays above, for the memory check
+var front_entries = 0;
 
-// The lattice point (a, b) of node n of grid g.
 fn node_lattice(g: i64, n: i64) -> i64, i64 {
     guard g >= 0 && g < grids.len && n >= grids[g].first_node else { abort("node_lattice: 0 <= g < grids.len, and n is a node of grid g"); }
     let gr = grids[g];
@@ -75,7 +48,6 @@ fn node_lattice(g: i64, n: i64) -> i64, i64 {
     return k / lb, k % lb;
 }
 
-// The cell (i, j) of grid g that holds both nodes of beam b, or -1, -1.
 fn beam_cell(g: i64, b: i64) -> i64, i64 {
     guard g >= 0 && g < grids.len && b >= 0 && b < beams.len else { abort("beam_cell: 0 <= g < grids.len, and 0 <= b < beams.len"); }
     let gr = grids[g];
@@ -88,8 +60,6 @@ fn beam_cell(g: i64, b: i64) -> i64, i64 {
     return i, j;
 }
 
-// The grid of the model if the dissection can solve it, or -1: one grid
-// that has each node and each shell, and each beam in a cell.
 fn dissect_grid() -> i64 {
     if grids.len != 1 || shells.len + beams.len == 0 { return -1; }
     let gr = grids[0];
@@ -104,17 +74,15 @@ fn dissect_grid() -> i64 {
     return 0;
 }
 
-// The cut of front f: the axis (0 along x, 1 along θ) and the cell line.
 fn front_cut(f: Front) -> i64, i64 {
     if f.i1 - f.i0 >= f.j1 - f.j0 { return 0, (f.i0 + f.i1) / 2; }
     return 1, (f.j0 + f.j1) / 2;
 }
 
-// The tree of fronts of grid g in preorder, from a stack of the parts.
 fn build_fronts(g: i64) {
     let gr = grids[g];
     fronts.clear();
-    var parts: i64[256] = [0; 256];     // 4 values for each part on the stack
+    var parts: i64[256] = [0; 256];
     parts[1] = gr.nx;
     parts[3] = gr.nt;
     var top = 1;
@@ -134,8 +102,6 @@ fn build_fronts(g: i64) {
     }
 }
 
-// True if lattice point (a, b) of front f is on a cut side of its cells:
-// a side that is not on the edge of grid g.
 fn on_cut(g: i64, f: Front, a: i64, b: i64) -> bool {
     let gr = grids[g];
     let o = gr.order;
@@ -143,7 +109,6 @@ fn on_cut(g: i64, f: Front, a: i64, b: i64) -> bool {
         || (f.j0 > 0 && b == o * f.j0) || (f.j1 < gr.nt && b == o * f.j1);
 }
 
-// The nodes of front t: the nodes that it eliminates, then its border.
 fn front_lists(g: i64, t: i64) {
     let f = fronts[t];
     let o = grids[g].order;
@@ -163,7 +128,6 @@ fn front_lists(g: i64, t: i64) {
     fronts[t].nb = front_nodes.len - start - fronts[t].ne;
 }
 
-// The beams of each leaf, from the leaf of each cell.
 fn leaf_beam_lists(g: i64) {
     let gr = grids[g];
     var cell_leaf: i64[>..] = [];
@@ -192,14 +156,11 @@ fn leaf_beam_lists(g: i64) {
     }
 }
 
-// Sizes a list to n values of v.
 fn sized_f64(v: f64[>..]&, n: i64) {
     v.clear();
     for k in n { v.push(0.0); }
 }
 
-// Makes the tree, the lists and the arrays of the dissection of grid g.
-// The memory check runs after the tree and before the large arrays.
 fn dissect_prepare(g: i64) {
     guard g >= 0 && g < grids.len && fixed.len == dof_count() else { abort("dissect_prepare: 0 <= g < grids.len, and a fixed value for each dof"); }
     build_fronts(g);
@@ -233,7 +194,6 @@ fn dissect_prepare(g: i64) {
     for n in node_count() { front_pos.push(-1); }
 }
 
-// The largest size of the stack of update matrices, in the run order.
 fn stack_peak() -> i64 {
     var sizes: i64[64] = [0; 64];
     var depth = 0;
@@ -255,14 +215,10 @@ fn stack_peak() -> i64 {
     return peak;
 }
 
-// The global dof of place k of front f.
 fn front_dof(f: Front, k: i64) -> i64 { return 6 * front_nodes[f.nodes + k / 6] + k % 6; }
 
-// The place of global dof d in the present front.
 fn local_dof(d: i64) -> i64 { return 6 * front_pos[d / 6] + d % 6; }
 
-// Adds the m × m cell matrix k on the dofs d to the front of size n, and
-// its diagonal to kdiag. A fixed dof gets no entry.
 fn add_cell(n: i64, d: i64[54], m: i64, k: f64[:]) {
     guard (m == 12 || m == 24 || m == 54) && k.len >= m * m else { abort("add_cell: m is 12, 24 or 54, and k has m x m entries"); }
     for a in m {
@@ -279,7 +235,6 @@ fn add_cell(n: i64, d: i64[54], m: i64, k: f64[:]) {
     }
 }
 
-// Adds the cells and the beams of leaf front t of grid g to the front.
 fn assemble_leaf(g: i64, t: i64, n: i64) {
     let f = fronts[t];
     var kbeam: f64[144] = [0.0; 144];
@@ -299,8 +254,6 @@ fn assemble_leaf(g: i64, t: i64, n: i64) {
     }
 }
 
-// Adds the update matrix of child front c, at front_stack[at..], to the
-// front of size n.
 fn extend_add(c: i64, at: i64, n: i64) {
     let f = fronts[c];
     let nb6 = 6 * f.nb;
@@ -315,10 +268,6 @@ fn extend_add(c: i64, at: i64, n: i64) {
     }
 }
 
-// Factors the columns k0..k1 of the front of size n (a panel): the
-// columns before k0 are done and their update is in the front. Sets
-// front_panel[PANEL i + m - k0] = L[i][m] D[m]. False at a pivot with no
-// stiffness: singular_dof is then its dof.
 fn factor_panel(f: Front, n: i64, k0: i64, k1: i64) -> bool {
     guard k0 >= 0 && k1 > k0 && k1 - k0 <= PANEL && k1 <= 6 * f.ne && n * n <= front_buf.len else { abort("factor_panel: 0 <= k0 < k1 <= 6 ne, k1 - k0 <= PANEL, and the front fits"); }
     for k in k0..k1 {
@@ -345,8 +294,6 @@ fn factor_panel(f: Front, n: i64, k0: i64, k1: i64) -> bool {
     return true;
 }
 
-// Takes the panel k0..k1 from the rest of the front of size n:
-// F[i][j] -= Σ L[i][m] D[m] L[j][m] for k1 <= j <= i, 4 columns j at once.
 fn update_rest(n: i64, k0: i64, k1: i64) {
     guard k0 >= 0 && k1 > k0 && k1 - k0 <= PANEL && k1 <= n && n * n <= front_buf.len else { abort("update_rest: 0 <= k0 < k1 <= n, and k1 - k0 <= PANEL"); }
     for i in k1..n {
@@ -380,8 +327,6 @@ fn update_rest(n: i64, k0: i64, k1: i64) {
     }
 }
 
-// Eliminates the nodes of front f (size n), by panels. The rows of the
-// border then hold L of the border, and the update matrix after them.
 fn eliminate(f: Front, n: i64) -> bool {
     let ne6 = 6 * f.ne;
     for k in ne6 { if fixed[front_dof(f, k)] != 0 { front_buf[n * k + k] = 1.0; } }
@@ -395,8 +340,6 @@ fn eliminate(f: Front, n: i64) -> bool {
     return true;
 }
 
-// Keeps L and D of front f (size n) in lfactor, and puts its update matrix
-// at front_stack[at..].
 fn keep_front(f: Front, n: i64, at: i64) {
     let ne6 = 6 * f.ne;
     let nb6 = 6 * f.nb;
@@ -413,14 +356,12 @@ fn keep_front(f: Front, n: i64, at: i64) {
     }
 }
 
-// The multifrontal factorization of grid g. False if a pivot has no
-// stiffness (singular_dof).
 fn dissect_factor(g: i64) -> bool {
     guard front_pos.len == node_count() && kdiag.len == dof_count() else { abort("dissect_factor: dissect_prepare made the arrays"); }
     singular_dof = -1;
     for &v in kdiag { v = 0.0; }
-    var waiting: i64[64] = [0; 64];     // the fronts of the update matrices on the stack
-    var place: i64[64] = [0; 64];       // and their place in front_stack
+    var waiting: i64[64] = [0; 64];
+    var place: i64[64] = [0; 64];
     var depth = 0;
     var top = 0;
     for tt in fronts.len {
@@ -448,7 +389,6 @@ fn dissect_factor(g: i64) -> bool {
     return true;
 }
 
-// Solves L D Lᵀ disp = load with the factor of dissect_factor.
 fn dissect_substitute() {
     guard fixed.len == dof_count() && load.len == fixed.len && disp.len == fixed.len else { abort("dissect_substitute: the loads and the solution have each dof"); }
     for j in dof_count() { disp[j] = if fixed[j] != 0 { 0.0 } else { load[j] }; }
@@ -456,7 +396,6 @@ fn dissect_substitute() {
     for t in fronts.len { backward_front(fronts[t]); }
 }
 
-// The forward step and the diagonal step of front f: L y = b, then y / D.
 fn forward_front(f: Front) {
     let ne6 = 6 * f.ne;
     var q = f.factor;
@@ -479,7 +418,6 @@ fn forward_front(f: Front) {
     }
 }
 
-// The backward step of front f: Lᵀ x = y, with x of the border known.
 fn backward_front(f: Front) {
     let ne6 = 6 * f.ne;
     let tri = ne6 * (ne6 + 1) / 2;

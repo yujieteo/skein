@@ -1,31 +1,3 @@
-// The `modal` step of the edge physics (spec §14.2): the resonances of
-//
-//     curl(ν curl(u)) + C u + B(ω) u = ω² M u
-//
-// with K the curl term, C the part of c that does not depend on ω, M the
-// matrix of the term m u of edge_m (the coefficient of ddt2(u)), and B(ω)
-// the matrix of the impedance conditions, whose z can depend on ω (a wall
-// of copper has z ~ sqrt(ω)). K, C, M and B are complex symmetric, so the
-// modes are M-orthogonal in the bilinear form x^T M y with no conjugate.
-//
-// The eigenvalue λ = ω² is complex when the walls or the material lose
-// energy. For the mode k, the iteration is nonlinear in two levels:
-//
-//   inner  with B frozen at ω_r (a real number), the shift-invert iteration
-//          x <- (A - τ M)^-1 M x, with τ = ω_r², by the direct factor of
-//          src/solvers/slu.goose. A found mode is projected out of x in the
-//          bilinear form, so that the next mode is the next one nearest to
-//          the shift. The Rayleigh quotient λ = x^T A x / x^T M x gives λ.
-//   outer  ω_r <- Re sqrt(λ), until it changes by less than 1e-10 relative.
-//          B changes with ω by about B/(2 ω), thus the outer iteration
-//          converges in 3 or 4 passes, and the z of a lossy wall at Re ω
-//          instead of ω changes λ at the second order of the loss.
-//
-// The first mode is the nearest to the shift, and each next one the nearest
-// to the last found, from above (a shift of 1.01 ω). The modes are sorted by
-// Re ω. The dofs that an essential condition holds
-// are at 0, and the null space of the curl (gradients, λ = 0) is far from a
-// shift above it: the shift must be > 0.
 import std;
 import math;
 namespace elements;
@@ -39,18 +11,18 @@ import .post;
 import .edge;
 import solvers from "../solvers";
 
-let MODAL_OUTER = 60;               // the passes of the outer iteration. Reason: a pass that ends before its inner iteration converges moves the shift to the estimate (a restart of the Rayleigh quotient iteration), and a mode in a crowd of null-space modes needs several
-let MODAL_INNER = 12;               // the passes of the inner iteration
-let MODAL_TOLERANCE = 1.0e-12;      // the change of λ in a pass, relative
-let MODAL_RESIDUAL = 1.0e-6;        // the residual of a mode, relative to |λ| |M x|
-let MODAL_OMEGA = 1.0e-10;          // the change of Re ω in a pass of the outer iteration, relative
+let MODAL_OUTER = 60;
+let MODAL_INNER = 12;
+let MODAL_TOLERANCE = 1.0e-12;
+let MODAL_RESIDUAL = 1.0e-6;
+let MODAL_OMEGA = 1.0e-10;
 
-var edge_omega: f64[>..] = [];      // ω of each mode of the last edge_modal, as re and im
-var edge_modes: f64[>..] = [];      // mode k at dof_total() k
-var val_m: f64[>..] = [];           // M on the pattern
-var val_k: f64[>..] = [];           // K + C on the pattern
-var val_s: f64[>..] = [];           // K + C + B - τ M on the pattern
-var modal_mass: f64[>..] = [];      // the bilinear x^T M x of each mode found, as re and im
+var edge_omega: f64[>..] = [];
+var edge_modes: f64[>..] = [];
+var val_m: f64[>..] = [];
+var val_k: f64[>..] = [];
+var val_s: f64[>..] = [];
+var modal_mass: f64[>..] = [];
 
 fn csqrt(a: f64[2]) -> f64[2] {
     let r = sqrt(a[0] * a[0] + a[1] * a[1]);
@@ -59,7 +31,6 @@ fn csqrt(a: f64[2]) -> f64[2] {
     return [re, if a[1] < 0.0 { -im } else { im }];
 }
 
-// y = V x, with V on the pattern of the matrix.
 fn csr_multiply(v: f64[:], x: f64[:], y: f64[:]) {
     for r in x.len {
         var s = 0.0;
@@ -68,8 +39,6 @@ fn csr_multiply(v: f64[:], x: f64[:], y: f64[:]) {
     }
 }
 
-// The bilinear form (no conjugate) of two complex vectors with the re and
-// im of dof d at 2 d and 2 d + 1.
 fn bilinear(a: f64[:], b: f64[:]) -> f64[2] {
     var re = 0.0;
     var im = 0.0;
@@ -80,8 +49,6 @@ fn bilinear(a: f64[:], b: f64[:]) -> f64[2] {
     return [re, im];
 }
 
-// The entries of a fixed row or column of v at 0, and with `diagonal` the
-// diagonal of a fixed row at 1.
 fn mask_fixed(v: f64[:], diagonal: bool) {
     for r in dof_total() {
         for e in row_start[r]..row_start[r + 1] {
@@ -91,7 +58,6 @@ fn mask_fixed(v: f64[:], diagonal: bool) {
     }
 }
 
-// A start vector of the free dofs that no mode is orthogonal to.
 fn start_vector(x: f64[>..]&) {
     x.clear();
     for d in dof_total() {
@@ -100,7 +66,6 @@ fn start_vector(x: f64[>..]&) {
     }
 }
 
-// The matrices M and K + C on the pattern, with the fixed dofs held.
 fn modal_matrices() {
     edge_pattern();
     for &v in val { v = 0.0; }
@@ -115,7 +80,6 @@ fn modal_matrices() {
     mask_fixed(val_k, true);
 }
 
-// The matrix K + C + B(ω_r) - τ M into val_s.
 fn modal_shifted<Z>(w: f64, tau: f64) {
     for e in val.len { val[e] = val_k[e]; }
     for i in imp_group.len {
@@ -129,10 +93,6 @@ fn modal_shifted<Z>(w: f64, tau: f64) {
     for e in val.len { val_s.push(val[e] - tau * val_m[e]); }
 }
 
-// One inner iteration run from x: the eigenvalue nearest to τ of the
-// problem with B frozen, with the modes found projected out. It gives
-// false if it does not converge in MODAL_INNER passes (λ is then the last
-// estimate, or NaN if x is 0).
 fn modal_inner(x: f64[:], tau: f64, lambda: f64[2]&) -> bool {
     let n = x.len;
     var u: f64[>..] = [];
@@ -171,7 +131,6 @@ fn modal_inner(x: f64[:], tau: f64, lambda: f64[2]&) -> bool {
         let change = sqrt((lambda[0] - previous[0]) * (lambda[0] - previous[0]) + (lambda[1] - previous[1]) * (lambda[1] - previous[1]));
         previous = [lambda[0], lambda[1]];
         if it > 0 && change <= MODAL_TOLERANCE * sqrt(lambda[0] * lambda[0] + lambda[1] * lambda[1]) {
-            // The residual of S x - (λ - τ) M x, relative to |λ| |M x|.
             var r2 = 0.0;
             var m2 = 0.0;
             for d in n {
@@ -186,7 +145,6 @@ fn modal_inner(x: f64[:], tau: f64, lambda: f64[2]&) -> bool {
     return false;
 }
 
-// Store the mode x with the frequency om, and its bilinear mass.
 fn accept_mode(x: f64[:], om: f64[2], n: i64) {
     edge_omega.push(om[0]);
     edge_omega.push(om[1]);
@@ -197,9 +155,6 @@ fn accept_mode(x: f64[:], om: f64[2], n: i64) {
     modal_mass.append(bilinear(x, mx));
 }
 
-// The `count` resonances nearest to the shift ω_s (> 0) of the problem
-// above, with the z of the conditions of the group g at ω as Z(g, ω). False
-// if a mode does not converge.
 fn edge_modal<Z>(count: i64, shift: f64) -> bool {
     guard physics == EDGE && dofs_sized() && edge_eps_set && count >= 1 && shift > 0.0 else {
         abort("edge_modal: an edge physics with a mass term, count >= 1 and a shift > 0");
@@ -214,8 +169,6 @@ fn edge_modal<Z>(count: i64, shift: f64) -> bool {
     var x: f64[>..] = [];
     for j in count {
         start_vector(x);
-        // The first mode is the nearest to the shift, and each next one is the nearest to 1% above the last: the null space of the curl
-        // (λ = 0) is then not nearer to the shift than the next mode, if that is below 2 times the last.
         var w = if j == 0 { shift } else { 1.01 * edge_omega[2 * j - 2] };
         var lambda: f64[2] = [w * w, 0.0];
         var done = false;
@@ -257,7 +210,6 @@ fn edge_modal<Z>(count: i64, shift: f64) -> bool {
     return true;
 }
 
-// The modes in the sequence of Re ω.
 fn sort_modes(n: i64) {
     let count = edge_omega.len / 2;
     for i in count {
@@ -282,13 +234,11 @@ fn sort_modes(n: i64) {
     }
 }
 
-// The frequency ω / (2 π) of mode k (from 1), as re and im.
 fn edge_frequency(k: i64) -> f64[2] {
     guard k >= 1 && 2 * k <= edge_omega.len else { abort("edge_frequency: 1 <= k <= the count of the last edge_modal"); }
     return [edge_omega[2 * k - 2] / (2.0 * PI), edge_omega[2 * k - 1] / (2.0 * PI)];
 }
 
-// Writes mode k as the unknown.
 fn edge_write_mode(path: const u8[:], field: const u8[:], k: i64) -> bool {
     let n = dof_total();
     guard k >= 1 && edge_modes.len >= k * n && sol.len == n else { abort("edge_write_mode: 1 <= k <= the count of the last edge_modal"); }

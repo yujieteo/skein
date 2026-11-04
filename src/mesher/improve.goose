@@ -1,27 +1,3 @@
-// The improvement of the bad tetrahedra of the stuffed mesh (spec §9.2),
-// after the schedule of Marot and Remacle (2020): first the cheap
-// operations, smoothing of a vertex and then edge removal and the 2-3
-// flip, on each cell with γ < BAD_GAMMA, again until no operation helps.
-//
-// γ is 2 √6 times the inradius over the longest edge: 1 for a regular
-// tetrahedron, 1 / max_aspect of quality.goose. Each operation changes a
-// small cavity of cells, and the mesh keeps the change only if the worst γ
-// of the new cells is more than that of the old cells. Thus the worst cell
-// of the mesh never gets worse. A node on the surface does not move, and
-// no operation changes a face on the surface, so the boundary and its
-// sharp edges stay as the stuffing made them.
-//
-// 1. Smoothing moves a free vertex of the bad cell to the mean of its
-//    neighbours, or to the apex of a regular tetrahedron on the face
-//    opposite to it in its worst cell, or part of the way to one of
-//    them, if that makes its worst cell better.
-// 2. Edge removal (Klingner and Shewchuk 2007) replaces the m cells about
-//    an inside edge a b by the 2 (m - 2) cells of a triangulation of the
-//    ring of the m other points, joined to a and to b. A dynamic program
-//    over the triangulations of the ring finds the one with the best
-//    worst cell. m = 3 is the 3-2 flip.
-// 3. The 2-3 flip replaces the 2 cells on an inside face p q r by the 3
-//    cells about the edge between their other points d and e.
 import std;
 import math;
 namespace mesher;
@@ -35,24 +11,21 @@ let MAX_RING = 7;
 let GAIN = 1.0e-6;
 let CLIMB_START = 0.1;
 let CLIMB_LEVELS = 4;
-let CLIMB_TRIES = 4;     // the least rise of the worst γ that counts as better
+let CLIMB_TRIES = 4;
 
-var improve_cells = true;   // false: mesh_3d keeps the stuffed cells
+var improve_cells = true;
 
-var ix: f64[>..] = [];      // x, y and z of each node
-var it: i64[>..] = [];      // the 4 nodes of each cell, positive
+var ix: f64[>..] = [];
+var it: i64[>..] = [];
 var alive: bool[>..] = [];
-var fixed: bool[>..] = [];  // the node is on the surface
-var locked: bool[>..] = []; // an operation of this pass changed the cells of the node
-// The cells at each node of a bad cell: star[star_start[s]..star_start[s + 1]]
-// with s = star_of[node], or star_of[node] = -1.
+var fixed: bool[>..] = [];
+var locked: bool[>..] = [];
 var star_of: i64[>..] = [];
 var star_start: i64[>..] = [];
 var star: i64[>..] = [];
 
 fn at(n: i64) -> f64[3] { return [ix[3 * n], ix[3 * n + 1], ix[3 * n + 2]]; }
 
-// γ of the tetrahedron a b c d, or -1 if it is not positive.
 fn gamma_of(a: f64[3], b: f64[3], c: f64[3], d: f64[3]) -> f64 {
     let u = sub3(b, a);
     let v = sub3(c, a);
@@ -85,8 +58,6 @@ fn add_cell(a: i64, b: i64, c: i64, d: i64) {
     alive.push(true);
 }
 
-// Improves the tetrahedra of the mesh. `surface` marks the nodes on the
-// surface. It returns the number of operations.
 fn improve(surface: bool[:]) -> i64 {
     guard mesh_dim == 3 && surface.len == point_count() else { abort("improve: a 3D mesh and a mark for each node"); }
     ix.clear();
@@ -114,7 +85,6 @@ fn improve(surface: bool[:]) -> i64 {
     return done;
 }
 
-// One pass over the bad cells. It returns the number of operations.
 fn improve_pass() -> i64 {
     var bad: i64[>..] = [];
     for t in alive.len {
@@ -134,7 +104,6 @@ fn improve_pass() -> i64 {
     return changes;
 }
 
-// The cells at each node of the cells `bad`.
 fn find_stars(bad: i64[:]) {
     star_of.clear();
     for n in ix.len / 3 { star_of.push(-1); }
@@ -172,7 +141,6 @@ fn find_stars(bad: i64[:]) {
     }
 }
 
-// Tries the operations on the bad cell t, in the sequence of the schedule.
 fn improve_cell(t: i64) -> bool {
     let v: i64[4] = [it[4 * t], it[4 * t + 1], it[4 * t + 2], it[4 * t + 3]];
     for n in v {
@@ -189,7 +157,6 @@ fn improve_cell(t: i64) -> bool {
     return false;
 }
 
-// The worst γ of the cells at n with n at x.
 fn worst_at(n: i64, x: f64[3]) -> f64 {
     var worst = 1.0;
     for t in star_cells(n) {
@@ -204,12 +171,9 @@ fn worst_at(n: i64, x: f64[3]) -> f64 {
     return worst;
 }
 
-// Moves the free node n to a better place, if there is one.
 fn smooth(n: i64) -> bool {
     let x = at(n);
     let old = worst_at(n, x);
-    // The mean of the neighbours, and the apex of the regular tetrahedron
-    // on the face opposite to n in its worst cell.
     var mean: f64[3] = [0.0, 0.0, 0.0];
     var count = 0.0;
     var apex = x;
@@ -251,7 +215,6 @@ fn smooth(n: i64) -> bool {
     return true;
 }
 
-// The mean length of the edges of the cells at n.
 fn edge_mean(n: i64) -> f64 {
     var sum = 0.0;
     var count = 0.0;
@@ -268,9 +231,6 @@ fn edge_mean(n: i64) -> f64 {
     return sum / count;
 }
 
-// A pattern search from x, where the worst γ of the cells at n is q: steps
-// along the axes of `CLIMB_START` times the edge length h, halved
-// CLIMB_LEVELS times. It returns the best point and its worst γ.
 fn climb(n: i64, x: f64[3], q: f64, h: f64) -> f64[3], f64 {
     var best_x = x;
     var best = q;
@@ -296,8 +256,6 @@ fn climb(n: i64, x: f64[3], q: f64, h: f64) -> f64[3], f64 {
     return best_x, best;
 }
 
-// The apex of the regular tetrahedron on the triangle a b c, on the side
-// of x.
 fn regular_apex(a: f64[3], b: f64[3], c: f64[3], x: f64[3]) -> f64[3] {
     var normal = cross3(sub3(b, a), sub3(c, a));
     let l = norm3(normal);
@@ -314,9 +272,6 @@ fn orient(a: i64, b: i64, c: i64, d: i64) -> f64 {
     return dot3(sub3(at(b), p), cross3(sub3(at(c), p), sub3(at(d), p)));
 }
 
-// The ring of the inside edge a b: the other 2 points of each of its cells
-// in a cycle, so that each a b ring[i] ring[i + 1] is positive, and the
-// cells. False for an edge on the surface, or a ring of more than MAX_RING.
 fn edge_ring(a: i64, b: i64, ring: i64[..8]&, cells: i64[..8]&) -> bool {
     var from: i64[..8] = [];
     var to: i64[..8] = [];
@@ -349,7 +304,6 @@ fn edge_ring(a: i64, b: i64, ring: i64[..8]&, cells: i64[..8]&) -> bool {
     return next == ring[0];
 }
 
-// Removes the inside edge a b, if a triangulation of its ring is better.
 fn remove_edge(a: i64, b: i64) -> bool {
     var ring: i64[..8] = [];
     var cells: i64[..8] = [];
@@ -357,8 +311,6 @@ fn remove_edge(a: i64, b: i64) -> bool {
     var old = 1.0;
     for t in cells { old = min(old, cell_gamma(t)); }
     let m = ring.len;
-    // best[i][j]: the best worst γ of the triangulations of ring i..j, and
-    // split[i][j] the third point of its triangle on the side i j.
     var best: f64[8][8] = default<f64[8][8]>();
     var split: i64[8][8] = default<i64[8][8]>();
     for d in 2..m {
@@ -396,9 +348,6 @@ fn remove_edge(a: i64, b: i64) -> bool {
     return true;
 }
 
-// Flips the face of cell t opposite to its point `skip` into 3 cells about
-// the edge between the other points of the 2 cells on it, if that is
-// better.
 fn flip23(t: i64, skip: i64) -> bool {
     let d = it[4 * t + skip];
     var f: i64[..3] = [];

@@ -1,18 +1,3 @@
-// `skein report` (docs/command_line.md §12). It runs a model with `skein
-// run`, and writes one HTML file that holds the source, the TOON tables of
-// the run and the VTU results. The page opens offline: its viewer
-// (viewer.js) is in the file. With a study, the page holds each case. The
-// page also holds the solve of `skein build --target wasm`, so that a slider
-// that stops between the stored cases meshes and solves in the page.
-//
-//     .skein/report/<model>/                  the TOON of check, verify and run
-//     .skein/report/<model>/<n>.vtu           blob n: the mesh or the fields of a result
-//
-// A small VTU has the corner nodes of each cell only, in one raw appended
-// block: a mesh part (Float32) and a fields part (Int16 with a scale).
-// Cases with the same mesh share its blob. gzip compresses each blob, and
-// the page holds it in base64. Reason: the VTU files of sample 01 and its
-// 16 cases are 230 MB as text.
 import std;
 import os;
 import base64;
@@ -26,7 +11,6 @@ extern "libc.so.6" {
 
 let USAGE = "usage: skein report <file.skn> [--study <name>] [--no-run] [-o <file.html>]\n";
 
-// Runs `command` in the shell, and gives its exit status.
 fn shell(command: u8[:]) -> i64 {
     var c: u8[>..] = [];
     c.append(command);
@@ -36,7 +20,6 @@ fn shell(command: u8[:]) -> i64 {
     return (status >> 8) & 0xff;
 }
 
-// `s` in single quotes for the shell.
 fn quoted(s: u8[:]) -> u8[>..] {
     var out: u8[>..] = "'";
     for c in s {
@@ -53,10 +36,6 @@ fn make_dirs(path: u8[:]) -> bool {
     return make_dir(path);
 }
 
-// --- JSON -------------------------------------------------------------------------
-
-// Appends `s` as a JSON string. `</` becomes `<\/`, so that the text cannot
-// end the script element that holds it.
 fn json_string(out: u8[>..]&, s: u8[:]) {
     out.push('"');
     for c, i in s {
@@ -76,7 +55,6 @@ fn json_string(out: u8[>..]&, s: u8[:]) {
     out.push('"');
 }
 
-// Appends `"key": value-text,` with the value as a JSON string.
 fn json_field(out: u8[>..]&, key: u8[:], value: u8[:]) {
     json_string(out, key);
     out.push(':');
@@ -84,23 +62,18 @@ fn json_field(out: u8[>..]&, key: u8[:], value: u8[:]) {
     out.push(',');
 }
 
-// --- the small VTU ----------------------------------------------------------------
-
-// The VTK type of the linear cell of the corner nodes of VTK type t, and
-// the count of its corner nodes. A type that has no entry stays as it is.
 fn corner_type(t: i64, nodes: i64) -> i64, i64 {
     match t {
-        21 => { return 3, 2; },              // quadratic edge
-        22 => { return 5, 3; },              // tri6
-        23, 28 => { return 9, 4; },          // quad8, quad9
-        24 => { return 10, 4; },             // tet10
-        25, 29 => { return 12, 8; },         // hex20, hex27
-        26 => { return 13, 6; },             // wedge15
+        21 => { return 3, 2; },
+        22 => { return 5, 3; },
+        23, 28 => { return 9, 4; },
+        24 => { return 10, 4; },
+        25, 29 => { return 12, 8; },
+        26 => { return 13, 6; },
         _ => { return t, nodes; },
     }
 }
 
-// The value of the attribute `key` in the tag `tag`, or "".
 fn attribute(tag: u8[:], key: u8[:]) -> const u8[:] {
     let at = find(tag, str(" ", key, "=\""));
     if at < 0 { return tag[..0]; }
@@ -109,7 +82,6 @@ fn attribute(tag: u8[:], key: u8[:]) -> const u8[:] {
     return if end < 0 { tag[..0] } else { tag[from..from + end] };
 }
 
-// Appends the numbers of the text `s`, which white space separates.
 fn numbers(s: u8[:], out: f64[>..]&) {
     var i = 0;
     while i < s.len {
@@ -123,8 +95,6 @@ fn numbers(s: u8[:], out: f64[>..]&) {
     }
 }
 
-// A data array of an ASCII VTU: its section, name, components, and its
-// values `values[lo..hi]`.
 struct Array {
     section: u8[..16],
     name: u8[..64],
@@ -135,7 +105,6 @@ struct Array {
 
 var values: f64[>..];
 
-// The data arrays of the ASCII VTU `text`, in the order of the file.
 fn arrays(text: u8[:]) -> Array[>..] {
     var out: Array[>..] = [];
     values.clear();
@@ -171,8 +140,6 @@ fn arrays(text: u8[:]) -> Array[>..] {
     return out;
 }
 
-// The index in `xs` of the array of section `section` and name `name`
-// ("" for any name), or -1.
 fn array_at(xs: Array[:], section: u8[:], name: u8[:]) -> i64 {
     for a, k in xs {
         if a.section[..] == section && (name.len == 0 || a.name[..] == name) { return k; }
@@ -180,7 +147,6 @@ fn array_at(xs: Array[:], section: u8[:], name: u8[:]) -> i64 {
     return -1;
 }
 
-// Appends one raw block of the appended data: its byte count, then the bytes.
 fn append_block(data: u8[>..]&, bytes: u8[:]) {
     let n = bytes.len;
     for k in 4 { data.push(((n >> (8 * k)) & 0xff) as u8); }
@@ -193,19 +159,18 @@ fn floats(xs: f64[:]) -> f32[>..] {
     return out;
 }
 
-// Appends the tag of a data array at `offset` of the appended data.
 fn array_tag(out: u8[>..]&, kind: u8[:], name: u8[:], comps: i64, offset: i64) {
     format(out, "<DataArray type=\"", kind, "\"");
     if name.len > 0 { format(out, " Name=\"", name, "\""); }
     format(out, " NumberOfComponents=\"", comps, "\" format=\"appended\" offset=\"", offset, "\"/>\n");
 }
 
-// The values `xs` as Int16, and the scale that gives each value back:
-// x = scale * n. The largest |x| is 32767.
+let INT16_MAX = 32767.0;
+
 fn shorts(xs: f64[:]) -> i16[>..], f64 {
     var m = 0.0;
     for x in xs { m = max(m, abs(x)); }
-    let scale = if m > 0.0 { m / 32767.0 } else { 1.0 };
+    let scale = if m > 0.0 { m / INT16_MAX } else { 1.0 };
     var out: i16[>..] = [];
     for x in xs {
         let half = if x >= 0.0 { 0.5 } else { -0.5 };
@@ -214,7 +179,6 @@ fn shorts(xs: f64[:]) -> i16[>..], f64 {
     return out, scale;
 }
 
-// Appends an Int16 data array of `xs` with its scale, and its block.
 fn short_array(out: u8[>..]&, data: u8[>..]&, name: u8[:], comps: i64, xs: f64[:]) {
     let n, scale = shorts(xs);
     format(out, "<DataArray type=\"Int16\" Name=\"", name, "\" NumberOfComponents=\"", comps,
@@ -222,7 +186,6 @@ fn short_array(out: u8[>..]&, data: u8[>..]&, name: u8[:], comps: i64, xs: f64[:
     append_block(data, bytes_of(n));
 }
 
-// The head and the end of a small VTU, with its appended data.
 fn vtu_open(out: u8[>..]&, points: i64, cells: i64) {
     format(out, "<?xml version=\"1.0\"?>\n<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">\n",
            "<UnstructuredGrid>\n<Piece NumberOfPoints=\"", points, "\" NumberOfCells=\"", cells, "\">\n");
@@ -234,11 +197,6 @@ fn vtu_close(out: u8[>..]&, data: u8[:]) {
     out.append("\n</AppendedData>\n</VTKFile>\n");
 }
 
-// The small VTU of the ASCII VTU `text`, in two parts. `mesh` has the
-// corner nodes of each cell as Float32, and the cells. `fields` has the
-// point data at these nodes and the cell data, as Int16 with a scale.
-// Reason: cases with the same geometry share one mesh, and Int16 halves
-// the fields. False if `text` has no points or cells.
 fn small_vtu(text: u8[:], mesh: u8[>..]&, fields: u8[>..]&) -> bool {
     let xs = arrays(text);
     let pa = array_at(xs, "Points", "");
@@ -250,9 +208,9 @@ fn small_vtu(text: u8[:], mesh: u8[>..]&, fields: u8[>..]&) -> bool {
     let offsets = values[xs[oa].lo..xs[oa].hi];
     let pts = values[xs[pa].lo..xs[pa].hi];
     let cells = offsets.len;
-    var keep: i64[>..] = [];             // the new index of each old node, or -1
+    var keep: i64[>..] = [];
     for n in pts.len / 3 { keep.push(-1); }
-    var old: i64[>..] = [];              // the old index of each new node
+    var old: i64[>..] = [];
     var nodes: i32[>..] = [];
     var ends: i32[>..] = [];
     var types: u8[>..] = [];
@@ -293,8 +251,6 @@ fn small_vtu(text: u8[:], mesh: u8[>..]&, fields: u8[>..]&) -> bool {
     return true;
 }
 
-// The fields part of a small VTU: the point data at the nodes `old` and
-// the cell data, of the arrays `xs` of a VTU of `nodes` nodes.
 fn small_fields(xs: Array[:], old: i64[:], cells: i64, nodes: i64, out: u8[>..]&) {
     var data: u8[>..] = [];
     vtu_open(out, old.len, cells);
@@ -314,9 +270,6 @@ fn small_fields(xs: Array[:], old: i64[:], cells: i64, nodes: i64, out: u8[>..]&
     vtu_close(out, data);
 }
 
-// --- the run ----------------------------------------------------------------------
-
-// The lines of the list `results[n]:` in the TOON `toon`: the VTU files.
 fn result_files(toon: u8[:]) -> const u8[:][>..] {
     var out: const u8[:][>..] = [];
     var inside = false;
@@ -332,7 +285,6 @@ fn result_files(toon: u8[:]) -> const u8[:][>..] {
     return out;
 }
 
-// The name of the model and of its first study, from the program `prog`.
 fn names(prog: i64) -> u8[>..], u8[>..] {
     var model: u8[>..] = [];
     var study: u8[>..] = [];
@@ -347,24 +299,20 @@ fn names(prog: i64) -> u8[>..], u8[>..] {
     return model, study;
 }
 
-// Reads the file `path` into `out`, or leaves `out` empty.
 fn text_of(path: u8[:]) -> u8[>..] {
     var out: u8[>..] = [];
     read_file(path, out);
     return out;
 }
 
-// The page of the report.
-var json: u8[>..];     // the data, in JSON
-var blobs: u8[>..];    // a script element of base64 for each result file
-var files = 0;         // the result files in `blobs`
-var mesh_texts: u8[>..];  // the mesh part of each distinct mesh, one after the other
-var mesh_ends: i64[>..];   // the end of each of them in mesh_texts
-var mesh_blobs: i64[>..];  // the blob of each of them
+var json: u8[>..];
+var blobs: u8[>..];
+var files = 0;
+var mesh_texts: u8[>..];
+var mesh_ends: i64[>..];
+var mesh_blobs: i64[>..];
 var cases = 0;
 
-// Adds the result file `vtu` to the page: its small VTU, compressed. It
-// gives the index of the file, or -1.
 fn add_result(work: u8[:], vtu: u8[:]) -> i64, i64 {
     var mesh: u8[>..] = [];
     var fields: u8[>..] = [];
@@ -386,8 +334,6 @@ fn add_result(work: u8[:], vtu: u8[:]) -> i64, i64 {
     return m, add_blob(work, fields);
 }
 
-// Adds `bytes` to the page as a script element of base64 of its gzip, and
-// gives its index, or -1.
 fn add_blob(work: u8[:], bytes: u8[:]) -> i64 {
     guard write_blob(work, bytes) else { return -1; };
     let k = files;
@@ -399,7 +345,6 @@ fn add_blob(work: u8[:], bytes: u8[:]) -> i64 {
     return k;
 }
 
-// Writes `bytes` to the next blob file of `work` and compresses it.
 fn write_blob(work: u8[:], bytes: u8[:]) -> bool {
     let path = str(work, "/", files, ".vtu");
     guard write_file(path, bytes) && shell(str("gzip -9 -n -f ", quoted(path), " -c > ", quoted(str(path, ".gz")))) == 0 else {
@@ -409,8 +354,6 @@ fn write_blob(work: u8[:], bytes: u8[:]) -> bool {
     return true;
 }
 
-// Adds the case with the run output `toon` to the page. Its result files
-// are at their paths in `toon` under `root` ("" or a directory with `/`).
 fn add_case(work: u8[:], root: u8[:], id: i64, toon: u8[:]) -> bool {
     if cases > 0 { json.push(','); }
     cases++;
@@ -429,7 +372,6 @@ fn add_case(work: u8[:], root: u8[:], id: i64, toon: u8[:]) -> bool {
     return true;
 }
 
-// The count n of the table `cases[n]{...}:` of a study.
 fn case_count(toon: u8[:]) -> i64 {
     let at = find(toon, "cases[");
     guard at >= 0 else { return 0; };
@@ -438,10 +380,6 @@ fn case_count(toon: u8[:]) -> i64 {
     return if good { n } else { 0 };
 }
 
-// Copies to `toon` the table of the last run of study `study` in
-// .skein/studies, and gives the exit status of that run. It gives 2 if
-// there is no table, or if the run was of another source than the source
-// that syntax parsed last.
 fn last_run(model: u8[:], study: u8[:], toon: u8[:]) -> i64 {
     let file = str(".skein/studies/", model, "/", study);
     let last = text_of(str(file, ".toon"));
@@ -456,8 +394,6 @@ fn last_run(model: u8[:], study: u8[:], toon: u8[:]) -> i64 {
     return if find(last, ",fail,") >= 0 { 1 } else { 0 };
 }
 
-// Fills the fields check and verify of `json` with the records of `skein
-// check` and `skein verify` of the model at `path`. Their files are in `work`.
 fn add_checks(path: u8[:], work: u8[:]) {
     var me: u8[>..] = [];
     arg(0, me);
@@ -468,11 +404,6 @@ fn add_checks(path: u8[:], work: u8[:]) {
     }
 }
 
-// Fills `page` with the run of the model at `path`, and of its study
-// `study` if that is not "". It gives the exit status of the run, or 3.
-// With `no_run`, it reads the table of the last run of the study from
-// .skein/studies, and solves nothing. Reason: the interposer sweep of 72
-// cases runs for more than an hour.
 fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool) -> i64 {
     var me: u8[>..] = [];
     arg(0, me);
@@ -504,9 +435,6 @@ fn run_model(path: u8[:], model: u8[:], study: u8[:], work: u8[:], no_run: bool)
     return status;
 }
 
-// The solve of the page of the model at `path` (solve_html of
-// src/codegen/page.goose), from `skein build --target wasm`, or "" if the
-// build fails. Its module is empty if the model is too large for the browser.
 fn page_solve(path: u8[:], model: u8[:], work: u8[:]) -> u8[>..], bool {
     var me: u8[>..] = [];
     arg(0, me);
@@ -519,7 +447,6 @@ fn page_solve(path: u8[:], model: u8[:], work: u8[:]) -> u8[>..], bool {
     return text_of(str(".skein/build/", model, "/web/solve.html")), find(text_of(out), "solve_in_page: yes") >= 0;
 }
 
-// Replaces the first `mark` in `doc` with `with`.
 fn put(doc: u8[>..]&, mark: u8[:], with: u8[:]) {
     let at = find(doc, mark);
     guard at >= 0 else { return; };
@@ -531,10 +458,6 @@ fn put(doc: u8[>..]&, mark: u8[:], with: u8[:]) {
     doc.append(out);
 }
 
-// The token classes of the source, as [line, column, length, class] for the
-// coloured source pane: k keyword, n number, s string, u unit, t type. A
-// unit is a unit name after a number. A type is a name that starts with a
-// capital letter after `:` or `<`.
 fn token_classes(out: u8[>..]&) {
     out.append("[");
     var first = true;
@@ -565,9 +488,6 @@ fn token_classes(out: u8[>..]&) {
     out.append("]");
 }
 
-// The page of `model` from the files of src/report: the data `json` and
-// `blobs`, and the solve `solve` (solve_html of src/codegen/page.goose, or
-// ""). It gives "", with an error, if page.html is missing.
 fn page(model: u8[:], solve: u8[:]) -> u8[>..] {
     let dir = str(resource_dir(), "../src/report/");
     var html = text_of(str(dir, "page.html"));
@@ -576,7 +496,6 @@ fn page(model: u8[:], solve: u8[:]) -> u8[>..] {
         return html;
     };
     put(html, "<!--title-->", model);
-    // kowalski.css is the file of the site as it is. Its two font urls become data URIs.
     var css = text_of(str(dir, "kowalski.css"));
     css.append(text_of(str(dir, "viewer.css")));
     var inter: u8[>..] = [];
@@ -591,11 +510,6 @@ fn page(model: u8[:], solve: u8[:]) -> u8[>..] {
     return html;
 }
 
-// The page of `skein build --target wasm` (src/codegen/build.goose) for
-// the model `model` of the source `text` at `path`: the page of the report,
-// with the native run `toon` at the default values as its one case, and
-// the solve `solve`. The result files of `toon` and the blobs are in `dir`.
-// It gives "", with an error, if a part is missing.
 fn web_page(path: u8[:], text: u8[:], model: u8[:], dir: u8[:], toon: u8[:], solve: u8[:]) -> u8[>..] {
     syntax::parse_model(path, text);
     var classes: u8[>..] = [];
@@ -613,9 +527,6 @@ fn web_page(path: u8[:], text: u8[:], model: u8[:], dir: u8[:], toon: u8[:], sol
     return page(model, solve);
 }
 
-// `skein report`. `args` are the words after `report`. F(prog) tells if the
-// page of `skein build --target wasm` can take the program `prog`: if not,
-// the report does not run `build`. It gives the exit status (command_line.md §10).
 fn run<F>(args: const u8[:][:]) -> i64 {
     var path: u8[>..] = [];
     var out_path: u8[>..] = [];

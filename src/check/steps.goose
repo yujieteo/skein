@@ -1,5 +1,3 @@
-// The rules of steps, expectations, `allow`, scales, studies and the other
-// items (spec §12.4 to §22).
 import std;
 import dictionary;
 namespace check;
@@ -12,9 +10,6 @@ import .typeexpr;
 import .items;
 import .physics;
 
-// --- procedures (spec §14.2) ----------------------------------------------------------------
-
-// The arguments of each procedure. The first one is also the positional one.
 let STATIC_ARGS = ["ramp"];
 let TRANSIENT_ARGS = ["end", "dt", "scheme"];
 let EXPLICIT_SCHEMES = ["ssprk3", "central_difference"];
@@ -71,8 +66,6 @@ fn check_procedure(pr: i64) {
     }
 }
 
-// `dt: stable`: the solver chooses the stable increment of an explicit
-// scheme (§14.2).
 fn is_stable(v: i64) -> bool {
     return syntax::nodes[v].kind == syntax::N_NAME && tok_text(syntax::nodes[v].tok) == "stable";
 }
@@ -103,8 +96,6 @@ fn proc_arg(name: u8[:], arg: u8[:], v: i64) {
     if arg == "ramp" || arg == "count" { assign(first_tok(v), base_ty(B_INT), t, str("the argument ", arg)); }
     if arg == "damping" { assign(first_tok(v), base_ty(B_REAL), t, str("the argument ", arg)); }
 }
-
-// --- steps (spec §14) ----------------------------------------------------------------------
 
 fn check_step(n: i64) {
     let k = syntax::nodes[n];
@@ -181,8 +172,6 @@ fn check_step(n: i64) {
     cur_step = -1;
 }
 
-// The literal `count` of a `modal` or `buckling` step, its first argument,
-// or -1 when no literal gives it (spec §14.2).
 fn proc_count(pr: i64) -> i64 {
     var a = syntax::nodes[pr].first;
     var i = 0;
@@ -198,17 +187,11 @@ fn proc_count(pr: i64) -> i64 {
     return -1;
 }
 
-// The value of a literal number, which no param or --set can change.
 fn literal_value(n: i64) -> f64, bool {
     guard syntax::nodes[n].kind == syntax::N_NUMBER else { return 0.0, false; }
     return const_value(n);
 }
 
-// --- expect (spec §15.3) -------------------------------------------------------------------
-
-// An `expect` item, an `expect` of a step, or an `expect` of a study whose
-// lists hold one value for each of its `cases` cases. `cases` is 0 where a
-// list cannot stand, and -1 when the checker cannot count the cases.
 fn check_expect(n: i64, cases: i64) {
     let k = syntax::nodes[n];
     in_expect = true;
@@ -238,8 +221,6 @@ fn check_expect(n: i64, cases: i64) {
     declare(S_EXPECT, k.tok, n, kind_ty(K_DECL));
 }
 
-// The types of the expected value or the `within` `v` of an expect: one for
-// each value of a list, else one.
 fn expect_values(v: i64, cases: i64) -> Ty[>..] {
     var tys: Ty[>..] = [];
     guard syntax::nodes[v].kind == syntax::N_LIST else {
@@ -266,10 +247,6 @@ fn expect_values(v: i64, cases: i64) -> Ty[>..] {
     return tys;
 }
 
-// --- allow (spec §19) ----------------------------------------------------------------------
-
-// The ids that `allow` can turn off: lint rules and verification checks
-// (docs/checks.md §3, §4).
 let ALLOWABLE = [
     "unused_let", "unused_material", "unused_field", "load_no_cells", "bending_lock", "volumetric_lock",
     "dt_unstable", "stabilization_missing", "mesh_feature_small", "rigid_body", "pressure_level",
@@ -295,9 +272,6 @@ fn check_allow(n: i64) {
     }
 }
 
-// --- scales (spec §21.2) -------------------------------------------------------------------
-
-// The rank of the dimensions in `rows`, by Gaussian elimination.
 fn dim_rank(rows: i64[7][:]) -> i64 {
     var m: f64[7][>..] = [];
     for r in rows {
@@ -349,7 +323,6 @@ fn check_scales(n: i64) {
     }
 }
 
-// `scales_missing` and `scales_incomplete`, after all the items.
 fn scales_end() {
     if nondim || used_dims.len == 0 { return; }
     if !has_scales {
@@ -382,8 +355,6 @@ fn scales_end() {
     }
 }
 
-// --- study (spec §20.2) --------------------------------------------------------------------
-
 let STUDIES = ["grid", "zip", "sample", "minimize", "topology"];
 let TOPOLOGY_ARGS = ["objective", "region", "volume", "penalty", "filter", "max_iterations", "threshold"];
 var objectives: i64[>..];
@@ -414,9 +385,18 @@ fn check_study(n: i64) {
         a = syntax::nodes[a].next;
     }
     if pname == "topology" { topology_needs(pr); }
+    var zip_count = -1;
     var c = syntax::nodes[b].first;
     while c >= 0 {
         let s = syntax::nodes[c];
+        if s.kind == syntax::N_SETTING && pname == "zip" && syntax::nodes[s.first].kind == syntax::N_LIST {
+            let count = list_count(s.first);
+            if zip_count < 0 { zip_count = count; }
+            if count != zip_count {
+                error(s.tok, "procedure_args", str("the lists of a zip have one length: '", tok_text(s.tok), "' has ", count, " values, not ", zip_count),
+                      "give each list of the zip the same number of values");
+            }
+        }
         if s.kind == syntax::N_SETTING && pname == "topology" {
             error(s.tok, "procedure_args", "a topology study varies the density of each cell, not a param",
                   "remove the entry, or make a second study");
@@ -428,8 +408,6 @@ fn check_study(n: i64) {
     }
 }
 
-// The argument `xtol` or `step` of minimize: a fraction of each range, a
-// Real above 0 and at most 1 (femahoy gap G25).
 fn fraction_arg(name: u8[:], v: i64) {
     let t = setting_ty(v);
     let x, known = const_value(v);
@@ -439,9 +417,6 @@ fn fraction_arg(name: u8[:], v: i64) {
     }
 }
 
-// An argument of topology (femahoy gap G1): the region of the design, the
-// volume fraction above 0 and at most 1, the SIMP power of 1 or more, the
-// filter radius, a Length above 0, and the largest number of iterations.
 fn topology_arg(at: i64, word: u8[:], v: i64) {
     let where = if at >= 0 { at } else { first_tok(v) };
     if !contains_name(TOPOLOGY_ARGS, word) {
@@ -476,8 +451,6 @@ fn topology_arg(at: i64, word: u8[:], v: i64) {
     }
 }
 
-// The arguments that topology needs: the objective, the region, the
-// volume and the filter.
 fn topology_needs(pr: i64) {
     for word in ["objective", "region", "volume", "filter"] {
         var found = false;
@@ -494,8 +467,19 @@ fn topology_needs(pr: i64) {
     }
 }
 
-// The number of cases of a `grid` or a `zip` study with the block `b`, -1
-// when a range makes it unknown, and 0 for the other procedures.
+fn list_count(v: i64) -> i64 {
+    var count = 1;
+    if syntax::nodes[v].kind == syntax::N_LIST {
+        count = 0;
+        var i = syntax::nodes[v].first;
+        while i >= 0 {
+            if syntax::nodes[i].kind != syntax::N_UNIT { count++; }
+            i = syntax::nodes[i].next;
+        }
+    }
+    return count;
+}
+
 fn study_case_count(pname: u8[:], b: i64) -> i64 {
     if pname != "grid" && pname != "zip" { return 0; }
     var cases = 1;
@@ -504,16 +488,7 @@ fn study_case_count(pname: u8[:], b: i64) -> i64 {
         if syntax::nodes[c].kind == syntax::N_SETTING {
             let v = syntax::nodes[c].first;
             if syntax::nodes[v].kind == syntax::N_RANGE { return -1; }
-            var count = 1;
-            if syntax::nodes[v].kind == syntax::N_LIST {
-                count = 0;
-                var i = syntax::nodes[v].first;
-                while i >= 0 {
-                    if syntax::nodes[i].kind != syntax::N_UNIT { count++; }
-                    i = syntax::nodes[i].next;
-                }
-            }
-            // A zip takes value i of each list, so its lists have one length.
+            let count = list_count(v);
             if pname == "zip" { return count; }
             cases *= count;
         }
@@ -583,8 +558,6 @@ fn objectives_end() {
         }
     }
 }
-
-// --- other items (spec §12.4, §12.6, §10.7) -----------------------------------------------
 
 let GROUPS = ["bloch"];
 

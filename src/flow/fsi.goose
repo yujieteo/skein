@@ -1,25 +1,3 @@
-// Steady fluid-structure interaction: the flow of this package around a
-// linear elastic solid in plane strain, on two meshes that share the
-// nodes of their interface (an `interface` item, spec §14).
-//
-// The solid has P2 triangles and the stiffness of Hooke's law on the
-// small strain. The fluid holds v = 0 on the interface, since a steady
-// solid does not move. The loop of solve_fsi is a fixed point on the
-// displacement u of the solid (Küttler and Wall 2008):
-//
-//     1. move the fluid mesh: the harmonic extension of u on the interface
-//     2. solve the flow on the moved mesh
-//     3. solve K u~ = f, with f = -(the reactions of the interface nodes)
-//     4. u += ω (u~ - u), with the Aitken factor ω
-//
-// until |u~ - u| <= FSI_RTOL |u~|. The fluid solve after the first starts
-// from the last flow. At the end the fluid mesh goes back to rest, so
-// that the regions, the reports and the VTU file use the positions of the
-// model; the flow and its reactions are those of the moved mesh.
-//
-// The memory of the solid and of the mesh motion is not in the check of
-// clear_bcs. Reason: their patterns have 2% of the entries of the flow on
-// the FSI1 sample (examples/flow/turek_hron_fsi1_tri.skn).
 import std;
 import math;
 import dictionary;
@@ -31,19 +9,15 @@ import .cell;
 import .solve;
 
 let FSI_MAX = 50;
-// Reason: on the FSI1 sample, 1e-6 changes u at point A by less than
-// 1e-5 of its value from 1e-8.
-let FSI_RTOL = 1.0e-6;
-let OMEGA_START = 0.5;    // the ω of the first step
-let MOTION_RTOL = 1.0e-10; // GMRES of the mesh motion
+let FSI_RTOL_ACCURATE_ON_FSI1 = 1.0e-6;
+let OMEGA_START = 0.5;
+let MOTION_RTOL = 1.0e-10;
 
 var coupled = false;
 var young = 1.0;
 var poisson = 0.3;
 var fsi_iterations = 0;
 
-// The solid: the nodes, 6 for each triangle (the vertices, then the edge
-// nodes of EDGES), and 2 dofs for each node, 2 n and 2 n + 1.
 var s_vertices = 0;
 var s_coords: f64[>..] = [];
 var s_conn: i64[>..] = [];
@@ -51,31 +25,22 @@ var s_boundary: u8[>..] = [];
 var s_region: u8[>..] = [];
 var s_fixed: u8[>..] = [];
 var s_u: f64[>..] = [];
-// The stiffness in a band: the dofs in the sequence s_at (a breadth-first
-// sequence of the nodes), and its Cholesky factor L, with L(i, j) at
-// (s_width + 1) i + i - j for 0 <= i - j < s_width. Reason: GMRES with ILU(0) did not reach 1e-10
-// in 5000 iterations on the cantilever of test.goose.
-var s_position: i64[>..] = [];   // the position of each dof in the band
+var s_position: i64[>..] = [];
 var s_width = 0;
 var s_band: f64[>..] = [];
-var link: i64[>..] = [];     // the fluid node at each solid node, or -1
+var link: i64[>..] = [];
 
-// The mesh motion: a Laplace problem on the vertices of the fluid mesh,
-// with each boundary vertex fixed.
-var rest: f64[>..] = [];     // the fluid coords at rest
+var rest: f64[>..] = [];
 var m_rs: i64[>..] = [];
 var m_col: i32[>..] = [];
-var m_full: f64[>..] = [];   // the matrix before the fixed rows
+var m_full: f64[>..] = [];
 var m_val: f64[>..] = [];
 var m_lu: f64[>..] = [];
 var m_diag: i64[>..] = [];
 var m_fixed: u8[>..] = [];
 
-// Finite strain: St. Venant-Kirchhoff in the total Lagrangian form, solved by Newton. The tangent
-// of each cell is a central difference of its internal force. Reason: the femahoy FSI1 model writes
-// the flag as S = hooke(E, nu, strain(u)) with eq div(defgrad(u)*S) = 0.
 var finite = false;
-var s_state: f64[>..] = [];   // the u at which the tangent is built
+var s_state: f64[>..] = [];
 
 fn solid_finite() { finite = true; }
 
@@ -88,9 +53,6 @@ fn solid(e: f64, nu: f64) {
 fn solid_nodes() -> i64 { return s_coords.len / 2; }
 fn solid_cells() -> i64 { return s_conn.len / 6; }
 
-// Reads the solid mesh that skein run wrote in `dir` (solid.xy and
-// solid.tri, as flow.xy and flow.tri), after read_mesh. False if it
-// cannot read them.
 fn read_solid(dir: const u8[:]) -> bool {
     var a: u8[>..] = [];
     var b: u8[>..] = [];
@@ -102,8 +64,6 @@ fn read_solid(dir: const u8[:]) -> bool {
     return true;
 }
 
-// The solid of the vertices `xy` and the triangles `tri`, with the edge
-// nodes of P2, and its pattern.
 fn solid_from_arrays(xy: f64[:], tri: i64[:]) {
     guard xy.len % 2 == 0 && tri.len % 3 == 0 && tri.len > 0 else { abort("solid_from_arrays: vertices and triangles"); }
     s_vertices = xy.len / 2;
@@ -155,8 +115,6 @@ fn solid_from_arrays(xy: f64[:], tri: i64[:]) {
     coupled = true;
 }
 
-// The CSR of the sorted pairs a n + b of n nodes, with no repeat: the
-// columns of row a are next[start[a]..start[a + 1]].
 fn node_csr(pairs: i64[:], n: i64, start: i64[>..]&, next: i64[>..]&) {
     start.clear();
     next.clear();
@@ -171,9 +129,6 @@ fn node_csr(pairs: i64[:], n: i64, start: i64[>..]&, next: i64[>..]&) {
     while start.len <= n { start.push(next.len); }
 }
 
-// The band of the solid: a breadth-first sequence of the nodes from the
-// last node of a first one, which is at an end of the solid (George and
-// Liu 1981), and the largest distance of two nodes of a cell in it.
 fn solid_pattern() {
     let n = solid_nodes();
     var pairs: i64[>..] = [];
@@ -195,7 +150,6 @@ fn solid_pattern() {
         s_position[2 * seq[i]] = 2 * i;
         s_position[2 * seq[i] + 1] = 2 * i + 1;
     }
-    // the dofs 2 p + 1 and 2 q of nodes p and q are 2 |p - q| + 1 apart
     var width = 0;
     for e in pairs { width = max(width, abs(s_position[2 * (e / n)] - s_position[2 * (e % n)]) + 2); }
     s_width = width;
@@ -208,8 +162,6 @@ fn solid_pattern() {
     solvers::zeros(s_band, 2 * n * (s_width + 1));
 }
 
-// The breadth-first sequence of the n nodes of the graph from node
-// `from`. It starts again at the first node that it did not reach.
 fn breadth_first(from: i64, start: i64[:], next: i64[:], seq: i64[>..]&) {
     let n = start.len - 1;
     var seen: u8[>..] = [];
@@ -236,8 +188,6 @@ fn breadth_first(from: i64, start: i64[:], next: i64[:], seq: i64[>..]&) {
     }
 }
 
-// Selects the solid nodes on the boundary where P(x, y) holds, with the
-// edge nodes between two selected ends. False if no node holds.
 fn select_solid_boundary<P>() -> bool {
     guard solid_cells() > 0 else { abort("select_solid_boundary: a solid"); }
     var found = false;
@@ -254,13 +204,10 @@ fn select_solid_boundary<P>() -> bool {
     return found;
 }
 
-// Frees each displacement of the solid.
 fn clear_solid_bcs() {
     for d in s_fixed.len { s_fixed[d] = 0; }
 }
 
-// Holds u at 0 on the selected solid nodes. Reason for 0 only: the root
-// of FSI1 is the one solid bc of the samples.
 fn fix_solid() {
     guard s_region.len == solid_nodes() else { abort("fix_solid: a solid"); }
     for n in solid_nodes() {
@@ -271,7 +218,6 @@ fn fix_solid() {
     }
 }
 
-// The gradients of the barycentric coordinates of solid cell c, and its area.
 fn solid_gradients(c: i64) -> f64[6], f64 {
     let a = s_conn[6 * c];
     let b = s_conn[6 * c + 1];
@@ -289,7 +235,6 @@ fn solid_gradients(c: i64) -> f64[6], f64 {
     return g, 0.5 * twice;
 }
 
-// The gradients of the 6 P2 shape functions at the barycentric point l.
 fn p2_gradients(g: f64[6], l: f64[3]) -> f64[12] {
     var d: f64[12] = [0.0; 12];
     for k in 3 {
@@ -303,8 +248,6 @@ fn p2_gradients(g: f64[6], l: f64[3]) -> f64[12] {
     return d;
 }
 
-// The stiffness of solid cell c in plane strain, with the 3-point rule,
-// which is exact for P2 on a straight triangle.
 fn solid_cell(c: i64, k: f64[144]&) {
     if finite {
         svk_tangent(c, k);
@@ -334,8 +277,6 @@ fn solid_cell(c: i64, k: f64[144]&) {
     }
 }
 
-// The internal force of solid cell c at the dofs ue (x and y of the 6 nodes): the integral of
-// P d_a with P = F S, F = I + grad u, S = lam tr(E) I + 2 mu E, E = (F^T F - I)/2.
 fn svk_force(c: i64, ue: f64[12], f: f64[12]&) {
     let g, area = solid_gradients(c);
     let lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
@@ -370,7 +311,6 @@ fn svk_force(c: i64, ue: f64[12], f: f64[12]&) {
     }
 }
 
-// The tangent of cell c at s_state by central differences of svk_force.
 fn svk_tangent(c: i64, k: f64[144]&) {
     var ue: f64[12] = [0.0; 12];
     for a in 12 { ue[a] = s_state[2 * s_conn[6 * c + a / 2] + a % 2]; }
@@ -388,7 +328,6 @@ fn svk_tangent(c: i64, k: f64[144]&) {
     }
 }
 
-// The internal force of the whole solid at u.
 fn svk_internal(u: f64[:], g: f64[:]) {
     for d in g.len { g[d] = 0.0; }
     var ue: f64[12] = [0.0; 12];
@@ -402,9 +341,6 @@ fn svk_internal(u: f64[:], g: f64[:]) {
 
 fn band(i: i64, j: i64) -> i64 { return (s_width + 1) * i + i - j; }
 
-// Assembles the stiffness in the band, with the row and the column of
-// each fixed dof those of the identity, and factors it (Cholesky). False
-// if a pivot is not positive.
 fn factor_solid() -> bool {
     for e in s_band.len { s_band[e] = 0.0; }
     var k: f64[144] = [0.0; 144];
@@ -438,7 +374,6 @@ fn factor_solid() -> bool {
     return true;
 }
 
-// Solves the solid for the load into u. Finite strain: Newton from the u given, with a new tangent each step.
 fn solve_solid(load: f64[:], u: f64[:]) {
     if !finite {
         solve_linear_solid(load, u);
@@ -465,7 +400,6 @@ fn solve_solid(load: f64[:], u: f64[:]) {
     abort("solve_solid: the Newton iteration did not converge in 20 steps");
 }
 
-// Solves K u = load (factor_solid first) into u.
 fn solve_linear_solid(load: f64[:], u: f64[:]) {
     guard load.len == s_fixed.len && u.len == s_fixed.len else { abort("solve_solid: a load and a u for each dof"); }
     let n = load.len;
@@ -484,8 +418,6 @@ fn solve_linear_solid(load: f64[:], u: f64[:]) {
     for d in n { u[d] = y[s_position[d]]; }
 }
 
-// Links each solid boundary node to the fluid boundary node at its
-// position, and holds v = 0 at the fluid node. False if no node links.
 fn link_interface() -> bool {
     let tol = tolerance();
     link.clear();
@@ -510,8 +442,6 @@ fn link_interface() -> bool {
     return found;
 }
 
-// The Laplace matrix of the mesh motion on the fluid vertices at rest,
-// with each boundary vertex fixed, and its ILU(0). False if ILU(0) fails.
 fn motion_setup() -> bool {
     let n = vertex_count;
     var pairs: i64[>..] = [];
@@ -553,9 +483,6 @@ fn motion_setup() -> bool {
     return solvers::ilu0(m_rs, m_col, m_val, m_lu, m_diag);
 }
 
-// Moves the fluid mesh from rest: u on the linked vertices, 0 on the other
-// boundary vertices, the harmonic extension inside, and each edge node at
-// the middle of its edge (the cells are straight). False if GMRES fails.
 fn move_mesh() -> bool {
     let n = vertex_count;
     var g: f64[>..] = [];
@@ -570,7 +497,7 @@ fn move_mesh() -> bool {
         }
         solvers::multiply(m_rs, m_col, m_full, g, b);
         for v in n { b[v] = if m_fixed[v] != 0 { 0.0 } else { -b[v] }; }
-        let its, solved = solvers::gmres(m_rs, m_col, m_val, b, x, MOTION_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
+        let its, solved = solvers::gmres(m_rs, m_col, m_val, b, x, MOTION_RTOL, LINEAR_RESTART_FEWER_ITERATIONS, LINEAR_MAX) { r, z =>
             solvers::ilu0_apply(m_rs, m_col, m_lu, m_diag, r, z);
         };
         if !solved { return false; }
@@ -587,9 +514,6 @@ fn move_mesh() -> bool {
     return true;
 }
 
-// The steady coupled solve of the flow (clear_bcs and its bcs first) and
-// the solid (clear_solid_bcs and fix_solid first): the loop at the top of
-// this file. newton_steps and linear_iterations count each flow solve.
 fn solve_fsi(rtol: f64) -> bool {
     guard coupled && !turbulent && fixed.len == dof_count() && rtol > 0.0 else { abort("solve_fsi: a solid, a laminar flow, clear_bcs, and rtol > 0"); }
     let start = clock();
@@ -627,7 +551,7 @@ fn solve_fsi(rtol: f64) -> bool {
         solve_solid(load, trial);
         for d in ns { r[d] = trial[d] - s_u[d]; }
         fsi_iterations++;
-        if solvers::norm(r) <= FSI_RTOL * solvers::norm(trial) {
+        if solvers::norm(r) <= FSI_RTOL_ACCURATE_ON_FSI1 * solvers::norm(trial) {
             for d in ns { s_u[d] = trial[d]; }
             converged = true;
             break;
@@ -646,7 +570,6 @@ fn solve_fsi(rtol: f64) -> bool {
     return converged;
 }
 
-// The Aitken factor after ω: -ω (r_last · Δr) / |Δr|², with Δr = r - r_last.
 fn aitken(omega: f64, r: f64[:], last: f64[:]) -> f64 {
     var top = 0.0;
     var bottom = 0.0;
@@ -657,8 +580,6 @@ fn aitken(omega: f64, r: f64[:], last: f64[:]) -> f64 {
     return if bottom > 0.0 { -omega * top / bottom } else { omega };
 }
 
-// Component comp of u (scaled) at (x, y), and whether a solid cell holds
-// the point.
 fn solid_value_at(comp: i64, x: f64, y: f64) -> f64, bool {
     guard (comp == 0 || comp == 1) && solid_cells() > 0 else { abort("solid_value_at: comp 0 or 1, and a solid"); }
     let tol = 1.0e-9;
@@ -678,7 +599,6 @@ fn solid_value_at(comp: i64, x: f64, y: f64) -> f64, bool {
     return 0.0, false;
 }
 
-// Writes the solid at rest and u, times x_ref, to a VTU file.
 fn write_solid_vtu(path: const u8[:], x_ref: f64) -> bool {
     let nodes = solid_nodes();
     var out: u8[>..] = [];

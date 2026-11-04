@@ -1,17 +1,3 @@
-// The lexer (spec §2). It appends the tokens of one file to `tokens`,
-// comments included, and ends them with TK_EOF.
-//
-// Statement ends: a newline gives TK_NL, except inside `(`, `[` or a type
-// `<`, and except after a token that continues the statement (spec §2.2): a
-// binary operator, `,`, `:`, `=` or an open bracket. Thus a statement can
-// continue on the next line, and the parser sees one TK_NL at its end. A
-// line that starts in column 1 with the keyword of an item always starts a
-// new statement.
-//
-// Tables: the line of a `table` item at the top level ends with `:`, which
-// gives TK_NL there. Each later line that starts with a space or a tab is a
-// row: TK_INDENT, the values and TK_NL. The first other line that is not
-// blank ends the table (spec §3, notes).
 import std;
 namespace syntax;
 import .tree;
@@ -19,13 +5,10 @@ import .tree;
 fn is_letter(c: u8) -> bool { (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' }
 fn is_digit(c: u8) -> bool { c >= '0' && c <= '9' }
 
-// True for the names whose `<` opens a type argument (spec §3, `type`).
 fn is_type_constructor(word: u8[:]) -> bool {
     word == "Vector" || word == "Tensor2" || word == "Tensor4" || word == "Complex"
 }
 
-// True when a line that ends with a token of this kind continues on the
-// next line (spec §2.2).
 fn continues(kind: i64) -> bool {
     match kind {
         TK_COMMA, TK_COLON, TK_ASSIGN, TK_LPAREN, TK_LBRACKET, TK_LBRACE, TK_LANGLE => true,
@@ -35,8 +18,6 @@ fn continues(kind: i64) -> bool {
     }
 }
 
-// True when the line at `text[i..]` starts with the keyword of an item that
-// is not a label before `:`.
 fn starts_item_line(text: u8[:], i: i64) -> bool {
     var k = i;
     while k < text.len && (is_letter(text[k]) || is_digit(text[k])) { k++; }
@@ -45,8 +26,6 @@ fn starts_item_line(text: u8[:], i: i64) -> bool {
     return k >= text.len || text[k] != ':';
 }
 
-// The kind of the operator or bracket at `text[i..]`, and its length, or
-// TK_ERROR and 1.
 fn punct(text: u8[:], i: i64) -> i64, i64 {
     let c = text[i];
     let d = if i + 1 < text.len { text[i + 1] } else { 0 as u8 };
@@ -69,18 +48,17 @@ fn punct(text: u8[:], i: i64) -> i64, i64 {
     return k, 1;
 }
 
-// Lexes file `f`. It reports each byte that starts no token as `syntax`.
 fn lex(f: i64) {
     let base = files[f].start;
     let text = source[base..base + files[f].len];
     var i = 0;
     var line = 1;
     var line_start = 0;
-    var depth = 0;            // open `(`, `[` and type `<` brackets
-    var angle = 0;            // open type `<` brackets
-    var last = TK_NL;         // the last token that is not a comment
-    var stmt_first = -1;      // the kind of the first token of the statement
-    var brace = 0;            // open `{` brackets
+    var depth = 0;
+    var angle = 0;
+    var last = TK_NL;
+    var stmt_first = -1;
+    var brace = 0;
     var in_table = false;
     var at_line_start = true;
 
@@ -99,11 +77,8 @@ fn lex(f: i64) {
         last = kind;
     }
 
-    // The end of a line at offset `at`.
     fn newline(at: i64) {
         if starts_item_line(text, at + 1) {
-            // A new item always ends the statement, also after an open
-            // bracket, so that one error does not hide the next items.
             if last != TK_NL && last != TK_INDENT { emit(TK_NL, at, 0); }
             depth = 0;
             angle = 0;
@@ -129,8 +104,6 @@ fn lex(f: i64) {
         if at_line_start {
             at_line_start = false;
             if in_table {
-                // A row starts with a space or a tab. A blank line or a
-                // comment line is no row.
                 var k = i;
                 while k < text.len && (text[k] == ' ' || text[k] == '\t' || text[k] == '\r') { k++; }
                 let blank = k >= text.len || text[k] == '\n' ||
@@ -160,7 +133,6 @@ fn lex(f: i64) {
         }
         if is_digit(c) {
             while i < text.len && is_digit(text[i]) { i++; }
-            // `1d`, `2d` and `3d` are one token (spec §3, notes).
             if i - start == 1 && c >= '1' && c <= '3' && i < text.len && text[i] == 'd' &&
                     (i + 1 >= text.len || !(is_letter(text[i + 1]) || is_digit(text[i + 1]))) {
                 i++;
@@ -214,8 +186,6 @@ fn lex(f: i64) {
             kind = TK_RANGLE;
         }
         if kind == TK_ERROR {
-            // One token for a run of bytes of one character, so that a
-            // character of more than one byte gives one error.
             i++;
             while i < text.len && (text[i] & 0xC0) == 0x80 { i++; }
             emit(TK_ERROR, start, i - start);

@@ -1,6 +1,3 @@
-// `skein check` and `skein lint` (docs/command_line.md §2, §4, §6): parses
-// a model, applies the rules of spec §19 and prints the diagnostics and the
-// free boundary report and the default methods in TOON or JSON.
 import std;
 import os;
 import dictionary;
@@ -17,8 +14,6 @@ import .templates;
 import .lint;
 import .stages;
 
-// Checks the model `text` from the file `path`. The result is in `diags`
-// and `free`.
 fn check_text(path: u8[:], text: u8[:]) {
     syntax::reset();
     reset_state();
@@ -32,12 +27,10 @@ fn check_text(path: u8[:], text: u8[:]) {
     model_prog = prog;
     syntax::read_uses(prog);
     take_syntax_errors();
-    // The other rules need a tree with no syntax errors (spec §19).
     if diags.len > 0 { return; }
     let s = syntax::add_file(STD_PATH, STD_SOURCE);
     syntax::lex(s);
     std_prog = syntax::parse(s);
-    // The header first: it sets the space and the units of the built-in names.
     let h = syntax::child_of_kind(prog, syntax::N_HEADER);
     if h >= 0 { check_header(h); }
     add_builtins();
@@ -55,7 +48,6 @@ fn check_text(path: u8[:], text: u8[:]) {
     sort_diags();
 }
 
-// Adds each error of `syntax::errors` to `diags`.
 fn take_syntax_errors() {
     for e in syntax::errors {
         let k = syntax::tokens[e.tok];
@@ -66,8 +58,6 @@ fn take_syntax_errors() {
     }
 }
 
-// `skein lint`: checks the model `text`, then applies the lint rules when
-// it has no error. The result is in `diags`.
 fn lint_text(path: u8[:], text: u8[:]) {
     check_text(path, text);
     if diags.len > 0 { return; }
@@ -102,8 +92,6 @@ fn check_item(n: i64) {
     }
 }
 
-// Sorts the diagnostics by file, line and column (command_line.md §6.1),
-// stably. The model file comes first, then each library file in `use` order.
 fn after(a: Diag, b: Diag) -> bool {
     if a.fnum != b.fnum { return a.fnum > b.fnum; }
     if a.line != b.line { return a.line > b.line; }
@@ -122,11 +110,8 @@ fn sort_diags() {
     }
 }
 
-// --- output (docs/command_line.md §6) -------------------------------------------------------
-
 let HEX = "0123456789abcdef";
 
-// `s` in double quotes, with `"`, `\` and the control bytes escaped (TOON and JSON).
 fn quoted(out: u8[>..]&, s: u8[:]) {
     out.push('"');
     for c in s {
@@ -150,7 +135,6 @@ fn quoted(out: u8[>..]&, s: u8[:]) {
     out.push('"');
 }
 
-// A TOON value: quoted when it holds a comma, a quote or a space at an end.
 fn toon_value(out: u8[>..]&, s: u8[:]) {
     var plain = s.len > 0 && s[0] != ' ' && s[s.len - 1] != ' ';
     for c in s {
@@ -159,7 +143,6 @@ fn toon_value(out: u8[>..]&, s: u8[:]) {
     if plain { out.append(s); } else { quoted(out, s); }
 }
 
-// The number of diagnostics that are errors, not lint warnings.
 fn error_count() -> i64 {
     var n = 0;
     for d in diags {
@@ -261,19 +244,12 @@ fn write_json(out: u8[>..]&) {
     out.append("}\n");
 }
 
-// `skein check`, and `skein lint` with no mesh. `args[1]` is the command.
-// The result is the exit status (command_line.md §10): a lint warning
-// alone gives 0.
 fn command(args: u8[:][:]) -> i64 {
     let status, json, mesh = start(args);
     if status >= 0 { return status; }
     return finish(json);
 }
 
-// Reads the options of `args` and the model, then checks it, or lints it
-// when `args[1]` is "lint". The result is an exit status, or -1 when the
-// command continues, then true for `--format json` and for `--mesh`. Only
-// `lint` has `--mesh`.
 fn start(args: u8[:][:]) -> i64, bool, bool {
     let lint = args[1] == "lint";
     let usage = str("usage: skein ", args[1], if lint { " [--mesh]" } else { "" }, " [--format toon|json] model.skn\n");
@@ -319,8 +295,6 @@ fn start(args: u8[:][:]) -> i64, bool, bool {
     return -1, json, mesh;
 }
 
-// Prints the diagnostics, in JSON when `json` is true. The result is the
-// exit status.
 fn finish(json: bool) -> i64 {
     var out: u8[>..] = [];
     if json { write_json(out); } else { write_toon(out); }

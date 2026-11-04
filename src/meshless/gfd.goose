@@ -1,16 +1,3 @@
-// gfd: the generalized finite differences of Benito, Ureña and Gavete
-// (2001), collocated at each point (spec §17.5).
-//
-// The stencil of point I is the `stencil` points nearest to it. The
-// derivatives D = (u_x, u_y, u_xx, u_yy, u_xy) at I minimize
-//
-//     Σ_j w_j² (u_I + p_jᵀ D - u_j)²,   p_j = (Δx, Δy, Δx²/2, Δy²/2, Δx Δy)
-//
-// with Δ = x_j - x_I and the weight w_j = 1/|Δ|³. So D = Σ_j c_j (u_j - u_I),
-// with c_j = A⁻¹ p_j w_j² and A = Σ_j w_j² p_j p_jᵀ. Each point gives one
-// row: the equation at a point inside, u = g at a point of a fixed edge,
-// and (a u - d grad(u))·n = 0 at a point of a free edge, with n the mean
-// normal of its edges.
 import std;
 import math;
 namespace meshless;
@@ -19,14 +6,12 @@ import .rk;
 import .model;
 import .solve;
 
-var st_start: i64[>..] = [];    // the stencil of each point, from st_start[p]
+var st_start: i64[>..] = [];
 var st_item: i64[>..] = [];
-var st_c: f64[>..] = [];        // c_j of each entry: 5 values
-var on_edge: i64[>..] = [];     // a boundary edge of each point, or -1
-var normal: f64[>..] = [];      // the mean outward normal of each point on the boundary
+var st_c: f64[>..] = [];
+var on_edge: i64[>..] = [];
+var normal: f64[>..] = [];
 
-// The stencils, the normals, and the pattern. False if a stencil cannot
-// fit the 5 derivatives: its points are on one conic.
 fn gfd_setup() -> bool {
     st_start.clear();
     st_item.clear();
@@ -72,7 +57,6 @@ fn boundary_normals() {
     }
 }
 
-// The `stencil` points nearest to p, and their c_j.
 fn stencil_of(p: i64) -> bool {
     var radius = 2.0 * spacing[p];
     var cand: i64[>..] = [];
@@ -113,7 +97,6 @@ fn stencil_of(p: i64) -> bool {
     return true;
 }
 
-// p_j of point j from point p, in units of h, and w_j².
 fn taylor(p: i64, j: i64, h: f64) -> f64[5], f64 {
     let dx = (px(j) - px(p)) / h;
     let dy = (py(j) - py(p)) / h;
@@ -122,8 +105,6 @@ fn taylor(p: i64, j: i64, h: f64) -> f64[5], f64 {
     return [dx, dy, 0.5 * dx * dx, 0.5 * dy * dy, dx * dy], w * w;
 }
 
-// The inverse of the 5 × 5 matrix a by Gauss-Jordan with partial
-// pivoting, and false if it is singular.
 fn inverse_5(a: f64[25]) -> f64[25], bool {
     var m = a;
     var inv: f64[25] = [0.0; 25];
@@ -159,7 +140,6 @@ fn inverse_5(a: f64[25]) -> f64[25], bool {
     return inv, true;
 }
 
-// The row of each point.
 fn gfd_assemble<SRC, BC>() {
     for &v in val { v = 0.0; }
     var fix: i64[>..] = [];
@@ -179,7 +159,6 @@ fn gfd_assemble<SRC, BC>() {
         }
         let free = on_edge[p] >= 0;
         let n = [normal[2 * p], normal[2 * p + 1]];
-        // The row: Σ_j coef_j (u_j - u_I).
         var centre = if free { ax * n[0] + ay * n[1] } else { 0.0 };
         for i in st_start[p]..st_start[p + 1] {
             let c = st_c[5 * i..5 * i + 5];

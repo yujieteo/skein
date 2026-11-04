@@ -1,19 +1,7 @@
-// A direct solve of a sparse system with a narrow band: the LU factors with
-// partial pivoting of the rows, in the band of the matrix (LAPACK dgbsv).
-//
-// A has the lower width kl and the upper width ku when its entries a(i, j)
-// are 0 for j < i - kl and j > i + ku. The pivoting makes the upper width of
-// U at most ku + kl. Row i of the work array `band` holds the columns
-// i - kl to i + ku + kl, so its size is n (2 kl + ku + 1).
-//
-// The solve forms U x = L⁻¹ P b in one pass: each row operation also acts on
-// the right side b, so the factors are not kept. Reason: the Newton method
-// of src/flow/solve.goose solves each Jacobian once.
 import std;
 import math;
 namespace solvers;
 
-// The lower and upper width of the matrix in CSR.
 fn band_widths(row_start: i64[:], col: i32[:]) -> i64, i64 {
     guard row_start.len > 0 && row_start[row_start.len - 1] == col.len else { abort("band_widths: row_start ends at col.len"); }
     var kl = 0;
@@ -28,11 +16,8 @@ fn band_widths(row_start: i64[:], col: i32[:]) -> i64, i64 {
     return kl, ku;
 }
 
-// The number of entries of the work array of a system of n unknowns.
 fn band_size(n: i64, kl: i64, ku: i64) -> i64 { return n * (2 * kl + ku + 1); }
 
-// Solves A x = b, and puts the solution in x. `band` has band_size entries.
-// False if a pivot is 0 (the matrix is singular).
 fn band_solve(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:], kl: i64, ku: i64, band: f64[:]) -> bool {
     let n = row_start.len - 1;
     let w = 2 * kl + ku + 1;
@@ -70,8 +55,6 @@ fn band_solve(row_start: i64[:], col: i32[:], val: f64[:], b: f64[:], x: f64[:],
     return true;
 }
 
-// Swaps the active parts, the columns k to k + ku + kl, of rows k and p,
-// and the right sides.
 fn swap_rows(band: f64[:], w: i64, k: i64, p: i64, kl: i64, ku: i64, x: f64[:]) {
     let n = x.len;
     for c in k..min(n - 1, k + ku + kl) + 1 {

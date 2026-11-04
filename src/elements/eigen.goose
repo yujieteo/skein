@@ -1,18 +1,3 @@
-// The `modal` and `buckling` steps (spec §14.2): LOBPCG (Knyazev 2001) for
-// the smallest eigenpairs of A x = θ B x on the free dofs.
-//
-//   modal      A = K, B = M (the consistent mass): θ = ω²
-//   buckling   A = K_G (the geometric stiffness of the stress of the
-//              solution of the last step, which clear_bcs keeps), B = K: θ = -1/λ, with λ the
-//              load factor. The most negative θ gives the smallest λ.
-//
-// The preconditioner is the AMG of K (solve.goose) in both. The basis of
-// each Rayleigh-Ritz step is [X, W, P], made B-orthonormal by two passes of
-// Gram-Schmidt. A vector that is nearly in the span of the others leaves
-// the basis.
-//
-// M and K_G have the pattern of K, in val_b. Their integrals use a conical
-// product of 4-point Gauss rules (Stroud): exact for the P2 mass.
 import std;
 import math;
 namespace elements;
@@ -25,21 +10,22 @@ import solvers from "../solvers";
 
 let MASS = 0;
 let GEOMETRIC = 1;
-let EIGEN_TOLERANCE = 1.0e-8;    // the residual relative to |A x| + |θ B x|
+let EIGEN_TOLERANCE = 1.0e-8;
 let EIGEN_ITERATIONS = 500;
+let FREE_BODY_SHIFT = 1.0e-6;
+let LOBPCG_BLOCKS = 14;
 
 var density = 0.0;
 var val_b: f64[>..] = [];
 var eigen_kind = MASS;
-var eigenvalues: f64[>..] = [];  // θ of each mode of the last eigen step
-var modes: f64[>..] = [];        // mode k at dof_total() k
+var eigenvalues: f64[>..] = [];
+var modes: f64[>..] = [];
 
 let GAUSS_X: f64[4] = [0.0694318442029737, 0.33000947820757187, 0.6699905217924281, 0.9305681557970263];
 let GAUSS_W: f64[4] = [0.17392742256872692, 0.3260725774312731, 0.3260725774312731, 0.17392742256872692];
 
 fn rich_count() -> i64 { return if hex_cells { quad_count(dim) } else if dim == 2 { 16 } else { 64 }; }
 
-// Point q of the conical product rule on the unit simplex of dimension dim.
 fn rich_point(q: i64) -> f64[3], f64 {
     if hex_cells { return quad_point(dim, q); }
     let u = GAUSS_X[q % 4];
@@ -50,9 +36,6 @@ fn rich_point(q: i64) -> f64[3], f64 {
     return [u, v * (1.0 - u), w * (1.0 - u) * (1.0 - v)], weight * (1.0 - u) * (1.0 - u) * (1.0 - v);
 }
 
-// The stress of the solution of the last step (held: clear_bcs keeps it)
-// in cell c at the point of the last cell_geometry, after use_law(c):
-// s[3 i + j].
 fn stress_here(c: i64) -> f64[9] {
     let b = born.len > 0 && born[c] != 0;
     var du: f64[9] = [0.0; 9];
@@ -72,8 +55,6 @@ fn stress_here(c: i64) -> f64[9] {
     return s;
 }
 
-// M or K_G in val_b, on the pattern of K: δpq times the scalar matrix of
-// the nodes, ∫ ρ Ni Nj dV or ∫ ∇Ni · σ ∇Nj dV.
 fn assemble_second(kind: i64) {
     guard physics == ELASTIC && val.len > 0 else { abort("assemble_second: an elastic physics and K"); }
     val_b.clear();
@@ -110,7 +91,6 @@ fn assemble_second(kind: i64) {
     use_law_0();
 }
 
-// y = A x (second false) or B x (second true) on the free dofs.
 fn apply(second: bool, x: f64[:], y: f64[:]) {
     let a = eigen_kind == MASS;
     let use_b = if second { a } else { !a };
@@ -127,9 +107,6 @@ fn apply(second: bool, x: f64[:], y: f64[:]) {
     }
 }
 
-// The eigenvalues and the eigenvectors of the symmetric k × k matrix h
-// (row major), in increasing order: cyclic Jacobi rotations. Vector j is
-// column j of the second result.
 fn symmetric_eigen(h: f64[:], k: i64) -> f64[>..], f64[>..] {
     var a: f64[>..] = [];
     a.append(h);
@@ -157,7 +134,6 @@ fn symmetric_eigen(h: f64[:], k: i64) -> f64[>..], f64[>..] {
     return sorted_pairs(a, v, k);
 }
 
-// a = Jᵀ a J and v = v J, with J the rotation of (p, q).
 fn rotate(a: f64[>..]&, v: f64[>..]&, k: i64, p: i64, q: i64, cs: f64, sn: f64) {
     for r in k {
         let x = a[k * r + p];
@@ -179,7 +155,6 @@ fn rotate(a: f64[>..]&, v: f64[>..]&, k: i64, p: i64, q: i64, cs: f64, sn: f64) 
     }
 }
 
-// The diagonal of a in increasing order, and the columns of v in that order.
 fn sorted_pairs(a: f64[:], v: f64[:], k: i64) -> f64[>..], f64[>..] {
     var order: i64[>..] = [];
     for i in k { order.push(i); }
@@ -201,9 +176,6 @@ fn sorted_pairs(a: f64[:], v: f64[:], k: i64) -> f64[>..], f64[>..] {
     return values, vectors;
 }
 
-// --- LOBPCG ------------------------------------------------------------------
-
-// The basis S of the Rayleigh-Ritz step, B S and A S: vector i at n i.
 var basis: f64[>..] = [];
 var basis_b: f64[>..] = [];
 var basis_a: f64[>..] = [];
@@ -214,8 +186,6 @@ fn dot_of(a: f64[:], i: i64, b: f64[:], j: i64, n: i64) -> f64 {
     return s;
 }
 
-// Adds v to the basis, B-orthonormal to the vectors in it, if it is not
-// nearly in their span.
 fn add_to_basis(v: f64[:]) -> bool {
     let n = v.len;
     var u: f64[>..] = [];
@@ -242,7 +212,6 @@ fn add_to_basis(v: f64[:]) -> bool {
     guard norm > 1.0e-16 * first else { return false; }
     let f = 1.0 / sqrt(norm);
     for &x in u { x *= f; }
-    // B u again: the updates of bu drift from it when B is ill-conditioned.
     apply(true, u, bu);
     basis.append(u);
     basis_b.append(bu);
@@ -251,7 +220,6 @@ fn add_to_basis(v: f64[:]) -> bool {
     return true;
 }
 
-// The m vectors Σ_{i >= from} src_i y[k i + j] of the k vectors of src.
 fn ritz_vectors(src: f64[:], y: f64[:], k: i64, m: i64, from: i64, n: i64) -> f64[>..] {
     var out: f64[>..] = [];
     for j in m {
@@ -264,7 +232,6 @@ fn ritz_vectors(src: f64[:], y: f64[:], k: i64, m: i64, from: i64, n: i64) -> f6
     return out;
 }
 
-// The block of m start vectors: a fixed pseudo-random value on each free dof.
 fn start_block(m: i64, n: i64) -> f64[>..] {
     var x: f64[>..] = [];
     for i in m * n {
@@ -276,8 +243,6 @@ fn start_block(m: i64, n: i64) -> f64[>..] {
 
 var eigen_its = 0;
 
-// The `count` smallest θ of A x = θ B x, in eigenvalues and modes. False if
-// they do not converge in EIGEN_ITERATIONS steps.
 fn lobpcg(count: i64) -> bool {
     let n = dof_total();
     var free = 0;
@@ -314,9 +279,6 @@ fn lobpcg(count: i64) -> bool {
     return converged;
 }
 
-// The Ritz values and vectors of the basis: H y = θ G y, with H = Sᵀ A S
-// and the Gram matrix G = Sᵀ B S, near I. With G = L Lᵀ (Cholesky), it is
-// C z = θ z for C = L⁻¹ H L⁻ᵀ, and y = L⁻ᵀ z.
 fn ritz(k: i64, n: i64) -> f64[>..], f64[>..] {
     var h: f64[>..] = [];
     var l: f64[>..] = [];
@@ -326,7 +288,6 @@ fn ritz(k: i64, n: i64) -> f64[>..], f64[>..] {
             l.push(0.5 * (dot_of(basis, i, basis_b, j, n) + dot_of(basis, j, basis_b, i, n)));
         }
     }
-    // l = L, in its lower triangle
     for j in k {
         for i in j..k {
             var s = l[k * i + j];
@@ -334,7 +295,6 @@ fn ritz(k: i64, n: i64) -> f64[>..], f64[>..] {
             l[k * i + j] = if i == j { sqrt(max(s, 1.0e-300)) } else { s / l[k * j + j] };
         }
     }
-    // h = L⁻¹ h L⁻ᵀ: forward substitution on the columns, then on the rows.
     for c in k {
         for i in k {
             var s = h[k * i + c];
@@ -350,7 +310,6 @@ fn ritz(k: i64, n: i64) -> f64[>..], f64[>..] {
         }
     }
     let theta, z = symmetric_eigen(h, k);
-    // y = L⁻ᵀ z: back substitution on each column.
     var y: f64[>..] = [];
     y.append(z);
     for c in k {
@@ -364,8 +323,6 @@ fn ritz(k: i64, n: i64) -> f64[>..], f64[>..] {
     return theta, y;
 }
 
-// The preconditioned residual T (A x_j - θ_j B x_j) of each Ritz pair that
-// has not converged, and whether the first `count` have.
 fn residuals(theta: f64[:], ax: f64[:], bx: f64[:], count: i64, m: i64, n: i64) -> bool, f64[>..] {
     var w: f64[>..] = [];
     var r: f64[>..] = [];
@@ -394,8 +351,6 @@ fn residuals(theta: f64[:], ax: f64[:], bx: f64[:], count: i64, m: i64, n: i64) 
     return all, w;
 }
 
-// For a modal step of a body with no fixed dof: adds s M to K, with s = 1e-6
-// times the ratio of the sums of the diagonals of K and M. Gives s, or 0.
 fn free_body_shift(kind: i64) -> f64 {
     guard kind == MASS else { return 0.0; }
     for d in dof_total() { if fixed[d] != 0 { return 0.0; } }
@@ -405,25 +360,20 @@ fn free_body_shift(kind: i64) -> f64 {
         dk += val[entry(r, r)];
         dm += val_b[entry(r, r)];
     }
-    let s = 1.0e-6 * dk / dm;
+    let s = FREE_BODY_SHIFT * dk / dm;
     for e in val.len { val[e] += s * val_b[e]; }
     return s;
 }
 
-// Assembles K, its AMG and the matrix B or A of `kind`, then runs LOBPCG.
 fn eigen_solve(kind: i64, count: i64) -> bool {
     guard physics == ELASTIC && dofs_sized() && count >= 1 else { abort("eigen_solve: an elastic physics, the arrays of the dofs and count >= 1"); }
     guard kind == GEOMETRIC || density > 0.0 else { abort("eigen_solve: a density > 0 for a modal step"); }
     guard kind == MASS || held.len == sol.len else { abort("eigen_solve: the solution of a step before a buckling step"); }
     let start = clock();
-    // The blocks of lobpcg of m = count + max(count / 2, 2) vectors: about
-    // 14 m, and the modes of the AMG with their copy.
     let m = count + max(count / 2, 2);
-    assemble(if kind == MASS { "simplex modal lobpcg amg" } else { "simplex buckling lobpcg amg" }, 14 * m + 2 * mode_count());
+    assemble(if kind == MASS { "simplex modal lobpcg amg" } else { "simplex buckling lobpcg amg" }, LOBPCG_BLOCKS * m + 2 * mode_count());
     hold_dead_nodes();
     eigen_kind = kind;
-    // A body with no fixed dof has 6 rigid modes (K is singular): the shift
-    // K + s M, an SPD matrix, moves each θ by s, which is removed after.
     assemble_second(kind);
     let shift = free_body_shift(kind);
     let factored = setup_preconditioner(0);
@@ -434,8 +384,6 @@ fn eigen_solve(kind: i64, count: i64) -> bool {
     return done;
 }
 
-// Eigenvalue k (1 ..), in the unit of the step: the frequency ω / 2π of a
-// modal step, the load factor -1/θ of a buckling step.
 fn mode_value(k: i64) -> f64 {
     guard k >= 1 && k <= eigenvalues.len else { abort("mode_value: 1 <= k <= the count of the last eigen step"); }
     let t = eigenvalues[k - 1];

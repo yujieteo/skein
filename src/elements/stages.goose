@@ -1,20 +1,3 @@
-// The materials of the cells, and birth and death (spec §11, §14.3).
-//
-// A cell is in a shape g of src/mesher/ if the centroid of its vertices is
-// in g. The mesh of mesh_shape keeps the boundary of each shape of
-// mesher::add_interface as edges in 2D, so each cell is then in or out of
-// the shape as a whole.
-//
-// Law 0 is the material of set_elastic and body_force. add_law gives the
-// cells in a shape another one.
-//
-// A dead cell adds no stiffness and no load. A node that no live cell holds
-// is held at its value of the last step: fixed is 2 there, and the
-// reactions and the check `equilibrium` skip it. A born cell is
-// strain-free at its birth (spec §14.3): it stores the unknown of its nodes
-// then, u_b, and its stress is C (strain(u) - strain(u_b)). The assembly
-// adds K_e u_b to the load of its nodes for this. The new nodes that no
-// live cell held take the value of the nearest node that one held.
 import std;
 import math;
 namespace elements;
@@ -23,26 +6,25 @@ import .mesh;
 import .assemble;
 
 struct Law {
-    cond: f64,      // the conductivity and the source of a heat physics
+    cond: f64,
     heat: f64,
     lame: f64,
     lame_3d: f64,
     shear: f64,
     force: f64[3],
-    ani: bool,      // the written-out law of assemble.goose
+    ani: bool,
     cm: f64[36],
     s0: f64[6],
 }
 
 var laws: Law[>..] = [];
-var cell_law: i64[>..] = [];    // the law of each cell; empty for law 0 in each cell
-var dead: u8[>..] = [];         // 1 for each dead cell; empty if each cell is live
-var born: u8[>..] = [];         // 1 for each cell with a birth; empty if none
-var birth_u: f64[>..] = [];     // u_b of each node of each cell, per_cell ncomp values
-var held: f64[>..] = [];        // the solution of the last step
-var origin: f64[>..] = [];      // the value of each dof of a node at its birth: a report and an output show sol - origin
+var cell_law: i64[>..] = [];
+var dead: u8[>..] = [];
+var born: u8[>..] = [];
+var birth_u: f64[>..] = [];
+var held: f64[>..] = [];
+var origin: f64[>..] = [];
 
-// Clears the laws and the live set, for a new physics.
 fn clear_stages() {
     laws.clear();
     cell_law.clear();
@@ -53,10 +35,6 @@ fn clear_stages() {
     origin.clear();
 }
 
-// The value of dof d that a report or an output shows. A node that a
-// birth made has the settlement of the column below it in sol, but its
-// point is not on the column before its cells: it shows the change since
-// its birth.
 fn shown(d: i64) -> f64 {
     return if origin.len == sol.len { sol[d] - origin[d] } else { sol[d] };
 }
@@ -64,7 +42,6 @@ fn shown(d: i64) -> f64 {
 fn law_now() -> Law { return Law { cond: conductivity, heat: source, lame: lame, lame_3d: lame_3d, shear: shear, force: volume_force,
                                           ani: aniso_on, cm: aniso_c, s0: aniso_s0 }; }
 
-// Sets the moduli and the body force of the assembly to the law of cell c.
 fn use_law(c: i64) {
     guard cell_law.len > 0 else { return; }
     let w = laws[cell_law[c]];
@@ -77,12 +54,10 @@ fn use_law(c: i64) {
     use_aniso(w);
 }
 
-// The written-out law of w, or none.
 fn use_aniso(w: Law) {
     if w.ani { set_aniso(w.cm, w.s0); } else { aniso_on = false; }
 }
 
-// Sets them to law 0 again.
 fn use_law_0() {
     guard laws.len > 0 else { return; }
     conductivity = laws[0].cond;
@@ -96,7 +71,6 @@ fn use_law_0() {
 
 fn cell_in(c: i64, g: i64) -> bool {
     var p: f64[3] = [0.0, 0.0, 0.0];
-    // The centre of the corners: a simplex has dim + 1, a hexahedron has 8.
     let corners = if hex_cells { 8 } else { dim + 1 };
     for l in corners {
         for t in 3 { p[t] += node_x(cell_node(c, l), t) / corners; }
@@ -106,9 +80,6 @@ fn cell_in(c: i64, g: i64) -> bool {
 
 fn is_live(c: i64) -> bool { return dead.len == 0 || dead[c] == 0; }
 
-// Gives the cells in shape g the elastic law of E, nu and the body force
-// (bx, by, bz), with the plane assumption and the thickness of law 0. It
-// gives the number of these cells.
 fn add_law(g: i64, E: f64, nu: f64, b: f64[3]) -> i64 {
     guard physics == ELASTIC && E > 0.0 && nu > -1.0 && nu < 0.5 else { abort("add_law: an elastic physics, E > 0 and -1 < nu < 0.5"); }
     if laws.len == 0 {
@@ -128,8 +99,6 @@ fn add_law(g: i64, E: f64, nu: f64, b: f64[3]) -> i64 {
     return count;
 }
 
-// Gives the cells in shape g the written-out law c and s0 (set_aniso) and
-// the body force b. It gives the number of these cells.
 fn add_aniso_law(g: i64, c: f64[36], s0: f64[6], b: f64[3]) -> i64 {
     guard physics == ELASTIC else { abort("add_aniso_law: an elastic physics"); }
     if laws.len == 0 {
@@ -147,8 +116,6 @@ fn add_aniso_law(g: i64, c: f64[36], s0: f64[6], b: f64[3]) -> i64 {
     return count;
 }
 
-// Gives the cells in shape g the heat law of the conductivity k and the
-// source q. It gives the number of these cells.
 fn add_heat_law(g: i64, k: f64, q: f64) -> i64 {
     guard physics == HEAT && k > 0.0 && curve_k.len == 0 else { abort("add_heat_law: a heat physics with a constant conductivity, and k > 0"); }
     if laws.len == 0 {
@@ -166,7 +133,6 @@ fn add_heat_law(g: i64, k: f64, q: f64) -> i64 {
     return count;
 }
 
-// Kills the live cells in shape g. It gives the number of cells in g.
 fn kill_cells(g: i64) -> i64 {
     if dead.len == 0 { for c in cell_count() { dead.push(0); } }
     var count = 0;
@@ -179,7 +145,6 @@ fn kill_cells(g: i64) -> i64 {
     return count;
 }
 
-// Whether a live cell holds each node.
 fn live_nodes() -> u8[>..] {
     var live: u8[>..] = [];
     for n in node_count() { live.push(0); }
@@ -190,7 +155,6 @@ fn live_nodes() -> u8[>..] {
     return live;
 }
 
-// The new cells come alive. Each new node takes the value of the nearest shared node.
 fn adopt_values(new_cells: i64[>..]&, shared: i64[>..]&, before: u8[>..]&, seen: u8[>..]&) {
     for c in new_cells {
         dead[c] = 0;
@@ -214,7 +178,6 @@ fn adopt_values(new_cells: i64[>..]&, shared: i64[>..]&, before: u8[>..]&, seen:
     }
 }
 
-// Records the value of each new node at its birth, for the change since birth.
 fn record_birth(new_cells: i64[>..]&, before: u8[>..]&) {
     if origin.len != sol.len {
         origin.clear();
@@ -233,8 +196,6 @@ fn record_birth(new_cells: i64[>..]&, before: u8[>..]&) {
     }
 }
 
-// Gives birth to the dead cells in shape g, strain-free on the solution of
-// the last step. It gives the number of cells in g.
 fn birth_cells(g: i64) -> i64 {
     guard dofs_sized() else { abort("birth_cells: the arrays of the dofs"); }
     if dead.len == 0 { for c in cell_count() { dead.push(0); } }
@@ -247,8 +208,6 @@ fn birth_cells(g: i64) -> i64 {
         held.append(sol);
     }
     let before = live_nodes();
-    // The nodes of the new cells that a live cell held: the start of the
-    // nearest-node search.
     var new_cells: i64[>..] = [];
     var shared: i64[>..] = [];
     var seen: u8[>..] = [];
@@ -270,8 +229,6 @@ fn birth_cells(g: i64) -> i64 {
     return count;
 }
 
-// Holds each dof of a node that no live cell holds at its value of the
-// last step, with a 1 on the diagonal of its row.
 fn hold_dead_nodes() {
     guard dead.len > 0 else { return; }
     let live = live_nodes();
@@ -279,7 +236,7 @@ fn hold_dead_nodes() {
         if live[n] != 0 { continue; }
         for p in ncomp {
             let d = ncomp * n + p;
-            fixed[d] = 2;
+            fixed[d] = FIXED_HELD;
             prescribed[d] = if held.len == sol.len { held[d] } else { 0.0 };
             val[entry(d, d)] = 1.0;
         }

@@ -1,15 +1,8 @@
-// Tests of the runtime. `./build.sh test` runs this program from the root
-// of the repository, and a non-zero exit status is a failure.
-//
-// The acceptance case is femahoy validation/cases/grid-cantilever
-// (examples/femahoy/grid_cantilever.skn): a steel beam 100 × 10 × 10 mm,
-// E = 210000 MPa, nu = 0.3, fixed at x = 0, with a traction of -1 MPa in z
-// on the tip x = 100 mm, so P = 100 N. Units: mm, N, MPa.
 import std;
 import math;
 import os;
 import runtime from "../runtime";
-import solvers from "../solvers";   // the runtime imports it (lane_solvers.goose)
+import solvers from "../solvers";
 
 var failures = 0;
 
@@ -28,7 +21,7 @@ let E = 210000.0;
 let NU = 0.3;
 let P = 100.0;
 
-// The femahoy grid result at max_cell 2.5 mm (derivation.md, mesh study).
+let EQUILIBRIUM_TOLERANCE = 1.0e-6;
 let FEMAHOY_TIP = -0.190113;
 
 fn euler_bernoulli_tip() -> f64 {
@@ -36,8 +29,6 @@ fn euler_bernoulli_tip() -> f64 {
     return -P * L * L * L / (3.0 * E * inertia);
 }
 
-// The cantilever on 2.5 mm cells (40 × 4 × 4 27-node hexahedra), as the
-// femahoy grid case.
 fn test_cantilever() {
     runtime::mesh_box(0.0, 0.0, 0.0, L, B, H, 40, 4, 4);
     runtime::material(E, NU);
@@ -59,8 +50,7 @@ fn test_cantilever() {
     expect_near("tip uz against Euler-Bernoulli", uz, euler_bernoulli_tip(), 0.02);
     expect_near("applied load", fz, -P, 1.0e-12);
     expect_near("tip face area", runtime::face_area("x1"), B * H, 1.0e-12);
-    // The equilibrium check of docs/checks.md: 1e-6 of the largest load.
-    if abs(rz + fz) > 1.0e-6 * P || abs(rx + fx) > 1.0e-6 * P || abs(ry + fy) > 1.0e-6 * P {
+    if abs(rz + fz) > EQUILIBRIUM_TOLERANCE * P || abs(rx + fx) > EQUILIBRIUM_TOLERANCE * P || abs(ry + fy) > EQUILIBRIUM_TOLERANCE * P {
         failures++;
         print("FAIL equilibrium: reaction ", rx, " ", ry, " ", rz, ", load ", fx, " ", fy, " ", fz);
     }
@@ -71,9 +61,6 @@ fn test_cantilever() {
     }
 }
 
-// The cantilever on 2.5 mm cells with 8-node hexahedra with incompatible
-// modes (C3D8I), as the femahoy grid solver. The bending stress at
-// x = 51.25 mm on the top face is the Saint-Venant value M c / I.
 fn test_cantilever_incompatible() {
     runtime::mesh_box_incompatible(0.0, 0.0, 0.0, L, B, H, 40, 4, 4);
     runtime::material(E, NU);
@@ -93,9 +80,6 @@ fn test_cantilever_incompatible() {
     expect_near("hex8i top sxx against Saint-Venant", sxx, bending, 0.015);
 }
 
-// The patch test of the incompatible modes: a uniform tension of 1 MPa in
-// x on a box of 2 × 2 × 2 cells with a moved centre node. The modes of
-// Taylor et al. (1976) keep the stress uniform and exact.
 fn test_patch_incompatible() {
     runtime::mesh_box_incompatible(0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2, 2, 2);
     let centre = 1 + 3 * (1 + 3 * 1);
@@ -123,8 +107,6 @@ fn test_patch_incompatible() {
     }
 }
 
-// A second load step on the same mesh: a point force at the tip, after
-// `clear_loads`. A name that is not a set of the mesh selects nothing.
 fn test_second_step() {
     runtime::clear_loads();
     runtime::force_point(L, 0.5 * B, 0.5 * H, 0.0, 0.0, -2.0 * P);
@@ -142,12 +124,9 @@ fn test_second_step() {
     print("second step: point force ", fz, " N, tip uz at the top ", uz, " mm, reaction z ", rz, " N");
     expect_near("second step applied load", fz, -2.0 * P, 1.0e-12);
     expect_near("second step reaction", rz, 2.0 * P, 1.0e-6);
-    // The beam is linear: twice the load gives about twice the deflection.
     expect_near("second step tip uz", uz, 2.0 * FEMAHOY_TIP, 0.02);
 }
 
-// The linear problem through the Newton interface: R(u) = K u - f, with
-// the Jacobian K. One Newton iteration solves it.
 fn linear_residual(u: f64[:], r: f64[:]) {
     runtime::multiply(u, r);
     for d in r.len { r[d] -= runtime::load[d]; }
@@ -169,8 +148,6 @@ fn test_newton() {
     expect_near("newton tip uz against the linear solve", uz, -0.1905018167560175, 1.0e-6);
 }
 
-// Two fixed faces with a shared edge: the total reaction counts each node
-// of the edge once, so it balances the load.
 fn test_shared_edge() {
     runtime::mesh_box(0.0, 0.0, 0.0, L, B, H, 10, 1, 1);
     runtime::material(E, NU);
@@ -192,12 +169,6 @@ fn test_shared_edge() {
     }
 }
 
-// A quarter of a closed-end steel tube, a = 100 mm, b = 105 mm, 10 mm
-// long, with an internal pressure of 1 MPa. Symmetry on x = 0, y = 0 and
-// z = 0. The closed end is the uniform axial stress A = p a² / (b² - a²)
-// on z = 10 mm. The Lamé solution is exact for these loads:
-// σθ = A (1 + b²/r²), σr = A (1 - b²/r²) and σz = A. The 0.1% limit is
-// about 4 times the error of this mesh.
 fn test_annulus() {
     let a = 100.0;
     let b = 105.0;
@@ -224,9 +195,7 @@ fn test_annulus() {
     print("  reaction z ", rz, " N, applied ", fx, " ", fy, " ", fz, " N");
     expect_near("annulus hoop against Lame", syy, A * (1.0 + b * b / (r * r)), 1.0e-3);
     expect_near("annulus axial against Lame", szz, A, 1.0e-3);
-    // The axial load is the pressure on the end cap, p π a² / 4.
     expect_near("annulus axial reaction", rz, -0.25 * PI * a * a * p, 1.0e-6);
-    // The hoop stress at 45°: (σθ + σr) / 2 on xx and yy, (σθ - σr) / 2 on xy.
     let s45 = r * sqrt(0.5);
     let txx, tyy, tzz, tyz, txz, txy = runtime::stress_at(s45, s45, 5.0);
     expect_near("annulus shear at 45 degrees", -txy, A * b * b / (r * r), 1.0e-2);
@@ -237,8 +206,6 @@ fn test_annulus() {
     }
 }
 
-// A field with 1 dof for each node, as the heat template has: the VTU
-// file holds 1 component for each node, with the value of its dof.
 fn test_scalar_field() {
     runtime::mesh_box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 2, 1, 1);
     runtime::dofs_per_node = 1;
@@ -271,7 +238,6 @@ fn test_scalar_field() {
     }
 }
 
-// The face sets of the box, and a cell type with no registry entry.
 fn test_registry() {
     runtime::mesh_box(0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 2, 1, 1);
     let s = runtime::find_set("x1", true);
@@ -294,11 +260,6 @@ fn test_registry() {
     }
 }
 
-// A free thermal expansion of 2 boxes of 2 materials on a grid that is not
-// uniform: 2 x 1 x 0.5 mm of E = 210000 MPa under 2 x 1 x 0.1 mm of
-// E = 70000 MPa, with the same thermal strain s. Rollers on x = 0, y = 0
-// and z = 0. The exact solution is u = s x and sigma = 0, which the
-// 27-node hexahedra hold.
 fn test_thermal_grid() {
     let s = 1.0e-3;
     runtime::mesh_union([0.0, 0.0, 0.0, 2.0, 1.0, 0.5, 0.0, 0.0, 0.5, 2.0, 1.0, 0.6], [], 1.0);

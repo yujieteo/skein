@@ -1,33 +1,19 @@
-// The reproducing kernel shape functions of rkpm with the linear basis
-// (Liu, Jun and Zhang 1995, Chen et al. 1996):
-//
-//     Ψ_I(x) = H(0)ᵀ M(x)⁻¹ H(x_I - x) φ_I(x),   M(x) = Σ_I H(x_I - x) H(x_I - x)ᵀ φ_I(x)
-//
-// with H(d) = (1, d_x/L, d_y/L) and φ_I the cubic B-spline of |x - x_I|/a_I.
-// The support a_I is the `support` factor times the spacing of point I.
-// The functions reproduce 1, x and y, so they pass the patch test of
-// order 1. L is the largest support of the points near x: it scales H so
-// that M is well conditioned in each unit system.
 import std;
 import math;
 namespace meshless;
 import .cloud;
 
-var support: f64[>..] = [];     // a of each point
-var bucket_size = 0.0;          // at least the largest support
+var support: f64[>..] = [];
+var bucket_size = 0.0;
 var bucket_n: i64[2] = [0, 0];
 var bucket_start: i64[>..] = [];
 var bucket_items: i64[>..] = [];
 
-// The points near the point of the last shape_at, and Ψ, ∂Ψ/∂x and ∂Ψ/∂y
-// of each.
 var near: i64[>..] = [];
 var psi: f64[>..] = [];
 var psi_x: f64[>..] = [];
 var psi_y: f64[>..] = [];
 
-// Gives each point the support `factor` times its spacing, and sorts the
-// points into buckets of the largest support.
 fn set_support(factor: f64) {
     guard factor > 0.0 && spacing.len == point_count() else { abort("set_support: factor > 0 and a cloud"); }
     support.clear();
@@ -59,8 +45,6 @@ fn bucket_axis(j: i64, v: f64) -> i64 {
 
 fn bucket_of(x: f64, y: f64) -> i64 { return bucket_axis(0, x) + bucket_n[0] * bucket_axis(1, y); }
 
-// The points within `radius` of (x, y), or within their own support for
-// a radius <= 0, in `into`.
 fn points_near(x: f64, y: f64, radius: f64, into: i64[>..]&) {
     guard support.len == point_count() && bucket_size > 0.0 else { abort("points_near: set_support"); }
     into.clear();
@@ -78,15 +62,12 @@ fn points_near(x: f64, y: f64, radius: f64, into: i64[>..]&) {
     }
 }
 
-// The cubic B-spline of z = r/a, and its derivative.
 fn kernel(z: f64) -> f64, f64 {
     if z <= 0.5 { return 2.0 / 3.0 - 4.0 * z * z + 4.0 * z * z * z, -8.0 * z + 12.0 * z * z; }
     if z < 1.0 { return 4.0 / 3.0 - 4.0 * z + 4.0 * z * z - 4.0 / 3.0 * z * z * z, -4.0 + 8.0 * z - 4.0 * z * z; }
     return 0.0, 0.0;
 }
 
-// The inverse of the symmetric 3 × 3 matrix m, and false if it is
-// singular.
 fn inverse_3(m: f64[9]) -> f64[9], bool {
     var c: f64[9] = [0.0; 9];
     c[0] = m[4] * m[8] - m[5] * m[7];
@@ -111,8 +92,6 @@ fn times_3(m: f64[9], v: f64[3]) -> f64[3] {
 
 fn dot_3(a: f64[3], b: f64[3]) -> f64 { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
-// Ψ and its gradient at (x, y) for each point near it, in near, psi,
-// psi_x and psi_y. False if M is singular there: too few points cover it.
 fn shape_at(x: f64, y: f64) -> bool {
     points_near(x, y, 0.0, near);
     psi.clear();
@@ -129,7 +108,6 @@ fn shape_at(x: f64, y: f64) -> bool {
         for r in 3 {
             for c in 3 {
                 m[3 * r + c] += f * h[r] * h[c];
-                // ∂H/∂x = (0, -1/L, 0), ∂H/∂y = (0, 0, -1/L)
                 mx[3 * r + c] += fx * h[r] * h[c] - f * ((if r == 1 { h[c] } else { 0.0 }) + (if c == 1 { h[r] } else { 0.0 })) / l;
                 my[3 * r + c] += fy * h[r] * h[c] - f * ((if r == 2 { h[c] } else { 0.0 }) + (if c == 2 { h[r] } else { 0.0 })) / l;
             }
@@ -151,7 +129,6 @@ fn shape_at(x: f64, y: f64) -> bool {
     return true;
 }
 
-// φ_p at (x, y), and its gradient.
 fn weight(p: i64, x: f64, y: f64) -> f64, f64, f64 {
     let dx = x - px(p);
     let dy = y - py(p);

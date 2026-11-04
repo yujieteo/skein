@@ -1,16 +1,3 @@
-// The code generator of the ODE models: a Skein syntax tree to a Goose
-// program that calls src/ode/ode.goose.
-//
-// It takes a physics with only global unknowns (spec §10.5) and a method
-// `ode`: lets of scalars and vectors, and an `eq` for each unknown, with
-// `ddt`, `ddt2`, `dot`, `sin`, `cos`, `sqrt`, `exp`, `ln`, a whole power,
-// the time `t` and the unknowns. The `ddt` of any expression is exact: the
-// program evaluates the equations on series in time (src/ode/jet.goose).
-// One `transient(end:, dt:, scheme:)` step integrates from the initial
-// values, and its reports and expects read the unknowns at the end. Each
-// other construct gives an error `unsupported` at its token, with a fix.
-//
-// The values are in the unit system of the header.
 import std;
 import math;
 namespace ode_gen;
@@ -35,8 +22,6 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 fn binary(n: i64, op: u8[:]) -> bool { kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == op }
 
-// Whether this generator takes the model: a physics with no region and no
-// template, and an unknown.
 fn claims(prog: i64) -> bool {
     var c = first(prog);
     while c >= 0 {
@@ -57,9 +42,9 @@ fn claims(prog: i64) -> bool {
 
 struct Item {
     name: u8[..64],
-    node: i64,        // the value of a let, or the type of an unknown
-    count: i64,       // the components of a let
-    start: i64,       // the first local of its components
+    node: i64,
+    count: i64,
+    start: i64,
 }
 
 struct Report {
@@ -73,18 +58,18 @@ struct Expect {
     step: i64,
 }
 
-var lets: Item[>..];            // the lets of the physics, in order
+var lets: Item[>..];
 var unknowns: Item[>..];
-var initials: f64[>..];         // the initial value of each unknown
-var equations: i64[>..];        // the N_EQN nodes
+var initials: f64[>..];
+var equations: i64[>..];
 var reports: Report[>..];
 var expects: Expect[>..];
-var steps: u8[..64][>..];       // the name of the step: this generator has one
+var steps: u8[..64][>..];
 var step_end = 0.0;
 var step_dt = 0.0;
 var step_points = 6;
 var step_scheme: u8[..64] = [];
-var locals = 0;                 // the components of all the lets
+var locals = 0;
 
 fn reset() {
     syntax::errors.clear();
@@ -126,12 +111,8 @@ fn find_item(items: Item[:], word: u8[:]) -> i64 {
     return -1;
 }
 
-// --- the expressions ---------------------------------------------------------------
-
 let EXPR_FIX = "write + - * / of the unknowns, t, lets and numbers, a whole power, ddt, ddt2, dot, sin, cos, sqrt, exp, ln, (a, b) and v.x";
 
-// Whether the value of n depends on an unknown, on t, on a let of the
-// physics or on ddt: it is not a constant of the model.
 recursive fn varies(n: i64) -> bool {
     if kind(n) == syntax::N_NAME {
         return name(n) == "t" || find_item(unknowns, name(n)) >= 0 || find_item(lets, name(n)) >= 0;
@@ -145,7 +126,20 @@ recursive fn varies(n: i64) -> bool {
     return false;
 }
 
-// The components of the value of n: 1 for a scalar, the length of a vector.
+let DDT_MAX = 4;
+
+recursive fn ddt_depth(n: i64) -> i64 {
+    var deepest = 0;
+    var c = first(n);
+    while c >= 0 {
+        deepest = max(deepest, ddt_depth(c));
+        c = next(c);
+    }
+    if is_call(n, "ddt") { return deepest + 1; }
+    if is_call(n, "ddt2") { return deepest + 2; }
+    return deepest;
+}
+
 recursive fn components(n: i64) -> i64 {
     let k = kind(n);
     if k == syntax::N_VECTOR {
@@ -171,7 +165,6 @@ recursive fn components(n: i64) -> i64 {
 
 fn axis_of(word: u8[:]) -> i64 { return if word == "x" { 0 } else if word == "y" { 1 } else if word == "z" { 2 } else { -1 }; }
 
-// The Goose expression of component c of n, a series, in `out`.
 recursive fn jet(out: u8[>..]&, n: i64, c: i64) {
     let k = kind(n);
     if k == syntax::N_NAME {
@@ -215,7 +208,6 @@ recursive fn jet(out: u8[>..]&, n: i64, c: i64) {
     jet_operation(out, n, c);
 }
 
-// A unary, binary or call node whose value varies.
 recursive fn jet_operation(out: u8[>..]&, n: i64, c: i64) {
     let k = kind(n);
     if k == syntax::N_UNARY && syntax::text(tok(n)) == "-" {
@@ -274,6 +266,7 @@ recursive fn jet_call(out: u8[>..]&, n: i64, c: i64) {
         return;
     }
     if codegen::call_args(n, "ddt", 1) || codegen::call_args(n, "ddt2", 1) {
+        if ddt_depth(n) > DDT_MAX { unsupported(tok(n), "ddt is nested more than 4 times: the series of src/ode/jet.goose has 5 terms", "remove a ddt, or add an unknown for an inner derivative"); }
         out.append(if is_call(n, "ddt2") { "ode::jddt(ode::jddt(" } else { "ode::jddt(" });
         jet(out, arg(n, 0), c);
         out.append(if is_call(n, "ddt2") { "))" } else { ")" });
@@ -295,8 +288,6 @@ recursive fn jet_call(out: u8[>..]&, n: i64, c: i64) {
         out.append("ode::jconst(0.0)");
     }
 }
-
-// --- the model ---------------------------------------------------------------------
 
 let PHYSICS_FIX = "write physics linkage solves q: Angle = 0 rad { let ... eq ... } and method linkage: ode {}";
 let STEP_FIX = "write step run: transient(end: 1 s, dt: 1 ms, scheme: bdf2) { report q }";
@@ -336,7 +327,6 @@ fn method_item(n: i64) {
     }
 }
 
-// The points of the polynomial of the scheme (src/ode/ode.goose).
 fn scheme(v: i64) {
     let word = if kind(v) == syntax::N_CALL { name(child(v, 0)) } else { source_of(v) };
     set64(step_scheme, word);
@@ -394,7 +384,6 @@ fn step(n: i64) {
     }
 }
 
-// The unknown that n names, or -1 and an error.
 fn unknown_of(n: i64) -> i64 {
     let u = if kind(n) == syntax::N_NAME { find_item(unknowns, name(n)) } else { -1 };
     if u < 0 { unsupported(tok(n), str("the value '", source_of(n), "' is not an unknown"), "write the name of an unknown, for example report xb"); }
@@ -449,8 +438,6 @@ fn name_of(n: i64) -> u8[..64] {
 }
 
 fn dof_estimate() -> i64 { return unknowns.len; }
-
-// --- the Goose program -------------------------------------------------------------
 
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
@@ -532,7 +519,6 @@ let PRELUDE = """
     }
 """;
 
-// The unit of the type name t: a base unit of the header, or "".
 fn base_unit(t: i64) -> const u8[:] {
     guard kind(t) == syntax::N_TYPE_NAME else { return ""; };
     let w = name(t);
@@ -542,7 +528,6 @@ fn base_unit(t: i64) -> const u8[:] {
     return "";
 }
 
-// The unit of a type: a base unit, or a product of two, or "".
 fn type_unit(t: i64) -> u8[>..] {
     if kind(t) == syntax::N_DIM_MUL {
         let a = base_unit(child(t, 0));
@@ -552,7 +537,6 @@ fn type_unit(t: i64) -> u8[>..] {
     return str(base_unit(t));
 }
 
-// The locals of the lets, as globals.
 fn emit_lets(out: u8[>..]&) {
     for i in locals { format(out, "var L", i, ": f64[5] = [0.0, 0.0, 0.0, 0.0, 0.0];\n"); }
     out.push('\n');
@@ -567,7 +551,6 @@ fn emit_lets(out: u8[>..]&) {
     out.append("}\n\n");
 }
 
-// The residual of each eq at the series of the candidate.
 fn emit_residual(out: u8[>..]&) {
     out.append("fn residual(t: f64) {\n    eval_lets();\n");
     for e, k in equations {
@@ -628,8 +611,6 @@ fn emit_step(out: u8[>..]&) {
     out.append("}\n\n");
 }
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the ode package from `ode_path`.
 fn generate(ode_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     let src = ode_path[..ode_path.len - 3];

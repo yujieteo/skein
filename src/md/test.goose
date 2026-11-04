@@ -1,8 +1,3 @@
-// Tests of `skein md`. `./build.sh test` runs this program from the root of
-// the repository, and a non-zero exit status is a failure.
-//
-// Each model must give its golden document in tests/md/ exactly. README.md
-// gives the command that writes the golden files again.
 import std;
 import os;
 import syntax from "../syntax";
@@ -11,13 +6,11 @@ import .md;
 
 var failures = 0;
 
-// The models and their golden documents.
 let GOLDEN = [
     "samples/01_cantilever.skn", "tests/md/01_cantilever.md",
     "examples/femahoy/heat_fin.skn", "tests/md/heat_fin.md",
 ];
 
-// The first line where `got` and `want` differ, 1-based.
 fn first_difference(got: u8[:], want: u8[:]) -> i64 {
     var line = 1;
     for i in min(got.len, want.len) {
@@ -27,7 +20,6 @@ fn first_difference(got: u8[:], want: u8[:]) -> i64 {
     return line;
 }
 
-// The document of `model`, or an empty one after a failure.
 fn document(model: u8[:]) -> u8[>..] {
     var text: u8[>..] = [];
     var result: u8[>..] = [];
@@ -46,8 +38,6 @@ fn document(model: u8[:]) -> u8[>..] {
 fn test_golden() {
     var i = 0;
     while i < GOLDEN.len {
-        // Copies: the checker empties the syntax tables, and the compiler
-        // cannot see that the names do not point into them.
         let model = str(GOLDEN[i]);
         let golden = str(GOLDEN[i + 1]);
         let got = document(model);
@@ -64,8 +54,6 @@ fn test_golden() {
     }
 }
 
-// The same model gives the same document again: no date and no state from
-// the run before.
 fn test_deterministic() {
     let a = document(str(GOLDEN[0]));
     let b = document(str(GOLDEN[2]));
@@ -76,8 +64,6 @@ fn test_deterministic() {
     }
 }
 
-// Text outside the math has the Markdown escapes. The math has no backslash
-// before a punctuation character.
 fn test_escapes() {
     let text = """
         // Costs 5% & *more*: $x_1 [a] #2 <b> `c`
@@ -113,7 +99,6 @@ fn test_escapes() {
     }
 }
 
-// A mesh lists its `crack_tip` entry (gap G20).
 fn test_crack_tip() {
     let result = document("examples/femahoy/fracture_centre_crack.skn");
     let want = "- crack_tip `tip`: $L_{\\mathrm{q}}$";
@@ -123,8 +108,6 @@ fn test_crack_tip() {
     }
 }
 
-// The expects of a step and of a study are tables after their other
-// entries, not list entries (gap G10).
 fn test_expects() {
     let model = "examples/elements/heated_bar_study_tet.skn";
     var text: u8[>..] = [];

@@ -1,17 +1,3 @@
-// Tests of the solvers. `./build.sh test` runs this program from the root
-// of the repository, and a non-zero exit status is a failure.
-//
-// 1. Newton on a manufactured nonlinear problem: the residual must fall
-//    quadratically, and the discrete solution must converge to the exact
-//    one at second order in h.
-// 2. GMRES with ILU(0) against CG with Jacobi on the grid cantilever of
-//    src/runtime/test.goose: the same tip deflection in fewer iterations.
-// 3. The near null space of each physics (modes.goose), and the AMG levels
-//    that a page keeps from one run to the next (warm.goose).
-// 4. The nested dissection solve (nested.goose) on a lattice with holes
-//    and fixed dofs: the residual of its solution.
-// 5. The direct solve of an indefinite system with a symmetric pattern
-//    (slu.goose): the residual of its solution.
 import std;
 import math;
 import runtime from "../runtime";
@@ -24,29 +10,18 @@ fn fail(what: u8[:]) {
     print("FAIL ", what);
 }
 
-// --- Newton: -div((1 + u²) grad u) = f on the unit square ---------------------
-//
-// The exact solution is u = sin(πx) sin(πy), with u = 0 on the boundary,
-// so f = -(1 + u²) Δu - 2u |grad u|². The discrete problem is the 5-point
-// finite volume scheme on n × n cells, with the conductivity 1 + m² at the
-// midpoint value m of the two nodes of each link. The Jacobian is not
-// symmetric, so each Newton step needs GMRES.
-
-var grid = 0;           // n: cells along each side
-var h = 0.0;            // the size of a cell
+var grid = 0;
+var h = 0.0;
 var source: f64[>..] = [];
 var exact: f64[>..] = [];
 var pattern_start: i64[>..] = [];
 var pattern_col: i32[>..] = [];
 var jacobian: f64[>..] = [];
 
-// The unknown of interior node (i, j), 1 ≤ i, j ≤ n - 1.
 fn unknown(i: i64, j: i64) -> i64 { return (i - 1) + (grid - 1) * (j - 1); }
 
 fn interior(i: i64, j: i64) -> bool { return i > 0 && i < grid && j > 0 && j < grid; }
 
-// The 4 neighbours of a node, south, west, east and north: the order of
-// their unknowns.
 let DI = [0, -1, 1, 0];
 let DJ = [-1, 0, 0, 1];
 
@@ -124,9 +99,6 @@ fn jacobian_values(u: f64[:], val: f64[:]) {
     }
 }
 
-// Solves on n × n cells from u = 0, prints the residual of each step and
-// the rate log(r(k+1) / r(k)) / log(r(k) / r(k-1)), and gives the largest
-// error at the nodes.
 fn newton_on_grid(n: i64) -> f64 {
     setup_grid(n);
     var u: f64[>..] = [];
@@ -143,7 +115,6 @@ fn newton_on_grid(n: i64) -> f64 {
         if k >= 2 && history[k - 1] < history[k - 2] {
             let rate = log(r / history[k - 1]) / log(history[k - 1] / history[k - 2]);
             print("  ", k, "     ", r, "  ", rate);
-            // A rate counts only before the residual reaches round-off.
             if r > 1.0e3 * tol { last_rate = rate; }
         } else {
             print("  ", k, "     ", r);
@@ -164,22 +135,16 @@ fn test_newton() {
     if abs(order - 2.0) > 0.1 { fail(str("Newton: the order of the error is ", order, ", not 2")); }
 }
 
-// --- GMRES with ILU(0) against CG with Jacobi on the cantilever --------------
-
 let L = 100.0;
 let B = 10.0;
 let H = 10.0;
 let E = 210000.0;
 let NU = 0.3;
 let P = 100.0;
-let RTOL = 1.0e-10;         // the tolerance of runtime::solve_static
+let RTOL = 1.0e-10;
 
-// The tip deflection of runtime::solve_static on this mesh (CG with
-// Jacobi, src/runtime/test.goose).
 let RUNTIME_TIP = -0.190502;
 
-// Solves the cantilever with the linear solver and the preconditioner of
-// the names, and gives the iterations and the tip deflection.
 fn solve_cantilever(solver: u8[:], preconditioner: u8[:]) -> i64, f64 {
     runtime::mesh_box(0.0, 0.0, 0.0, L, B, H, 40, 4, 4);
     runtime::material(E, NU);
@@ -190,7 +155,6 @@ fn solve_cantilever(solver: u8[:], preconditioner: u8[:]) -> i64, f64 {
     let ux, uy, uz = runtime::displacement_at(L, 0.5 * B, 0.5 * H);
     print("  ", solver, "+", preconditioner, " ", runtime::cg_iterations(), " iterations, tip uz ", uz, " mm, ",
           runtime::solve_seconds(), " s");
-    // RUNTIME_TIP has 6 digits: 5e-7 mm is half of its last digit.
     if abs(uz - RUNTIME_TIP) > 5.0e-7 { fail(str("cantilever: ", solver, " tip uz ", uz, ", want ", RUNTIME_TIP)); }
     return runtime::cg_iterations(), uz;
 }
@@ -200,13 +164,10 @@ fn test_cantilever() {
     let cg_its, cg_tip = solve_cantilever("cg", "jacobi");
     let gm_its, gm_tip = solve_cantilever("gmres", "ilu0");
     if gm_its >= cg_its { fail(str("cantilever: GMRES+ILU(0) takes ", gm_its, " iterations, CG+Jacobi ", cg_its)); }
-    // The box is a lattice: cg with amg takes the direct solve (nested.goose).
     let amg_its, amg_tip = solve_cantilever("cg", "amg");
     if amg_its != 1 { fail(str("cantilever: cg with amg takes ", amg_its, " iterations, not the direct solve")); }
 }
 
-// The memory check (memory.goose): the /proc fields, and an estimate of the
-// RSS now and the entries and the vectors of a path.
 fn test_memory() {
     let meminfo = "MemTotal:       32762052 kB\nMemAvailable:   1234 kB\n";
     if solvers::proc_kb(meminfo, "MemAvailable:") != 1234.0 || solvers::proc_kb(meminfo, "Swap:") != -1.0 {
@@ -218,15 +179,13 @@ fn test_memory() {
     }
 }
 
-// The modes of a scalar field, of a 2D and a 3D solid, and of a thin plate.
 fn test_modes() {
-    // The 8 corners of a box of sides 1, 1 and t.
     var cube: f64[>..] = [];
     var plate: f64[>..] = [];
     for k in 8 {
-        for t in 3 { cube.push(((k >> t) & 1) as f64); }
-        plate.push((k & 1) as f64);
-        plate.push(((k >> 1) & 1) as f64);
+        for t in 3 { cube.push((k >> t) & 1); }
+        plate.push(k & 1);
+        plate.push((k >> 1) & 1);
         plate.push(0.05 * ((k >> 2) & 1));
     }
     var fixed: u8[>..] = [];
@@ -240,14 +199,11 @@ fn test_modes() {
         fail("modes: mode_count differs from near_null_space");
     }
     for v in mp[..3 * nbp] { if v != 0.0 { fail("modes: a mode is not 0 on a fixed dof"); } }
-    // u = (-y, x, 0) about the centre (0.5, 0.5, ...): the rotation about z at node 7 (1, 1, 1).
     if mp[nbp * 21 + 3] != -0.5 || mp[nbp * 22 + 3] != 0.5 || mp[nbp * 23 + 3] != 0.0 { fail("modes: the rotation about z"); }
-    // The curvature along x of the plate: u_z = x²/2 about the centre.
     if mp[nbp * 23 + 6] != 0.125 { fail("modes: the bending mode of the plate"); }
     if ms[2] != 0.0 || ms[3] != 1.0 { fail("modes: the constant of a scalar field"); }
 }
 
-// The 5-point Laplacian on 80 x 80 nodes (3 AMG levels), for test_warm.
 var lap_rs: i64[>..] = [0];
 var lap_col: i32[>..] = [];
 var lap_val: f64[>..] = [];
@@ -256,10 +212,6 @@ fn lap_multiply(x: f64[:], y: f64[:]) { solvers::multiply(lap_rs, lap_col, lap_v
 
 fn lap_amg(r: f64[:], z: f64[:]) { solvers::amg_apply(r, z); }
 
-// CG with the AMG levels that amg_reuse reads from the files of amg_keep
-// gives the solution and the iterations of CG with the levels of
-// amg_setup; the levels do not fit a matrix of another pattern. It needs
-// SKEIN_WARM, which ./build.sh test sets to an empty directory.
 fn test_warm() {
     if solvers::warm_dir().len == 0 { fail("warm: SKEIN_WARM is not set"); return; }
     let n = 80;
@@ -303,9 +255,6 @@ fn test_warm() {
     if solvers::amg_reuse(key, lap_rs, moved, lap_val, free) { fail("warm: amg_reuse of another pattern"); }
 }
 
-// A 7-point operator with 2 dofs for each node on a 9 x 7 x 6 lattice
-// with no node at the points of a hole and with the first plane of x
-// fixed: nested_solve gives x with |K x - b| <= 1e-10 |b|.
 fn test_nested() {
     let lat: i64[3] = [9, 7, 6];
     var place: i64[>..] = [];
@@ -355,11 +304,6 @@ fn test_nested() {
     if !(worst <= 1.0e-10 * solvers::norm(b)) { fail(str("nested: the residual is ", worst)); }
 }
 
-// --- slu: the direct solve of an indefinite system with a symmetric pattern ---
-//
-// A 7-point operator on a 9 x 7 x 6 grid with a complex diagonal 5.5 + 0.3i (as 2 x 2 real
-// blocks), so the matrix is indefinite and not symmetric. slu_apply gives x with
-// |K x - b| <= 1e-9 |b|, and the plan counts the entries of L.
 fn test_slu() {
     let nx = 9;
     let ny = 7;
@@ -404,9 +348,6 @@ fn test_slu() {
     solvers::slu_free();
 }
 
-// --- band_solve: a tridiagonal system that needs a pivot ---------------------
-//
-// Row 0 has a 0 on the diagonal, so the solve must swap rows. The exact x is (1, 2, 3, 4).
 fn test_band() {
     var rs: i64[5] = [0, 2, 5, 8, 10];
     var cols: i32[10] = [0, 1, 0, 1, 2, 1, 2, 3, 2, 3];
@@ -418,7 +359,14 @@ fn test_band() {
     if kl != 1 || ku != 1 { fail("band_widths"); }
     if !solvers::band_solve(rs[..], cols[..], vals[..], b[..], x[..], kl, ku, work[..]) { fail("band_solve: singular"); return; }
     for i in 4 {
-        if abs(x[i] - (i + 1) as f64) > 1.0e-12 { fail("band_solve: wrong x"); }
+        if abs(x[i] - (i + 1)) > 1.0e-12 { fail("band_solve: wrong x"); }
+    }
+}
+
+fn test_memory_paths() {
+    for p, i in solvers::MEMORY_PATHS {
+        if p.entry_bytes < 0.0 || p.dof_bytes < 0.0 || p.thread_bytes < 0.0 { fail(str("memory: the path '", p.name, "' has a negative model")); }
+        for q, j in solvers::MEMORY_PATHS { if j > i && q.name == p.name { fail(str("memory: the path '", p.name, "' is twice in MEMORY_PATHS")); } }
     }
 }
 
@@ -426,6 +374,7 @@ fn main() {
     test_newton();
     test_cantilever();
     test_memory();
+    test_memory_paths();
     test_modes();
     test_warm();
     test_nested();

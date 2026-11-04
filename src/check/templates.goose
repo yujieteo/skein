@@ -1,15 +1,3 @@
-// The physics templates of the standard library (spec §4.2), in Skein
-// source. The checker parses this text after the model, and a physics that
-// uses a template takes its statements from it.
-//
-// `linear_elastic`, `reissner_mindlin` and `timoshenko` have their source in
-// the spec (§4.2, §4.3). `heat` is the steady conduction that src/elements
-// solves. `navier_stokes` and `stokes` are the incompressible Newtonian
-// equations that src/flow solves. `stokes` has no convection term.
-// `k_omega_sst` is the k-ω SST model of Menter (1994) with the mean flow,
-// kinematic k and w, and the production γ S² of ω. Its constant 1e-20 s^-2
-// is the floor of the cross diffusion. The other templates of spec §4.2
-// come with their solvers.
 import std;
 namespace check;
 
@@ -92,7 +80,6 @@ let STD_SOURCE = """
     }
     """;
 
-// The text of `skein help std`: STD_SOURCE with no model line.
 fn std_text() -> const u8[:] {
     var i = 0;
     while i < STD_SOURCE.len && STD_SOURCE[i] != '\n' { i++; }

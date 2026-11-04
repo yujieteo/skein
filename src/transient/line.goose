@@ -1,7 +1,3 @@
-// The line mesh of quadratic cells and the assembly of M and K for heat.
-//
-// Cell c has the nodes 2c, 2c + 1 and 2c + 2, at its left end, its middle
-// and its right end. Each node has one dof, the temperature.
 import std;
 import math;
 namespace transient;
@@ -11,10 +7,10 @@ import solvers from "../solvers";
 var line_lo = 0.0;
 var line_hi = 0.0;
 var cells = 0;
-var spacing = 0.0;     // the length of a cell
+var spacing = 0.0;
 
 var conductivity = 0.0;
-var capacity = 0.0;    // rho cp
+var capacity = 0.0;
 
 fn node_count() -> i64 { return 2 * cells + 1; }
 
@@ -57,14 +53,9 @@ fn mark_fixed_end(x: f64, T: f64) -> bool {
     return true;
 }
 
-// The exact matrices of a quadratic cell of length h, for k = 1 and
-// rho cp = 1: K = 1/(3h) KE and M = h/30 ME.
 let KE: f64[9] = [7.0, -8.0, 1.0, -8.0, 16.0, -8.0, 1.0, -8.0, 7.0];
 let ME: f64[9] = [4.0, 2.0, -1.0, 2.0, 16.0, 2.0, -1.0, 2.0, 4.0];
 
-// The row of node i holds the nodes of the cells that hold i, in
-// increasing order: i - 2 to i + 2 for an end node of a cell, and i - 1 to
-// i + 1 for a middle node.
 fn assemble_line() {
     assert(conductivity > 0.0 && capacity > 0.0);
     clear_matrices();
