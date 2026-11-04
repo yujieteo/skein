@@ -416,12 +416,15 @@ gives the roadmap phase that closes the gap:
   and z, for each material); and `integral(f, c)` of a Complex function of
   the unknown, its gradient and the normal n along a Curve inside the mesh
   (a `line`, `boundary(circle(...))` or `boundary(rect(...))`;
-  `src/elements/curve.goose`). The edge physics integrates its field along
-  a `line` with the same curve integral.
+  `src/elements/curve.goose`). The edge physics and the Darcy flow integrate
+  along a `line` with the same curve integral. The wave number k of the PML
+  has one definition for the wave and edge physics. A lossy c uses Re(c)
+  for k, and the stretch does not use Im(c).
   dipole_king_middleton stays blocked. The PML of the edge physics in 3D
   runs now. It needs the strip and the feed as faces inside the air for the
-  delta-gap `bc`: the box mesh has no interior surface, and `skein run`
-  stops at "this generator refines only the hole". Its mesh of 5 mm cells in
+  delta-gap `bc` on faces inside the mesh. That `bc` is missing: the box
+  mesh has no interior surface, and `skein run` stops at "this generator
+  refines only the hole". Its mesh of 5 mm cells in
   a 281 x 280 x 435 mm box is also far above the 68066 dofs that the direct
   solve of the 3D edge physics takes in 15 minutes.
 - Not run yet, each for a large missing piece:

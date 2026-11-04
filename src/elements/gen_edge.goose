@@ -1007,7 +1007,13 @@ let EDGE_PRELUDE = """
         return s;
     }
 
-    // Its integral on a line of component comp of q (0 to 2), or p (3), of the Darcy flow.
+    // Component comp of q (0 to 2), or p (3), of the Darcy flow at a point.
+    fn darcy_point(comp: i64, x: f64, y: f64, z: f64) -> f64[2] {
+        let v, found = elements::darcy_at(comp, x, y, z);
+        if !found { found_all = false; }
+        return [v, 0.0];
+    }
+
     fn darcy_segment(comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> f64[2] {
         let s, found = elements::curve_integral(0, [x0, y0, z0], [x1, y1, z1], 0.0, 64, false) { p, n, v => [v[comp], 0.0] };
         if !found { found_all = false; }

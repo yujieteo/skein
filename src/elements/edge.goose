@@ -40,7 +40,6 @@ var cell_edge: i64[>..] = [];   // the edge of each local edge of each cell
 var cell_sign: f64[>..] = [];   // +1 if the local edge runs from the lower vertex, else -1
 var edge_nu: f64[>..] = [];     // ν of each cell
 var edge_c: f64[>..] = [];      // c of each cell, as re and im
-var edge_mark: i64[>..] = [];   // the shape of the last material that gave the cell its coefficients, or -1 for the base material
 var gauge_count = 0;            // the edges of the tree of the last gauge
 var edge_p = 1;                 // the polynomial order of the elements: 1 or 2 (edge_order)
 var cell_dof: i64[>..] = [];    // the dof of each local function of each cell
@@ -92,11 +91,11 @@ fn set_edge(nu: f64, c: f64[2], t: f64) {
     clear_matrix();
     edge_nu.clear();
     edge_c.clear();
-    edge_mark.clear();
+    cell_mark.clear();
     for e in cell_count() {
         edge_nu.push(nu);
         edge_c.append(c);
-        edge_mark.push(-1);
+        cell_mark.push(-1);
     }
     gauge_count = 0;
     pml_shape = -1;
@@ -174,7 +173,7 @@ fn edge_material(g: i64, nu: f64, c: f64[2]) -> i64 {
     for e in cell_count() {
         if !cell_in(e, g) { continue; }
         edge_nu[e] = nu;
-        edge_mark[e] = g;
+        cell_mark[e] = g;
         edge_c[2 * e] = c[0];
         edge_c[2 * e + 1] = c[1];
         count++;
@@ -277,7 +276,7 @@ fn edge_cell(c: i64, me: f64[:], mass: bool) {
         for v in dim + 1 {
             for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
         }
-        let st = if mass { [1.0, 0.0, 1.0, 0.0, 1.0, 0.0] } else { stretch(c, p, if edge_c[2 * c] >= 0.0 { 0.0 } else { sqrt(-edge_c[2 * c] / edge_nu[c]) }) };
+        let st = if mass { [1.0, 0.0, 1.0, 0.0, 1.0, 0.0] } else { stretch(c, p, pml_k(c)) };
         var inv: f64[6] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0];
         var lam: f64[6] = [cr, ci, cr, ci, cr, ci];
         for t in 3 {
@@ -383,7 +382,7 @@ fn edge_source<S>(mark: i64) {
     var w: f64[60] = [0.0; 60];
     var cw: f64[60] = [0.0; 60];
     for c in cell_count() {
-        if mark != -2 && edge_mark[c] != mark { continue; }
+        if !source_cell(c, mark) { continue; }
         for q in volume_points() {
             let xi, wt = volume_point(q);
             var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
@@ -392,10 +391,7 @@ fn edge_source<S>(mark: i64) {
                 l[0] -= xi[r];
             }
             let dv = wt * edge_basis(c, l, w, cw) * thickness;
-            var p: f64[3] = [0.0; 3];
-            for v in dim + 1 {
-                for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
-            }
+            let p = source_point(c, l);
             let s: f64[6] = S(p);
             for a in le {
                 let d = 2 * cell_dof[le * c + a];
