@@ -149,6 +149,7 @@ let MEMORY_PATHS = [
     MemoryPath { name: "grid ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "cons ssprk3", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "vof cg amg", entry_bytes: 64.0, dof_bytes: 0.0, thread_bytes: 0.0 },
+    MemoryPath { name: "meshless explicit", entry_bytes: 0.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "meshless skyline lu", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "simplex mixed cg", entry_bytes: 16.0, dof_bytes: 0.0, thread_bytes: 0.0 },
     MemoryPath { name: "radiation dense", entry_bytes: 32.0, dof_bytes: 0.0, thread_bytes: 0.0 },

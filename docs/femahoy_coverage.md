@@ -251,11 +251,24 @@ gives the roadmap phase that closes the gap:
   and the solve does not converge in 600 steps, nor in 2500 steps in 58 minutes. Turbulence runs
   on P1 cells only, and the next step is a P2 velocity or a finer nose.
 - Not run yet in the flow batch, each needs a new solver family and is left out of this batch:
-  - dam_break_martin_moyce: the meshless package (`src/meshless`) has no generator and no CLI lane
-    and runs static steps only. It needs a lane in `codegen/run.goose`, a `points` mesh read, a
-    total-Lagrangian explicit step (`central_difference`) with the Tait stress from a `let` chain,
-    SCNI internal force for a nonlinear P(F), a lumped mass, explicit wall conditions and the
-    `front` and `when` report. A free surface with SCNI can go unstable, and 7 % is not proven.
+- [dam_break_martin_moyce.skn](../examples/femahoy/dam_break_martin_moyce.skn) runs in the explicit
+  meshless lane (`src/meshless/gen.goose` and `dyn.goose`), but it does not meet its `expect`, so it
+  has a `// blocked-by:` mark and is not in `scripts/generated_c.sh`. The lane takes a `points` cloud on
+  a `rect` (a lattice), a `Vector<Length>` unknown with `rkpm`, `integrate: scni` and `bc: nitsche`,
+  the first Piola-Kirchhoff stress from a `let` chain of `defgrad`, `det`, `inv`, `transpose`, `tr`, `I`
+  and scalar functions, the body force `rho*(bx, by)`, `bc` on `u.x`, `u.y` or `u`, a lumped mass, the
+  `central_difference` step, `max` and `min` of a field over the region, `report`, `when` and `output u`
+  with the scalar lets. The walls are the penalty and traction terms of Nitsche without the adjoint
+  term. [bar_release.skn](../examples/meshless/bar_release.skn) uses the lane with a Saint Venant–Kirchhoff
+  stress and passes: the unloading wave of a bar reaches the level at 0.876 ms against 0.949 ms
+  (-7.7 %, the limit is 10 %). The dam break stops at t = 0.0201 s with a displacement that is not
+  finite (3321 points, dt 5.36 us), before the front gets to Z = 1.44. With the cut-off `max(p, 0)` in
+  the stress it runs to t = 0.050 s with the front at 1.72 a (T = 0.93), and then a point leaves the cloud.
+  With the cut-off, a step four times shorter fails at the same time, so the limit is not the step. A damping of 100 1/s makes
+  the front stall at 1.58 a. The cause is SCNI with a total-Lagrangian reference: the nodal quadrature
+  puts the pressure of the sub-domain on the free edges, and the force on the top rows of a hydrostatic
+  column is 15 % of g short. The next step is a free-surface integration (stress points or a boundary
+  correction of the SCNI force) or an updated reference.
 - dam_break_vof runs in the two-phase lane (`src/vof`, 21 s, estimate 44 MB). The front times
   are 1.856, 2.571 and 3.199 against 1.83, 2.51 and 3.11 (+1.4 %, +2.4 %, +2.8 %). The limit is 5.5 %.
   The lane takes a physics with a `Vector<Velocity>` unknown `v`, a `Pressure` unknown `p` and a

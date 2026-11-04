@@ -174,6 +174,14 @@ fn edge_point(e: i64, s: f64) -> f64[2] {
 let JITTER = 0.15;
 
 fn points_rect(xa: f64, ya: f64, xb: f64, yb: f64, nx: i64, ny: i64) {
+    lattice(xa, ya, xb, yb, nx, ny, JITTER);
+}
+
+fn points_lattice(xa: f64, ya: f64, xb: f64, yb: f64, nx: i64, ny: i64) {
+    lattice(xa, ya, xb, yb, nx, ny, 0.0);
+}
+
+fn lattice(xa: f64, ya: f64, xb: f64, yb: f64, nx: i64, ny: i64, jitter: f64) {
     guard xb > xa && yb > ya && nx >= 1 && ny >= 1 else { abort("points_rect: xb > xa, yb > ya, and nx, ny >= 1"); }
     let hx = (xb - xa) / nx;
     let hy = (yb - ya) / ny;
@@ -182,8 +190,8 @@ fn points_rect(xa: f64, ya: f64, xb: f64, yb: f64, nx: i64, ny: i64) {
         for i in nx + 1 {
             let inside = i > 0 && i < nx && j > 0 && j < ny;
             let p = i + (nx + 1) * j;
-            points.push(xa + i * hx + (if inside { JITTER * hx * scatter(2 * p) } else { 0.0 }));
-            points.push(ya + j * hy + (if inside { JITTER * hy * scatter(2 * p + 1) } else { 0.0 }));
+            points.push(xa + i * hx + (if inside { jitter * hx * scatter(2 * p) } else { 0.0 }));
+            points.push(ya + j * hy + (if inside { jitter * hy * scatter(2 * p + 1) } else { 0.0 }));
         }
     }
     var triangles: i64[>..] = [];

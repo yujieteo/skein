@@ -84,7 +84,38 @@ fn patch_test() {
     if abs(r[0]) + abs(r[1]) > 1.0e-8 * size { fail("patch test: the reaction is not in balance"); }
 }
 
+fn no_stress(f: f64[4]) -> f64[4] { return [0.0, 0.0, 0.0, 0.0]; }
+fn start_zero(x: f64, y: f64) -> f64[2] { return [0.0, 0.0]; }
+fn no_wall(k: i64, x: f64, y: f64, t: f64) -> f64 { return 0.0; }
+fn no_record(k: i64, t: f64) {}
+fn runaway_stress(f: f64[4]) -> f64[4] { return [1.0e300 * f[0], 0.0, 0.0, 1.0e300 * f[3]]; }
+
+fn dynamic_free_fall() {
+    meshless::points_lattice(0.0, 0.0, 1.0, 1.0, 4, 4);
+    if !meshless::explicit_setup(2.5, 1000.0) { fail("free fall: no shape functions"); }
+    meshless::start_displacement(start_zero);
+    meshless::clear_bcs();
+    if !meshless::solve_dynamic(0.01, 0.001, 0.0, -9.81, no_stress, no_wall, no_record) { fail("free fall: the solve stops"); }
+    let want = -0.5 * 9.81 * 0.01 * 0.01;
+    var worst = 0.0;
+    for p in meshless::point_count() { worst = max(worst, abs(meshless::sol[2 * p + 1] - want)); }
+    print("free fall: largest error ", worst, " of ", want);
+    if worst > 1.0e-12 { fail(str("free fall: the error is ", worst)); }
+}
+
+fn dynamic_runaway() {
+    meshless::points_lattice(0.0, 0.0, 1.0, 1.0, 4, 4);
+    if !meshless::explicit_setup(2.5, 1000.0) { fail("runaway: no shape functions"); }
+    meshless::start_displacement(start_zero);
+    meshless::clear_bcs();
+    meshless::start_displacement(start_zero);
+    for &v in meshless::sol { v = 1.0e-3; }
+    if meshless::solve_dynamic(1.0, 0.001, 0.0, 0.0, runaway_stress, no_wall, no_record) { fail("runaway: the solve does not stop"); }
+}
+
 fn main() {
+    dynamic_free_fall();
+    dynamic_runaway();
     patch_test();
     check_order("rkpm, advection-diffusion", false);
     check_order("gfd, advection-diffusion", true);
