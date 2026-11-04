@@ -105,10 +105,7 @@ fn wave_sample(x: f64, y: f64, z: f64) -> f64[8], bool {
     var r: f64[8] = [0.0; 8];
     guard sol.len == dof_total() && ncomp == 2 && loc_start.len > 0 else { return r, false; }
     let c, l, found = locate([x, y, z]);
-    guard found else {
-        curve_missed++;
-        return r, false;
-    }
+    guard found else { return r, false; }
     cell_geometry(c, [l[1], l[2], l[3]]);
     for k in per_cell {
         let n = cell_node(c, k);
@@ -120,26 +117,29 @@ fn wave_sample(x: f64, y: f64, z: f64) -> f64[8], bool {
     return r, true;
 }
 
-fn curve_sample(x: f64, y: f64, z: f64) -> f64[12], bool {
+fn curve_sample(x: f64, y: f64, z: f64, curl: bool) -> f64[12], bool {
     var r: f64[12] = [0.0; 12];
+    var found = false;
     if physics == EDGE {
-        var found = true;
-        for k in 2 {
-            let v, f = edge_value_at([x, y, z], k == 1);
-            for i in 6 { r[6 * k + i] = v[i]; }
-            found = found && f;
-        }
-        if !found { curve_missed++; }
-        return r, found;
+        let v, f = edge_value_at([x, y, z], curl);
+        for i in 6 { r[i] = v[i]; }
+        found = f;
+    } else if physics == MIXED {
+        let v, f = mixed_value_at([x, y, z]);
+        for i in 4 { r[i] = v[i]; }
+        found = f;
+    } else {
+        let s, f = wave_sample(x, y, z);
+        for i in 8 { r[i] = s[i]; }
+        found = f;
     }
-    let s, found = wave_sample(x, y, z);
-    for i in 8 { r[i] = s[i]; }
+    if !found { curve_missed++; }
     return r, found;
 }
 
-fn curve_integral<F>(shape_kind: i64, a: f64[3], b: f64[3], r: f64, segments: i64) -> f64[2], bool {
+fn curve_integral<F>(shape_kind: i64, a: f64[3], b: f64[3], r: f64, segments: i64, curl: bool) -> f64[2], bool {
     guard segments > 0 && (shape_kind == CURVE_LINE || shape_kind == CURVE_CIRCLE) else { abort("curve_integral: a line or a circle and segments > 0"); }
-    locate_build();
+    if physics == WAVE { locate_build(); }
     let gauss: f64[3] = [0.5 - 0.5 * sqrt(0.6), 0.5, 0.5 + 0.5 * sqrt(0.6)];
     let weight: f64[3] = [5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0];
     var total: f64[2] = [0.0, 0.0];
@@ -172,7 +172,7 @@ fn curve_integral<F>(shape_kind: i64, a: f64[3], b: f64[3], r: f64, segments: i6
                 n[1] = sin(th);
                 for t in 3 { p[t] = a[t] + r * n[t]; }
             }
-            let sample, found = curve_sample(p[0], p[1], p[2]);
+            let sample, found = curve_sample(p[0], p[1], p[2], curl);
             let f = F(p, n, sample);
             let ds = length * weight[k] / (segments);
             total[0] += f[0] * ds;

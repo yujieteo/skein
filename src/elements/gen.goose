@@ -4722,7 +4722,7 @@ fn emit_curve_integral(pre: u8[>..]&, n: i64, z: i64) {
         lits(pre, sg.b);
         pre.append("], ");
         lit(pre, sg.r);
-        format(pre, ", ", count, ") { p, n, s => ");
+        format(pre, ", ", count, ", false) { p, n, s => ");
         emit_complex(pre, arg(z, 0), false);
         format(pre, " };\n            wz", n, " = wadd(wz", n, ", ci);\n            if !ok { wf", n, " = false; }\n        }\n");
     }

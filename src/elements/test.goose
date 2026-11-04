@@ -1545,7 +1545,16 @@ fn test_solid_plastic() {
     expect_near("solid J2 bar", rx, want, 1.0e-8);
 }
 
+fn test_curve_missed() {
+    let v, found = elements::curve_integral(0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], 0.0, 4, false) { p, n, s => [s[0], 0.0] };
+    if found {
+        failures++;
+        print("FAIL curve_missed: a curve with no solution is found");
+    }
+}
+
 fn main() {
+    test_curve_missed();
     test_solid_points();
     test_solid_energy();
     test_solid_plastic();
