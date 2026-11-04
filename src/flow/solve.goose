@@ -13,7 +13,7 @@ let NEWTON_MAX = 30;
 let NEWTON_SUFFICIENT = 1.0e-4;
 let NEWTON_HALVINGS = 20;
 let LINEAR_RTOL = 1.0e-6;
-let LINEAR_RESTART = 150;
+let LINEAR_RESTART_FEWER_ITERATIONS = 150;
 let LINEAR_MAX = 5000;
 
 var fixed: u8[>..] = [];
@@ -73,7 +73,7 @@ fn clear_bcs() {
         use_band = solvers::band_size(n, band_kl, band_ku) <= BAND_MAX;
     }
     let band_vectors = if use_band { 2 * band_kl + band_ku + 1 } else { 0 };
-    solvers::memory_check("flow newton gmres ilu0", col.len, n, LINEAR_RESTART + 7 + band_vectors, 8 * (coords.len + conn.len + first_dof.len + n), "");
+    solvers::memory_check("flow newton gmres ilu0", col.len, n, LINEAR_RESTART_FEWER_ITERATIONS + 7 + band_vectors, 8 * (coords.len + conn.len + first_dof.len + n), "");
     if use_band { solvers::zeros(band_work, solvers::band_size(n, band_kl, band_ku)); }
     val.clear();
     lu.clear();
@@ -314,7 +314,7 @@ fn linear_solve(f: f64[:], du: f64[:]) -> bool {
     if !solvers::ilu0(row_start, col, pre, lu, diag) { return false; }
     for d in f.len { du[d] = 0.0; }
     solvers::rows_start(row_start, col, val);
-    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
+    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART_FEWER_ITERATIONS, LINEAR_MAX) { r, z =>
         solvers::ilu0_apply(row_start, col, lu, diag, r, z);
     };
     solvers::rows_stop();
@@ -482,7 +482,7 @@ fn ptc_step(dt: f64, f: f64[:], du: f64[:]) -> bool {
         du[d] = 0.0;
     }
     solvers::rows_start(row_start, col, val);
-    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
+    let its, solved = solvers::gmres(row_start, col, val, f, du, LINEAR_RTOL, LINEAR_RESTART_FEWER_ITERATIONS, LINEAR_MAX) { r, z =>
         solvers::ilu0_apply(row_start, col, lu, diag, r, z);
     };
     solvers::rows_stop();

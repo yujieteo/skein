@@ -9,7 +9,7 @@ import .cell;
 import .solve;
 
 let FSI_MAX = 50;
-let FSI_RTOL = 1.0e-6;
+let FSI_RTOL_ACCURATE_ON_FSI1 = 1.0e-6;
 let OMEGA_START = 0.5;
 let MOTION_RTOL = 1.0e-10;
 
@@ -497,7 +497,7 @@ fn move_mesh() -> bool {
         }
         solvers::multiply(m_rs, m_col, m_full, g, b);
         for v in n { b[v] = if m_fixed[v] != 0 { 0.0 } else { -b[v] }; }
-        let its, solved = solvers::gmres(m_rs, m_col, m_val, b, x, MOTION_RTOL, LINEAR_RESTART, LINEAR_MAX) { r, z =>
+        let its, solved = solvers::gmres(m_rs, m_col, m_val, b, x, MOTION_RTOL, LINEAR_RESTART_FEWER_ITERATIONS, LINEAR_MAX) { r, z =>
             solvers::ilu0_apply(m_rs, m_col, m_lu, m_diag, r, z);
         };
         if !solved { return false; }
@@ -551,7 +551,7 @@ fn solve_fsi(rtol: f64) -> bool {
         solve_solid(load, trial);
         for d in ns { r[d] = trial[d] - s_u[d]; }
         fsi_iterations++;
-        if solvers::norm(r) <= FSI_RTOL * solvers::norm(trial) {
+        if solvers::norm(r) <= FSI_RTOL_ACCURATE_ON_FSI1 * solvers::norm(trial) {
             for d in ns { s_u[d] = trial[d]; }
             converged = true;
             break;
