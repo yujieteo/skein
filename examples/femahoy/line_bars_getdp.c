@@ -14237,7 +14237,7 @@ static void step_proximity_1_g(int64_t gs_sp) {
                 {
                     t131.data = ((uint8_t *)gs_str57); t131.len = 38;
                     t132 = t131;
-                    gs_abort_msg(t132.data, t132.len, gs_file11, 315);
+                    gs_abort_msg(t132.data, t132.len, gs_file11, 314);
                 }
                 L127:;
                 uint8_t *t228 = GS(gs_sp + 0)->top;
@@ -14279,7 +14279,7 @@ static void step_proximity_1_g(int64_t gs_sp) {
                     for (int64_t a_g = 0; a_g < t143; a_g++) {
                         double v_g_5;
                         if ((uint8_t)((int64_t)((int64_t)(a_g)) < (int64_t)(GS_GL->elements_ncomp_g8))) {
-                            int64_t d_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file11, 323)), a_g, gs_file11, 323);
+                            int64_t d_g = gs_add_i64((int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_ncomp_g8), n_g, gs_file11, 322)), a_g, gs_file11, 322);
                             {
                                 if ((uint8_t)((int64_t)((int64_t)(((GS_GL->elements_origin_g8.len)))) == (int64_t)(((GS_GL->elements_sol_g8.len))))) {
                                     int64_t t147 = d_g;
@@ -14298,7 +14298,7 @@ static void step_proximity_1_g(int64_t gs_sp) {
                         int64_t t150 = gs_fmt_f64(t228, (double)(v_g_5));
                         t228 += t150;
                         out_g.len += t150;
-                        if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(a_g), 1, gs_file11, 324))) < (int64_t)(comps_g))) {
+                        if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(a_g), 1, gs_file11, 323))) < (int64_t)(comps_g))) {
                             t153.data = ((uint8_t *)gs_str61); t153.len = 1;
                             t152 = t153;
                         } else {
@@ -44103,7 +44103,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
             int64_t t28 = gs_fmt_i64(t50, (int64_t)(t29));
             t50 += t28;
             t51 += t28;
-            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file11, 302))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
+            if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file11, 301))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
                 t32.data = ((uint8_t *)gs_str61); t32.len = 1;
                 t31 = t32;
             } else {
@@ -44123,7 +44123,7 @@ static void elements_vtu_mesh_g8(gs_rhdr *out_g_hdr, gs_stack *out_g_stk, int64_
     t51 += t35;
     int64_t t36 = cells_g;
     for (int64_t c_g_2 = 0; c_g_2 < t36; c_g_2++) {
-        int64_t t39 = gs_fmt_i64(t50, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file11, 305), gs_file11, 305)));
+        int64_t t39 = gs_fmt_i64(t50, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file11, 304), gs_file11, 304)));
         t50 += t39;
         t51 += t39;
         int64_t t40 = 1;

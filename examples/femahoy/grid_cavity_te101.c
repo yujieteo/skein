@@ -17203,7 +17203,7 @@ static uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t path_g_len,
                 int64_t t35 = gs_fmt_i64(t183, (int64_t)(t36));
                 t183 += t35;
                 out_g.len += t35;
-                if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file15, 302))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
+                if ((uint8_t)((int64_t)((int64_t)(gs_add_i64((int64_t)(l_g), 1, gs_file15, 301))) < (int64_t)(GS_GL->elements_per_cell_g8))) {
                     t39.data = ((uint8_t *)gs_str8); t39.len = 1;
                     t38 = t39;
                 } else {
@@ -17223,7 +17223,7 @@ static uint8_t elements_write_edge_vtu_g8(void *path_g_data, int64_t path_g_len,
         out_g.len += t42;
         int64_t t43 = cells_g;
         for (int64_t c_g_2 = 0; c_g_2 < t43; c_g_2++) {
-            int64_t t46 = gs_fmt_i64(t183, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file15, 305), gs_file15, 305)));
+            int64_t t46 = gs_fmt_i64(t183, (int64_t)(gs_mul_i64((int64_t)(GS_GL->elements_per_cell_g8), gs_add_i64((int64_t)(c_g_2), 1, gs_file15, 304), gs_file15, 304)));
             t183 += t46;
             out_g.len += t46;
             int64_t t47 = 1;
