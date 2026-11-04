@@ -23,6 +23,7 @@ TABLE = re.compile(r"^(\s*)([A-Za-z_]\w*)\[\d+\]\{([^}]*)\}:$")
 WITHIN = re.compile(r"within\s+(\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)\s*(%|\S*)")
 LEFT_OUT = ("seconds",)
 LEFT_OUT_LINES = ("peak_mb", "estimate_mb", "built ")
+REPLAY_PLAIN_RTOL = 1e-6
 
 
 def without_source_lines(c: str) -> str:
@@ -37,7 +38,7 @@ def number_and_unit(field: str) -> tuple[float, str] | None:
 def tolerance(row: dict[str, str], value: float) -> float:
     within = WITHIN.search(row.get("limit", ""))
     if not within:
-        return 0.0
+        return value * REPLAY_PLAIN_RTOL
     amount = float(within.group(1))
     return abs(value) * amount / 100 if within.group(2) == "%" else amount
 

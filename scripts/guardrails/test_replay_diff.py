@@ -28,6 +28,16 @@ class ExpectTolerance(unittest.TestCase):
             len(differences(results("kirsch: 301.2 MPa"), results("kirsch: 301.2 MPa", "1.9e-3 N"))), 1
         )
 
+    def test_a_plain_limit_allows_only_rounding(self) -> None:
+        self.assertEqual(differences(stress("301.2 MPa"), stress("301.2000001 MPa")), [])
+
+
+def stress(value: str) -> str:
+    return (
+        "verify[1]{stage,id,result,value,limit}:\n"
+        f'  post,stress,pass,"{value}","301.2 MPa"\n'
+    )
+
 
 if __name__ == "__main__":
     unittest.main()
