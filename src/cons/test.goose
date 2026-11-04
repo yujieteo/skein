@@ -34,6 +34,10 @@ fn write_square(dir: u8[:], n: i64) -> bool {
     for t in tri { mask.push(1); }
     var flags: u8[>..] = [];
     for t in tri.len / 3 { flags.push(1); }
+    // make_dir makes one level, and a fresh clone has no .skein yet.
+    for c, i in dir {
+        if c == '/' && i > 0 { make_dir(dir[..i]); }
+    }
     return make_dir(dir) && write_file(str(dir, "/cons.xy"), to_bytes(xy[..])) && write_file(str(dir, "/cons.tri"), to_bytes(tri[..])) &&
            write_file(str(dir, "/cons.sides"), to_bytes(mask[..])) && write_file(str(dir, "/cons.cells"), to_bytes(flags[..]));
 }
