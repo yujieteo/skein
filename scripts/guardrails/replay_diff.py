@@ -17,7 +17,6 @@ import re
 import sys
 from pathlib import Path
 
-LARGE_CHANGE = 0.2
 SOURCE_LINE = re.compile(r"\b(gs_file\d+), (?:\d+|\(\w+\) \? \d+ : \d+)\)")
 NUMBER = re.compile(r"^\s*((?:[A-Za-z_]\w*:\s*)?)(-?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)\s*(.*)$")
 TABLE = re.compile(r"^(\s*)([A-Za-z_]\w*)\[\d+\]\{([^}]*)\}:$")
@@ -142,19 +141,9 @@ def main() -> int:
     compared, reports = compare(Path(paths[0]), Path(paths[1]))
     models = len({p.with_suffix("") for p in Path(paths[1]).rglob("*") if p.is_file() and p.suffix in (".c", ".fail")})
     differing = len({r.split(":", 1)[0].rsplit(".", 1)[0] for r in reports})
-    shown_c = 0
     for report in reports:
-        is_c = "the generated C differs" in report.split("\n", 1)[0]
-        shown_c += is_c
-        if not is_c or shown_c <= 3 or len(reports) <= models * LARGE_CHANGE:
-            print(report)
-    by_cause = {
-        cause: sum(cause in r.split("\n", 1)[0] for r in reports)
-        for cause in ("generated C differs", "results beyond the tolerance", "other outputs", "error differs")
-    }
-    if models and differing / models > LARGE_CHANGE:
-        print(f"replay: large change, {differing} of {models} models differ: {by_cause}")
-    elif reports:
+        print(report)
+    if reports:
         print(f"replay: {differing} of {models} models differ")
     else:
         print(f"replay: ok, {models} models, {compared} outputs the same within tolerance")
