@@ -1351,6 +1351,14 @@ fn test_solid_plastic() {
     expect_near("solid J2 bar", rx, want, 1.0e-8);
 }
 
+fn test_curve_missed() {
+    let v, found = elements::curve_integral(0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], 0.0, 4, false) { p, n, s => [s[0], 0.0] };
+    if found {
+        failures++;
+        print("FAIL curve_missed: a curve with no solution is found");
+    }
+}
+
 fn test_quadrature_weights_sum_to_reference_size() {
     let sizes: f64[3] = [1.0, 0.5, 1.0 / 6.0];
     let second_moments: f64[3] = [1.0 / 3.0, 1.0 / 12.0, 1.0 / 60.0];
@@ -1422,6 +1430,7 @@ fn test_curve_below_zero() {
 }
 
 fn main() {
+    test_curve_missed();
     test_quadrature_weights_sum_to_reference_size();
     test_solid_points();
     test_solid_energy();

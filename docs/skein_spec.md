@@ -1615,19 +1615,24 @@ value of `family` or `quadrature` is an error [`method_setting`].
 
 The setting `pml: { region: layer, thickness: 1 um }` of `cg` makes
 `region` a perfectly matched layer (PML) of an open boundary (Bérenger
-1994). The layer is the part of the body within `thickness` of its outer
-faces. In the layer, the solver stretches each coordinate axis along
-which the point is past the rest of the body by the complex factor
+1994). `region` is the body less a box: a `box` in `3d`, or a `rect` in
+`2d`. The box is the rest of the body, and `thickness` is the depth h of
+the layer past it. In the layer, the solver stretches each coordinate axis
+along which the point is past the box by the complex factor
 s = 1 - im·σ, with σ = (3 ln(10⁶)/(2 k h))·(d/h)². Here d is the depth of
-the point past the rest of the body along the axis, h is `thickness`, and
-k is the wave number in the layer: the square root of the coefficient of
-the unknown in the equation. An outgoing wave decays in the layer, and the
-reflection of the layer at normal incidence is 10⁻⁶ before the
-discretization. The outer faces of the layer keep their own conditions.
-`region` and `thickness` are both required, and the physics needs a
-`Complex` unknown [`method_setting`]. Reason: the antenna, the eddy current
-and the optics models of femahoy need an open boundary (gap G26), and a
-first-order absorbing condition reflects a wave that is not normal to it.
+the point past the box along the axis. The wave number k of the layer is
+the square root of Re(c)/ν for the scalar wave `div(ν·grad(u)) + c·u = s`.
+For the edge physics `curl(ν·curl(u)) + c·u = s`, k is the square root of
+-Re(c)/ν. A lossy c uses Re(c) only: Im(c) changes neither k nor the
+stretch. An outgoing wave decays in the layer, and the reflection of the
+layer at normal incidence is 10⁻⁶ before the discretization. The outer
+faces of the layer keep their own conditions. `region` and `thickness`
+are both required, and the physics needs a `Complex` unknown, a scalar
+one or an edge (`nedelec`) one [`method_setting`]. In this generator, a
+`modal` step of an edge physics does not take the `pml`, and `skein run`
+refuses the model. Reason: the antenna, the eddy current and the optics
+models of femahoy need an open boundary (gap G26), and a first-order
+absorbing condition reflects a wave that is not normal to it.
 
 A setting that does not belong to the kind is an error
 [`method_setting`]. The checker tests the method against the physics:
@@ -1873,6 +1878,11 @@ text as the column name.
 `integral(f, r)` has the dimension of `f` times `Length^k`, where `k` is
 the topological dimension of `r`. In a `2d` model with no thickness, a force
 on a curve is thus `Force/Length`, the force per unit depth.
+
+In a physics of a `Complex` unknown (a wave or an edge physics) and in a
+Darcy flow, `c` in `integral(f, c)` may be a `Curve` inside the mesh, such as
+a `line`. The integral then runs along `c`, and `f` is a function of the
+unknown and its gradient.
 
 ---
 

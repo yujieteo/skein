@@ -1,0 +1,50 @@
+// A modal step of an edge physics solves a lossless eigenproblem, so it cannot take the pml:
+// skein run must refuse the pml and not solve the eigenproblem without it.
+
+model guide_modal_pml: 3d, mm_N_MPa_s
+
+let a: Length = 22.86 mm
+let b: Length = 10.16 mm
+let Lg: Length = 30 mm
+let eps0: Current^2*Time/(Power*Length) = 8.8541878128e-12 C/(V*m)
+let mu0: Power*Time/(Current^2*Length) = 1.25663706212e-6 V*s/(A*m)
+
+scales a, 1 V, 1 mA, 0.1 ns
+
+let world: Solid = box((0, 0, 0) mm, (a, b, 45 mm))
+let guide: Solid = box((0, 0, 0) mm, (a, b, Lg))
+let layer: Solid = world - guide
+let xwalls: Surface = boundary(world, x == 0 mm || x == a)
+let ywalls: Surface = boundary(world, y == 0 mm || y == b)
+
+material air {
+    eps: Current^2*Time/(Power*Length) = eps0
+    mu: Power*Time/(Current^2*Length) = mu0
+}
+
+mesh m on world {
+    size: 4 mm
+    cell: tet
+}
+
+physics wave on world solves E: Vector<Complex<Power/(Current*Length)>> {
+    material air
+    let Hs: Tensor2<Complex<Current/(Length*Time)>> = -2*skew(grad(E))/mu
+    eq div(Hs) + eps*ddt2(E) = 0
+}
+
+method wave: cg {
+    mesh: m
+    order: 2
+    family: nedelec
+    pml: { region: layer, thickness: 15 mm }
+}
+
+bc xwalls: E.y = 0
+bc xwalls: E.z = 0
+bc ywalls: E.x = 0
+bc ywalls: E.z = 0
+
+step resonance: modal(count: 1, shift: 8 GHz) {
+    output E
+}

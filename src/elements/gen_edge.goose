@@ -918,9 +918,9 @@ let EDGE_PRELUDE = """
 
     // Its integral on the line from (x0, y0, z0) to (x1, y1, z1).
     fn edge_segment(curl: bool, comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> f64[2] {
-        let re, im, found = elements::edge_line_integral(curl, comp, x0, y0, z0, x1, y1, z1, 64);
+        let s, found = elements::curve_integral(0, [x0, y0, z0], [x1, y1, z1], 0.0, 64, curl) { p, n, v => [v[comp], v[comp + 3]] };
         if !found { found_all = false; }
-        return [re, im];
+        return s;
     }
 
     // Component comp of q (0 to 2), or p (3), of the Darcy flow at a point.
@@ -930,15 +930,10 @@ let EDGE_PRELUDE = """
         return [v, 0.0];
     }
 
-    // Its integral on a line, by the midpoint rule on 64 pieces.
     fn darcy_segment(comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> f64[2] {
-        let length = sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0) + (z1 - z0) * (z1 - z0));
-        var s = 0.0;
-        for i in 64 {
-            let t = (i as f64 + 0.5) / 64.0;
-            s += darcy_point(comp, x0 + t * (x1 - x0), y0 + t * (y1 - y0), z0 + t * (z1 - z0))[0];
-        }
-        return [s * length / 64.0, 0.0];
+        let s, found = elements::curve_integral(0, [x0, y0, z0], [x1, y1, z1], 0.0, 64, false) { p, n, v => [v[comp], 0.0] };
+        if !found { found_all = false; }
+        return s;
     }
 
     fn output_darcy(path: u8[:], p: u8[:], q: u8[:]) {
@@ -1297,6 +1292,7 @@ fn emit_edge_case(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
             emit_edge_sources(out);
         }
     }
+    emit_pml(out);
     if complex_solid {
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if !is_load(b) { emit_bc(out, b); } }
         for b in active[s.first_bc..s.first_bc + s.bc_count] { if is_load(b) { emit_bc(out, b); } }

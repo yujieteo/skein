@@ -7,6 +7,7 @@ Each model has a .c (the generated C) or a .fail (why there is none), and,
 when its C differs, a .toon (the results of skein run) or a .runfail. The C
 must be the same, except for the line numbers of the source in the calls of
 the runtime. A result number may differ by the tolerance that its row states.
+A model that the base has only as a .fail is new, and its C is not compared.
 """
 
 from __future__ import annotations
@@ -100,7 +101,8 @@ def compare(base_dir: Path, head_dir: Path) -> tuple[int, list[str]]:
         relative = head_file.relative_to(head_dir)
         base_file = base_dir / relative
         if not base_file.exists():
-            if any(base_dir.glob(f"{relative.with_suffix('')}.*")):
+            others = [f for f in base_dir.glob(f"{relative.with_suffix('')}.*") if f.suffix != ".fail"]
+            if others:
                 reports.append(f"{relative}: the base made other outputs than the branch")
             continue
         compared += 1

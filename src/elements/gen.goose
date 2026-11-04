@@ -5,6 +5,7 @@ import syntax from "../syntax";
 import codegen.codegen;
 import mesher from "../mesher";
 import .gen_edge;
+import .gen_curve;
 import .gen_aniso;
 import .gen_solid;
 import .gen_contact;
@@ -1107,6 +1108,7 @@ fn surface(n: i64) {
     let k = find_body(of);
     let whole = if syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME { name(arg(v, 0)) } else { of };
     if whole != body_name && find_body(whole) < 0 && whole.len > 0 && find_geometry(whole) >= 0 { return; }
+    if syntax::child_count(v) == 2 && (is_call(arg(v, 0), "circle") || is_call(arg(v, 0), "rect")) { return; }
     let all = syntax::child_count(v) == 2 && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == body_name;
     if of != body_name && k < 0 && !all {
         unsupported(tok(v), str("the boundary '", name(n), "' is not on the body of the physics"), SURF_FIX);
@@ -1204,8 +1206,8 @@ fn property(word: u8[:]) -> i64 {
 fn read_material() {
     guard material_node >= 0 else { return; }
     let base = material_node;
-    if physics != ELASTIC && physics != HEAT && physics != EDGE && !wave_eddy && region_laws.len > 0 {
-        unsupported(tok(base), "a material on a region of a wave, edge or Darcy physics is not in this generator", "use one material");
+    if physics != ELASTIC && physics != HEAT && physics != EDGE && physics != WAVE && !wave_eddy && region_laws.len > 0 {
+        unsupported(tok(base), "a material on a region of a Darcy flow is not in this generator", "use one material");
     }
     for &w in region_laws {
         material_node = w.item;
@@ -1753,7 +1755,7 @@ fn method(n: i64) {
             order = scalar_value(first(s)) as! i64;
             if order != 1 && order != 2 { unsupported(tok(s), "this generator has order 1 and order 2", "write order: 2"); }
         } else if kind(s) == syntax::N_SETTING && name(s) == "couple" && source_of(first(s)) == "staggered" && multi() {
-        } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && physics == WAVE {
+        } else if kind(s) == syntax::N_SETTING && name(s) == "pml" && (physics == WAVE || physics == EDGE) {
             pml_setting(first(s));
         } else if kind(s) == syntax::N_SETTING && name(s) == "family" && kind(first(s)) == syntax::N_NAME && name(first(s)) == "incompatible" && physics == ELASTIC {
             incompatible_family = true;
@@ -1763,7 +1765,7 @@ fn method(n: i64) {
         } else if (physics == EDGE || physics == DARCY) && edge_method(s) {
         } else if !(kind(s) == syntax::N_SETTING && name(s) == "mesh") {
             unsupported(tok(s), "the method setting is not in this generator",
-                        "use only mesh, order, the pml of a wave physics, and the family and gauge: tree of edge elements");
+                        "use only mesh, order, the pml of a wave or edge physics, and the family and gauge: tree of edge elements");
         }
         s = next(s);
     }
@@ -2061,6 +2063,11 @@ fn procedure(proc: i64, s: Step&) {
         return;
     }
     if physics == EDGE && p == "modal" {
+        if pml_g >= 0 {
+            unsupported(tok(proc), "a modal step of an edge physics does not take the pml in this generator",
+                        "remove the pml, or write step sweep: harmonic(freq: [10 GHz]) { ... }");
+            return;
+        }
         edge_modal_proc(proc, s);
         return;
     }
@@ -2225,6 +2232,7 @@ fn wave_simple(e: i64) -> i64 {
 recursive fn wave_samples(e: i64) -> i64 {
     let k = kind(e);
     if k == syntax::N_AT { return if kind(child(e, 0)) == syntax::N_NAME && name(child(e, 0)) == unknown_name { 1 } else { -1 }; }
+    if is_call(e, "integral") && syntax::child_count(e) == 3 && is_curve(arg(e, 1)) { return 1; }
     if is_call(e, "mean") && syntax::child_count(e) == 3 && kind(arg(e, 0)) == syntax::N_NAME && name(arg(e, 0)) == unknown_name {
         return if kind(arg(e, 1)) == syntax::N_NAME && find_surf(name(arg(e, 1))) >= 0 { 1 } else { -1 };
     }
@@ -3291,7 +3299,7 @@ fn harmonic_values() {
         for f in freqs[s.first_freq..s.first_freq + s.freq_count] {
             omega_now = 2.0 * PI * f;
             var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
-            if wave_s_node >= 0 { cval(wave_s_node); }
+            if wave_s_node >= 0 && !mentions_xyz(wave_s_node) { cval(wave_s_node); }
             if wave_eddy {
                 let nu, ce, se = eddy_terms();
                 c = ce;
@@ -3644,6 +3652,7 @@ let WAVE_PRELUDE = """
         return [re, im], found_re && found_im;
     }
 
+    fn wconj(a: f64[2]) -> f64[2] { return [a[0], -a[1]]; }
     fn wadd(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] + b[0], a[1] + b[1]]; }
     fn wsub(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] - b[0], a[1] - b[1]]; }
     fn wmul(a: f64[2], b: f64[2]) -> f64[2] { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
@@ -4018,7 +4027,7 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     let f = freqs[s.first_freq + i];
     omega_now = 2.0 * PI * f;
     var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
-    var src = if wave_s_node >= 0 { cval(wave_s_node) } else { [0.0, 0.0] };
+    var src = if wave_s_node >= 0 && !mentions_xyz(wave_s_node) { cval(wave_s_node) } else { [0.0, 0.0] };
     var nu0 = 1.0;
     if wave_eddy { nu0, c, src = eddy_terms(); }
     var label: u8[>..] = [];
@@ -4031,16 +4040,8 @@ fn emit_frequency(out: u8[>..]&, si: i64, i: i64, results_dir: u8[:]) {
     }
     lit(out, s.damping);
     out.append(");\n");
-    if wave_eddy { emit_eddy_laws(out, nu0); }
-    if pml_g >= 0 {
-        format(out, "    elements::pml(", pml_g, ", ");
-        lits(out, pml_lo);
-        out.append(", ");
-        lits(out, pml_hi);
-        out.append(", ");
-        lit(out, pml_h);
-        out.append(");\n");
-    }
+    if wave_eddy { emit_eddy_laws(out, nu0); } else { emit_wave_laws(out); }
+    emit_pml(out);
     for b in active[s.first_bc..s.first_bc + s.bc_count] { emit_bc(out, b); }
     out.append("    solve(");
     quoted(out, label);
@@ -4124,6 +4125,14 @@ var wz_found: u8[>..] = [];
 
 recursive fn emit_wz(out: u8[>..]&, pre: u8[>..]&, z: i64) {
     let k = kind(z);
+    if is_call(z, "integral") && syntax::child_count(z) == 3 && is_curve(arg(z, 1)) {
+        let n = wz_count;
+        wz_count++;
+        emit_curve_integral(pre, n, z);
+        format(wz_found, " && wf", n);
+        format(out, "wz", n);
+        return;
+    }
     if k == syntax::N_AT || is_call(z, "mean") {
         let n = wz_count;
         wz_count++;
@@ -4162,6 +4171,8 @@ recursive fn emit_wz(out: u8[>..]&, pre: u8[>..]&, z: i64) {
     emit_wz(out, pre, child(z, 1));
     out.append(")");
 }
+
+
 
 fn emit_wave_z(out: u8[>..]&, var_name: u8[:], z: i64, part: i64) {
     var pre: u8[>..] = [];

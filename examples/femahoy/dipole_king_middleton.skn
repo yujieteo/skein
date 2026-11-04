@@ -1,4 +1,5 @@
 // femahoy: validation/cases/dipole-king-middleton/omega12.5/openems.py
+// blocked-by: a mesh with the strip and the feed as faces inside the air, and the delta-gap bc on them: skein run stops at "this generator refines only the hole" (the box mesh has no interior surface). The PML of the edge physics and the loop integrals of hc run (examples/elements/pml_guide_tet.skn); the 3D direct solve limit of 15 minutes (68066 dofs) is far below the order 2 mesh of 5 mm cells in a 281 x 280 x 435 mm box (femahoy_coverage.md)
 // A centre-fed strip dipole in free space, half length 77.7 mm, width 1.2 mm (equivalent
 // radius 0.3 mm, Omega = 12.5), with a delta-gap feed. Time-harmonic Maxwell equations for E.
 // Reference: King and Middleton, X = -185.7 ohm at beta*h = 1.2, R = 71.02 ohm at 1.5.
@@ -47,15 +48,12 @@ mesh m on world {
     refine strip | feed: 0.3 mm
 }
 
-// curl(hc) is written as div(th): th*w = cross(w, hc) for each vector w. Thus th*n is the
-// natural condition cross(n, hc) on the outer faces.
 physics em on world solves ef: Vector<Complex<Mass*Length/(Time^3*Current)>> {
     material vacuum
     let hc: Vector<Complex<Current/(Time*Length)>> = curl(ef)/mu
-    let th: Tensor2<Complex<Current/(Time*Length)>> = outer(cross(ex, hc), ex) + outer(cross(ey, hc), ey) + outer(cross(ez, hc), ez)
     // The magnetic field H = curl(ef)/(-im*omega*mu).
     let hf: Vector<Complex<Current/Length>> = im*hc/omega
-    eq div(th) - omega^2*eps*ef = 0
+    eq curl(hc) - omega^2*eps*ef = 0
 }
 
 method em: cg {
@@ -72,7 +70,7 @@ step tone: harmonic(freq: [f0]) {
     // The delta gap: the voltage v0 across the gap drives the current along +z.
     bc feed: ef.x = 0
     bc feed: ef.z = -v0/g_f
-    // Behind the PML, the default natural condition th*n = 0.
+    // Behind the PML, the default natural condition cross(n, hc) = 0.
     output ef
     // H = curl(ef)/(-im*omega*mu0) = im*hc/omega. The current is the loop integral of H.
     report z_in = v0/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) - integral(hc.x, lp_n) - integral(hc.y, lp_w)))

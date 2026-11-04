@@ -17,7 +17,6 @@ var cell_edge: i64[>..] = [];
 var cell_sign: f64[>..] = [];
 var edge_nu: f64[>..] = [];
 var edge_c: f64[>..] = [];
-var edge_mark: i64[>..] = [];
 var gauge_count = 0;
 var edge_p = 1;
 var cell_dof: i64[>..] = [];
@@ -63,13 +62,14 @@ fn set_edge(nu: f64, c: f64[2], t: f64) {
     clear_matrix();
     edge_nu.clear();
     edge_c.clear();
-    edge_mark.clear();
+    cell_mark.clear();
     for e in cell_count() {
         edge_nu.push(nu);
         edge_c.append(c);
-        edge_mark.push(-1);
+        cell_mark.push(-1);
     }
     gauge_count = 0;
+    pml_shape = -1;
     clear_impedance();
 }
 
@@ -136,7 +136,7 @@ fn edge_material(g: i64, nu: f64, c: f64[2]) -> i64 {
     for e in cell_count() {
         if !cell_in(e, g) { continue; }
         edge_nu[e] = nu;
-        edge_mark[e] = g;
+        cell_mark[e] = g;
         edge_c[2 * e] = c[0];
         edge_c[2 * e + 1] = c[1];
         count++;
@@ -221,16 +221,41 @@ fn edge_cell(c: i64, me: f64[:], mass: bool) {
         let nu = if mass { 0.0 } else { edge_nu[c] };
         let cr = if mass { edge_m[2 * c] } else { edge_c[2 * c] };
         let ci = if mass { edge_m[2 * c + 1] } else { edge_c[2 * c + 1] };
+        var p: f64[3] = [0.0; 3];
+        for v in dim + 1 {
+            for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
+        }
+        let st = if mass { [1.0, 0.0, 1.0, 0.0, 1.0, 0.0] } else { stretch(c, p, pml_k(c)) };
+        var inv: f64[6] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0];
+        var lam: f64[6] = [cr, ci, cr, ci, cr, ci];
+        for t in 3 {
+            let a1 = (t + 1) % 3;
+            let a2 = (t + 2) % 3;
+            let top = cmul([st[2 * a1], st[2 * a1 + 1]], [st[2 * a2], st[2 * a2 + 1]]);
+            let m = cdiv(top, [st[2 * t], st[2 * t + 1]]);
+            let iv = cdiv([1.0, 0.0], m);
+            inv[2 * t] = iv[0];
+            inv[2 * t + 1] = iv[1];
+            let cm = cmul([cr, ci], m);
+            lam[2 * t] = cm[0];
+            lam[2 * t + 1] = cm[1];
+        }
         for a in ne {
             for b in ne {
-                var k = 0.0;
-                var m = 0.0;
+                var kr = 0.0;
+                var ki = 0.0;
+                var mr = 0.0;
+                var mi = 0.0;
                 for t in 3 {
-                    k += cw[3 * a + t] * cw[3 * b + t];
-                    m += w[3 * a + t] * w[3 * b + t];
+                    let k = cw[3 * a + t] * cw[3 * b + t];
+                    let m = w[3 * a + t] * w[3 * b + t];
+                    kr += k * inv[2 * t];
+                    ki += k * inv[2 * t + 1];
+                    mr += m * lam[2 * t];
+                    mi += m * lam[2 * t + 1];
                 }
-                me[2 * (ne * a + b)] += (nu * k + cr * m) * dv;
-                me[2 * (ne * a + b) + 1] += ci * m * dv;
+                me[2 * (ne * a + b)] += (nu * kr + mr) * dv;
+                me[2 * (ne * a + b) + 1] += (nu * ki + mi) * dv;
             }
         }
     }
@@ -297,7 +322,7 @@ fn edge_source<S>(mark: i64) {
     var w: f64[60] = [0.0; 60];
     var cw: f64[60] = [0.0; 60];
     for c in cell_count() {
-        if mark != -2 && edge_mark[c] != mark { continue; }
+        if !source_cell(c, mark) { continue; }
         for q in volume_points() {
             let xi, wt = volume_point(q);
             var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
@@ -306,10 +331,7 @@ fn edge_source<S>(mark: i64) {
                 l[0] -= xi[r];
             }
             let dv = wt * edge_basis(c, l, w, cw) * thickness;
-            var p: f64[3] = [0.0; 3];
-            for v in dim + 1 {
-                for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
-            }
+            let p = source_point(c, l);
             let s: f64[6] = S(p);
             for a in le {
                 let d = 2 * cell_dof[le * c + a];
@@ -775,30 +797,6 @@ fn edge_value_at(p: f64[3], curl: bool) -> f64[6], bool {
     }
     guard best >= 0 else { return sum, false; };
     return edge_cell_value(best, barycentric(best, p), curl), best_l >= -0.1;
-}
-
-fn edge_line(a: f64[3], b: f64[3], t: i64, curl: bool, n: i64) -> f64[2], bool {
-    guard t >= -1 && t < 3 && n >= 1 else { abort("edge_line: -1 <= t < 3 and n >= 1"); }
-    var s: f64[2] = [0.0, 0.0];
-    var all = true;
-    var len = 0.0;
-    for j in 3 { len += (b[j] - a[j]) * (b[j] - a[j]); }
-    len = sqrt(len);
-    for i in n {
-        let f = (i + 0.5) / n;
-        var p: f64[3] = [0.0; 3];
-        for j in 3 { p[j] = a[j] + f * (b[j] - a[j]); }
-        let v, found = edge_value_at(p, curl);
-        if !found { all = false; }
-        for part in 2 {
-            if t >= 0 {
-                s[part] += v[3 * part + t] * len / n;
-            } else {
-                for j in 3 { s[part] += v[3 * part + j] * (b[j] - a[j]) / n; }
-            }
-        }
-    }
-    return s, all;
 }
 
 fn edge_nodal(curl: bool) -> f64[>..] {

@@ -16,7 +16,9 @@ var wave_c: f64[2] = [0.0, 0.0];
 var wave_s: f64[2] = [0.0, 0.0];
 var wave_damping = 0.0;
 var wave_cell_terms: f64[>..] = [];
+var cell_mark: i64[>..] = [];
 var pml_shape = -1;
+var pml_flag: u8[>..] = [];
 var pml_lo: f64[3] = [0.0; 3];
 var pml_hi: f64[3] = [0.0; 3];
 var pml_h = 0.0;
@@ -98,8 +100,10 @@ fn set_wave_terms(c: f64[2], s: f64[2], damping: f64) {
     wave_s = s;
     wave_damping = damping;
     wave_cell_terms.clear();
+    cell_mark.clear();
     for e in cell_count() {
         wave_cell_terms.append([c[0], c[1], s[0], s[1], 1.0]);
+        cell_mark.push(-1);
     }
 }
 
@@ -141,14 +145,42 @@ fn wave_material(g: i64, nu: f64, c: f64[2], s: f64[2]) -> i64 {
         wave_cell_terms[5 * e + 2] = s[0];
         wave_cell_terms[5 * e + 3] = s[1];
         wave_cell_terms[5 * e + 4] = nu;
+        cell_mark[e] = g;
         count++;
     }
     return count;
 }
 
+fn wave_source<S>(mark: i64) {
+    guard physics == WAVE && dofs_sized() && cell_mark.len == cell_count() else { abort("wave_source: a wave physics with its terms set"); }
+    for c in cell_count() {
+        if !source_cell(c, mark) { continue; }
+        for q in rich_count() {
+            let xi, w = rich_point(q);
+            let dv = w * cell_geometry(c, xi) * thickness;
+            var b: f64[4] = [1.0, 0.0, 0.0, 0.0];
+            for r in dim {
+                b[r + 1] = xi[r];
+                b[0] -= xi[r];
+            }
+            let p = source_point(c, b);
+            let st = stretch(c, p, pml_k(c));
+            var det: f64[2] = [1.0, 0.0];
+            for j in dim { det = cmul(det, [st[2 * j], st[2 * j + 1]]); }
+            let f = cmul(S(p), det);
+            for l in per_cell {
+                load[2 * cell_node(c, l)] -= f[0] * shp[l] * dv;
+                load[2 * cell_node(c, l) + 1] -= f[1] * shp[l] * dv;
+            }
+        }
+    }
+}
+
 fn set_pml(g: i64, lo: f64[3], hi: f64[3], h: f64) {
-    guard physics == WAVE && g >= 0 && h > 0.0 && wave_c[0] > 0.0 else { abort("set_pml: a wave physics with c > 0, a shape and h > 0"); }
+    guard (physics == WAVE || physics == EDGE) && g >= 0 && h > 0.0 else { abort("set_pml: a wave or edge physics, a shape and h > 0"); }
     pml_shape = g;
+    pml_flag.clear();
+    for c in cell_count() { pml_flag.push(if cell_in(c, g) { 1 } else { 0 }); }
     pml_lo = lo;
     pml_hi = hi;
     pml_h = h;
@@ -246,10 +278,25 @@ fn add_block(a: i64, b: i64, z: f64[2]) {
     val[e1 + 1] += z[0];
 }
 
-fn stretch(c: i64, p: f64[3]) -> f64[6] {
+fn pml_k(c: i64) -> f64 {
+    if physics == EDGE { return if edge_c[2 * c] < 0.0 { sqrt(-edge_c[2 * c] / edge_nu[c]) } else { 0.0 }; }
+    return if wave_cell_terms[5 * c] > 0.0 { sqrt(wave_cell_terms[5 * c] / wave_cell_terms[5 * c + 4]) } else { 0.0 };
+}
+
+fn source_cell(c: i64, mark: i64) -> bool { return mark == -2 || cell_mark[c] == mark; }
+
+fn source_point(c: i64, l: f64[4]) -> f64[3] {
+    var p: f64[3] = [0.0; 3];
+    for v in dim + 1 {
+        for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
+    }
+    return p;
+}
+
+fn stretch(c: i64, p: f64[3], k: f64) -> f64[6] {
     var s: f64[6] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0];
-    guard pml_shape >= 0 && cell_in(c, pml_shape) else { return s; }
-    let k = sqrt(wave_c[0]);
+    guard pml_shape >= 0 && pml_flag[c] != 0 else { return s; }
+    guard k > 0.0 else { abort("stretch: a cell of the PML layer has a wave number k > 0"); }
     let top = 3.0 * log(1.0 / PML_REFLECTION) / (2.0 * k * pml_h);
     for j in dim {
         let d = max(0.0, max(pml_lo[j] - p[j], p[j] - pml_hi[j]));
@@ -270,7 +317,7 @@ fn wave_cell(c: i64, me: f64[:], fe: f64[:]) {
         for l in per_cell {
             for t in 3 { p[t] += shp[l] * node_x(cell_node(c, l), t); }
         }
-        let s = stretch(c, p);
+        let s = stretch(c, p, pml_k(c));
         var det: f64[2] = [1.0, 0.0];
         for j in dim { det = cmul(det, [s[2 * j], s[2 * j + 1]]); }
         var lam: f64[6] = [0.0; 6];

@@ -10,6 +10,7 @@ import .source;
 import .stages;
 import .eigen;
 import .wave;
+import .curve;
 import .harmonic;
 import .radiation;
 import .explicit;
@@ -145,6 +146,8 @@ fn wave_terms(c_re: f64, c_im: f64, s_re: f64, s_im: f64, damping: f64) {
     set_wave_terms([c_re, c_im], [s_re, s_im], damping);
 }
 
+fn wave_source_in<S>(g: i64) { wave_source(g) { p => S(p) }; }
+
 fn wave_nu(nu: f64) { wave_material_all(nu); }
 
 fn wave_region_integral(g: i64) -> f64[3] { return wave_cells_integral(g); }
@@ -200,10 +203,6 @@ fn edge_at(curl: bool, part: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, boo
     return v[3 * part + comp], found;
 }
 
-fn edge_line_integral(curl: bool, comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, n: i64) -> f64, f64, bool {
-    let s, found = edge_line([x0, y0, z0], [x1, y1, z1], comp, curl, n);
-    return s[0], s[1], found;
-}
 
 fn far_field(dx: f64, dy: f64, dz: f64, k: f64, eta: f64, hf_re: f64, hf_im: f64) -> f64 {
     surface_samples([hf_re, hf_im]);
