@@ -2648,7 +2648,7 @@ fn expect(n: i64, step: i64) {
     } else if wave_simple(left) >= 0 {
         comp = wave_simple(left);
         what = FIELD_WAVE;
-    } else if wave_part(left) >= 0 || (physics == WAVE && wave_samples(left) >= 1 && kind(left) != syntax::N_AT) {
+    } else if wave_part(left) >= 0 {
         comp = left;
         what = FIELD_WAVE_Z;
     }
@@ -3587,7 +3587,6 @@ fn harmonic_values() {
             omega_now = 2.0 * PI * f;
             var c = if wave_c_node >= 0 { cval(wave_c_node) } else { [0.0, 0.0] };
             if wave_s_node >= 0 && !mentions_xyz(wave_s_node) { cval(wave_s_node); }
-            for w in region_laws { if !wave_eddy { wave_region_terms(w); } }
             if wave_eddy {
                 let nu, ce, se = eddy_terms();
                 c = ce;
@@ -4423,60 +4422,108 @@ fn emit_wave_laws(out: u8[>..]&) {
     guard wave_s_node >= 0 && mentions_xyz(wave_s_node) else { return; }
     let base = material_node;
     format(out, "    elements::wave_source_in(-1) { p => ");
-    emit_cs(out, wave_s_node);
+    emit_complex(out, wave_s_node, true);
     out.append(" };\n");
     for w in region_laws {
         material_node = w.item;
         format(out, "    elements::wave_source_in(", w.g, ") { p => ");
-        emit_cs(out, wave_s_node);
+        emit_complex(out, wave_s_node, true);
         out.append(" };\n");
     }
     material_node = base;
 }
 
-recursive fn emit_cs(out: u8[>..]&, n: i64) {
+recursive fn emit_complex(out: u8[>..]&, n: i64, spatial: bool) {
     let k = kind(n);
     let op = if k == syntax::N_BINARY || k == syntax::N_UNARY { syntax::text(tok(n)) } else { "" };
-    if !mentions_xyz(n) {
+    if !(if spatial { mentions_xyz(n) } else { !ci_free(n) }) {
         let c = cval(n);
         out.append("[");
         lit(out, c[0]);
         out.append(", ");
         lit(out, c[1]);
         out.append("]");
-    } else if k == syntax::N_NAME && axis_of(name(n)) >= 0 {
-        format(out, "[p[", axis_of(name(n)), "], 0.0]");
-    } else if k == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
-        codegen::depth++;
-        emit_cs(out, codegen::find_value(name(n)));
-        codegen::depth--;
-    } else if k == syntax::N_NAME && property(name(n)) >= 0 && codegen::depth < 100 {
-        codegen::depth++;
-        emit_cs(out, property(name(n)));
-        codegen::depth--;
-    } else if k == syntax::N_UNARY && op == "-" {
-        out.append("wsub([0.0, 0.0], ");
-        emit_cs(out, first(n));
-        out.append(")");
-    } else if k == syntax::N_BINARY && (op == "+" || op == "-" || op == "*" || op == "/") {
-        out.append(if op == "+" { "wadd(" } else if op == "-" { "wsub(" } else if op == "*" { "wmul(" } else { "wdiv(" });
-        emit_cs(out, child(n, 0));
-        out.append(", ");
-        emit_cs(out, child(n, 1));
-        out.append(")");
-    } else if k == syntax::N_CALL && syntax::child_count(n) == 2 && kind(child(n, 0)) == syntax::N_NAME && position(["sin", "cos", "exp"], name(child(n, 0))) >= 0 && !mentions_im(arg(n, 0)) {
-        out.append("[");
-        emit_space(out, n, -1);
-        out.append(", 0.0]");
-    } else {
-        unsupported(tok(n), str("the expression '", source_of(n), "' is not in this generator"),
-                    "write + - * / of numbers, im, lets, properties, x, y, z, and sin, cos or exp of a real function of x, y and z");
-        out.append("[0.0, 0.0]");
+        return;
     }
+    if spatial && k == syntax::N_NAME && axis_of(name(n)) >= 0 {
+        format(out, "[p[", axis_of(name(n)), "], 0.0]");
+        return;
+    }
+    if !spatial && k == syntax::N_NAME && name(n) == unknown_name {
+        out.append("[s[0], s[1]]");
+        return;
+    }
+    if k == syntax::N_NAME && codegen::depth < 100 {
+        let v = if codegen::find_value(name(n)) >= 0 { codegen::find_value(name(n)) } else { property(name(n)) };
+        if v >= 0 {
+            codegen::depth++;
+            emit_complex(out, v, spatial);
+            codegen::depth--;
+            return;
+        }
+    }
+    if k == syntax::N_UNARY && op == "-" {
+        out.append("wsub([0.0, 0.0], ");
+        emit_complex(out, first(n), spatial);
+        out.append(")");
+        return;
+    }
+    if !spatial && is_call(n, "dot") && syntax::child_count(n) == 3 {
+        var g = -1;
+        var m = -1;
+        if is_call(arg(n, 0), "grad") && source_of(arg(arg(n, 0), 0)) == unknown_name && source_of(arg(n, 1)) == "n" { g = arg(n, 0); m = arg(n, 1); }
+        if is_call(arg(n, 1), "grad") && source_of(arg(arg(n, 1), 0)) == unknown_name && source_of(arg(n, 0)) == "n" { g = arg(n, 1); m = arg(n, 0); }
+        if g >= 0 && m >= 0 {
+            if dim == 3 { unsupported(tok(n), "dot with the normal n on a curve in 3d: the curve has no normal", "integrate over a line or a circle in a 2d model"); }
+            out.append("[s[2] * n[0] + s[3] * n[1] + s[4] * n[2], s[5] * n[0] + s[6] * n[1] + s[7] * n[2]]");
+            return;
+        }
+    }
+    if k == syntax::N_CALL && syntax::child_count(n) == 2 && kind(child(n, 0)) == syntax::N_NAME {
+        let f = name(child(n, 0));
+        if spatial && position(["sin", "cos", "exp"], f) >= 0 && !mentions_im(arg(n, 0)) {
+            out.append("[");
+            emit_space(out, n, -1);
+            out.append(", 0.0]");
+            return;
+        }
+        if !spatial && f == "conj" {
+            out.append("wconj(");
+            emit_complex(out, arg(n, 0), spatial);
+            out.append(")");
+            return;
+        }
+        if !spatial {
+            for w, i in PARTS {
+                if f == w {
+                    format(out, "[wave_pick(", i, ", ");
+                    emit_complex(out, arg(n, 0), spatial);
+                    out.append("), 0.0]");
+                    return;
+                }
+            }
+        }
+    }
+    guard op == "+" || op == "-" || op == "*" || op == "/" else {
+        if spatial {
+            unsupported(tok(n), str("the expression '", source_of(n), "' is not in this generator"),
+                        "write + - * / of numbers, im, lets, properties, x, y, z, and sin, cos or exp of a real function of x, y and z");
+        } else {
+            unsupported(tok(n), str("the integrand '", source_of(n), "' is not in this generator"),
+                        str("write the unknown ", unknown_name, ", dot(grad(", unknown_name, "), n), re, imag, abs, arg and conj of them, joined by + - * / and constants"));
+        }
+        out.append("[0.0, 0.0]");
+        return;
+    };
+    out.append(if op == "+" { "wadd(" } else if op == "-" { "wsub(" } else if op == "*" { "wmul(" } else { "wdiv(" });
+    emit_complex(out, child(n, 0), spatial);
+    out.append(", ");
+    emit_complex(out, child(n, 1), spatial);
+    out.append(")");
 }
 
 recursive fn mentions_im(n: i64) -> bool {
-    if kind(n) == syntax::N_NAME && (name(n) == "im" || name(n) == "omega") { return true; }
+    if kind(n) == syntax::N_NAME && name(n) == "im" { return true; }
     if kind(n) == syntax::N_NAME && codegen::find_value(name(n)) >= 0 && codegen::depth < 100 {
         codegen::depth++;
         let r = mentions_im(codegen::find_value(name(n)));
@@ -4657,67 +4704,6 @@ recursive fn ci_free(e: i64) -> bool {
     return true;
 }
 
-recursive fn emit_ci(out: u8[>..]&, e: i64) {
-    let k = kind(e);
-    if ci_free(e) {
-        let c = cval(e);
-        out.append("[");
-        lit(out, c[0]);
-        out.append(", ");
-        lit(out, c[1]);
-        out.append("]");
-        return;
-    }
-    if k == syntax::N_NAME && name(e) == unknown_name {
-        out.append("[s[0], s[1]]");
-        return;
-    }
-    if is_call(e, "dot") && syntax::child_count(e) == 3 {
-        var g = -1;
-        var m = -1;
-        if is_call(arg(e, 0), "grad") && source_of(arg(arg(e, 0), 0)) == unknown_name && source_of(arg(e, 1)) == "n" { g = arg(e, 0); m = arg(e, 1); }
-        if is_call(arg(e, 1), "grad") && source_of(arg(arg(e, 1), 0)) == unknown_name && source_of(arg(e, 0)) == "n" { g = arg(e, 1); m = arg(e, 0); }
-        if g >= 0 && m >= 0 {
-            out.append("[s[2] * n[0] + s[3] * n[1] + s[4] * n[2], s[5] * n[0] + s[6] * n[1] + s[7] * n[2]]");
-            return;
-        }
-    }
-    if k == syntax::N_CALL && syntax::child_count(e) == 2 && kind(child(e, 0)) == syntax::N_NAME {
-        let f = name(child(e, 0));
-        if f == "conj" {
-            out.append("wconj(");
-            emit_ci(out, arg(e, 0));
-            out.append(")");
-            return;
-        }
-        for w, i in PARTS {
-            if f == w {
-                format(out, "[wave_pick(", i, ", ");
-                emit_ci(out, arg(e, 0));
-                out.append("), 0.0]");
-                return;
-            }
-        }
-    }
-    if k == syntax::N_UNARY && syntax::text(tok(e)) == "-" {
-        out.append("wsub([0.0, 0.0], ");
-        emit_ci(out, first(e));
-        out.append(")");
-        return;
-    }
-    let op = if k == syntax::N_BINARY { syntax::text(tok(e)) } else { "" };
-    guard op == "+" || op == "-" || op == "*" || op == "/" else {
-        unsupported(tok(e), str("the integrand '", source_of(e), "' is not in this generator"),
-                    str("write the unknown ", unknown_name, ", dot(grad(", unknown_name, "), n), re, imag, abs, arg and conj of them, joined by + - * / and constants"));
-        out.append("[0.0, 0.0]");
-        return;
-    };
-    out.append(if op == "+" { "wadd(" } else if op == "-" { "wsub(" } else if op == "*" { "wmul(" } else { "wdiv(" });
-    emit_ci(out, child(e, 0));
-    out.append(", ");
-    emit_ci(out, child(e, 1));
-    out.append(")");
-}
 
 fn emit_curve_integral(pre: u8[>..]&, n: i64, z: i64) {
     let segs = curve_segments(arg(z, 1));
@@ -4737,7 +4723,7 @@ fn emit_curve_integral(pre: u8[>..]&, n: i64, z: i64) {
         pre.append("], ");
         lit(pre, sg.r);
         format(pre, ", ", count, ") { p, n, s => ");
-        emit_ci(pre, arg(z, 0));
+        emit_complex(pre, arg(z, 0), false);
         format(pre, " };\n            wz", n, " = wadd(wz", n, ", ci);\n            if !ok { wf", n, " = false; }\n        }\n");
     }
 }
@@ -4776,7 +4762,7 @@ fn emit_change(out: u8[>..]&, ch: Change) {
 // `let v, found = <sample at p>;`
 fn emit_sample(out: u8[>..]&, var_name: u8[:], what: i64, comp: i64, at: f64[3]) {
     if what == FIELD_WAVE_Z {
-        emit_wave_z(out, var_name, if wave_part(comp) >= 0 { arg(comp, 0) } else { comp }, max(wave_part(comp), 0));
+        emit_wave_z(out, var_name, arg(comp, 0), wave_part(comp));
         return;
     }
     if what == FIELD_WAVE {

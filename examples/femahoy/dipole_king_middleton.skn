@@ -70,7 +70,7 @@ step tone: harmonic(freq: [f0]) {
     // The delta gap: the voltage v0 across the gap drives the current along +z.
     bc feed: ef.x = 0
     bc feed: ef.z = -v0/g_f
-    // Behind the PML, the default natural condition th*n = 0.
+    // Behind the PML, the default natural condition cross(n, hc) = 0.
     output ef
     // H = curl(ef)/(-im*omega*mu0) = im*hc/omega. The current is the loop integral of H.
     report z_in = v0/(im/omega*(integral(hc.x, lp_s) + integral(hc.y, lp_e) - integral(hc.x, lp_n) - integral(hc.y, lp_w)))

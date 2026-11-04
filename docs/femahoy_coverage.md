@@ -405,8 +405,9 @@ gives the roadmap phase that closes the gap:
   3D. The tree gauge is not the limit.
   optics_mie_cylinder runs and passes its four `expect` lines within 1 %
   (Q 2.8582, 4.2972, 3.6230 and 2.5727 against 2.862930, 4.293232,
-  3.613747 and 2.582972; `skein run --study spectrum`, mesh of a_c/10:
-  the a_c/40 of femahoy has 3.2M dofs and stops at the direct solve limit).
+  3.613747 and 2.582972; `skein run --study spectrum`). The Mie mesh is
+  a_c/10. femahoy used res40 (a_c/40), which has 3.2M dofs and stops at the
+  direct solve limit.
   It uses four mechanisms that every physics shares: the PML of the edge
   and wave physics on any layer that is the body less a box
   (`examples/elements/pml_guide_tet.skn` holds abs(E.y) within 0.4 % of E0

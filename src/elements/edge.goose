@@ -277,7 +277,7 @@ fn edge_cell(c: i64, me: f64[:], mass: bool) {
         for v in dim + 1 {
             for t in 3 { p[t] += l[v] * node_x(cell_node(c, v), t); }
         }
-        let st = stretch(c, p, if mass || edge_c[2 * c] >= 0.0 { 0.0 } else { sqrt(-edge_c[2 * c] / edge_nu[c]) });
+        let st = if mass { [1.0, 0.0, 1.0, 0.0, 1.0, 0.0] } else { stretch(c, p, if edge_c[2 * c] >= 0.0 { 0.0 } else { sqrt(-edge_c[2 * c] / edge_nu[c]) }) };
         var inv: f64[6] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0];
         var lam: f64[6] = [cr, ci, cr, ci, cr, ci];
         for t in 3 {

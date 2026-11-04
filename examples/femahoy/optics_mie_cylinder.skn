@@ -62,6 +62,6 @@ step tone: harmonic(freq: [f0]) {
 // e0^2/(2*mu0*c0). Thus Q = integral(imag(es*conj(dot(grad(es), n))), ring)/(2*k0*a_c*e0^2).
 study spectrum: grid {
     ka: [1, 2, 2.5, 3]
-    expect q: integral(imag(es*conj(dot(grad(es), n))), ring)/(2*k0*a_c*e0^2) ==
+    expect q: imag(integral(es*conj(dot(grad(es), n)), ring)/(2*k0*a_c*e0^2)) ==
         [2.862930, 4.293232, 3.613747, 2.582972] within 1%
 }

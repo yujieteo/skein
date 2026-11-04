@@ -183,7 +183,7 @@ fn wave_material(g: i64, nu: f64, c: f64[2], s: f64[2]) -> i64 {
 fn wave_source<S>(mark: i64) {
     guard physics == WAVE && dofs_sized() && wave_mark.len == cell_count() else { abort("wave_source: a wave physics with its terms set"); }
     for c in cell_count() {
-        if mark != -2 && wave_mark[c] != mark { continue; }
+        if wave_mark[c] != mark { continue; }
         for q in rich_count() {
             let xi, w = rich_point(q);
             let dv = w * cell_geometry(c, xi) * thickness;
@@ -322,7 +322,8 @@ fn wave_k(c: i64) -> f64 {
 // The stretch s_j of each axis at point p of cell c, in the PML.
 fn stretch(c: i64, p: f64[3], k: f64) -> f64[6] {
     var s: f64[6] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0];
-    guard pml_shape >= 0 && k > 0.0 && pml_flag[c] != 0 else { return s; }
+    guard pml_shape >= 0 && pml_flag[c] != 0 else { return s; }
+    guard k > 0.0 else { abort("stretch: a cell of the PML layer has a wave number k > 0"); }
     let top = 3.0 * log(1.0 / PML_REFLECTION) / (2.0 * k * pml_h);
     for j in dim {
         let d = max(0.0, max(pml_lo[j] - p[j], p[j] - pml_hi[j]));
