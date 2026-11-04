@@ -16,7 +16,7 @@ var rho_two = 1.0;
 fn properties(a: f64) -> f64[2] { return [a * rho_one + (1.0 - a) * rho_two, a * 1.0e-3 + (1.0 - a) * 1.0e-5]; }
 fn no_slip(k: i64, x: f64, y: f64, t: f64) -> f64[2] { return [0.0, 0.0]; }
 fn stream(k: i64, x: f64, y: f64, t: f64) -> f64[2] { return [1.0, 0.0]; }
-fn after(k: i64, t: f64) { }
+fn after(k: i64, t: f64) {}
 fn stream_field(x: f64, y: f64) -> f64[2] { return [1.0, 0.0]; }
 
 fn half_filled(x: f64, y: f64) -> f64 { return if y < 0.5 { 1.0 } else { 0.0 }; }

@@ -258,8 +258,8 @@ gives the roadmap phase that closes the gap:
     `front` and `when` report. A free surface with SCNI can go unstable, and 7 % is not proven.
 - dam_break_vof runs in the two-phase lane (`src/vof`, 21 s, estimate 44 MB). The front times
   are 1.856, 2.571 and 3.199 against 1.83, 2.51 and 3.11 (+1.4 %, +2.4 %, +2.8 %). The limit is 5.5 %.
-  The lane takes any physics with `v`, `p` and a Real unknown `alpha`, on a rectangle with quad
-  cells. The model gives `rho` and `mu` as any expression of `alpha`, the gravity and surface
+  The lane takes a physics with a `Vector<Velocity>` unknown `v`, a `Pressure` unknown `p` and a
+  Real unknown `alpha`, in 2D on a rectangle with quad cells, with `gradient: green_gauss` only. The model gives `rho` and `mu` as any expression of `alpha`, the gravity and surface
   tension terms, and the conditions on `v`. The alpha flux is HRIC with a Courant blend. The
   momentum is explicit with a limited linear upwind face value. The pressure is an incremental
   projection with a Rhie-Chow face flux. CG with an AMG V-cycle solves it. The curvature of the
