@@ -128,7 +128,7 @@ fn curve_value(t: f64) -> f64 {
     let x = (t - curve_lo) / curve_step;
     let i = min(max(floor(x) as! i64, 0), n - 2);
     let k = curve_k[i] + (curve_k[i + 1] - curve_k[i]) * (x - i);
-    guard k > 0.0 else { abort("curve_value: k > 0 at the temperature, also beyond the ends of the curve"); }
+    guard k > 0.0 else { abort(str("curve_value: the conductivity curve k(T) gives k = ", k, " at T = ", t, " K, and k must be > 0")); }
     return k;
 }
 

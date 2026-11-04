@@ -1367,6 +1367,60 @@ fn test_quadrature_weights_sum_to_reference_size() {
     }
 }
 
+fn expect_true(what: u8[:], ok: bool) {
+    if !ok {
+        failures++;
+        print("FAIL ", what);
+    }
+}
+
+fn test_midpoints_straight() {
+    elements::mesh_box(3, 2, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 2, 1, 1);
+    var worst = 0.0;
+    for c in elements::cell_count() {
+        for e in 6 {
+            let a = elements::cell_node(c, elements::edge_node(3, e, 0));
+            let b = elements::cell_node(c, elements::edge_node(3, e, 1));
+            let m = elements::cell_node(c, 4 + e);
+            for t in 3 { worst = max(worst, abs(elements::node_x(m, t) - 0.5 * (elements::node_x(a, t) + elements::node_x(b, t)))); }
+        }
+    }
+    expect_true("mesh_box order 2: each midpoint node is the middle of its edge", worst < 1.0e-12);
+}
+
+fn test_cells_for() {
+    expect_true("cells_for rounds up to a cell size of at most size",
+                elements::cells_for(1.0, 0.25) == 4 && elements::cells_for(1.0, 0.3) == 4 && elements::cells_for(0.1, 1.0) == 1);
+}
+
+fn test_geometry_tolerance() {
+    elements::mesh_box(3, 1, 0.0, 0.0, 0.0, 40.0, 10.0, 10.0, 2, 1, 1);
+    expect_true("geometry_tolerance is 1e-6 of the largest side of the box",
+                abs(elements::geometry_tolerance() - 40.0e-6) < 1.0e-12);
+}
+
+fn test_hole_corner_node() {
+    elements::mesh_hole(2, 1, 0.0, 0.0, 0.0, 40.0, 30.0, 0.0, 1.0, 4.0, 0.5);
+    var found = false;
+    for n in elements::node_count() {
+        if abs(elements::node_x(n, 0) - 40.0) < 1.0e-9 && abs(elements::node_x(n, 1) - 30.0) < 1.0e-9 { found = true; }
+    }
+    expect_true("mesh_hole has a node on the corner (hi.x, hi.y)", found);
+}
+
+fn test_curve_below_zero() {
+    var c: u8[>..] = [];
+    format(c, "cd build && ./skein run ../tests/elements/curve_below_zero.skn > curve_below_zero.out 2>&1");
+    c.push(0);
+    let status = system(c[0]);
+    var out: u8[>..] = [];
+    let read = read_file("build/curve_below_zero.out", out);
+    if status == 0 || !read || find(out, "curve_value: the conductivity curve k(T) gives k = ") < 0 {
+        failures++;
+        print("FAIL curve below zero: the run does not stop in curve_value with the curve message\n", out);
+    }
+}
+
 fn main() {
     test_quadrature_weights_sum_to_reference_size();
     test_solid_points();
@@ -1397,7 +1451,11 @@ fn main() {
     test_darcy();
     test_warm_start();
     test_runs();
-    failures += elements::el2_failures();
+    test_midpoints_straight();
+    test_cells_for();
+    test_geometry_tolerance();
+    test_hole_corner_node();
+    test_curve_below_zero();
     if failures > 0 { exit(1); }
     print("elements: all tests pass");
 }
