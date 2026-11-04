@@ -58,5 +58,5 @@ done
 for pid in $pids; do
     wait "$pid" || status=1
 done
-[ $status -eq 0 ] && echo "sanitize: ok ($(echo $parts | wc -w) test programs)"
+[ $status -eq 0 ] && echo "sanitize: ok ($(echo "$parts" | wc -w) test programs)"
 exit $status

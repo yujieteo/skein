@@ -16,6 +16,9 @@
 #                       scripts/sanitize.sh (the tests with ASan and UBSan),
 #                       scripts/replay.sh (the generated C and the results of
 #                       the models against origin/main).
+#                       Needs goose, python3, pyright (or nix) and a C
+#                       compiler with the ASan and UBSan runtimes
+#                       ($SANITIZE_CC).
 #   ./build.sh gpu      build, then check the GPU path of the page of
 #                       `skein build --target wasm` against its CPU path
 #                       in Node (tests/gpu/gpu.test.mjs). Needs emcc, Node
