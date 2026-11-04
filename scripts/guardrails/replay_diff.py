@@ -7,6 +7,7 @@ Each model has a .c (the generated C) or a .fail (why there is none), and,
 when its C differs, a .toon (the results of skein run) or a .runfail. The C
 must be the same, except for the line numbers of the source in the calls of
 the runtime. A result number may differ by the tolerance that its row states.
+A model that the base has only as a .fail is new, and its C is not compared.
 """
 
 from __future__ import annotations
