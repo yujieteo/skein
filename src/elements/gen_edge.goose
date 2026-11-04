@@ -1002,9 +1002,10 @@ let EDGE_PRELUDE = """
 
     // Its integral on the line from (x0, y0, z0) to (x1, y1, z1).
     fn edge_segment(curl: bool, comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64) -> f64[2] {
-        let re, im, found = elements::edge_line_integral(curl, comp, x0, y0, z0, x1, y1, z1, 64);
+        let k = (if curl { 6 } else { 0 }) + comp;
+        let s, found = elements::curve_integral(0, [x0, y0, z0], [x1, y1, z1], 0.0, 64) { p, n, v => [v[k], v[k + 3]] };
         if !found { found_all = false; }
-        return [re, im];
+        return s;
     }
 
     // Component comp of q (0 to 2), or p (3), of the Darcy flow at a point.

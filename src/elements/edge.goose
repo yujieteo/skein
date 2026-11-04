@@ -918,33 +918,6 @@ fn edge_value_at(p: f64[3], curl: bool) -> f64[6], bool {
     return edge_cell_value(best, barycentric(best, p), curl), best_l >= -0.1;
 }
 
-// The line integral of component t (or of all, with t < 0, along the line)
-// of u or curl u along the line from a to b, by the midpoint rule on n
-// pieces. Re and im, and whether each point is near a cell.
-fn edge_line(a: f64[3], b: f64[3], t: i64, curl: bool, n: i64) -> f64[2], bool {
-    guard t >= -1 && t < 3 && n >= 1 else { abort("edge_line: -1 <= t < 3 and n >= 1"); }
-    var s: f64[2] = [0.0, 0.0];
-    var all = true;
-    var len = 0.0;
-    for j in 3 { len += (b[j] - a[j]) * (b[j] - a[j]); }
-    len = sqrt(len);
-    for i in n {
-        let f = (i + 0.5) / n;
-        var p: f64[3] = [0.0; 3];
-        for j in 3 { p[j] = a[j] + f * (b[j] - a[j]); }
-        let v, found = edge_value_at(p, curl);
-        if !found { all = false; }
-        for part in 2 {
-            if t >= 0 {
-                s[part] += v[3 * part + t] * len / n;
-            } else {
-                for j in 3 { s[part] += v[3 * part + j] * (b[j] - a[j]) / n; }
-            }
-        }
-    }
-    return s, all;
-}
-
 // The nodal mean of u (curl = false) or curl u of the cells at each node:
 // 6 values for each node, as in edge_cell_value.
 fn edge_nodal(curl: bool) -> f64[>..] {

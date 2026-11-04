@@ -358,14 +358,6 @@ fn edge_at(curl: bool, part: i64, comp: i64, x: f64, y: f64, z: f64) -> f64, boo
     return v[3 * part + comp], found;
 }
 
-// The integral of component `comp` of u, or of curl(u) with `curl`, along
-// the line from (x0, y0, z0) to (x1, y1, z1), by the midpoint rule on n
-// pieces: its real and imaginary parts, and whether each point is near a
-// cell.
-fn edge_line_integral(curl: bool, comp: i64, x0: f64, y0: f64, z0: f64, x1: f64, y1: f64, z1: f64, n: i64) -> f64, f64, bool {
-    let s, found = edge_line([x0, y0, z0], [x1, y1, z1], comp, curl, n);
-    return s[0], s[1], found;
-}
 
 // The radiation intensity (power per solid angle) in the direction
 // (dx, dy, dz) of the field on the closed surface of the region, by the

@@ -6,6 +6,7 @@ import .mesh;
 import .assemble;
 import .stages;
 import .post;
+import .edge;
 
 let CURVE_LINE = 0;
 let CURVE_CIRCLE = 1;
@@ -119,6 +120,23 @@ fn wave_sample(x: f64, y: f64, z: f64) -> f64[8], bool {
     return r, true;
 }
 
+fn curve_sample(x: f64, y: f64, z: f64) -> f64[12], bool {
+    var r: f64[12] = [0.0; 12];
+    if physics == EDGE {
+        var found = true;
+        for k in 2 {
+            let v, f = edge_value_at([x, y, z], k == 1);
+            for i in 6 { r[6 * k + i] = v[i]; }
+            found = found && f;
+        }
+        if !found { curve_missed++; }
+        return r, found;
+    }
+    let s, found = wave_sample(x, y, z);
+    for i in 8 { r[i] = s[i]; }
+    return r, found;
+}
+
 fn curve_integral<F>(shape_kind: i64, a: f64[3], b: f64[3], r: f64, segments: i64) -> f64[2], bool {
     guard segments > 0 && (shape_kind == CURVE_LINE || shape_kind == CURVE_CIRCLE) else { abort("curve_integral: a line or a circle and segments > 0"); }
     locate_build();
@@ -154,7 +172,7 @@ fn curve_integral<F>(shape_kind: i64, a: f64[3], b: f64[3], r: f64, segments: i6
                 n[1] = sin(th);
                 for t in 3 { p[t] = a[t] + r * n[t]; }
             }
-            let sample, found = wave_sample(p[0], p[1], p[2]);
+            let sample, found = curve_sample(p[0], p[1], p[2]);
             let f = F(p, n, sample);
             let ds = length * weight[k] / (segments);
             total[0] += f[0] * ds;

@@ -416,7 +416,8 @@ gives the roadmap phase that closes the gap:
   and z, for each material); and `integral(f, c)` of a Complex function of
   the unknown, its gradient and the normal n along a Curve inside the mesh
   (a `line`, `boundary(circle(...))` or `boundary(rect(...))`;
-  `src/elements/curve.goose`).
+  `src/elements/curve.goose`). The edge physics integrates its field along
+  a `line` with the same curve integral.
   dipole_king_middleton stays blocked. The PML of the edge physics in 3D
   runs now. It needs the strip and the feed as faces inside the air for the
   delta-gap `bc`: the box mesh has no interior surface, and `skein run`
