@@ -1,25 +1,3 @@
-// The code generator of the grid models: a Skein syntax tree to a Goose
-// program that calls src/grid/grid.goose.
-//
-// It takes the models with a `method` of the kind `fv` or `dg`, and the
-// scalar models of `rkpm` and `gfd`, which call src/meshless/ on the points
-// of a `points` item with a `spacing` (a static step only). The model
-// is 2d. It has one physics with one scalar unknown u, and the physics
-// block has one equation of the form of src/grid/grid.goose:
-//
-//     ct ddt(u) + div(a u) - d div(grad(u)) = f(x, y, t)
-//
-// with the terms in any sequence and on any side, `lap(u)` for
-// div(grad(u)), and ct, a and d constant. Each term with no u is a part of
-// f, and can use x, y, t and the varying lets. The mesh is a `rect` with
-// `cell: quad`, and the conditions are `bc r: u = g(x, y, t)` on a
-// `boundary(rect)` or a `boundary(rect, condition)`. The steps are `static`
-// and `transient(end:, dt:, scheme: ssprk3)`. An `expect u == g within e`
-// compares the L2 norm of u - g with e (spec §15.3). Each other construct
-// gives an error `unsupported` at its token, with a fix.
-//
-// The values are in the unit system of the header, and the reports give
-// u in the unit of its type.
 import std;
 import math;
 namespace grid_gen;
@@ -44,7 +22,6 @@ fn is_call(n: i64, callee: u8[:]) -> bool {
 fn arg(n: i64, i: i64) -> i64 { first(child(n, i + 1)) }
 fn binary(n: i64, op: u8[:]) -> bool { kind(n) == syntax::N_BINARY && syntax::text(tok(n)) == op }
 
-// Whether this generator takes the model: a method of the kind fv or dg.
 fn claims(prog: i64) -> bool {
     var elastic = false;
     var meshless = false;
@@ -62,11 +39,8 @@ fn claims(prog: i64) -> bool {
         }
         c = next(c);
     }
-    // The elastic rkpm models are of src/elements/gen.goose.
     return meshless && !elastic;
 }
-
-// --- the model ----------------------------------------------------------------
 
 let FV = 0;
 let DG = 1;
@@ -79,18 +53,17 @@ let GRADIENT_CONSTANTS = ["grid::GREEN_GAUSS", "grid::LEAST_SQUARES"];
 let LIMITER_NAMES = ["none", "minmod", "van_leer", "venkatakrishnan"];
 let LIMITER_CONSTANTS = ["grid::NONE", "grid::MINMOD", "grid::VAN_LEER", "grid::VENKATAKRISHNAN"];
 
-// The essential condition `bc region: u = value`.
 struct Bc {
-    region: i64,     // an index in curve_names
-    value: i64,      // the expression
+    region: i64,
+    value: i64,
 }
 
 struct Step {
     name: u8[..64],
     transient: bool,
     end: f64,
-    dt: f64,           // 0 for `dt: stable`
-    first_bc: i64,     // the conditions of the step in `active`
+    dt: f64,
+    first_bc: i64,
     bc_count: i64,
     first_report: i64,
     report_count: i64,
@@ -99,44 +72,44 @@ struct Step {
 
 struct Expect {
     node: i64,
-    step: i64,         // the step, or -1 for an item
+    step: i64,
 }
 
-var level = 0;   // skein verify convergence: the mesh has 2^level times the cells on each axis
+var level = 0;
 
-var shape_names: u8[..64][>..];   // the lets of a rect
+var shape_names: u8[..64][>..];
 var shape_nodes: i64[>..];
-var curve_names: u8[..64][>..];   // the lets of a boundary
+var curve_names: u8[..64][>..];
 var curve_nodes: i64[>..];
 var bcs: Bc[>..];
 var global_bcs: i64[>..];
-var active: i64[>..];             // the conditions of each step, in `bcs`
-var reports: i64[>..];            // the N_REPORTITEM of each report
+var active: i64[>..];
+var reports: i64[>..];
 var steps: Step[>..];
 var expects: Expect[>..];
 var material_node = -1;
 var physics_name: u8[..64];
-var unknown: u8[..64];            // the name of u
+var unknown: u8[..64];
 var unknown_type: u8[..64];
 var initial_node = -1;
-var source_terms: i64[>..];       // the terms of f
+var source_terms: i64[>..];
 var source_signs: f64[>..];
 var ct = 0.0;
 var adv: f64[2] = [0.0, 0.0];
-var lap = 0.0;                    // the factor of div(grad(u)) in lhs - rhs
-var flip = 1.0;                   // -1 if the equation is the negative of the form
-var domain = -1;                  // the rect of the mesh, in shape_nodes
+var lap = 0.0;
+var flip = 1.0;
+var domain = -1;
 var lo: f64[2] = [0.0, 0.0];
 var hi: f64[2] = [0.0, 0.0];
 var cells: i64[2] = [0, 0];
 var method = -1;
-var flux = 1;                     // linear_upwind
-var gradient = 0;                 // green_gauss
-var limiter = 0;                  // none
+var flux = 1;
+var gradient = 0;
+var limiter = 0;
 var order = 2;
 var penalty = 2.0;
-var support = 2.5;                // of rkpm, times the spacing
-var stencil = 12;                 // the points of each stencil of gfd
+var support = 2.5;
+var stencil = 12;
 
 fn reset() {
     syntax::errors.clear();
@@ -173,9 +146,6 @@ fn reset() {
     stencil = 12;
 }
 
-// --- values ---------------------------------------------------------------------
-
-// A scalar or a 2D vector in the unit system of the header.
 struct Vec {
     n: i64,
     v: f64[2],
@@ -232,7 +202,6 @@ fn scalar_value(n: i64) -> f64 {
     return v.v[0];
 }
 
-// Whether expression n depends on x, y or t, through the lets too.
 recursive fn varying(n: i64) -> bool {
     if kind(n) == syntax::N_NAME {
         let w = name(n);
@@ -254,7 +223,6 @@ recursive fn varying(n: i64) -> bool {
     return false;
 }
 
-// Whether expression n holds the unknown.
 recursive fn has_unknown(n: i64) -> bool {
     if kind(n) == syntax::N_NAME { return name(n) == unknown; }
     var c = first(n);
@@ -264,8 +232,6 @@ recursive fn has_unknown(n: i64) -> bool {
     }
     return false;
 }
-
-// --- the items ------------------------------------------------------------------
 
 fn header(n: i64) {
     set64(codegen::model_name, name(n));
@@ -281,7 +247,6 @@ fn header(n: i64) {
     unsupported(tok(sys), "the unit system is not in this slice", "write SI, mm_N_MPa_s or mm_kg_ms");
 }
 
-// `let` and `param`: a rect, a boundary, or a value.
 fn value_item(n: i64) {
     let v = child(n, 1);
     var w: u8[..64] = [];
@@ -339,11 +304,9 @@ fn find_material(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The terms of `eq left = right`, as the terms of left - right.
 fn equation(n: i64) {
     terms(child(n, 0), 1.0);
     terms(child(n, 1), -1.0);
-    // The form has -d div(grad(u)) with d >= 0, and ct >= 0.
     if lap > 0.0 || lap == 0.0 && ct < 0.0 { flip = -1.0; }
     ct *= flip;
     lap *= flip;
@@ -351,13 +314,11 @@ fn equation(n: i64) {
     if ct < 0.0 { unsupported(tok(n), "ddt(u) and div(grad(u)) have the same sign: the equation is not stable forward in time", PHYSICS_FIX); }
 }
 
-// The value of a constant factor, or an error.
 fn factor(n: i64) -> f64 {
     if varying(n) { unsupported(tok(n), "a factor of the unknown is not constant in the fv and dg generator", PHYSICS_FIX); }
     return scalar_value(n);
 }
 
-// Adds the terms of n times s.
 recursive fn terms(n: i64, s: f64) {
     if !has_unknown(n) {
         source_terms.push(n);
@@ -386,7 +347,6 @@ recursive fn terms(n: i64, s: f64) {
     }
 }
 
-// Adds the terms of div(n) times s: grad(u) and a*u.
 recursive fn flux_terms(n: i64, s: f64) {
     if binary(n, "+") || binary(n, "-") {
         flux_terms(child(n, 0), s);
@@ -412,7 +372,6 @@ recursive fn flux_terms(n: i64, s: f64) {
     }
 }
 
-// mesh m on r { size: h, cell: quad }, with r a rect.
 fn mesh(n: i64) {
     let r = child(n, 0);
     domain = if kind(r) == syntax::N_NAME { find_name(shape_names, name(r)) } else { -1 };
@@ -466,7 +425,7 @@ fn method_item(n: i64) {
         if name(s) == "flux" {
             flux = position(FLUX_NAMES, w);
             let good = if method == FV { flux >= 0 && flux <= 2 } else { flux == 0 || flux == 3 || w == "roe" };
-            if w == "roe" { flux = 0; }   // Roe is upwind for one scalar
+            if w == "roe" { flux = 0; }
             if !good { unsupported(tok(v), "the flux is not one of the method", if method == FV { "write flux: upwind, linear_upwind or central" } else { "write flux: upwind, lax_friedrichs or roe" }); }
             flux = max(flux, 0);
         } else if name(s) == "gradient" && method == FV {
@@ -489,8 +448,6 @@ fn method_item(n: i64) {
     }
 }
 
-// method heat: rkpm { points: c, basis: linear, support: 2.5, integrate:
-// scni, bc: nitsche }, or method heat: gfd { points: c, stencil: 12 }.
 fn meshless_item(n: i64, rkpm: bool) {
     method = if rkpm { RKPM } else { GFD };
     let fix = if rkpm { "use points, basis: linear, support, integrate: scni and bc: nitsche" } else { "use points and stencil" };
@@ -514,7 +471,6 @@ fn meshless_item(n: i64, rkpm: bool) {
 
 let BC_FIX = "write bc left: u = 0 K, with let left: Curve = boundary(plate, x == 0 m)";
 
-// `bc r: u = g`. It gives the index in bcs, or -1.
 fn bc(n: i64) -> i64 {
     let r = child(n, 0);
     let target = child(n, 1);
@@ -595,7 +551,6 @@ fn step(n: i64) {
         }
         c = next(c);
     }
-    // The conditions of the step replace the global ones on the same region.
     s.first_bc = active.len;
     for g in global_bcs {
         var replaced = false;
@@ -610,7 +565,6 @@ fn step(n: i64) {
 
 let REPORT_FIX = "write report u at (0.5, 0.5) m";
 
-// `u at p`.
 fn point_ok(e: i64) -> bool {
     guard kind(e) == syntax::N_AT && kind(child(e, 0)) == syntax::N_NAME && name(child(e, 0)) == unknown else { return false; }
     return value(child(e, 1)).n == 2;
@@ -624,7 +578,6 @@ fn report(item: i64) {
     reports.push(item);
 }
 
-// `expect e: u at p == v within w`, or `expect e: u == g within w`.
 fn expect(n: i64, step: i64) {
     let left = child(n, 0);
     let field = kind(left) == syntax::N_NAME && name(left) == unknown;
@@ -635,8 +588,6 @@ fn expect(n: i64, step: i64) {
     expects.push(Expect { node: n, step: step });
 }
 
-// Reads the program `prog`. False on an error, and `syntax::errors` holds
-// it.
 fn read(prog: i64) -> bool {
     reset();
     material_items.clear();
@@ -697,14 +648,11 @@ fn read(prog: i64) -> bool {
     return ok();
 }
 
-// The dofs of the mesh.
 fn dof_estimate() -> i64 {
     if method == RKPM || method == GFD { return (cells[0] + 1) * (cells[1] + 1); }
     return cells[0] * cells[1] * (if method == DG { (order + 1) * (order + 1) } else { 1 });
 }
 
-// The order of the L2 error of the method for a smooth solution
-// (docs/checks.md §4.3), and its reason.
 fn expected_order() -> f64, u8[>..] {
     if method == DG { return order + 1.0, str("dg, order ", order); }
     if method == RKPM { return 2.0, str("rkpm, basis linear"); }
@@ -713,12 +661,9 @@ fn expected_order() -> f64, u8[>..] {
     return 2.0, str("fv, flux ", FLUX_NAMES[flux]);
 }
 
-// --- the Goose program ----------------------------------------------------------
-
 let FUNCTIONS = ["sin", "cos", "tan", "exp", "log", "sqrt", "abs", "tanh"];
 let COND_FIX = "write a condition of x and y with == < <= > >= && || and !";
 
-// The Goose expression of the field n of x, y and t.
 recursive fn emit(out: u8[>..]&, n: i64) {
     let k = kind(n);
     if !varying(n) {
@@ -779,7 +724,6 @@ recursive fn emit_cond(out: u8[>..]&, n: i64) {
         unsupported(tok(n), str("the condition '", source_of(n), "' is not in the fv and dg generator"), COND_FIX);
         return;
     }
-    // Each comparison has the tolerance of spec §8.2.
     out.append(if i <= 1 { "abs(" } else { "(" });
     emit(out, child(n, 0));
     out.append(" - ");
@@ -910,11 +854,8 @@ let PRELUDE = """
     }
 """;
 
-// The package of the program: grid, or meshless for rkpm and gfd.
 fn pkg() -> const u8[:] { if method == RKPM || method == GFD { "meshless::" } else { "grid::" } }
 
-// PRELUDE for the package: meshless has a component in value_at, and no
-// linear iterations (its solve is direct).
 fn emit_prelude(out: u8[>..]&) {
     if pkg() == "grid::" {
         out.append(PRELUDE);
@@ -927,7 +868,6 @@ fn emit_prelude(out: u8[>..]&) {
     format_replaced(out, b, "grid::", "meshless::");
 }
 
-// The unit of u in the reports.
 fn unit() -> const u8[:] {
     if unknown_type == "Temperature" { return "K"; }
     if unknown_type == "Length" { return codegen::system.length; }
@@ -935,8 +875,6 @@ fn unit() -> const u8[:] {
     return "";
 }
 
-// The functions of the fields: f, the values of the conditions, the
-// initial value, and the field of each L2 expect.
 fn emit_fields(out: u8[>..]&) {
     out.append("fn source(x: f64, y: f64, t: f64) -> f64 {\n    return 0.0");
     for n, i in source_terms {
@@ -1039,9 +977,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the grid package from `grid_path`, and writes its VTU files in
-// `results_dir`.
 fn generate(grid_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", codegen::model_name, ". Do not edit it: edit the model.\n");
     let src = grid_path[..grid_path.len - 4];
@@ -1049,7 +984,6 @@ fn generate(grid_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append(pkg()[..pkg().len - 2]);
     out.append(" from ");
     quoted(out, str(src, pkg()[..pkg().len - 2]));
-    // The package imports the package solvers, beside it.
     out.append(";\nimport solvers from ");
     quoted(out, str(src, "solvers"));
     out.append(";\n");
@@ -1092,8 +1026,6 @@ fn generate(grid_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append("    print_records();\n    if failed { exit(1); }\n}\n");
 }
 
-// The main of rkpm and gfd: the jittered lattice of points on the rect
-// (meshless::points_rect), the equation, the method and the steps.
 fn emit_meshless_main(out: u8[>..]&) {
     format(out, "fn main() {\n    // points: a lattice of ", cells[0] + 1, " x ", cells[1] + 1, ", each point inside moved\n    meshless::points_rect(");
     lit(out, lo[0]);

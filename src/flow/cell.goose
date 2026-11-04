@@ -1,27 +1,3 @@
-// The cell residual of the steady incompressible Navier-Stokes or Stokes
-// equations, with the stabilization of spec §17.2, and its Jacobian.
-//
-// The unknowns are scaled (spec §21.2): the generated program gives rho,
-// mu and the body force f in the scaled units of the scales line, so the
-// values of the unknowns are near 1.
-//
-// For the test functions w = N_a e_i and q = L_k, the residual of a cell is
-//
-//     r(a i) = ∫ N_a (ρ (∇v) v - f)_i + ∂_j N_a σ_ij
-//              + τ_M (v·∇N_a) R_i                     (supg)
-//              + τ_C ρ ∂_i N_a div v                  (lsic)
-//     r(k)   = ∫ L_k div v + τ_M ∂_i L_k R_i / ρ      (pspg)
-//
-// with σ = -p I + μ (∇v + ∇vᵀ) and the strong residual of the momentum
-// equation R = ρ (∇v) v + ∇p - div(μ (∇v + ∇vᵀ)) - f. For Stokes the
-// convection term (∇v) v is 0. The stabilization parameters are
-// τ_M = ((2|v|/h)² + (4ν/h²)²)^(-1/2) and τ_C = 1 / (τ_M tr(G)), after
-// Tezduyar (1992), with h = 2 sqrt(A/π) / order and the metric G of the
-// cell. A static step has no 2/Δt term.
-//
-// The Jacobian of a cell is the forward difference of its residual, one
-// dof at a time. Reason: τ_M depends on v, and the difference includes
-// that derivative, so Newton's method keeps its quadratic rate.
 import std;
 import math;
 namespace flow;
@@ -35,15 +11,10 @@ let SUPG_PSPG_LSIC = 3;
 var rho = 1.0;
 var mu = 1.0;
 var force: f64[2] = [0.0, 0.0];
-// The part of the body force that is linear in the temperature T of a
-// thermal flow (heat.goose): the force at T is force + buoyancy T. Reason:
-// the Boussinesq buoyancy rho (1 - beta (T - T0)) g is of this form.
 var buoyancy: f64[2] = [0.0, 0.0];
-var convective = true;      // Navier-Stokes; false for Stokes
+var convective = true;
 var stabilize = NONE;
 
-// The 7-point rule of degree 5 on a triangle (Radon 1948): barycentric
-// coordinates and weights that sum to 1.
 let QA1 = 0.059715871789770;
 let QB1 = 0.470142064105115;
 let QA2 = 0.797426985353087;
@@ -63,13 +34,11 @@ fn quad_point(q: i64) -> f64[3], f64 {
     return l, if q <= 3 { QW1 } else { QW2 };
 }
 
-// The geometry of a cell: the gradients of the barycentric coordinates,
-// the area and the size h.
 struct Geometry {
-    gl: f64[6],     // ∂L_k/∂x, ∂L_k/∂y at 2 k, 2 k + 1
+    gl: f64[6],
     area: f64,
     h: f64,
-    trace_g: f64,   // tr(G), G = (∂ξ/∂x)ᵀ(∂ξ/∂x) with ξ = (L1, L2)
+    trace_g: f64,
 }
 
 fn geometry(c: i64) -> Geometry {
@@ -93,9 +62,6 @@ fn geometry(c: i64) -> Geometry {
     return g;
 }
 
-// The shape functions of the velocity at the barycentric point l: values
-// n, gradients dn (2 per node) and the Laplacians lap and the Hessians hs
-// (xx, xy, yy per node). For P1 the second derivatives are 0.
 struct Shape {
     n: f64[6],
     dn: f64[12],
@@ -134,15 +100,13 @@ fn shape(g: Geometry, l: f64[3]) -> Shape {
     return s;
 }
 
-// The flow at a point: v, ∇v (∂_j v_i at 2 i + j), p, ∇p and the strong
-// residual R of the momentum equation.
 struct Point {
     v: f64[2],
     gv: f64[4],
     p: f64,
     gp: f64[2],
     r: f64[2],
-    bf: f64[2],     // the body force at the point
+    bf: f64[2],
 }
 
 fn flow_point(g: Geometry, s: Shape, l: f64[3], u: f64[15], tq: f64) -> Point {
@@ -154,7 +118,6 @@ fn flow_point(g: Geometry, s: Shape, l: f64[3], u: f64[15], tq: f64) -> Point {
             f.v[i] += s.n[a] * ui;
             for j in 2 { f.gv[2 * i + j] += s.dn[2 * a + j] * ui; }
         }
-        // div(∇v + ∇vᵀ)_i = Δv_i + ∂_i div v
         let hxx = s.hs[3 * a];
         let hxy = s.hs[3 * a + 1];
         let hyy = s.hs[3 * a + 2];
@@ -175,7 +138,6 @@ fn flow_point(g: Geometry, s: Shape, l: f64[3], u: f64[15], tq: f64) -> Point {
     return f;
 }
 
-// τ_M and τ_C at a point with velocity v.
 fn taus(g: Geometry, v: f64[2]) -> f64, f64 {
     let speed2 = v[0] * v[0] + v[1] * v[1];
     let nu = mu / rho;
@@ -185,13 +147,10 @@ fn taus(g: Geometry, v: f64[2]) -> f64, f64 {
     return tm, 1.0 / (tm * g.trace_g);
 }
 
-// The residual r of cell c at the local dofs u (cell_dofs).
 fn cell_residual(c: i64, u: f64[15], r: f64[15]&) {
     cell_residual_t(c, u, [0.0; 6], r);
 }
 
-// The same with the temperature tl at the nodes of the cell, for the body
-// force that depends on it.
 fn cell_residual_t(c: i64, u: f64[15], tl: f64[6], r: f64[15]&) {
     guard c >= 0 && c < cell_count() && rho > 0.0 && mu > 0.0 else { abort("cell_residual: c < cell_count(), rho > 0 and mu > 0"); }
     let g = geometry(c);
@@ -231,7 +190,6 @@ fn momentum_rows(s: Shape, f: Point, sigma: f64[4], tm: f64, tc: f64, div: f64, 
     }
 }
 
-// The Jacobian k[15 a + b] = ∂r_a/∂u_b of cell c at u, and its residual r.
 fn cell_jacobian(c: i64, u: f64[15], r: f64[15]&, k: f64[225]&) {
     guard c >= 0 && c < cell_count() else { abort("cell_jacobian: c < cell_count()"); }
     cell_residual(c, u, r);
@@ -247,9 +205,6 @@ fn cell_jacobian(c: i64, u: f64[15], r: f64[15]&, k: f64[225]&) {
     }
 }
 
-// The PSPG term of the pressure rows, τ_M/ρ ∫ ∇L_k·∇L_l, of cell c at u,
-// with τ_M at the centroid: k[3 k + l]. The preconditioner adds it when
-// the equations have no PSPG (solve.goose).
 fn pressure_term(c: i64, u: f64[15], k: f64[9]&) {
     guard c >= 0 && c < cell_count() else { abort("pressure_term: c < cell_count()"); }
     let g = geometry(c);

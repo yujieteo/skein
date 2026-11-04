@@ -1,18 +1,3 @@
-// The `quad` and `hex` cells of spec §9.2 on a region that is not a union
-// of rects or boxes:
-//
-// - a quarter of a ring, (circle - circle) & rect, or of a tube,
-//   (cylinder - cylinder) & box, with the corner of the rect or the box on
-//   the axis: a grid in r, θ (and z);
-// - in 2D, another shape: Blossom-Quad (quad.goose);
-// - in 3D, a prism along z (each primitive is a box, a cylinder along z or
-//   an extrude, and it holds the z range of the region): the quads of
-//   Blossom-Quad on the section at twice the size, each cut into 4 quads
-//   or a triangle into 3, swept through layers of equal height;
-// - in 3D, another shape: the grid of the planes of the boxes in the
-//   bounds of the region, the cells whose centre is inside, and each node
-//   on the boundary of the cells moved onto the boundary of the region
-//   (Schneiders 1996).
 import std;
 import math;
 import dictionary;
@@ -23,8 +8,6 @@ import .grid;
 import .quad;
 import runtime from "../runtime";
 
-// Meshes g with quad (2D) or hex (3D) cells of about `size`, with the
-// planes of each shape of `planes`. False if mesh_2d does not finish.
 fn mesh_cells(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
     if mesh_grid(g, dim, size, planes) { return true; }
     if mesh_sector(g, dim, size) { return true; }
@@ -36,15 +19,12 @@ fn mesh_cells(g: i64, dim: i64, size: f64, planes: i64[:]) -> bool {
     return true;
 }
 
-// A circle in 2D, or a cylinder along +z in 3D.
 fn round_shape(g: i64, dim: i64) -> bool {
     let s = shapes[g];
     if dim == 2 { return s.kind == CIRCLE; }
     return s.kind == CYLINDER && abs(s.p[3]) < 1.0e-12 && abs(s.p[4]) < 1.0e-12;
 }
 
-// The outer shape, the inner shape and the box (or rect) of a quarter of a
-// ring or a tube, in either form (o - i) & b or (o & b) - i, or -1.
 fn sector_parts(g: i64) -> i64, i64, i64 {
     let s = shapes[g];
     if s.kind == INTERSECT {
@@ -59,7 +39,6 @@ fn sector_parts(g: i64) -> i64, i64, i64 {
     return -1, -1, -1;
 }
 
-// Meshes a quarter of a ring or a tube. False if g is not one.
 fn mesh_sector(g: i64, dim: i64, size: f64) -> bool {
     let o, i, c = sector_parts(g);
     guard o >= 0 && round_shape(o, dim) && round_shape(i, dim) else { return false; };
@@ -113,8 +92,6 @@ fn mesh_sector(g: i64, dim: i64, size: f64) -> bool {
     return true;
 }
 
-// The 2D section of node g alone, or -2 if it is a union, intersect or
-// subtract: its section is the same operation on the sections of its parts.
 fn own_section(g: i64, z0: f64, z1: f64) -> i64 {
     let s = shapes[g];
     let p = s.p;
@@ -124,16 +101,12 @@ fn own_section(g: i64, z0: f64, z1: f64) -> i64 {
     if s.kind == BOX { return rect(p[0], p[1], p[3], p[4]); }
     if s.kind == CYLINDER { return if round_shape(g, 3) { circle(p[0], p[1], p[6]) } else { -1 }; }
     if s.kind == EXTRUDE { return s.a; }
-    // A shape that is subtracted may hold more than [z0, z1], not less.
     return if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT { -2 } else { -1 };
 }
 
-// The 2D section of g between z0 and z1, if g is a prism along z there:
-// each box, cylinder along z and extrude of g holds [z0, z1]. Else -1. A
-// stack walks the tree of g, with no recursion (rule 1).
 fn section(g: i64, z0: f64, z1: f64) -> i64 {
-    var todo: i64[>..] = [g];     // the nodes; -1 - n after the parts of node n
-    var done: i64[>..] = [];      // the sections, in the sequence of the nodes
+    var todo: i64[>..] = [g];
+    var done: i64[>..] = [];
     while todo.len > 0 {
         let n = todo[todo.len - 1];
         todo.pop();
@@ -157,7 +130,6 @@ fn section(g: i64, z0: f64, z1: f64) -> i64 {
     return done[0];
 }
 
-// Sweeps the quads of the 2D section s from z0 to z1. False as mesh_2d.
 fn mesh_sweep(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     let done = mesh_blossom(s, 2.0 * size);
     all_quads(s);
@@ -188,8 +160,6 @@ fn mesh_sweep(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     return done;
 }
 
-// Whether g has a cylinder or an extrude: a round or sloped side, whose
-// sharp edges isosurface stuffing cuts off (tet.goose).
 fn has_round(g: i64) -> bool {
     var todo: i64[>..] = [g];
     while todo.len > 0 {
@@ -204,11 +174,8 @@ fn has_round(g: i64) -> bool {
     return false;
 }
 
-// Whether each refine target spans z0 to z1, so that the section at the
-// middle z (sweep_tets) sizes it. A target on an end face does not.
 fn targets_span_z(z0: f64, z1: f64) -> bool {
     for t in targets {
-        // A clip to planes or a ring is not the same at each z.
         if t.axis >= 0 { return false; }
         let tb = bounds(t.g);
         if tb[2] > z0 || tb[5] < z1 { return false; }
@@ -216,11 +183,6 @@ fn targets_span_z(z0: f64, z1: f64) -> bool {
     return true;
 }
 
-// Sweeps the triangles of the 2D section s from z0 to z1 through layers of
-// equal height, and cuts each prism into 3 tetrahedra (add_prism). The ends
-// are planes and the side nodes are on the side, so the sharp edges stay
-// sharp. A refine target of 3D shapes sizes the section at the middle z.
-// False as mesh_2d.
 fn sweep_tets(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     section_z = 0.5 * (z0 + z1);
     let done = mesh_2d(s, size);
@@ -251,8 +213,6 @@ fn sweep_tets(s: i64, z0: f64, z1: f64, size: f64) -> bool {
     return done;
 }
 
-// Whether each shape is a box, a cylinder or a union, an intersection or
-// a difference: the shapes that turn_shapes can turn.
 fn turnable() -> bool {
     for s in shapes {
         if s.kind != BOX && s.kind != CYLINDER && s.kind != UNION && s.kind != INTERSECT && s.kind != SUBTRACT { return false; }
@@ -260,12 +220,8 @@ fn turnable() -> bool {
     return true;
 }
 
-// Turns the first `count` shapes so that the new axis i is the old axis
-// (i + shift) % 3. A shift of 1 makes x the new z, and a shift of 2 makes
-// y the new z. A shift of 3 - k turns a shift of k back.
 fn turn_shapes(count: i64, shift: i64) {
     for i in count {
-        // A box holds two corners, and a cylinder a centre and an axis.
         guard shapes[i].kind == BOX || shapes[i].kind == CYLINDER else { continue; }
         let p = shapes[i].p;
         var q: f64[8] = p;
@@ -277,7 +233,6 @@ fn turn_shapes(count: i64, shift: i64) {
     }
 }
 
-// Turns each node of the mesh as turn_shapes turns the shapes.
 fn turn_nodes(shift: i64) {
     for n in point_count() {
         let x = point(n);
@@ -285,9 +240,6 @@ fn turn_nodes(shift: i64) {
     }
 }
 
-// The centre and the radii r0 < r1 of an octant of a spherical shell,
-// (sphere - sphere) & box with the corner of the box at the centre, or
-// r1 = 0.
 fn shell_parts(g: i64) -> f64[3], f64, f64 {
     let o, i, c = sector_parts(g);
     guard o >= 0 && shapes[o].kind == SPHERE && shapes[i].kind == SPHERE && shapes[c].kind == BOX else { return [0.0; 3], 0.0, 0.0; };
@@ -302,10 +254,6 @@ fn shell_parts(g: i64) -> f64[3], f64, f64 {
     return [po[0], po[1], po[2]], pn[3], po[3];
 }
 
-// The unit vector of point (s, t) of patch k of the octant of the unit
-// sphere: the 3 patches of a cubed sphere, each from an axis e_k to the
-// middles of its two arcs and the centre of the octant, with the bilinear
-// point of the flat quad moved out onto the sphere.
 fn shell_direction(k: i64, s: f64, t: f64) -> f64[3] {
     var e: f64[3] = [0.0; 3];
     e[k] = 1.0;
@@ -318,16 +266,8 @@ fn shell_direction(k: i64, s: f64, t: f64) -> f64[3] {
     return q * (1.0 / sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]));
 }
 
-// The radii of the layers and the cells n along an arc of the shell: with targets, the layers follow
-// the wanted size (refine.goose) along the axes and the diagonal of the octant, and the arcs have
-// the cells of the smallest wanted size of all radii. Without, equal layers and arcs of `size`.
-// False if the layers or the cells are too many.
 fn shell_layers(centre: f64[3], r0: f64, r1: f64, size: f64, radii: f64[>..]&, cells: i64&) -> bool {
     var n = 1;
-    // The radii of the layers and the cells along an arc: with targets, the
-    // layers follow the wanted size (refine.goose) along the axes and the
-    // diagonal of the octant, and the arcs have the cells of the smallest
-    // wanted size of all radii. Without, equal layers and arcs of `size`.
     radii.clear();
     radii.push(r0);
     n = max(1, ceil(0.25 * PI * r1 / size - 1.0e-9) as! i64);
@@ -353,7 +293,6 @@ fn shell_layers(centre: f64[3], r0: f64, r1: f64, size: f64, radii: f64[>..]&, c
         }
         guard radii[radii.len - 1] >= r1 - 1.0e-9 * r1 else { return false; }
         n = max(n, ceil(0.25 * PI * r1 / wanted(r1) - 1.0e-9) as! i64);
-        // The last layer is not a sliver: it joins the one before it.
         if radii.len >= 3 && radii[radii.len - 1] - radii[radii.len - 2] < 0.5 * (radii[radii.len - 2] - radii[radii.len - 3]) {
             radii.pop();
             radii[radii.len - 1] = r1;
@@ -364,11 +303,6 @@ fn shell_layers(centre: f64[3], r0: f64, r1: f64, size: f64, radii: f64[>..]&, c
     return true;
 }
 
-// Meshes an octant of a spherical shell (shell_parts) with tetrahedra: the
-// triangles of the 3 patches of a cubed sphere (shell_direction) swept
-// through radial layers of equal depth, each prism cut into 3 tetrahedra
-// (add_prism). Each node on an arc or a face of the shell is on it, so the
-// sharp edges stay sharp. False if g is not such a shell.
 var shell_centre: f64[3] = [0.0; 3];
 let SHELL_LAYERS = 400;
 let SHELL_CELLS = 4000000;
@@ -380,8 +314,6 @@ fn shell_tets(g: i64, size: f64) -> bool {
     var n = 1;
     guard shell_layers(centre, r0, r1, size, radii, n) else { return false; };
     let nr = radii.len - 1;
-    // The directions of the nodes of the surface, each once, and the node
-    // of each point (s, t) of each patch.
     var dirs: f64[>..] = [];
     var at: i64[>..] = [];
     for k in 3 {
@@ -422,9 +354,6 @@ fn shell_tets(g: i64, size: f64) -> bool {
     return true;
 }
 
-// Meshes g with the grid of the planes of its bounds and of the boxes of
-// `planes`, and moves each node on the boundary of the cells onto the
-// boundary of g.
 fn mesh_mapped(g: i64, size: f64, planes: i64[:]) {
     var boxes: f64[>..] = [];
     for s in planes {
@@ -432,7 +361,6 @@ fn mesh_mapped(g: i64, size: f64, planes: i64[:]) {
         if box_union(s, extra) { for p in extra { boxes.push(p); } }
     }
     fill_lattice(g, 3, size, boxes[..], []);
-    // The faces in one cell. A face is keyed by its 3 lowest nodes.
     let n = point_count();
     let faces: i64[4][6] = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
     var count = dictionary<i64, i64> {};

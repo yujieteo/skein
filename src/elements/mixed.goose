@@ -1,24 +1,3 @@
-// The mixed Darcy flow of `family: raviart_thomas` (spec §13): the
-// lowest order Raviart-Thomas element for the flux q and a constant p on
-// each cell, on P1 triangles and tetrahedra, for
-//
-//     q + k grad(p) = 0,    div(q) = f
-//
-// with k > 0 on each cell and f constant on each cell. The dof of a facet
-// is the flux of q through it, along the normal out of the first cell of
-// the facet. The basis function of facet F of cell T, with x_F the vertex
-// of T that is not on F, is φ = s (x - x_F) / (d |T|), with s = 1 in the
-// first cell of F and -1 in the second, so div φ = s / |T|.
-//
-// The weak form is ∫ q·v / k - p div v dV = -∮ p_D v·n dA and
-// ∫ w div q dV = ∫ f w dV. The pressure p = p_D of a `bc` is natural. The
-// flux dot(q, n) = g of a `bc` is essential, and each other boundary facet
-// has no flux. In 2D, each integral has the thickness, which cancels, so
-// only `mixed_flux` uses it.
-//
-// The system is a saddle point. CG solves its Schur complement
-// B A⁻¹ Bᵀ p = B A⁻¹ g - h, with A the flux matrix and B the divergence,
-// and an inner CG with the Jacobi preconditioner solves each A x = y.
 import std;
 import math;
 import dictionary;
@@ -34,19 +13,18 @@ import .edge;
 import .wave;
 import solvers from "../solvers";
 
-let MIXED_TOLERANCE = 1.0e-10;   // the residual of the Schur system relative to its right side
-let INNER_TOLERANCE = 1.0e-13;   // the residual of each A x = y relative to y
+let MIXED_TOLERANCE = 1.0e-10;
+let INNER_TOLERANCE = 1.0e-13;
 
-var facet_cells: i64[>..] = [];  // the first and the second cell of each facet, -1 for none
-var cell_facet: i64[>..] = [];   // the facet of each local facet of each cell
-var cell_fsign: f64[>..] = [];   // +1 in the first cell of the facet, -1 in the second
-var mixed_k: f64[>..] = [];      // k of each cell
-var mixed_f: f64[>..] = [];      // f of each cell
-var on_pressure: u8[>..] = [];   // 1 for a facet with a pressure condition
+var facet_cells: i64[>..] = [];
+var cell_facet: i64[>..] = [];
+var cell_fsign: f64[>..] = [];
+var mixed_k: f64[>..] = [];
+var mixed_f: f64[>..] = [];
+var on_pressure: u8[>..] = [];
 
 fn facet_total() -> i64 { return facet_cells.len / 2; }
 
-// Starts the mixed physics on the P1 mesh with k and f on each cell.
 fn set_mixed(k: f64, f: f64, t: f64) {
     guard order == 1 && per_cell == dim + 1 && k > 0.0 && t > 0.0 else { abort("set_mixed: a P1 mesh, k > 0 and t > 0"); }
     physics = MIXED;
@@ -80,7 +58,6 @@ fn clear_pressure() {
     for k in facet_total() { on_pressure.push(0); }
 }
 
-// The facets of the mesh, each once, with their cells.
 fn build_facets() {
     facet_cells.clear();
     cell_facet.clear();
@@ -107,8 +84,6 @@ fn build_facets() {
     }
 }
 
-// Gives the cells in the shape g the coefficients k and f. It gives the
-// number of these cells.
 fn mixed_material(g: i64, k: f64, f: f64) -> i64 {
     guard physics == MIXED && g >= 0 && k > 0.0 else { abort("mixed_material: a mixed physics, a shape and k > 0"); }
     var count = 0;
@@ -121,8 +96,6 @@ fn mixed_material(g: i64, k: f64, f: f64) -> i64 {
     return count;
 }
 
-// Sets f of each cell to the mean of F(p) over the cell, for a source
-// that varies.
 fn mixed_source<F>() {
     guard physics == MIXED else { abort("mixed_source: a mixed physics"); }
     for c in cell_count() {
@@ -138,7 +111,6 @@ fn mixed_source<F>() {
     }
 }
 
-// The vertex of cell c that is not on its local facet f.
 fn opposite(f: i64) -> i64 {
     var on: i64[4] = [0, 0, 0, 0];
     for l in dim { on[facet_node(dim, f, l)] = 1; }
@@ -146,10 +118,8 @@ fn opposite(f: i64) -> i64 {
     abort("opposite: a facet of d vertices");
 }
 
-// The size |T| of cell c.
 fn cell_size(c: i64) -> f64 { return cell_geometry(c, [0.0; 3]) * (if dim == 2 { 0.5 } else { 1.0 / 6.0 }); }
 
-// The basis function of local facet f of cell c at point p, with its sign.
 fn rt_basis(c: i64, f: i64, p: f64[3], size: f64) -> f64[3] {
     let o = cell_node(c, opposite(f));
     let s = cell_fsign[(dim + 1) * c + f] / (dim * size);
@@ -158,7 +128,6 @@ fn rt_basis(c: i64, f: i64, p: f64[3], size: f64) -> f64[3] {
     return v;
 }
 
-// The flux matrix of cell c, ∫ φ_a · φ_b / k dV, by the rule of degree 2.
 fn mixed_cell(c: i64, me: f64[16]&) {
     for &v in me { v = 0.0; }
     let size = cell_size(c);
@@ -182,7 +151,6 @@ fn mixed_cell(c: i64, me: f64[16]&) {
     }
 }
 
-// The point of cell c at reference point xi.
 fn point_of(c: i64, xi: f64[3]) -> f64[3] {
     var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
     for r in dim {
@@ -196,12 +164,8 @@ fn point_of(c: i64, xi: f64[3]) -> f64[3] {
     return p;
 }
 
-// --- the conditions -------------------------------------------------------------------
-
-// Whether facet k is on the boundary: it has one cell.
 fn boundary_facet(k: i64) -> bool { return facet_cells[2 * k + 1] < 0; }
 
-// The boundary facets of the region, as their first cell and local facet.
 fn region_facets() -> i64[>..] {
     var out: i64[>..] = [];
     for c in cell_count() {
@@ -213,8 +177,6 @@ fn region_facets() -> i64[>..] {
     return out;
 }
 
-// The pressure condition p = v on the region: -∮ v φ·n dA on each facet.
-// It gives the number of facets.
 fn mixed_pressure(v: f64) -> i64 {
     guard physics == MIXED && dofs_sized() else { abort("mixed_pressure: a mixed physics and the arrays of the dofs"); }
     let ks = region_facets();
@@ -225,8 +187,6 @@ fn mixed_pressure(v: f64) -> i64 {
     return ks.len;
 }
 
-// The flux condition dot(q, n) = g on the region: the flux of each facet
-// is g |F|. It gives the number of facets.
 fn mixed_normal_flux(g: f64) -> i64 {
     guard physics == MIXED && dofs_sized() else { abort("mixed_normal_flux: a mixed physics and the arrays of the dofs"); }
     var count = 0;
@@ -243,7 +203,6 @@ fn mixed_normal_flux(g: f64) -> i64 {
     return count;
 }
 
-// The flux out of the boundary facets of the region, ∮ dot(q, n) dA.
 fn mixed_flux() -> f64 {
     guard physics == MIXED && sol.len == dof_total() else { abort("mixed_flux: a mixed physics and a solution"); }
     var s = 0.0;
@@ -251,11 +210,6 @@ fn mixed_flux() -> f64 {
     return s * thickness;
 }
 
-// --- the solve ----------------------------------------------------------------------
-
-// The flux matrix A in row_start, col and val, on the facets, with the
-// fixed facets as identity rows and no fixed columns. g gets the load less
-// A times the fixed fluxes.
 fn mixed_assemble(g: f64[>..]&) {
     clear_matrix();
     let nf = facet_total();
@@ -299,7 +253,6 @@ fn mixed_assemble(g: f64[>..]&) {
     for k in nf { if fixed[k] != 0 { val[entry(k, k)] = 1.0; } }
 }
 
-// y = A x on the facets.
 fn flux_multiply(x: f64[:], y: f64[:]) {
     for r in facet_total() {
         var s = 0.0;
@@ -308,8 +261,6 @@ fn flux_multiply(x: f64[:], y: f64[:]) {
     }
 }
 
-// Solves A x = y by CG with the Jacobi preconditioner, from x = 0. It
-// gives the iterations, or -1 if CG does not converge.
 fn flux_solve(y: f64[:], x: f64[:]) -> i64 {
     let n = facet_total();
     var r: f64[>..] = [];
@@ -345,7 +296,6 @@ fn flux_solve(y: f64[:], x: f64[:]) -> i64 {
     return it;
 }
 
-// Bᵀ p on the free facets: -s p of each cell on each of its facets.
 fn divergence_t(p: f64[:], y: f64[:]) {
     for &v in y { v = 0.0; }
     let lf = dim + 1;
@@ -357,7 +307,6 @@ fn divergence_t(p: f64[:], y: f64[:]) {
     }
 }
 
-// B x on the cells: -Σ s x of the free facets of each cell.
 fn divergence(x: f64[:], y: f64[:]) {
     let lf = dim + 1;
     for c in cell_count() {
@@ -370,7 +319,6 @@ fn divergence(x: f64[:], y: f64[:]) {
     }
 }
 
-// y = S x = B A⁻¹ Bᵀ x. It gives the inner iterations, or -1.
 fn schur_multiply(x: f64[:], y: f64[:], t: f64[:], u: f64[:]) -> i64 {
     divergence_t(x, t);
     let its = flux_solve(t, u);
@@ -378,11 +326,9 @@ fn schur_multiply(x: f64[:], y: f64[:], t: f64[:], u: f64[:]) -> i64 {
     return its;
 }
 
-// Assembles and solves. False if CG does not converge.
 fn mixed_solve() -> bool {
     guard physics == MIXED && dofs_sized() && mixed_k.len == cell_count() else { abort("mixed_solve: a mixed physics and the arrays of the dofs"); }
     let start = clock();
-    // The boundary facets with no condition have no flux.
     for k in facet_total() {
         if boundary_facet(k) && fixed[k] == 0 && on_pressure[k] == 0 { fixed[k] = 1; }
     }
@@ -393,7 +339,6 @@ fn mixed_solve() -> bool {
     let nc = cell_count();
     var t = zeros(nf);
     var u = zeros(nf);
-    // b = B A⁻¹ g - h, with h = -∫ f dV less the fixed fluxes of each cell.
     for k in nf { t[k] = if fixed[k] != 0 { 0.0 } else { g[k] }; }
     var its = flux_solve(t, u);
     var b = zeros(nc);
@@ -411,7 +356,6 @@ fn mixed_solve() -> bool {
     var p = zeros(nc);
     let outer = schur_cg(b, dg, p, t, u);
     var converged = its >= 0 && outer >= 0;
-    // q = A⁻¹ (g - Bᵀ p) on the free facets.
     divergence_t(p, t);
     for k in nf { t[k] = if fixed[k] != 0 { 0.0 } else { g[k] - t[k] }; }
     if flux_solve(t, u) < 0 { converged = false; }
@@ -423,9 +367,6 @@ fn mixed_solve() -> bool {
     return converged;
 }
 
-// CG on S p = b with the preconditioner 1/dg, from p = 0. t and u are
-// vectors of the facets for schur_multiply. It gives the iterations, or
-// -1 if CG or an inner CG does not converge.
 fn schur_cg(b: f64[:], dg: f64[:], p: f64[:], t: f64[:], u: f64[:]) -> i64 {
     let n = b.len;
     var r = zeros(n);
@@ -457,9 +398,6 @@ fn schur_cg(b: f64[:], dg: f64[:], p: f64[:], t: f64[:], u: f64[:]) -> i64 {
     return it;
 }
 
-// --- values ----------------------------------------------------------------------------
-
-// q (3 components) and p in cell c at point x.
 fn mixed_cell_value(c: i64, x: f64[3]) -> f64[4] {
     let size = cell_size(c);
     var v: f64[4] = [0.0, 0.0, 0.0, sol[facet_total() + c]];
@@ -470,8 +408,6 @@ fn mixed_cell_value(c: i64, x: f64[3]) -> f64[4] {
     return v;
 }
 
-// q and p at point x: the mean of the cells that hold x, else the value of
-// the nearest cell. The bool says whether a cell is near x.
 fn mixed_value_at(x: f64[3]) -> f64[4], bool {
     guard physics == MIXED && sol.len == dof_total() else { abort("mixed_value_at: a mixed physics and a solution"); }
     var sum: f64[4] = [0.0; 4];
@@ -499,7 +435,6 @@ fn mixed_value_at(x: f64[3]) -> f64[4], bool {
     return mixed_cell_value(best, x), best_l >= -0.1;
 }
 
-// Writes the mesh with the nodal means of p and q of the cells.
 fn write_mixed_vtu(path: const u8[:], p_name: const u8[:], q_name: const u8[:]) -> bool {
     guard physics == MIXED && sol.len == dof_total() else { abort("write_mixed_vtu: a mixed physics and a solution"); }
     var v: f64[>..] = [];

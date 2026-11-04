@@ -1,14 +1,7 @@
-// Tests of the package ode. `./build.sh test` runs this program from the
-// root of the repository, and a non-zero exit status is a failure.
-//
-// - jets: sin, exp, sqrt, a quotient and a power against their derivatives;
-// - the ODE y' = -y: y(1) = exp(-1);
-// - an algebraic unknown that holds the second derivative of a given
-//   function: x = sin(3 t), a = ddt(ddt(x)) = -9 sin(3 t).
 import std;
 import math;
 import ode from "../ode";
-import solvers from "../solvers";   // ode imports it
+import solvers from "../solvers";
 
 var failures = 0;
 
@@ -22,7 +15,6 @@ fn near(what: u8[:], got: f64, want: f64, rel: f64) {
 }
 
 fn test_jets() {
-    // t -> 2 + 0.5 t at t = 0: [2, 0.5, 0, 0, 0].
     let a: f64[5] = [2.0, 0.5, 0.0, 0.0, 0.0];
     near("sin'", ode::jsin(a)[1], 0.5 * cos(2.0), 1.0e-12);
     near("cos'", ode::jcos(a)[1], -0.5 * sin(2.0), 1.0e-12);
@@ -33,6 +25,8 @@ fn test_jets() {
     near("1/a''/2", ode::jdiv(ode::jconst(1.0), a)[2], 0.25 / 8.0, 1.0e-12);
     near("a^3'", ode::jpow(a, 3)[1], 3.0 * 4.0 * 0.5, 1.0e-12);
     near("ddt(a^2)", ode::jddt(ode::jpow(a, 2))[0], 2.0, 1.0e-12);
+    let quartic: f64[5] = [0.0, 0.0, 0.0, 0.0, 1.0];
+    near("four ddt of t^4", ode::jddt(ode::jddt(ode::jddt(ode::jddt(quartic))))[0], 24.0, 1.0e-12);
 }
 
 fn decay(t: f64) { ode::resid[0] = ode::jadd(ode::jddt(ode::uj[0]), ode::uj[0])[0]; }

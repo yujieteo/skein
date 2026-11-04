@@ -1,17 +1,3 @@
-// Implicit time stepping of M du/dt + K u = 0 with fixed values on some
-// dofs. M and K are sparse (CSR) with the same pattern, and they hold all
-// dofs, with the fixed dofs too.
-//
-// Each step solves A u_new = M w + K v by CG (runtime::cg) with a Jacobi
-// preconditioner, where A = cm M + ck K:
-//
-//     scheme           cm          ck     w                      v
-//     backward_euler   1/dt        1      u/dt                   0
-//     crank_nicolson   1/dt        1/2    u/dt                   -u/2
-//     bdf2             3/(2 dt)    1      (4 u - u_old)/(2 dt)   0
-//
-// BDF2 needs two old states. Its first step in a run is a backward Euler
-// step. Its local error is O(dt²), so the global error stays O(dt²).
 import std;
 import math;
 namespace transient;
@@ -23,15 +9,15 @@ var col: i32[>..] = [];
 var mass: f64[>..] = [];
 var stiff: f64[>..] = [];
 
-var temp: f64[>..] = [];            // u, the temperature of each dof
-var fixed: u8[>..] = [];            // 1 for each dof that is held
-var fixed_value: f64[>..] = [];     // the value of each held dof
+var temp: f64[>..] = [];
+var fixed: u8[>..] = [];
+var fixed_value: f64[>..] = [];
 var now = 0.0;
 
 var last_steps = 0;
 var last_iterations = 0;
 
-let CG_TOLERANCE = 1.0e-12;   // the residual relative to the right-hand side
+let CG_TOLERANCE = 1.0e-12;
 
 fn clear_matrices() {
     row_start.clear();
@@ -40,12 +26,9 @@ fn clear_matrices() {
     stiff.clear();
 }
 
-// The scheme of the current step: A = cm M + ck K in a_val, and the
-// inverse of its diagonal on the free dofs (0 on the fixed dofs).
 var a_val: f64[>..] = [];
 var inv_diag: f64[>..] = [];
 
-// y = A x on the free dofs, and 0 on the fixed dofs.
 fn free_operator(x: f64[:], y: f64[:]) {
     solvers::multiply(row_start, col, a_val, x, y);
     for d in y.len { if fixed[d] != 0 { y[d] = 0.0; } }
@@ -55,9 +38,6 @@ fn jacobi(r: f64[:], z: f64[:]) {
     for d in r.len { z[d] = inv_diag[d] * r[d]; }
 }
 
-// Solves (cm M + ck K) temp = b on the free dofs, with temp = fixed_value
-// on the fixed dofs, by runtime::cg. Starts from the current temp. Returns
-// false if CG does not converge.
 fn solve_step(cm: f64, ck: f64, b: f64[>..]&) -> bool {
     let n = temp.len;
     a_val.clear();
@@ -76,7 +56,6 @@ fn solve_step(cm: f64, ck: f64, b: f64[>..]&) -> bool {
     return converged;
 }
 
-// Steps from `now` to `end` with the scheme. See the table at the top.
 fn advance(end: f64, dt_max: f64, scheme: i64) -> bool {
     assert(dt_max > 0.0 && scheme >= 0 && scheme <= 2);
     let steps = max(ceil((end - now) / dt_max - 1.0e-9) as i64, 0);

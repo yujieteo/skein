@@ -1,20 +1,8 @@
-// Shell sections: the ABD matrix of a laminate (classical laminate theory)
-// and the transverse shear stiffness, in the axes of the section.
-//
-// A section holds, in the local axes (1, 2) of the shell surface,
-//     N = A eps + B kappa,   M = B eps + D kappa,   Q = S gamma
-// with eps = (eps_11, eps_22, gamma_12), kappa the same for the curvature,
-// and gamma = (gamma_13, gamma_23). Each 3 × 3 matrix is row-major.
-//
-// The plies stack from the top face (z = +h/2) down. A ply angle turns
-// from the 1 axis of the section to the fibre, right-handed about the top
-// normal (spec §4.2, `reissner_mindlin`). Reference: R. M. Jones,
-// Mechanics of Composite Materials, 2nd ed., §2.6 (Q-bar) and §4.2 (ABD).
 import std;
 import math;
 namespace shells;
 
-let SHEAR_FACTOR = 5.0 / 6.0;   // the transverse shear correction factor
+let SHEAR_FACTOR = 5.0 / 6.0;
 
 struct Section {
     a: f64[9],
@@ -25,7 +13,7 @@ struct Section {
 }
 
 struct Ply {
-    angle: f64,     // rad
+    angle: f64,
     t: f64,
     e1: f64,
     e2: f64,
@@ -38,8 +26,6 @@ struct Ply {
 var sections: Section[>..] = [];
 var plies: Ply[>..] = [];
 
-// The reduced stiffness of a ply in the axes of the section (Jones eq. 2.85):
-// q[0..9] for (11, 22, 12) and s[0..4] for (13, 23).
 fn ply_qbar(p: Ply) -> f64[9], f64[4] {
     let nu21 = p.nu12 * p.e2 / p.e1;
     let den = 1.0 - p.nu12 * nu21;
@@ -63,24 +49,18 @@ fn ply_qbar(p: Ply) -> f64[9], f64[4] {
     return [b11, b12, b16, b12, b22, b26, b16, b26, b66], [s55, s45, s45, s44];
 }
 
-// --- the laminate builder ------------------------------------------------------
-
 fn laminate_clear() { plies.clear(); }
 
-// Adds a ply below the plies so far. The angle is in rad. G13 and G23 are
-// the transverse shear moduli.
 fn laminate_ply(angle: f64, t: f64, e1: f64, e2: f64, g12: f64, nu12: f64, g13: f64, g23: f64) {
     guard t > 0.0 && e1 > 0.0 && e2 > 0.0 && g12 > 0.0 && g13 > 0.0 && g23 > 0.0 else { abort("laminate_ply: t, e1, e2, g12, g13 and g23 > 0"); }
     plies.push(Ply { angle: angle, t: t, e1: e1, e2: e2, g12: g12, nu12: nu12, g13: g13, g23: g23 });
 }
 
-// Adds the plies so far again in the reverse sequence: a symmetric laminate.
 fn laminate_mirror() {
     let n = plies.len;
     for k in n { plies.push(plies[n - 1 - k]); }
 }
 
-// The section of the plies so far. Returns its index.
 fn laminate_section() -> i64 {
     guard plies.len > 0 else { abort("laminate_section: at least one ply"); }
     var s = Section { a: [0.0; 9], b: [0.0; 9], d: [0.0; 9], s: [0.0; 4], h: 0.0 };
@@ -101,7 +81,6 @@ fn laminate_section() -> i64 {
     return sections.len - 1;
 }
 
-// The section of an isotropic shell of thickness h.
 fn isotropic_section(e: f64, nu: f64, h: f64) -> i64 {
     laminate_clear();
     let g = e / (2.0 * (1.0 + nu));
@@ -109,7 +88,6 @@ fn isotropic_section(e: f64, nu: f64, h: f64) -> i64 {
     return laminate_section();
 }
 
-// The membrane compliance a = A⁻¹ of section k (row-major 3 × 3).
 fn membrane_compliance(k: i64) -> f64[9] {
     guard k >= 0 && k < sections.len else { abort("membrane_compliance: 0 <= k < sections.len"); }
     let a = sections[k].a;

@@ -1,5 +1,3 @@
-// The types of expressions (spec §5 to §8): names, literals, operators,
-// calls of built-in and user functions, members and `at`.
 import std;
 import dictionary;
 import math;
@@ -11,9 +9,6 @@ import .state;
 import .builtins;
 import .typeexpr;
 
-// The names of Appendix A, the geometry functions of spec §8.1 and the
-// functions of the phase 1 gaps G6, G7 and G12. A declaration may not use
-// them [`duplicate_name`].
 let BUILTIN_FNS = [
     "sym", "skew", "tr", "det", "inv", "transpose", "dev", "dot", "cross", "outer", "norm",
     "ddot", "strain", "defgrad", "hooke", "elasticity", "interp", "sum", "von_mises",
@@ -23,11 +18,7 @@ let BUILTIN_FNS = [
     "box", "cylinder", "sphere", "rect", "circle", "polygon", "fill", "extrude",
     "revolve", "sweep", "line", "arc", "spline", "nurbs", "knots", "point", "shell", "loft", "pattern",
     "pattern_polar", "fillet", "move", "rotate", "scale",
-    // Shells and beams (spec §4.3), argmax and when (§14.5), rigid and moment (§12.1).
     "tangent", "ply_stiffness", "laminate", "along", "argmax", "when", "rigid", "moment",
-    // rms of a harmonic step (§14.5, gap G2), radiation of a natural bc (§12.1),
-    // the wall distance of a turbulence model (§4.2), the far field of an antenna (§14.5, gap G13),
-    // copy of a pattern (§8.1, gap G35).
     "rms", "radiation", "wall_distance", "far_field", "copy",
 ];
 let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "omega"];
@@ -35,7 +26,6 @@ let BUILTIN_CONSTS = ["I", "pi", "x", "y", "z", "t", "n", "tau", "im", "omega"];
 fn tok_text(t: i64) -> const u8[:] { syntax::text(t) }
 fn node_kind(n: i64) -> i64 { syntax::nodes[n].kind }
 
-// The first token of the expression `n`, where an error about it goes.
 recursive fn first_tok(n: i64) -> i64 {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_BINARY || k.kind == syntax::N_CALL || k.kind == syntax::N_MEMBER || k.kind == syntax::N_AT {
@@ -44,9 +34,6 @@ recursive fn first_tok(n: i64) -> i64 {
     return k.tok;
 }
 
-// --- names ---------------------------------------------------------------------------
-
-// The edit distance of two names, for the suggested fix of a misspelt name.
 fn edit_distance(a: u8[:], b: u8[:]) -> i64 {
     guard a.len < 64 && b.len < 64 else { return 99; }
     var prev: i64[65] = [0; 65];
@@ -63,7 +50,6 @@ fn edit_distance(a: u8[:], b: u8[:]) -> i64 {
     return prev[b.len];
 }
 
-// The visible name nearest to `name`, or "".
 fn nearest_name(name: u8[:]) -> u8[>..] {
     var best: u8[>..] = [];
     var best_d = max(2, name.len / 3) + 1;
@@ -101,8 +87,6 @@ fn unknown_name(tok: i64) {
     }
 }
 
-// The materials of physics `p` that give the property `name`: the type of
-// the first, and the number that give it and that lack it.
 fn prop_in_physics(p: i64, name: u8[:]) -> Ty, i64, i64 {
     var ty = any_ty();
     var have = 0;
@@ -130,7 +114,6 @@ fn prop_reported(p: i64, name: u8[:]) -> bool {
     return false;
 }
 
-// The type of the name at token `tok`.
 fn name_ty(tok: i64) -> Ty {
     let name = tok_text(tok);
     for i in 0..locals.len {
@@ -161,7 +144,6 @@ fn name_ty(tok: i64) -> Ty {
             }
             return p.ty;
         }
-        // A property outside a physics: in a `bc`, `output`, `report` or `expect`.
         if cur_step >= 0 || in_expect || in_bc { return p.ty; }
         break;
     }
@@ -170,7 +152,6 @@ fn name_ty(tok: i64) -> Ty {
     return any_ty();
 }
 
-// `material_prop_type`: two materials of physics `p` give `name` with two types.
 fn check_prop_types(tok: i64, p: i64, name: u8[:]) {
     var first = any_ty();
     var have = false;
@@ -193,9 +174,6 @@ fn check_prop_types(tok: i64, p: i64, name: u8[:]) {
     }
 }
 
-// --- literals --------------------------------------------------------------------------
-
-// The value of a number token.
 fn number_value(tok: i64) -> f64 {
     let v, ok = parse_flt(tok_text(tok));
     return if ok { v } else { 0.0 };
@@ -208,8 +186,6 @@ fn is_int_text(s: u8[:]) -> bool {
     return true;
 }
 
-// The dimension and the SI factor of the unit expression `n` (spec §6.3).
-// `affine` counts the `degC` names in it.
 recursive fn unit_value(n: i64, affine: i64&) -> i64[7], f64 {
     let k = syntax::nodes[n];
     match k.kind {
@@ -232,7 +208,6 @@ recursive fn unit_value(n: i64, affine: i64&) -> i64[7], f64 {
         },
         syntax::N_UNIT_POW => {
             let d, s = unit_value(k.first, affine);
-            // The base is a unit name with whole exponents, so each half power is valid.
             let r, _ok = dim_pow_halves(d, k.aux);
             var f = 1.0;
             for i in abs(k.aux) / 2 { f *= s; }
@@ -244,12 +219,10 @@ recursive fn unit_value(n: i64, affine: i64&) -> i64[7], f64 {
     }
 }
 
-// The type of the unit `u` (an N_UNIT node) after a literal, and its SI factor.
 fn unit_ty(u: i64) -> Ty, f64 {
     var affine = 0;
     let before = diags.len;
     let d, s = unit_value(u, affine);
-    // After an unknown unit the type is unknown, so no error follows from it.
     if diags.len > before { return any_ty(), s; }
     let inner = syntax::nodes[u].first;
     if affine > 0 && syntax::nodes[inner].kind != syntax::N_UNIT_NAME {
@@ -268,7 +241,6 @@ fn unit_ty(u: i64) -> Ty, f64 {
     return t, s;
 }
 
-// The type of a number node.
 fn number_ty(n: i64) -> Ty {
     let k = syntax::nodes[n];
     let u = syntax::child_of_kind(n, syntax::N_UNIT);
@@ -282,10 +254,6 @@ fn number_ty(n: i64) -> Ty {
     return t;
 }
 
-// --- constant values ------------------------------------------------------------------
-
-// The value of the constant expression `n` in SI, and true, or false when it
-// is not a constant that the checker can compute.
 recursive fn const_value(n: i64) -> f64, bool {
     let k = syntax::nodes[n];
     match k.kind {
@@ -340,12 +308,8 @@ recursive fn const_value(n: i64) -> f64, bool {
     }
 }
 
-// --- the rules of the operators (spec §6.1, §7.2) ----------------------------------------
-
 fn op_text(tok: i64) -> const u8[:] { tok_text(tok) }
 
-// `a + b`, `a - b` and the two sides of an equation or a comparison: the
-// same rank and the same dimension. `what` names the place in a message.
 fn sum_ty(tok: i64, a: Ty, b: Ty, what: u8[:]) -> Ty {
     if is_any(a) || is_any(b) { return joined(any_ty(), a, b); }
     if !is_num(a) || !is_num(b) {
@@ -381,7 +345,6 @@ fn product_base(a: Ty, b: Ty) -> i64 {
     return B_REAL;
 }
 
-// `a*b` (spec §7.2).
 fn mul_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     if is_any(a) || is_any(b) { return joined(any_ty(), a, b); }
     if !is_num(a) || !is_num(b) {
@@ -411,7 +374,6 @@ fn mul_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     return joined(r, a, b);
 }
 
-// `a/b`.
 fn div_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     if is_any(a) || is_any(b) { return joined(any_ty(), a, b); }
     if !is_num(a) || !is_num(b) {
@@ -427,8 +389,6 @@ fn div_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     return joined(r, a, b);
 }
 
-// `a^e` with the exponent node `e` of type `b` (spec §6.1). A dimensionless
-// base takes any constant exponent (gap G30).
 fn pow_ty(tok: i64, a: Ty, b: Ty, e: i64) -> Ty {
     if is_any(a) || is_any(b) { return joined(any_ty(), a, b); }
     if !is_num(a) || !is_num(b) || a.rank != 0 || b.rank != 0 {
@@ -459,7 +419,6 @@ fn pow_ty(tok: i64, a: Ty, b: Ty, e: i64) -> Ty {
     return joined(r, a, b);
 }
 
-// `a == b` and the other comparisons.
 fn compare_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     let s = sum_ty(tok, a, b, op_text(tok));
     var r = kind_ty(K_BOOL);
@@ -476,7 +435,6 @@ fn bool_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     return joined(kind_ty(K_BOOL), a, b);
 }
 
-// `a | b`, `a & b` and `a - b` of two geometry values (spec §8.1).
 fn geom_op_ty(tok: i64, a: Ty, b: Ty) -> Ty {
     if is_any(a) || is_any(b) { return joined(any_ty(), a, b); }
     if a.kind == K_BOOL && b.kind == K_BOOL {
@@ -490,18 +448,14 @@ fn geom_op_ty(tok: i64, a: Ty, b: Ty) -> Ty {
               "both sides must be geometry values");
         return joined(any_ty(), a, b);
     }
-    // `a & b` is the part of the lower dimension (gap G32), `a - b` keeps `a`.
     var r = geom_ty(max(a.geo, b.geo));
     if syntax::tokens[tok].kind == syntax::TK_AMP { r.geo = min(a.geo, b.geo); }
     if syntax::tokens[tok].kind == syntax::TK_MINUS { r.geo = a.geo; }
     return joined(r, a, b);
 }
 
-// --- expressions ----------------------------------------------------------------------
-
 fn is_builtin_fn(name: u8[:]) -> bool { contains_name(BUILTIN_FNS, name) }
 
-// The type of a vector literal: all components of one dimension (spec §6.4).
 fn vector_join(tok: i64, acc: Ty, c: Ty, i: i64) -> Ty {
     if is_any(acc) || is_any(c) { return joined(any_ty(), acc, c); }
     if !is_num(c) {
@@ -536,7 +490,6 @@ fn vector_size(tok: i64, count: i64, rank: i64) {
     }
 }
 
-// The member `name` of a value of type `t` at token `tok` (spec §5.2, §5.6, §15.1).
 fn member_ty(tok: i64, obj: i64, t: Ty) -> Ty {
     let name = tok_text(tok);
     if is_any(t) { return t; }
@@ -583,7 +536,6 @@ fn member_ty(tok: i64, obj: i64, t: Ty) -> Ty {
     return any_ty();
 }
 
-// The type of a call of a user function (spec §7.4).
 fn user_call_ty(tok: i64, s: i64, a: Args) -> Ty {
     let f = syms[s].node;
     var params = 0;
@@ -606,7 +558,6 @@ fn user_call_ty(tok: i64, s: i64, a: Args) -> Ty {
     return r;
 }
 
-// The type of expression `n`.
 recursive fn expr_ty(n: i64) -> Ty {
     let k = syntax::nodes[n];
     match k.kind {
@@ -696,8 +647,6 @@ recursive fn expr_ty(n: i64) -> Ty {
             let callee = k.first;
             var a = Args { count: 0, ty: [any_ty(); 8], node: [-1; 8], name: [-1; 8] };
             let saved = setting_mode;
-            // The profile of extrude, revolve, sweep and loft is a 2D Surface
-            // (spec §8), and loft has 2.
             let cn = call_name(callee);
             let profile = space == 3 && (cn == "extrude" || cn == "revolve" || cn == "sweep" || cn == "loft");
             let profiles = if cn == "loft" { 2 } else { 1 };
@@ -743,8 +692,6 @@ fn call_name(callee: i64) -> const u8[:] {
     return "";
 }
 
-// The type of a call: of a user function, a built-in function, or a word
-// with arguments in a setting, for example `generalized_alpha(0.8)`.
 fn call_ty(tok: i64, callee: i64, a: Args) -> Ty {
     let ct = syntax::nodes[callee].tok;
     guard syntax::nodes[callee].kind == syntax::N_NAME else {
@@ -764,7 +711,6 @@ fn call_ty(tok: i64, callee: i64, a: Args) -> Ty {
     return any_ty();
 }
 
-// `f at p` (spec §7.5).
 fn at_ty(tok: i64, f: Ty, p: Ty) -> Ty {
     if !is_any(p) && !(p.kind == K_GEOM && p.geo == 0) && !(is_num(p) && p.rank == 1 && (p.dim == LENGTH || p.zero)) {
         error(tok, "type_mismatch", str("the point of 'at' is ", ty_str(p)), "give a Point or a vector of Length");
@@ -776,7 +722,6 @@ fn at_ty(tok: i64, f: Ty, p: Ty) -> Ty {
     return r;
 }
 
-// A bare number inside a literal with a unit takes that unit.
 fn bare_in_unit(t: Ty, unit: i64) -> Ty {
     if unit < 0 { return t; }
     let ut, s = unit_ty(unit);
@@ -786,7 +731,6 @@ fn bare_in_unit(t: Ty, unit: i64) -> Ty {
     return r;
 }
 
-// True for a number with no unit, or `-` and one.
 recursive fn is_bare(n: i64) -> bool {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_NUMBER { return syntax::child_of_kind(n, syntax::N_UNIT) < 0; }
@@ -794,10 +738,6 @@ recursive fn is_bare(n: i64) -> bool {
     return false;
 }
 
-// --- assignability (spec §5.7) ---------------------------------------------------------
-
-// Checks that a value of type `val` may initialize a declaration of type
-// `decl`. `what` names the declaration in a message.
 fn assign(tok: i64, decl: Ty, val: Ty, what: u8[:]) -> bool {
     if is_any(decl) || is_any(val) { return true; }
     if decl.kind == K_GEOM && val.kind == K_GEOM {

@@ -1,15 +1,11 @@
-// The stages of the work of a case that a param reaches (spec §20.4). The
-// study runner reuses the stages that no varied param reaches. A later
-// `skein check --study` can call it to report the stages of each param.
 import std;
 namespace check;
 import syntax from "../syntax";
 
-let STAGE_POST = 0;    // the expect and report expressions
-let STAGE_SOLVE = 1;   // the assembly and the solve: a material, a physics, a bc or a load
-let STAGE_MESH = 2;    // the geometry and the mesh, and each stage after them
+let STAGE_POST = 0;
+let STAGE_SOLVE = 1;
+let STAGE_MESH = 2;
 
-// Whether the tree `n` uses one of the names `names`.
 recursive fn uses_name(n: i64, names: u8[..64][:]) -> bool {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_NAME && position(names, syntax::text(k.tok)) >= 0 { return true; }
@@ -25,7 +21,6 @@ fn declares_value(kind: i64) -> bool {
     return kind == syntax::N_LET || kind == syntax::N_PARAM || kind == syntax::N_FN || kind == syntax::N_TABLE;
 }
 
-// The stage of an item other than a step that uses a param.
 fn item_stage(kind: i64) -> i64 {
     if kind == syntax::N_EXPECT { return STAGE_POST; }
     if kind == syntax::N_MATERIAL || kind == syntax::N_PHYSICS || kind == syntax::N_TEMPLATE || kind == syntax::N_BC ||
@@ -35,9 +30,6 @@ fn item_stage(kind: i64) -> i64 {
     return STAGE_MESH;
 }
 
-// The first stage that the param `name` of program `prog` reaches, or -1
-// when no item uses it. The param reaches each `let`, `fn` or `table` whose
-// value uses it or a declaration that it reaches.
 fn param_stage(prog: i64, name: u8[:]) -> i64 {
     var reached: u8[..64][>..] = [];
     var w: u8[..64] = [];

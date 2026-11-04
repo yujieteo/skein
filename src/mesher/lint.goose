@@ -1,8 +1,3 @@
-// `skein lint` (docs/command_line.md §4). With `--mesh`, it makes the mesh
-// of each `mesh` block, as `skein verify` does, and applies the lint rules
-// that need the mesh (docs/checks.md §3): `bending_lock` and
-// `mesh_feature_small`. The mesher makes a uniform mesh, so the local mesh
-// size is the `size` of the block. The other rules are in src/check/lint.goose.
 import std;
 namespace mesher;
 import syntax from "../syntax";
@@ -10,8 +5,6 @@ import check from "../check";
 import .geometry;
 import .verify;
 
-// `skein lint`. `args[1]` is "lint". The result is the exit status
-// (command_line.md §10).
 fn lint(args: u8[:][:]) -> i64 {
     let status, json, mesh = check::start(args);
     if status >= 0 { return status; }
@@ -19,8 +12,6 @@ fn lint(args: u8[:][:]) -> i64 {
     return check::finish(json);
 }
 
-// Applies the rules that need the mesh to the model of `check::lint_text`,
-// when it has no error. An error of the mesher goes into `check::diags`.
 fn mesh_lint() {
     guard check::error_count() == 0 else { return; };
     let prog = check::model_prog;
@@ -38,9 +29,6 @@ fn mesh_lint() {
     check::sort_diags();
 }
 
-// The smallest feature of shape `g`: the shortest side of the bounding box
-// of each box, cylinder, sphere, rect, circle, polygon, fill, extrude, revolve and
-// loft in it, and of the copy of each pattern.
 recursive fn smallest_feature(g: i64) -> f64 {
     let s = shapes[g];
     if s.kind == UNION || s.kind == INTERSECT || s.kind == SUBTRACT {
@@ -56,15 +44,6 @@ recursive fn smallest_feature(g: i64) -> f64 {
     return f;
 }
 
-// The rules on mesh block `n`, with its record `r`.
-//
-// `mesh_feature_small`: the smallest feature of the region is under the
-// mesh size.
-//
-// `bending_lock`: an order-1 displacement on triangles or tetrahedra, whose
-// region is thin:
-// the shortest side of its bounding box is under 4 cells, and the longest
-// side is at least 4 times the shortest, so a load bends it.
 fn mesh_rules(n: i64, r: MeshRecord, dim: i64) {
     let unit = length_name;
     let f = smallest_feature(r.g);

@@ -1,26 +1,9 @@
-// The code generator of the first slice (docs/implementation.md §6): a
-// Skein syntax tree to a Goose program that calls src/runtime/api.goose.
-//
-// The slice is one linear static solid: a CSG box, a quarter of a tube or
-// a union of boxes, a structured mesh of 27-node hexahedra, a linear
-// elastic material on each region, with a thermal strain of constant
-// temperatures (spec §10.4), `u = 0`, `u.x = 0` and `sigma*n` boundary
-// conditions on the faces of the solid, `u.x = 0` at a Point, and `static`
-// steps. Each other construct gives an error `unsupported` at its token,
-// with a fix.
-//
-// The generator evaluates each value at compile time, in the unit system
-// of the header, because the runtime has no units. The generated program
-// prints the reports and the verification records in TOON
-// (command_line.md §6.3, §6.4).
 import std;
 import math;
 import os;
 namespace codegen;
 import syntax from "../syntax";
 import .dispatch;
-
-// --- errors ------------------------------------------------------------------
 
 fn unsupported(tok: i64, msg: u8[:], fix: u8[:]) {
     syntax::error_at(tok, "unsupported", msg, fix);
@@ -32,18 +15,15 @@ fn kind(n: i64) -> i64 { syntax::nodes[n].kind }
 fn tok(n: i64) -> i64 { syntax::nodes[n].tok }
 fn name(n: i64) -> const u8[:] { syntax::text(syntax::nodes[n].tok) }
 
-// The source text of node `n` and its children.
 fn source_of(n: i64) -> const u8[:] {
     let lo, hi = source_span(n);
     return syntax::source[lo..hi];
 }
 
-// The offsets in `syntax::source` of the text of `source_of(n)`.
 fn source_span(n: i64) -> i64, i64 {
     var lo = syntax::tokens[tok(n)].start;
     var hi = lo;
     span(n, lo, hi);
-    // Parentheses make no node, so add the ones that the span cuts.
     let src = syntax::source;
     var depth = 0;
     var least = 0;
@@ -79,7 +59,6 @@ recursive fn span(n: i64, lo: i64&, hi: i64&) {
         let a = syntax::tokens[syntax::nodes[n].aux];
         if a.start + a.len > hi { hi = a.start + a.len; }
     }
-    // The exponent of a power makes no node: a number, or `-` and one, after the `^`.
     if kind(n) == syntax::N_DIM_POW || kind(n) == syntax::N_UNIT_POW {
         let e = if syntax::tokens[tok(n) + 1].kind == syntax::TK_MINUS { tok(n) + 2 } else { tok(n) + 1 };
         let x = syntax::tokens[e];
@@ -90,7 +69,6 @@ recursive fn span(n: i64, lo: i64&, hi: i64&) {
         span(c, lo, hi);
         c = syntax::nodes[c].next;
     }
-    // A closing bracket ends a vector or a call.
     if kind(n) == syntax::N_VECTOR || kind(n) == syntax::N_CALL {
         var e = hi;
         while e < syntax::source.len && syntax::source[e] == ' ' { e++; }
@@ -98,10 +76,6 @@ recursive fn span(n: i64, lo: i64&, hi: i64&) {
     }
 }
 
-// --- units (spec §6.3, §6.5) ---------------------------------------------------
-
-// A factor to SI and the exponents of length, mass and time, in halves
-// (spec §6.1).
 struct Unit {
     f: f64,
     l: i64,
@@ -122,27 +96,20 @@ let BASE_UNITS = [
     BaseUnit { name: "Pa", u: Unit { f: 1.0, l: -2, m: 2, t: -4 } },
     BaseUnit { name: "t", u: Unit { f: 1000.0, l: 0, m: 2, t: 0 } },
     BaseUnit { name: "bar", u: Unit { f: 1.0e5, l: -2, m: 2, t: -4 } },
-    // skein-elements: the heat units of src/elements/gen.goose. Each system uses the kelvin.
     BaseUnit { name: "W", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
     BaseUnit { name: "K", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
     BaseUnit { name: "J", u: Unit { f: 1.0, l: 4, m: 2, t: -4 } },
-    // The frequency of eigenvalue(k) of a modal step (src/elements/eigen.goose).
     BaseUnit { name: "Hz", u: Unit { f: 1.0, l: 0, m: 0, t: -2 } },
-    // The units of the edge physics (src/elements/gen_edge.goose). Each system uses the ampere,
-    // so A has no exponent here, and V is W/A. deg is an angle in rad.
     BaseUnit { name: "A", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
     BaseUnit { name: "V", u: Unit { f: 1.0, l: 4, m: 2, t: -6 } },
     BaseUnit { name: "C", u: Unit { f: 1.0, l: 0, m: 0, t: 2 } },
     BaseUnit { name: "deg", u: Unit { f: 0.017453292519943295, l: 0, m: 0, t: 0 } },
-    // The angle of a mechanism (src/ode/gen.goose).
     BaseUnit { name: "rad", u: Unit { f: 1.0, l: 0, m: 0, t: 0 } },
 ];
 
 let PREFIX_CHARS = "numckMG";
 let PREFIX_FACTORS = [1.0e-9, 1.0e-6, 1.0e-3, 1.0e-2, 1.0e3, 1.0e6, 1.0e9];
 
-// The unit system of the header: the size of its base units in SI, and the
-// names that the reports print.
 struct System {
     l: f64,
     m: f64,
@@ -202,16 +169,11 @@ recursive fn unit_value(n: i64) -> Unit {
     return Unit { f: a.f / b.f, l: a.l - b.l, m: a.m - b.m, t: a.t - b.t };
 }
 
-// The factor from a unit to the unit system of the header.
 fn to_system(n: i64) -> f64 {
     let u = unit_value(n);
     return u.f / (pow(system.l, u.l / 2.0) * pow(system.m, u.m / 2.0) * pow(system.t, u.t / 2.0));
 }
 
-// --- values --------------------------------------------------------------------
-
-// A scalar (`n` = 1) or a vector of 3 (`n` = 3), in the unit system of the
-// header.
 struct Val {
     n: i64,
     v: f64[3],
@@ -219,7 +181,6 @@ struct Val {
 
 fn scalar(x: f64) -> Val { Val { n: 1, v: [x, 0.0, 0.0] } }
 
-// The `let` and `param` items with a value, by name.
 var value_names: u8[..64][>..];
 var value_nodes: i64[>..];
 var depth = 0;
@@ -241,17 +202,12 @@ fn number(t: i64) -> f64 {
     return x;
 }
 
-// The value of expression `n`.
-// The name that eval gives the value bound_value (the temperature T of a
-// conductivity k(T) that the generator samples), or empty.
 var bound_name: u8[..64] = [];
 var bound_value = 0.0;
 
 recursive fn eval(n: i64) -> Val {
     let k = kind(n);
     if k == syntax::N_NUMBER {
-        // A temperature in degC is an absolute temperature in K. The aux of
-        // a degC value is its minus sign.
         let u = syntax::nodes[n].first;
         if u >= 0 && kind(syntax::nodes[u].first) == syntax::N_UNIT_NAME && syntax::text(tok(syntax::nodes[u].first)) == "degC" {
             let sign = if syntax::nodes[n].aux >= 0 { -1.0 } else { 1.0 };
@@ -340,7 +296,6 @@ recursive fn eval(n: i64) -> Val {
         }
         if op == "^" && a.n == 1 && b.n == 1 { return scalar(pow(a.v[0], b.v[0])); }
     }
-    // The functions of one scalar.
     for f in ["sqrt", "exp", "ln", "sin", "cos", "tan", "abs"] {
         if !call_args(n, f, 1) { continue; }
         let a = eval(syntax::nodes[syntax::child(n, 1)].first);
@@ -349,7 +304,6 @@ recursive fn eval(n: i64) -> Val {
         return scalar(if f == "sqrt" { sqrt(x) } else if f == "exp" { exp(x) } else if f == "ln" { log(x) } else if f == "sin" { sin(x) }
                       else if f == "cos" { cos(x) } else if f == "tan" { tan(x) } else { abs(x) });
     }
-    // A Point is its position.
     if call_args(n, "point", 1) { return eval(syntax::nodes[syntax::child(n, 1)].first); }
     if call_args(n, "interp", 3) { return scalar(interp(n)); }
     unsupported(tok(n), str("the expression '", source_of(n), "' is not in this slice"),
@@ -357,15 +311,11 @@ recursive fn eval(n: i64) -> Val {
     return scalar(0.0);
 }
 
-// The tables by name.
 var table_names: u8[..64][>..];
 var table_nodes: i64[>..];
 
-// The material item whose properties a name can be: the material of the
-// law that the generator evaluates now, or -1.
 var scope_material = -1;
 
-// The value of property `word` of scope_material, or -1.
 fn property(word: u8[:]) -> i64 {
     guard scope_material >= 0 else { return -1; };
     var p = syntax::nodes[scope_material].first;
@@ -376,7 +326,6 @@ fn property(word: u8[:]) -> i64 {
     return -1;
 }
 
-// The value of a table cell: a number, or - and a number.
 recursive fn row_number(n: i64) -> f64 {
     if kind(n) == syntax::N_UNARY && syntax::text(tok(n)) == "-" { return -row_number(syntax::nodes[n].first); }
     if kind(n) != syntax::N_NUMBER || syntax::nodes[n].first >= 0 {
@@ -386,7 +335,6 @@ recursive fn row_number(n: i64) -> f64 {
     return number(tok(n));
 }
 
-// The values of column `word` of table t, in the unit system of the header.
 fn table_column(t: i64, word: u8[:], at: i64, out: f64[>..]&) {
     var col = -1;
     var factor = 1.0;
@@ -408,8 +356,6 @@ fn table_column(t: i64, word: u8[:], at: i64, out: f64[>..]&) {
     if col < 0 { unsupported(at, str("the table has no column ", word), "name a column of the table"); }
 }
 
-// The values of the column `m`, t.col of a table t, in `out`. False after
-// an error.
 fn column_of(m: i64, out: f64[>..]&) -> bool {
     let o = if kind(m) == syntax::N_MEMBER { syntax::nodes[m].first } else { -1 };
     let t = if o >= 0 && kind(o) == syntax::N_NAME { position(table_names, name(o)) } else { -1 };
@@ -423,8 +369,6 @@ fn column_of(m: i64, out: f64[>..]&) -> bool {
 
 let INTERP_FIX = "write interp(props.T, props.k, x), with two columns of a table and x in the range of the first";
 
-// `interp(t.xs, t.ys, x)`: the piecewise linear function of the column ys
-// of the column xs, in increasing order, at x.
 recursive fn interp(n: i64) -> f64 {
     let x = eval(syntax::nodes[syntax::child(n, 3)].first).v[0];
     var xs: f64[>..] = [];
@@ -438,18 +382,12 @@ recursive fn interp(n: i64) -> f64 {
     return 0.0;
 }
 
-// --- the model -------------------------------------------------------------------
-
 let BOX = 0;
 let CYLINDER = 1;
-let TUBE = 2;       // a cylinder minus a cylinder on the same axis
-let SECTOR = 3;     // a tube & a box that cuts the quarter x >= cx, y >= cy
-let UNION = 4;      // a union of boxes, a | b, on the grid of runtime::mesh_union
+let TUBE = 2;
+let SECTOR = 3;
+let UNION = 4;
 
-// A solid. A box, and a union of boxes, span lo to hi in x, y and z. The
-// others span lo to hi in r, θ and z about the axis x = cx, y = cy, which
-// is parallel to z. The boxes of a union are union_boxes[6 first..6 (first
-// + count)]: x0, y0, z0, x1, y1, z1 for each.
 struct Shape {
     kind: i64,
     lo: f64[3],
@@ -462,11 +400,6 @@ struct Shape {
 
 var union_boxes: f64[>..];
 
-// A face of the meshed solid: the part of its boundary where lattice
-// coordinate `axis` (x, y, z for a box, r, θ, z for a sector) is `value`.
-// It is the node set and the face set `set` of the mesh
-// (src/runtime/api.goose): x0, x1, y0, y1, z0 or z1 on a box, r0, r1, t0,
-// t1, z0 or z1 on a sector. A surface of a lane's mesh has axis -1.
 struct Face {
     name: u8[..64],
     axis: i64,
@@ -474,10 +407,8 @@ struct Face {
     set: u8[..64],
 }
 
-// A boundary condition on a face: `u = 0` or `u.x = 0` (`fix` holds a bit
-// for each fixed component), or `sigma*n = t + s n` (`fix` is 0).
 struct Bc {
-    face: i64,      // index in `faces`
+    face: i64,
     fix: i64,
     t: f64[3],
     s: f64,
@@ -485,18 +416,18 @@ struct Bc {
 }
 
 struct Report {
-    expr: i64,      // the expression node
+    expr: i64,
     label: u8[..256],
 }
 
 struct Step {
     name: u8[..64],
-    procedure: i64, // the lane of the procedure (dispatch.goose)
-    solver: u8[..64],         // the linear solver and the preconditioner of `solve`
+    procedure: i64,
+    solver: u8[..64],
     preconditioner: u8[..64],
-    first_own: i64, // the bcs of the step itself: a range of `bcs`
+    first_own: i64,
     own_count: i64,
-    first_bc: i64,  // all bcs that hold in the step: a range of `active`
+    first_bc: i64,
     bc_count: i64,
     first_report: i64,
     report_count: i64,
@@ -506,14 +437,12 @@ struct Step {
 let EXPECT_U = 0;
 let EXPECT_SIGMA = 1;
 let EXPECT_REACTION = 2;
-let EXPECT_SUM = 3;      // a sum of components of u at points (point_sum)
+let EXPECT_SUM = 3;
 
-// An `expect` on a component of u or sigma at a point, or of the reaction
-// on a face.
 struct Expect {
     name: u8[..64],
     kind: i64,
-    comp: i64,      // 0 to 2 for u and the reaction, 0 to 5 for sigma
+    comp: i64,
     at: f64[3],
     face: i64,
     tok: i64,
@@ -521,12 +450,11 @@ struct Expect {
     within: f64,
     relative: bool,
     label: u8[..256],
-    step: i64,      // the step that checks it at its end, or -1 for an item
-    expr: i64,      // the expression of EXPECT_SUM
+    step: i64,
+    expr: i64,
 }
 
 var model_name: u8[..64];
-// The solids by name, and the solid that the model meshes.
 var shape_names: u8[..64][>..];
 var shapes: Shape[>..];
 var solid_name: u8[..64];
@@ -538,7 +466,6 @@ var active: Bc[>..];
 var reports: Report[>..];
 var steps: Step[>..];
 var expects: Expect[>..];
-// The skipped `expect` items: a name and why.
 var skipped: u8[..256][>..];
 var mesh_size = 0.0;
 var mesh_tok = -1;
@@ -549,19 +476,15 @@ var material_name: u8[..64];
 var physics_name: u8[..64];
 var unknown_name: u8[..64];
 var physics_tok = -1;
-var template = CORE;            // the lane of the template (dispatch.goose)
-var mesh_lane = CORE;           // the lane that meshes the geometry: CORE (a box or a sector), MESHER or SHELLS
-var cell_name: u8[..64];        // the mesh setting `cell`
+var template = CORE;
+var mesh_lane = CORE;
+var cell_name: u8[..64];
 var cell_tok = -1;
 var order_tok = -1;
-var incompatible = false;       // the method setting `family: incompatible`
+var incompatible = false;
 var family_tok = -1;
-// The `bc` items outside the steps, which hold in each step.
 var global_bcs: i64[>..];
 
-// A `let p: Point`: the face of its node set in `faces`, its position, and
-// whether a bc holds it. The grid of a union of boxes has a grid plane
-// through each Point that a bc holds, so a node is there.
 struct PointSet {
     face: i64,
     at: f64[3],
@@ -570,17 +493,12 @@ struct PointSet {
 
 var point_sets: PointSet[>..];
 
-// The materials by name, as the items.
 var material_names: u8[..64][>..];
 var material_nodes: i64[>..];
 
-// A material of the physics and its region: `material m on r`. The first
-// law is the material of each cell, and the region of each law, in order,
-// takes its material. The strain is the thermal strain alpha*(T - T0),
-// with the properties of the material.
 struct Law {
-    material: i64,  // index in material_names
-    region: i64,    // index in shapes, or -1 for the whole solid
+    material: i64,
+    region: i64,
     young: f64,
     poisson: f64,
     strain: f64,
@@ -588,7 +506,7 @@ struct Law {
 }
 
 var laws: Law[>..];
-var thermal_node = -1;  // the expression X of hooke(E, nu, strain(u) - X*I), or -1
+var thermal_node = -1;
 
 fn reset() {
     value_names.clear();
@@ -635,7 +553,6 @@ fn reset() {
     system = SYSTEMS[0];
 }
 
-// `s` in single quotes for the shell.
 fn shell_quoted(s: u8[:]) -> u8[>..] {
     var out: u8[>..] = [];
     out.push('\'');
@@ -646,9 +563,6 @@ fn shell_quoted(s: u8[:]) -> u8[>..] {
     return out;
 }
 
-// `path` relative to the directory that skein run started in, which is the
-// project root, if it is below it and the real working directory resolves
-// it. So the generated program names the same file in each checkout.
 fn project_path(path: u8[:]) -> u8[>..] {
     var cwd: u8[>..] = [];
     if env("PWD", cwd) && cwd.len > 0 && path.len > cwd.len && path[..cwd.len] == cwd[..] && path[cwd.len] == '/' {
@@ -659,21 +573,12 @@ fn project_path(path: u8[:]) -> u8[>..] {
     return str(path);
 }
 
-// The shell command that runs the model at `path` with skein. The program
-// finds skein in $SKEIN_EXE, which skein run sets, so the program has no
-// path of the build tree.
 fn skein_run_command(path: u8[:]) -> u8[>..] {
     return str("exec \"${SKEIN_EXE:-skein}\" run ", shell_quoted(project_path(path)));
 }
 
-// The directory of the results of model `model`, run with the --set words
-// `sets`: .skein/results/<model>, and with --set, set/<words> in it. The
-// words are joined by ',', with no spaces and with '_' for '/'. So a run
-// with other values does not write over the results of the model, and a
-// submodel finds the state of the case that it needs (spec §15.1).
 fn results_path(model: u8[:], sets: const u8[:][:]) -> u8[>..] { return set_path(".skein/results/", model, sets); }
 
-// The directory `root`<model>, and with --set, set/<words> in it.
 fn set_path(root: u8[:], model: u8[:], sets: const u8[:][:]) -> u8[>..] {
     var p = str(root, model);
     for w, i in sets {
@@ -729,9 +634,6 @@ fn call_args(value: i64, fn_name: u8[:], count: i64) -> bool {
 
 fn arg(value: i64, i: i64) -> Val { eval(syntax::nodes[syntax::child(value, i + 1)].first) }
 
-// The shape of a solid expression: a box, a cylinder along z, a cylinder
-// minus a cylinder, or a tube & a box, with names of solids in place of
-// each.
 recursive fn shape_of(value: i64) -> Shape {
     var out = Shape { kind: -1, lo: [0.0, 0.0, 0.0], hi: [0.0, 0.0, 0.0], cx: 0.0, cy: 0.0, first: 0, count: 0 };
     let k = kind(value);
@@ -807,8 +709,6 @@ recursive fn shape_of(value: i64) -> Shape {
 
 let UNION_FIX = "write a union of boxes, for example box((0, 0, 0) mm, (25, 5, 0.73) mm) | box((0, 0, 0.73) mm, (25, 5, 0.75) mm)";
 
-// The boxes of shape `sh`, a box or a union, at the end of union_boxes. It
-// gives the first box and the count.
 fn copy_boxes(sh: Shape) -> i64, i64 {
     let first = union_boxes.len / 6;
     if sh.kind == BOX {
@@ -820,7 +720,6 @@ fn copy_boxes(sh: Shape) -> i64, i64 {
     return first, sh.count;
 }
 
-// `a | b` of two boxes or unions of boxes.
 recursive fn box_union(value: i64) -> Shape {
     let a = shape_of(syntax::child(value, 0));
     let b = shape_of(syntax::child(value, 1));
@@ -841,8 +740,6 @@ recursive fn box_union(value: i64) -> Shape {
     return out;
 }
 
-// Whether `value` has the form of a solid that this package meshes: a
-// name, a box, a cylinder, or a -, & or | of them (shape_of).
 fn core_solid(value: i64) -> bool {
     let k = kind(value);
     if k == syntax::N_NAME || call_args(value, "box", 2) || call_args(value, "cylinder", 4) { return true; }
@@ -850,8 +747,6 @@ fn core_solid(value: i64) -> bool {
                                      syntax::text(tok(value)) == "|");
 }
 
-// `let wall: Solid = ...`. A solid of another form goes to the mesher lane
-// (mesher_read in lane_mesher.goose), which then meshes the model.
 fn solid(n: i64, value: i64) {
     if !core_solid(value) && solid_tok < 0 && mesher_read(n, value) {
         mesh_lane = MESHER;
@@ -867,9 +762,6 @@ fn solid(n: i64, value: i64) {
     shapes.push(sh);
 }
 
-// The solid that the mesh, the physics and the surfaces are on. The first
-// of these to name a solid chooses it. It gives false, after an error, if
-// `region` is not that solid or cannot be meshed.
 fn on_domain(region: i64, what: u8[:]) -> bool {
     if mesh_lane != CORE {
         if kind(region) == syntax::N_NAME && name(region) == solid_name { return true; }
@@ -904,8 +796,6 @@ let FACE_FIX = "write the surface as boundary(beam, x == 0 mm), with x, y or z e
 
 fn near(a: f64, b: f64, size: f64) -> bool { abs(a - b) <= 1.0e-9 * size }
 
-// The face of the domain where `axis` == v, as a face of the lattice, or
-// -1 for the axis if it is not a face.
 fn plane_face(axis: i64, v: f64) -> i64, f64 {
     let d = domain;
     if d.kind == BOX || d.kind == UNION {
@@ -920,15 +810,9 @@ fn plane_face(axis: i64, v: f64) -> i64, f64 {
     return -1, 0.0;
 }
 
-// The names of the lattice axes in the set names of the mesh.
 let BOX_SETS = ["x", "y", "z"];
 let SECTOR_SETS = ["r", "t", "z"];
 
-// `let root: Surface = boundary(beam, x == value)`, or
-// `let inner: Surface = boundary(wall, bore)` with bore a cylinder. A
-// surface of a geometry of the mesher lane goes to mesher_surface
-// (lane_mesher.goose), and of the shells lane to shells_surface
-// (lane_shells.goose).
 fn surface(n: i64, value: i64) {
     if mesh_lane != CORE {
         var g = Face { name: [], axis: -1, value: 0.0, set: [] };
@@ -977,8 +861,6 @@ fn surface(n: i64, value: i64) {
     faces.push(f);
 }
 
-// `let p: Point = point((x, y, z) mm)`: a value, and the node set of a face
-// that a bc can hold.
 fn point(n: i64, value: i64) {
     if !call_args(value, "point", 1) {
         unsupported(tok(value), str("the point '", name(n), "' is not point((x, y, z) mm)"), "write let p: Point = point((0, 0, 0) mm)");
@@ -993,13 +875,11 @@ fn point(n: i64, value: i64) {
     point_sets.push(PointSet { face: faces.len - 1, at: at.v, held: false });
 }
 
-// `let` and `param`.
 fn value_item(n: i64) {
     let ty = syntax::child(n, 0);
     let value = syntax::child(n, 1);
     let t = if kind(ty) == syntax::N_TYPE_NAME { name(ty) } else { "" };
     let shell_type = t == "Surface" || t == "Curve";
-    // A model with no solid can have a shell or beam geometry of the shells lane.
     if shell_type && solid_tok < 0 && shells_read_geometry(n, value) {
         mesh_lane = SHELLS;
         set64(solid_name, name(n));
@@ -1019,7 +899,6 @@ fn value_item(n: i64) {
     value_nodes.push(value);
 }
 
-// A material item. The physics evaluates its properties (laws).
 fn material(n: i64) {
     var w: u8[..64] = [];
     set64(w, name(n));
@@ -1036,9 +915,6 @@ fn material(n: i64) {
     }
 }
 
-// The E, nu and the thermal strain of each law, with the properties of its
-// material. A model with one material and no material statement in the
-// physics gives that material to the whole solid.
 fn evaluate_laws() {
     if laws.len == 0 && material_nodes.len == 1 {
         laws.push(Law { material: 0, region: -1, young: 0.0, poisson: -1.0, strain: 0.0, tok: tok(material_nodes[0]) });
@@ -1062,7 +938,6 @@ fn evaluate_laws() {
     }
 }
 
-// `material m, n on r, ...` of the physics.
 fn material_laws(c: i64) {
     var m = syntax::nodes[c].first;
     while m >= 0 {
@@ -1118,7 +993,6 @@ fn physics(n: i64) {
     }
     physics_tok = tok(n);
     set64(physics_name, name(n));
-    // A template of a lane goes to its generator (dispatch.goose).
     var c0 = syntax::nodes[n].first;
     while c0 >= 0 {
         if kind(c0) == syntax::N_USES && template_lane(name(c0)) > CORE {
@@ -1170,9 +1044,6 @@ fn physics(n: i64) {
     }
 }
 
-// `hooke(E, nu, strain(u))` or `hooke(E, nu, strain(u) - X*I)` with X the
-// thermal strain, for example alpha*(T - T0) with constant temperatures
-// (spec §10.4). It sets thermal_node to X. False after an error.
 fn hooke_let(v: i64) -> bool {
     let strain = str("strain(", unknown_name, ")");
     let good = call_args(v, "hooke", 3) && source_of(syntax::nodes[syntax::child(v, 1)].first) == "E" &&
@@ -1218,8 +1089,6 @@ fn method(n: i64) {
 
 let BC_FIX = "write bc root: u = 0, bc sym: u.x = 0, bc tip: sigma*n = (0, 0, -1) MPa, or bc inner: sigma*n = -p*n";
 
-// The scale s of `value` == s*n, with n the unit normal. False if `value`
-// is not a scalar times n.
 recursive fn normal_scale(value: i64) -> bool, f64 {
     let k = kind(value);
     if k == syntax::N_NAME && name(value) == "n" && find_value("n") < 0 { return true, 1.0; }
@@ -1239,7 +1108,6 @@ recursive fn normal_scale(value: i64) -> bool, f64 {
     return false, 0.0;
 }
 
-// A `bc` item or statement. It gives its index in `bcs`, or -1.
 fn bc(n: i64) -> i64 {
     let region = syntax::child(n, 0);
     let target = syntax::child(n, 1);
@@ -1290,8 +1158,7 @@ fn step(n: i64) {
                    first_bc: 0, bc_count: 0, first_report: reports.len, report_count: 0, output: false };
     set64(s.name, name(n));
     set64(s.solver, "cg");
-    set64(s.preconditioner, "amg");   // spec §14.4
-    // A procedure of a lane goes to its generator (dispatch.goose).
+    set64(s.preconditioner, "amg");
     let p = procedure_lane(name(proc));
     if p > CORE {
         s.procedure = p;
@@ -1339,8 +1206,6 @@ fn step(n: i64) {
 
 let SOLVE_FIX = "write solve { linear: cg, precond: amg }, or precond: jacobi";
 
-// `solve { linear: <solver>, precond: <preconditioner> }`. A pair other
-// than cg with jacobi goes to the solvers lane (lane_solvers.goose).
 fn solve(n: i64, s: Step&) {
     var c = syntax::nodes[syntax::nodes[n].first].first;
     while c >= 0 {
@@ -1363,8 +1228,6 @@ fn solve(n: i64, s: Step&) {
 
 let REPORT_FIX = "write report reaction(root), or report u.z at (100, 5, 5) mm";
 
-// The kinds of a report: the reaction on a face, or u or one component of u
-// at a point.
 fn report(item: i64) {
     let e = syntax::nodes[item].first;
     if kind(e) == syntax::N_CALL && name(syntax::child(e, 0)) == "reaction" && syntax::child_count(e) == 2 {
@@ -1382,7 +1245,6 @@ fn report(item: i64) {
     reports.push(r);
 }
 
-// The component of `u at p`: 0, 1 or 2, or 3 for the whole vector, or -1.
 fn point_field(e: i64) -> i64 {
     let f = syntax::child(e, 0);
     var comp = -1;
@@ -1401,8 +1263,6 @@ fn point_field(e: i64) -> i64 {
     return comp;
 }
 
-// Whether `e` is a sum of components of u at points: u.z at p, and + and -
-// of these, for example u.z at corner - u.z at centre.
 recursive fn point_sum(e: i64) -> bool {
     let k = kind(e);
     if k == syntax::N_AT {
@@ -1416,13 +1276,10 @@ recursive fn point_sum(e: i64) -> bool {
     return false;
 }
 
-// Emits the samples of the point sum `e` (point_sum), from sample `at` on,
-// and appends its value in Goose to `expr`.
 recursive fn emit_point_sum(out: u8[>..]&, e: i64, at: i64&, expr: u8[>..]&) {
     let k = kind(e);
     if k == syntax::N_AT {
         at++;
-        // The block of the report or the expect indents the first line.
         format(out, if at == 1 { "    let ux" } else { "        let ux" }, at, ", uy", at, ", uz", at, " = runtime::displacement_at(");
         lits(out, eval(syntax::child(e, 1)).v);
         out.append(");\n");
@@ -1445,7 +1302,6 @@ recursive fn emit_point_sum(out: u8[>..]&, e: i64, at: i64&, expr: u8[>..]&) {
 let SIGMA_COMPONENTS = ["xx", "yy", "zz", "yz", "xz", "xy"];
 let EXPECT_FIX = "write expect tip: u.z at (100, 5, 5) mm == -0.19 mm within 2%, or sigma.xx at a point, or reaction(root).z";
 
-// An `expect` item (step -1), or an `expect` of step `step`.
 fn expect(n: i64, step: i64) {
     let left = syntax::child(n, 0);
     let right = syntax::child(n, 1);
@@ -1466,8 +1322,6 @@ fn expect(n: i64, step: i64) {
         x.comp = c;
         x.at = eval(syntax::child(left, 1)).v;
     } else if kind(left) == syntax::N_AT && object >= 0 && name(object) != unknown_name {
-        // An expect on a field this slice cannot sample stays, and the
-        // report says that it did not run.
         var s: u8[..256] = [];
         set256(s, str(name(n), ": ", source_of(left), " is not in this slice"));
         skipped.push(s);
@@ -1524,8 +1378,6 @@ fn header(n: i64) {
     unsupported(tok(sys), "the unit system is not in this slice", "write SI, mm_N_MPa_s or mm_kg_ms");
 }
 
-// Reads the program `prog` into the model above. False on an error, and
-// `syntax::errors` holds the errors.
 fn read(prog: i64) -> bool {
     reset();
     var c = syntax::nodes[prog].first;
@@ -1535,8 +1387,6 @@ fn read(prog: i64) -> bool {
             header(c);
         } else if k == syntax::N_LET || k == syntax::N_PARAM {
             value_item(c);
-            // The items after a wrong solid, surface or value give only
-            // follow-on errors.
             if !ok() { return false; }
         } else if k == syntax::N_TABLE {
             var w: u8[..64] = [];
@@ -1572,8 +1422,6 @@ fn read(prog: i64) -> bool {
     if physics_tok < 0 { unsupported(at, "the model has no physics", PHYSICS_FIX); }
     if material_name.len == 0 { unsupported(at, "the model has no material", "add material steel { E: Pressure = 210 GPa, nu: Real = 0.3 }"); }
     if steps.len == 0 { unsupported(at, "the model has no step", "add step load: static { bc root: u = 0 ... }"); }
-    // A cell other than hex of order 2 goes to the lane that meshes the
-    // geometry: the mesher, the shells or the elements lane (lane_*.goose).
     let lane_cell = if mesh_lane == MESHER { mesher_cell(cell_name, order) }
                     else if mesh_lane == SHELLS { shells_cell(cell_name, order) }
                     else { elements_cell(cell_name, order) };
@@ -1584,7 +1432,6 @@ fn read(prog: i64) -> bool {
         }
     }
     if incompatible {
-        // The runtime has the incompatible modes on the box mesh only (hex8i).
         if thermal_node >= 0 {
             unsupported(family_tok, "this slice has no thermal strain on the incompatible modes", "remove the family");
         }
@@ -1607,7 +1454,6 @@ fn read(prog: i64) -> bool {
     return ok();
 }
 
-// Puts `b` in `set`, in place of a bc on the same face and target.
 fn merge(set: Bc[>..]&, b: Bc) {
     for i in 0..set.len {
         if set[i].face == b.face && set[i].fix == b.fix {
@@ -1618,9 +1464,6 @@ fn merge(set: Bc[>..]&, b: Bc) {
     set.push(b);
 }
 
-// The bcs that hold in each step (spec §12.2): the top-level bcs, wherever
-// they are in the file, then the bcs of each step from that step on. A
-// later bc replaces an earlier one on the same face and target.
 fn step_bcs() {
     var set: Bc[>..] = [];
     for g in global_bcs { merge(set, bcs[g]); }
@@ -1635,13 +1478,11 @@ fn step_bcs() {
 
 fn same_plane(a: i64, b: i64) -> bool { faces[a].set == faces[b].set }
 
-// A fixed face and its fixed components, one bit for each.
 struct Fixed {
     face: i64,
     mask: i64,
 }
 
-// The fixed faces of step `si`, one for each plane.
 fn fixed_faces(si: i64) -> Fixed[>..] {
     let s = steps[si];
     var out: Fixed[>..] = [];
@@ -1659,7 +1500,6 @@ fn fixed_faces(si: i64) -> Fixed[>..] {
     return out;
 }
 
-// The fixed components of face `face` in step `si`.
 fn fixed_mask(si: i64, face: i64) -> i64 {
     for f in fixed_faces(si) {
         if same_plane(f.face, face) { return f.mask; }
@@ -1675,11 +1515,6 @@ fn same_fixed(a: Fixed[:], b: Fixed[:]) -> bool {
     return true;
 }
 
-// The runtime keeps the supports from step to step, so each step must fix
-// the same faces. The check equilibrium uses the total reaction, which
-// counts each fixed node once, so two fixed faces can share nodes. A
-// reaction of a fixed face that shares nodes with another fixed face that
-// fixes the same component fails when the program runs (emit_alone).
 fn supports() {
     let a = fixed_faces(0);
     if a.len == 0 {
@@ -1717,7 +1552,6 @@ fn supports() {
     }
 }
 
-// The token of the first bc on face `f`.
 fn bc_tok_of(f: i64) -> i64 {
     for b in bcs {
         if b.face == f { return b.tok; }
@@ -1725,7 +1559,6 @@ fn bc_tok_of(f: i64) -> i64 {
     return physics_tok;
 }
 
-// The token of the fixed bc on face `f` in step `si`.
 fn bc_tok(si: i64, f: i64) -> i64 {
     let s = steps[si];
     for b in active[s.first_bc..s.first_bc + s.bc_count] {
@@ -1734,11 +1567,8 @@ fn bc_tok(si: i64, f: i64) -> i64 {
     return physics_tok;
 }
 
-// --- the Goose program -------------------------------------------------------------
-
 let AXES = ["runtime::X", "runtime::Y", "runtime::Z"];
 
-// The text of a Goose float literal.
 fn lit(out: u8[>..]&, x: f64) {
     if x == 0.0 { out.append("0.0"); return; }
     format(out, x);
@@ -1752,7 +1582,6 @@ fn lits(out: u8[>..]&, v: f64[3]) {
     lit(out, v[2]);
 }
 
-// A Goose string literal.
 fn quoted(out: u8[>..]&, s: u8[:]) {
     out.push('"');
     for c in s {
@@ -1762,10 +1591,6 @@ fn quoted(out: u8[>..]&, s: u8[:]) {
     out.push('"');
 }
 
-// What a case of a study shares with case 1 (spec §20.4). Case 1 writes
-// its first `stages` stages in `dir`, and each other case (`reads`) reads
-// them in place of their work. Stage 1 is the mesh. Stage 2 is the solve of
-// each step, so a case that reads it runs only the post-processing.
 struct Share {
     dir: u8[..1024],
     stages: i64,
@@ -1774,9 +1599,6 @@ struct Share {
 
 fn no_share() -> Share { return Share { dir: [], stages: 0, reads: false }; }
 
-// The call `call(dir)`, or `call(dir, step)` when `step` is not empty, of a
-// case that shares stages, made only when the condition `when` holds. The
-// case stops when the call fails.
 fn emit_share(out: u8[>..]&, when: u8[:], call: u8[:], share: Share, step: u8[:]) {
     format(out, "    if ", when, "!", call, "(");
     quoted(out, share.dir);
@@ -1789,7 +1611,6 @@ fn emit_share(out: u8[>..]&, when: u8[:], call: u8[:], share: Share, step: u8[:]
     out.append(");\n        write_stderr(\"\\n\");\n        exit(1);\n    }\n");
 }
 
-// The part of the generated program that is the same for each model.
 let PRELUDE = """
     // The reports and the verification records, in TOON (command_line.md §6).
     var reports: u8[>..] = [];
@@ -1955,12 +1776,9 @@ fn emit_face_call(out: u8[>..]&, b: Bc) {
     }
 }
 
-// The largest load of step `si`, in the variable `largest`: the size of a
-// traction times the area of its face (runtime::face_area).
 fn emit_largest_load(out: u8[>..]&, si: i64) {
     let s = steps[si];
     out.append("    var largest = 0.0;\n");
-    // A thermal load sums to 0: its scale is the sum of its positive loads.
     if thermal_node >= 0 { out.append("    largest = max(largest, runtime::load_spread());\n"); }
     for b in active[s.first_bc..s.first_bc + s.bc_count] {
         if b.fix != 0 { continue; }
@@ -1972,8 +1790,6 @@ fn emit_largest_load(out: u8[>..]&, si: i64) {
     }
 }
 
-// The components of a reaction that the fixed components `mask` hold, with
-// 0.0 for each other component.
 fn reaction_parts(mask: i64) -> u8[>..] {
     var out: u8[>..] = [];
     for c in 0..3 {
@@ -1992,7 +1808,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: Share) {
     } else {
         emit_solve(out, si, share);
     }
-    // The reaction on all fixed dofs, each once, for the check `equilibrium`.
     out.append("    let rx, ry, rz = runtime::total_reaction();\n");
     emit_largest_load(out, si);
     format(out, "    equilibrium(rx, ry, rz, largest, \"", system.force, "\");\n");
@@ -2010,7 +1825,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:], share: Share) {
     out.append("}\n\n");
 }
 
-// The supports and the loads of step `si`, and its solve.
 fn emit_solve(out: u8[>..]&, si: i64, share: Share) {
     let s = steps[si];
     if si > 0 {
@@ -2053,8 +1867,6 @@ fn emit_point(out: u8[>..]&, at: f64[3]) {
     out.append(");\n");
 }
 
-// Emits `alone`: false if face `fi` shares nodes with another fixed face of
-// step `si` that fixes a component in `mask`.
 fn emit_alone(out: u8[>..]&, si: i64, fi: i64, mask: i64) {
     out.append("        var alone = true;\n");
     for g in fixed_faces(si) {
@@ -2145,9 +1957,6 @@ fn emit_expect(out: u8[>..]&, x: Expect) {
     out.append(if reaction { "); }\n    }\n" } else { ");\n    }\n" });
 }
 
-// Writes the Goose program of the model that `read` read. The program
-// imports the runtime from `runtime_path` and writes its VTU files under
-// `results_dir`. In a study, it writes or reads the stages of `share`.
 fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&) {
     format(out, "// Generated by skein run from the model ", model_name, ". Do not edit it: edit the model.\n");
     format(out, "// All values are in the units of the model: length in ", system.length, ", force in ",
@@ -2155,7 +1964,6 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&
     out.append("import std;\nimport os;\nimport runtime from ");
     quoted(out, runtime_path);
     out.append(";\n");
-    // solvers lane: the runtime imports the package solvers (lane_solvers.goose).
     out.append("import solvers from ");
     quoted(out, str(runtime_path, "/../solvers"));
     out.append(";\n");
@@ -2202,9 +2010,6 @@ fn generate(runtime_path: u8[:], results_dir: u8[:], share: Share, out: u8[>..]&
     out.append("}\n");
 }
 
-// The material of each region of the laws, box by box (runtime::material_box).
-// A thermal strain of the first law without a region holds in the bounds of
-// the solid.
 fn emit_laws(out: u8[>..]&) {
     for w, i in laws {
         if w.region < 0 && (i > 0 || w.strain == 0.0) { continue; }
@@ -2230,11 +2035,6 @@ fn emit_laws(out: u8[>..]&) {
     }
 }
 
-// The grid lines along axis `a` of the union of boxes of the domain: each
-// face of each box, and each Point that a bc holds, is a grid plane.
-// Between two planes, the grid has the fewest equal cells of at most the
-// mesh size. The program meshes the same grid (runtime::mesh_union): this
-// copy gives only the dof estimate.
 fn grid_lines(a: i64) -> f64[>..] {
     let lo = domain.lo[a];
     let hi = domain.hi[a];
@@ -2260,8 +2060,6 @@ fn grid_lines(a: i64) -> f64[>..] {
     return out;
 }
 
-// The grid of the union of boxes, and the node set of each Point that a
-// bc holds.
 fn emit_grid_mesh(out: u8[>..]&) {
     format(out, "    // mesh on ", solid_name, ": 27-node hexahedra of at most ", mesh_size, " ", system.length,
            ", with a grid plane on each face of each box and through each held Point\n");
@@ -2293,8 +2091,6 @@ fn emit_grid_mesh(out: u8[>..]&) {
     }
 }
 
-// The dofs of the mesh of the model that `read` read: 3 at each node of
-// the lattice of 27-node hexahedra (emit_core_mesh), at most.
 fn dof_estimate() -> i64 {
     var nodes = 1;
     if domain.kind == UNION {
@@ -2309,8 +2105,6 @@ fn dof_estimate() -> i64 {
     return 3 * nodes;
 }
 
-// The box or the sector of the domain, by the lattice mesher, or the union
-// of boxes by the grid mesher.
 fn emit_core_mesh(out: u8[>..]&) {
     if domain.kind == UNION { emit_grid_mesh(out); return; }
     let d = domain;

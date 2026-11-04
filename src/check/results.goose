@@ -1,5 +1,3 @@
-// `results(file, step:, case:)` (spec §15.1): the checker reads the other
-// model and gives each of its unknowns a type.
 import std;
 import os;
 namespace check;
@@ -9,7 +7,6 @@ import .state;
 import .expr;
 import .typeexpr;
 
-// The directory of the file of token `tok`, with its final '/', or "".
 fn dir_of(tok: i64) -> u8[>..] {
     let path = syntax::files[syntax::tokens[tok].file].path;
     var cut = -1;
@@ -21,16 +18,12 @@ fn dir_of(tok: i64) -> u8[>..] {
     return d;
 }
 
-// The string literal at token `tok`, without its quotes.
 fn string_value(tok: i64) -> const u8[:] {
     let s = syntax::text(tok);
     if s.len < 2 { return s; }
     return s[1..s.len - 1];
 }
 
-// The type of `results(file, step: name, case: p)`. `file`, `step` and
-// `case` are the argument nodes (N_ARG children were already unwrapped).
-// `step` and `case` may be -1.
 fn results_ty(tok: i64, file: i64, step: i64, case: i64) -> Ty {
     guard syntax::nodes[file].kind == syntax::N_STRING else {
         error(first_tok(file), "type_mismatch", "the file of results must be a string", "write the path in quotes");
@@ -46,15 +39,11 @@ fn results_ty(tok: i64, file: i64, step: i64, case: i64) -> Ty {
     let res = results_count;
     results_count++;
     let f = syntax::add_file(path, text);
-    // The syntax errors of the other file stay in syntax::errors: the
-    // checker copied the errors of the model before it came here.
     syntax::lex(f);
     let prog = syntax::parse(f);
     var steps: u8[>..] = [];
     var found = step < 0;
     let want = if step >= 0 && syntax::nodes[step].kind == syntax::N_STRING { string_value(syntax::nodes[step].tok) } else { "" };
-    // `case: p` names a param of this model. The other model has a param
-    // of the same name and type, and runs with the value of p (spec §15.1).
     let case_name = if case >= 0 && syntax::nodes[case].kind == syntax::N_NAME { tok_text(syntax::nodes[case].tok) } else { "" };
     var case_sym = -1;
     if case >= 0 {
@@ -81,7 +70,6 @@ fn results_ty(tok: i64, file: i64, step: i64, case: i64) -> Ty {
         if k.kind == syntax::N_PHYSICS {
             var c = k.first;
             while c >= 0 {
-                // The unknowns and the `let` fields of the physics (spec §15.1).
                 if syntax::nodes[c].kind == syntax::N_UNKNOWN || syntax::nodes[c].kind == syntax::N_LET {
                     var t = type_of(syntax::nodes[c].first, false);
                     t.varying = true;

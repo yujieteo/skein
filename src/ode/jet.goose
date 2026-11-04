@@ -1,8 +1,3 @@
-// Truncated Taylor series in time ("jets") of the package ode. A jet is
-// the coefficients c_k = f^(k)(t) / k! of a function at one time, k = 0 to
-// JN - 1. The arithmetic of two jets is the arithmetic of the series, so
-// `ddt` of any expression of the unknowns is exact. A jet loses its last
-// coefficient at each ddt: a model uses at most JN - 1 nested ddt.
 import std;
 import math;
 namespace ode;
@@ -25,7 +20,6 @@ fn jmul(a: f64[5], b: f64[5]) -> f64[5] {
     return r;
 }
 
-// a / b: the series q with q b = a.
 fn jdiv(a: f64[5], b: f64[5]) -> f64[5] {
     var q: f64[5] = [0.0; 5];
     for k in JN {
@@ -36,10 +30,8 @@ fn jdiv(a: f64[5], b: f64[5]) -> f64[5] {
     return q;
 }
 
-// d/dt: c'_k = (k + 1) c_(k+1). The top coefficient is lost.
 fn jddt(a: f64[5]) -> f64[5] { return [a[1], 2.0 * a[2], 3.0 * a[3], 4.0 * a[4], 0.0]; }
 
-// sin and cos of a: s' = a' c and c' = -a' s.
 fn jsin(a: f64[5]) -> f64[5] {
     var s: f64[5] = [sin(a[0]), 0.0, 0.0, 0.0, 0.0];
     var c: f64[5] = [cos(a[0]), 0.0, 0.0, 0.0, 0.0];
@@ -72,8 +64,6 @@ fn jcos(a: f64[5]) -> f64[5] {
     return c;
 }
 
-
-// exp(a): e' = a' e.
 fn jexp(a: f64[5]) -> f64[5] {
     var e: f64[5] = [exp(a[0]), 0.0, 0.0, 0.0, 0.0];
     for k in 1..JN {
@@ -84,7 +74,6 @@ fn jexp(a: f64[5]) -> f64[5] {
     return e;
 }
 
-// ln(a): a l' = a'.
 fn jlog(a: f64[5]) -> f64[5] {
     var l: f64[5] = [log(a[0]), 0.0, 0.0, 0.0, 0.0];
     for k in 1..JN {
@@ -95,7 +84,6 @@ fn jlog(a: f64[5]) -> f64[5] {
     return l;
 }
 
-// sqrt(a): s s = a.
 fn jsqrt(a: f64[5]) -> f64[5] {
     var s: f64[5] = [sqrt(a[0]), 0.0, 0.0, 0.0, 0.0];
     for k in 1..JN {
@@ -106,7 +94,6 @@ fn jsqrt(a: f64[5]) -> f64[5] {
     return s;
 }
 
-// a to the whole power n.
 fn jpow(a: f64[5], n: i64) -> f64[5] {
     var r = jconst(1.0);
     for i in abs(n) { r = jmul(r, a); }

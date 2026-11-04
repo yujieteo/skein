@@ -1,12 +1,8 @@
-// The results of the package optim: the VTU file of u at the nodes and
-// of the density of each cell.
 import std;
 import os;
 namespace optim;
 import .q4;
 
-// Writes u (as `name`) and the density `rho` to the ASCII VTU file `path`.
-// False if the file cannot be written.
 fn write_vtu(path: const u8[:], name: const u8[:]) -> bool {
     guard u.len == dof_count() else { abort("write_vtu: a solve"); }
     var out: u8[>..] = [];
@@ -29,7 +25,6 @@ fn write_vtu(path: const u8[:], name: const u8[:]) -> bool {
     }
     out.append("</DataArray>\n<DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\n");
     for c in cell_count() { format(out, 4 * (c + 1), "\n"); }
-    // VTK_QUAD (9).
     out.append("</DataArray>\n<DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\n");
     for c in cell_count() { out.append("9\n"); }
     format(out, "</DataArray>\n</Cells>\n<PointData>\n<DataArray type=\"Float64\" Name=\"", name, "\" NumberOfComponents=\"3\" format=\"ascii\">\n");

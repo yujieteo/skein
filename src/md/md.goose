@@ -1,18 +1,9 @@
-// `skein md` (docs/command_line.md §11). It writes a model as one Markdown
-// document that a person reads: the header, then each item in the order of
-// the file, with the line of each item, so that a reader can find each part
-// in the source.
-//
-// The math is TeX inside `$...$` and `$$...$$`, as GitHub and the common
-// Markdown readers render it. The document holds the model only, never
-// results. It holds no date, so the same model always gives the same text.
 import std;
 import os;
 namespace md;
 import syntax from "../syntax";
 import check from "../check";
 
-// The document, as `write_model` makes it.
 var out: u8[>..];
 
 fn node_kind(n: i64) -> i64 { syntax::nodes[n].kind }
@@ -21,10 +12,6 @@ fn node_line(n: i64) -> i64 { syntax::tokens[syntax::nodes[n].tok].line }
 fn first(n: i64) -> i64 { syntax::nodes[n].first }
 fn next(n: i64) -> i64 { syntax::nodes[n].next }
 
-// --- text -----------------------------------------------------------------------------
-
-// Appends `s` as Markdown text: each punctuation character that Markdown
-// gives a meaning to has a backslash.
 fn text(s: u8[:]) {
     for c in s {
         if contains("\\`*_[]<>#|$~", c) { out.push('\\'); }
@@ -32,18 +19,10 @@ fn text(s: u8[:]) {
     }
 }
 
-// The math holds no backslash before a punctuation character, such as `\,`
-// or `\_`. Reason: GitHub applies the Markdown escapes inside `$...$`, so
-// `\_` arrives as `_`, and the other readers do not.
-
-// Appends the identifier `s` inside math, with each `_` as a comma, as in a
-// subscript `cell,x`.
 fn ident(s: u8[:]) {
     for c in s { out.push(if c == '_' { ',' } else { c }); }
 }
 
-// Appends `s` inside \text. The characters that TeX gives a meaning to
-// become spaces, and `_` is a line under a space, outside the \text.
 fn plain(s: u8[:]) {
     for c in s {
         if c == '_' {
@@ -54,8 +33,8 @@ fn plain(s: u8[:]) {
     }
 }
 
-// Appends `s` as inline code. Skein names and types hold no backquote.
 fn code(s: u8[:]) {
+    for c in s { if c == '`' { abort(str("md: backquote in a name or type: ", s)); } }
     out.push('`');
     out.append(s);
     out.push('`');
@@ -63,12 +42,8 @@ fn code(s: u8[:]) {
 
 fn code_node(n: i64) { code(node_text(n)); }
 
-// The source line of `n`, in parentheses.
 fn line_note(n: i64) { format(out, " (line ", node_line(n), ")"); }
 
-// --- types ----------------------------------------------------------------------------
-
-// Appends the type `n` in Skein notation, for example `Vector<Length>`.
 recursive fn type_str(n: i64, s: u8[>..]&) {
     match node_kind(n) {
         syntax::N_TYPE_APPLY => {
@@ -80,8 +55,6 @@ recursive fn type_str(n: i64, s: u8[>..]&) {
         syntax::N_DIM_MUL, syntax::N_DIM_DIV => {
             type_str(first(n), s);
             s.append(node_text(n));
-            // The products are left to right, so a product on the right
-            // had parentheses.
             let r = next(first(n));
             let wrap = node_kind(r) == syntax::N_DIM_MUL || node_kind(r) == syntax::N_DIM_DIV;
             if wrap { s.push('('); }
@@ -97,21 +70,17 @@ recursive fn type_str(n: i64, s: u8[>..]&) {
     }
 }
 
-// The type `n` as inline code.
 fn type_code(n: i64) {
     var s: u8[>..] = [];
     type_str(n, s);
     code(s);
 }
 
-// True for the type of a geometry value, which the document gives in words.
 fn is_geometry_type(n: i64) -> bool {
     if node_kind(n) != syntax::N_TYPE_NAME { return false; }
     let s = node_text(n);
     return s == "Solid" || s == "Surface" || s == "Curve" || s == "Point";
 }
-
-// --- math -----------------------------------------------------------------------------
 
 let GREEK = [
     "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa",
@@ -127,8 +96,6 @@ fn all_digits(s: u8[:]) -> bool {
     return s.len > 0;
 }
 
-// A name without `_`: a Greek letter, one letter, a letter and digits, or an
-// italic word.
 fn math_word(s: u8[:]) {
     if contains(GREEK, s) {
         out.push('\\');
@@ -145,7 +112,6 @@ fn math_word(s: u8[:]) {
     }
 }
 
-// A name: `h_air` is h with the subscript "air", and `sigma` is σ.
 fn math_name(s: u8[:]) {
     let i = find(s, "_");
     if i <= 0 || i == s.len - 1 {
@@ -158,7 +124,6 @@ fn math_name(s: u8[:]) {
     out.append("}}");
 }
 
-// A number. `1e7` is 1 × 10^7.
 fn math_number(s: u8[:]) {
     var e = find(s, "e");
     if e < 0 { e = find(s, "E"); }
@@ -171,7 +136,6 @@ fn math_number(s: u8[:]) {
     format(out, "10^{", exp, "}");
 }
 
-// The units that take an SI prefix (syntax/units.goose).
 fn micro(s: u8[:]) -> bool {
     s.len > 1 && s[0] == 'u' && contains(syntax::PREFIXED, s[1..])
 }
@@ -214,7 +178,6 @@ recursive fn math_unit(n: i64) {
     }
 }
 
-// The unit of a literal, after a thin space, if it has one.
 fn unit_after(n: i64) {
     let u = syntax::child_of_kind(n, syntax::N_UNIT);
     if u < 0 { return; }
@@ -222,7 +185,6 @@ fn unit_after(n: i64) {
     math_unit(u);
 }
 
-// The precedence of an operator of kind `k` (spec §7.1), times 10.
 fn op_prec(k: i64) -> i64 {
     match k {
         syntax::TK_OROR, syntax::TK_BAR => 20,
@@ -235,7 +197,6 @@ fn op_prec(k: i64) -> i64 {
     }
 }
 
-// How tightly the expression `n` binds. A `-x` binds between `+` and `*`.
 fn prec(n: i64) -> i64 {
     match node_kind(n) {
         syntax::N_BINARY => op_prec(syntax::tokens[syntax::nodes[n].tok].kind),
@@ -244,7 +205,6 @@ fn prec(n: i64) -> i64 {
     }
 }
 
-// `n` in parentheses when it binds less tightly than `least`.
 recursive fn math_at(n: i64, least: i64) {
     if prec(n) >= least {
         math(n);
@@ -286,7 +246,6 @@ recursive fn math_binary(n: i64) {
         math_at(r, 60);
         return;
     }
-    // A comparison does not chain, and `a - (b - c)` keeps its parentheses.
     math_at(l, if p == 40 { 41 } else { p });
     for o, i in OPS {
         if i % 2 == 0 && o == op { format(out, " ", OPS[i + 1], " "); }
@@ -294,7 +253,6 @@ recursive fn math_binary(n: i64) {
     math_at(r, p + 1);
 }
 
-// The arguments of call `n`, from `a`, separated by commas.
 recursive fn math_args(a: i64) {
     var c = a;
     var count = 0;
@@ -311,7 +269,6 @@ let FUNCTIONS = ["exp", "sin", "cos", "tan", "tanh", "ln", "max", "min", "det"];
 recursive fn math_call(n: i64) {
     let callee = first(n);
     let args = next(callee);
-    // The value of the first argument.
     let a = if args >= 0 { first(args) } else { -1 };
     let name = if node_kind(callee) == syntax::N_NAME { node_text(callee) } else { "" };
     let one = args >= 0 && next(args) < 0;
@@ -357,7 +314,6 @@ recursive fn math_call(n: i64) {
     if contains(FUNCTIONS, name) {
         format(out, "\\", name);
     } else if name.len > 0 {
-        // `von_mises` is von with the subscript "mises", as for a name.
         let i = find(name, "_");
         out.append("\\operatorname{");
         ident(if i > 0 { name[..i] } else { name });
@@ -375,8 +331,6 @@ recursive fn math_call(n: i64) {
     out.append(")");
 }
 
-// Appends the expression `n` in TeX math. Parentheses come from the
-// precedence, as the syntax tree has none.
 recursive fn math(n: i64) {
     let k = syntax::nodes[n];
     match k.kind {
@@ -387,9 +341,6 @@ recursive fn math(n: i64) {
         },
         syntax::N_PERCENT => {
             let s = node_text(n);
-            // `%` starts a comment in TeX, so a percent inside an
-            // expression is a word. `inline` writes a whole percent value
-            // with `%` after the math.
             math_number(s[..s.len - 1]);
             out.append("\\ \\text{percent}");
         },
@@ -476,7 +427,6 @@ recursive fn math(n: i64) {
     }
 }
 
-// The expression `n` in inline math.
 fn inline(n: i64) {
     if node_kind(n) == syntax::N_PERCENT {
         let s = node_text(n);
@@ -490,7 +440,6 @@ fn inline(n: i64) {
     out.push('$');
 }
 
-// The children of `n` from `c` in inline math, separated by commas.
 fn inline_list(c0: i64) {
     var c = c0;
     var count = 0;
@@ -502,7 +451,6 @@ fn inline_list(c0: i64) {
     }
 }
 
-// `left = right` as a displayed equation.
 fn equation(left: i64, right: i64) {
     out.append("$$\n");
     math(left);
@@ -511,9 +459,6 @@ fn equation(left: i64, right: i64) {
     out.append("\n$$\n\n");
 }
 
-// --- geometry in words ------------------------------------------------------------------
-
-// The value of argument `i` of call `n`, or -1.
 fn arg(n: i64, i: i64) -> i64 {
     var c = next(first(n));
     var k = 0;
@@ -524,7 +469,6 @@ fn arg(n: i64, i: i64) -> i64 {
 
 fn arg_count(n: i64) -> i64 { syntax::child_count(n) - 1 }
 
-// Appends the geometry expression `n` in words, with the values in math.
 recursive fn words(n: i64) {
     let k = syntax::nodes[n];
     if k.kind == syntax::N_BINARY {
@@ -592,15 +536,11 @@ recursive fn words(n: i64) {
     inline(n);
 }
 
-// --- blocks -------------------------------------------------------------------------------
-
-// The entries of block `b` as a list: `size: 5 mm`, `refine hole: 1 mm`.
 fn block_list(b: i64) {
     if b < 0 || first(b) < 0 { return; }
     var c = first(b);
     while c >= 0 {
         let k = node_kind(c);
-        // The expects of a study follow the list (procedure_item).
         if k == syntax::N_EXPECT {
             c = next(c);
             continue;
@@ -622,8 +562,6 @@ fn block_list(b: i64) {
     out.push('\n');
 }
 
-// A setting value: a name is a word, as in `cell: tet`, and a block is a
-// list of settings on one line.
 recursive fn setting_value(v: i64) {
     if node_kind(v) == syntax::N_NAME {
         code_node(v);
@@ -643,8 +581,6 @@ recursive fn setting_value(v: i64) {
     }
 }
 
-// A procedure with its arguments, for example `static` or `transient` with
-// $t_{\mathrm{end}} = 1\,\mathrm{s}$.
 fn procedure(p: i64) {
     code_node(p);
     if first(p) < 0 { return; }
@@ -652,9 +588,6 @@ fn procedure(p: i64) {
     inline_list(first(p));
 }
 
-// --- items --------------------------------------------------------------------------------
-
-// The groups of items. A new section starts where the group changes.
 let G_NONE = 0;
 let G_VALUES = 1;
 let G_GEOMETRY = 2;
@@ -685,14 +618,11 @@ fn group(n: i64) -> i64 {
     }
 }
 
-// True when `n` is a `param` or a `let` of a value: a row of the table of values.
 fn value_row(n: i64) -> bool {
     let k = node_kind(n);
     return k == syntax::N_PARAM || (k == syntax::N_LET && !is_geometry_type(first(n)));
 }
 
-// The table of a run of `param` and `let` items from `n`. It gives the item
-// after the run.
 fn value_table(n0: i64) -> i64 {
     out.append("| Name | Kind | Type | Value | Line |\n|---|---|---|---|---|\n");
     var n = n0;
@@ -719,8 +649,6 @@ fn value_table(n0: i64) -> i64 {
     return n;
 }
 
-// The list of a run of geometry `let` items from `n`. It gives the item
-// after the run.
 fn geometry_list(n0: i64) -> i64 {
     var n = n0;
     while n >= 0 && node_kind(n) == syntax::N_LET && is_geometry_type(first(n)) {
@@ -776,13 +704,10 @@ fn discretization_item(n: i64) {
     block_list(next(first(n)));
 }
 
-// The note after a statement of a physics: its line in the model. A
-// statement of a template has none.
 fn statement_note(c: i64, model: bool) {
     if model { line_note(c); }
 }
 
-// The statements of a physics (`model`) or a template, from `c`.
 fn physics_statements(c0: i64, model: bool) {
     var c = c0;
     while c >= 0 {
@@ -848,7 +773,6 @@ fn physics_statements(c0: i64, model: bool) {
     }
 }
 
-// The unknowns of a physics, from `c`. It gives the node after them.
 fn unknowns(c0: i64) -> i64 {
     var c = c0;
     out.append("Unknowns: ");
@@ -880,8 +804,6 @@ fn find_template(name: u8[:]) -> i64 {
     return -1;
 }
 
-// The value of template parameter `p` (the `i`-th) in the uses `u`: the
-// argument by name or by position, or the default.
 fn template_arg(u: i64, p: i64, i: i64) -> i64 {
     var a = first(u);
     var k = 0;
@@ -941,8 +863,6 @@ fn physics_item(n: i64) {
     physics_statements(p, false);
 }
 
-// The table of a run of `bc` statements from `n`. It gives the node after
-// the run.
 fn bc_table(n0: i64) -> i64 {
     out.append("| Region | Condition | Line |\n|---|---|---|\n");
     var n = n0;
@@ -974,7 +894,6 @@ fn pair_item(n: i64) {
     block_list(next(next(first(n))));
 }
 
-// An item with a procedure and a block: `symmetry` or `study`.
 fn procedure_item(n: i64, title: u8[:]) {
     format(out, "### ", title, " ");
     let c = first(n);
@@ -1078,8 +997,6 @@ fn step_item(n: i64) {
     }
 }
 
-// The table of a run of `expect` items from `n`. It gives the item after
-// the run.
 fn expect_table(n0: i64) -> i64 {
     out.append("| Name | Quantity | Expected value | Limit | Line |\n|---|---|---|---|---|\n");
     var n = n0;
@@ -1184,9 +1101,6 @@ fn other_item(n: i64) {
     }
 }
 
-// --- the document -------------------------------------------------------------------------
-
-// The base units of the named unit systems (spec §6.5).
 let SYSTEMS = [
     "SI", "m", "kg", "s", "N", "Pa", "K",
     "mm_N_MPa_s", "mm", "t", "s", "N", "MPa", "K",
@@ -1251,8 +1165,6 @@ fn scales(n: i64) {
     out.append(". The solver divides each quantity by the product of powers of these values that has its dimension.\n\n");
 }
 
-// The `//` comments at the top of the file, before the header, as the
-// introduction. The lines of one comment block make one paragraph.
 fn introduction() {
     var started = false;
     var last_line = 0;
@@ -1271,7 +1183,6 @@ fn introduction() {
     if started { out.append("\n\n"); }
 }
 
-// Writes the model `prog` of `path` to `out`. The checker has checked it.
 fn write_model(path: u8[:], prog: i64) {
     out.clear();
     let h = syntax::child_of_kind(prog, syntax::N_HEADER);
@@ -1316,12 +1227,9 @@ fn write_model(path: u8[:], prog: i64) {
             },
         }
     }
-    // One new line at the end, not a blank line.
     while out.len > 1 && out[out.len - 1] == '\n' && out[out.len - 2] == '\n' { out.resize(out.len - 1); }
 }
 
-// The first program in the syntax tables: the model. The standard library
-// comes after it.
 fn model_program() -> i64 {
     for node, i in syntax::nodes {
         if node.kind == syntax::N_PROGRAM { return i; }
@@ -1329,9 +1237,6 @@ fn model_program() -> i64 {
     return -1;
 }
 
-// Checks the model `text` of `path`, and makes its document in `result`.
-// It gives false, with the diagnostics in `check::diags`, when the model has
-// errors.
 fn md_text(path: u8[:], text: u8[:], result: u8[>..]&) -> bool {
     check::check_text(path, text);
     if check::diags.len > 0 { return false; }
@@ -1343,8 +1248,6 @@ fn md_text(path: u8[:], text: u8[:], result: u8[>..]&) -> bool {
 
 let USAGE = "usage: skein md model.skn > model.md\n";
 
-// `skein md`. `args` are the words after `md`. It writes the document to
-// standard output, and gives the exit status (command_line.md §10).
 fn run(args: const u8[:][:]) -> i64 {
     guard args.len == 1 && args[0].len > 0 && args[0][0] != '-' else {
         write_stderr(str("skein md: give one model file\n", USAGE));

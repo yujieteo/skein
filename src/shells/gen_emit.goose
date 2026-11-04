@@ -1,5 +1,3 @@
-// The program of the shell generator: the prelude, the mesh, the beams, the
-// steps, the reports and the expects, as Goose code that calls src/shells/.
 import std;
 import math;
 namespace shells_gen;
@@ -36,7 +34,6 @@ fn i64s(out: u8[>..]&, v: i64[:]) {
     out.push(']');
 }
 
-// The part of the generated program that is the same for each model.
 let PRELUDE = """
     extern "libc.so.6" {
         fn system(command: const u8&) -> i32;
@@ -834,10 +831,6 @@ let PRELUDE = """
 
 let DOF_NAMES = ["shells::UX", "shells::UY", "shells::UZ", "shells::RX", "shells::RY", "shells::RZ"];
 
-// --- the regions -------------------------------------------------------------------
-
-// The view nodes of region r, as code: lattice points, or the node at a
-// point of a model of beams.
 fn region_code(r: i64) -> u8[>..] {
     let reg = regions[r];
     var out: u8[>..] = [];
@@ -855,8 +848,6 @@ fn region_code(r: i64) -> u8[>..] {
     return out;
 }
 
-// The lattice points of region r: the point nearest to a Point, or the
-// points of the edges on a curve of the shell.
 fn region_lattice(r: i64) -> i64[>..] {
     let reg = regions[r];
     var out: i64[>..] = [];
@@ -892,10 +883,6 @@ fn region_lattice(r: i64) -> i64[>..] {
     return out;
 }
 
-// --- the beams on the grid ---------------------------------------------------------
-
-// A run of beams on lattice line points (a0, b0) to (a1, b1), of piece p
-// with beam material mat.
 struct Run {
     a0: i64,
     b0: i64,
@@ -907,7 +894,6 @@ struct Run {
 
 var runs: Run[>..];
 
-// Whether lattice segment k0 to k1 is on piece p: its middle is.
 fn segment_on(p: Piece, k0: i64, k1: i64) -> bool {
     let tol = 1.0e-6 * mesh_size;
     if p.ring {
@@ -918,8 +904,6 @@ fn segment_on(p: Piece, k0: i64, k1: i64) -> bool {
     return x >= min(p.p0[0], p.p1[0]) - tol && x <= max(p.p0[0], p.p1[0]) + tol;
 }
 
-// The runs of beams of each piece: the lattice segments of its line that
-// are on the piece and on a side of a shell cell.
 fn make_runs() {
     runs.clear();
     let ps = beam_pieces();
@@ -934,7 +918,6 @@ fn make_runs() {
             runs.push(Run { a0: 0, b0: 0, a1: 0, b1: 0, piece: pi, mat: mat });
             continue;
         }
-        // The line of the piece: a θ line, or an x line for a ring.
         var line = -1;
         let lines = if p.ring { xs[..] } else { ts[..] };
         let c = if p.ring { p.p0[0] } else { theta_of(p.p0) };
@@ -976,7 +959,6 @@ fn make_runs() {
     }
 }
 
-// The runs of the pieces of region r, as code.
 fn region_runs_code(r: i64) -> u8[>..] {
     if runs.len == 0 { make_runs(); }
     var ids: i64[>..] = [];
@@ -987,11 +969,6 @@ fn region_runs_code(r: i64) -> u8[>..] {
     return out;
 }
 
-// --- the program -------------------------------------------------------------------
-
-// Writes the Goose program of the model that `read` read. The program
-// imports the shells from `shells_path` and writes its VTU files and its
-// state under `results_dir`.
 fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     let sys = codegen::system;
     fields.clear();
@@ -1021,7 +998,6 @@ fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     body.append("    print_records();\n");
     body.append("    if failed { exit(1); }\n");
     body.append("}\n");
-    // The fields that the steps use.
     for k in fields.len { emit_field_fn(out, k); }
     out.append("fn field(f: i64, v: i64, k: i64) -> f64[9] {\n");
     for k in fields.len { format(out, "    if f == ", k, " { return field_", k, "(v, k); }\n"); }
@@ -1031,9 +1007,6 @@ fn generate(shells_path: u8[:], results_dir: u8[:], out: u8[>..]&) {
     out.append(body);
 }
 
-// Reads the state of the results value, and runs its model first if the
-// state is not there. The run of the other model is locked, so the cases
-// of a study that need the same state run it once.
 fn emit_source(out: u8[>..]&) {
     var sets: const u8[:][>..] = [];
     let dir = codegen::results_path(source_model, sets);
@@ -1054,7 +1027,6 @@ fn emit_source(out: u8[>..]&) {
     out.append(");\n");
 }
 
-// The laminates, the grid and the moves of its nodes onto the cuts.
 fn emit_shell(out: u8[>..]&) {
     let sys = codegen::system;
     for l, k in lams {
@@ -1071,7 +1043,6 @@ fn emit_shell(out: u8[>..]&) {
         }
         out.append("    secs.push(shells::laminate_section());\n");
     }
-    // The section of each cell, as runs of equal cells.
     var rle: i64[>..] = [];
     for m, i in cell_mat {
         if i > 0 && m == cell_mat[i - 1] {
@@ -1105,7 +1076,6 @@ fn emit_shell(out: u8[>..]&) {
     format(out, ", xs, ts, ", order, ", cs, ");
     lits(out, axis);
     out.append(");\n    }\n");
-    // The nodes that the cuts and the material boundaries moved.
     var mk: i64[>..] = [];
     var mx: f64[>..] = [];
     var mt: f64[>..] = [];
@@ -1130,8 +1100,6 @@ fn emit_shell(out: u8[>..]&) {
     }
 }
 
-// The beam sections and the beams of each run: on the lattice lines of the
-// shell, or on lines of their own.
 fn emit_beams(out: u8[>..]&) {
     for b, k in bmats {
         format(out, "    // material ", material_names[beam_mats[k]], ": a beam section\n    let beam_section_", k, " = shells::beam_section(");
@@ -1194,8 +1162,6 @@ fn emit_bc(out: u8[>..]&, b: Bc) {
         }
         out.append("    }\n");
     } else {
-        // The load of each edge at its middle, with n the outward normal of
-        // the edge on the surface.
         edge_mode = true;
         var count = 0;
         for e in edges {
@@ -1270,7 +1236,6 @@ fn emit_step(out: u8[>..]&, si: i64, results_dir: u8[:]) {
     out.append("}\n\n");
 }
 
-// The output of step s to the file `path` (code in a str call).
 fn emit_output(out: u8[>..]&, s: Step, path: u8[:]) {
     out.append("    {\n        var points: u8[>..] = [];\n        var cells: u8[>..] = [];\n");
     for o in outputs[s.first_output..s.first_output + s.output_count] {

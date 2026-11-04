@@ -1,16 +1,3 @@
-// `skein verify convergence model.skn [--levels n]` (docs/checks.md §4.3,
-// command_line.md §5): solve the model on n meshes, each with half the
-// size of the one before, and give the observed order of the L2 error of
-// each `expect u == g`.
-//
-//     .skein/build/<model>/convergence/<level>/main.goose    the program of a level
-//     .skein/results/<model>/convergence/<level>/            its results
-//
-// The fv, dg, rkpm and gfd models of src/grid/gen.goose run. The order of
-// an expect is log2 of the ratio of its errors on the two finest meshes.
-// It fails when it is lower than the expected order of the method by more
-// than 0.3.
-// The id is `convergence`.
 import std;
 import os;
 import math;
@@ -21,16 +8,15 @@ import grid.gen;
 import .run;
 
 let CONVERGENCE_USAGE = "usage: skein verify convergence <file.skn> [--levels n]\n";
-let ORDER_MARGIN = 0.3;   // checks.md §4.3
+let ORDER_MARGIN = 0.3;
+let MAX_LEVELS = 8;
 
-// The L2 errors of an expect on each level.
 struct Errors {
     name: u8[..64],
-    cells: i64[..8],    // --levels is 8 or less
-    error: f64[..8],
+    cells: i64[..MAX_LEVELS],
+    error: f64[..MAX_LEVELS],
 }
 
-// Adds the rows of the record l2 of the program output `out` to `errors`.
 fn read_errors(out: u8[:], errors: Errors[>..]&) {
     var inside = false;
     for line in split(out, '\n') {
@@ -56,8 +42,6 @@ fn read_errors(out: u8[:], errors: Errors[>..]&) {
     }
 }
 
-// Builds and runs the program of the model on the mesh of `level`, and
-// adds its L2 errors. False, with an error on stderr, if it cannot.
 fn run_level(path: u8[:], text: u8[:], level: i64, errors: Errors[>..]&) -> bool {
     grid_gen::level = level;
     let prog = syntax::parse_model(path, text);
@@ -91,7 +75,6 @@ fn run_level(path: u8[:], text: u8[:], level: i64, errors: Errors[>..]&) -> bool
         write_stderr(str("skein verify convergence: internal fault: goose cannot build '", source, "'. Please report it.\n"));
         return false;
     };
-    // A failed expect on a coarse mesh is not a fault here: exit status 1.
     let status = shell(str(shell_quoted(str("./", exe)), " >", shell_quoted(out)));
     var text_out: u8[>..] = [];
     guard (status == 0 || status == 1) && read_file(out, text_out) else {
@@ -108,7 +91,6 @@ fn run_level(path: u8[:], text: u8[:], level: i64, errors: Errors[>..]&) -> bool
     return true;
 }
 
-// `skein verify convergence`. `args` are the words after `convergence`.
 fn convergence(args: const u8[:][:]) -> i64 {
     var levels = 3;
     var at = -1;
@@ -116,7 +98,7 @@ fn convergence(args: const u8[:][:]) -> i64 {
     while i < args.len {
         if args[i] == "--levels" && i + 1 < args.len {
             let k, good = parse_int(args[i + 1]);
-            guard good && k >= 2 && k <= 8 else {
+            guard good && k >= 2 && k <= MAX_LEVELS else {
                 write_stderr(str("skein verify convergence: --levels takes a whole number from 2 to 8\n", CONVERGENCE_USAGE));
                 return 2;
             };
@@ -146,8 +128,6 @@ fn convergence(args: const u8[:][:]) -> i64 {
     return print_convergence(errors, levels, want, why);
 }
 
-// Prints the table of the errors and the check of each expect, and gives
-// the exit status.
 fn print_convergence(errors: Errors[:], levels: i64, want: f64, why: u8[:]) -> i64 {
     var table: u8[>..] = [];
     var checks: u8[>..] = [];

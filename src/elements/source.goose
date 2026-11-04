@@ -1,12 +1,3 @@
-// The saved state of a step, and the field of another model on the nodes
-// of this one: `results` and the cut of a submodel (spec §15.1, §15.2).
-//
-// save_state writes the mesh, the material and the solution of a step in
-// a directory. load_source reads them as a second mesh, the source, beside
-// the mesh of this model. source_value evaluates the source field at a
-// point with the shape functions of the source cells. A grid of buckets
-// over the bounding box of the source finds the cells near a point: each
-// bucket lists the cells whose box of vertices meets it.
 import std;
 import os;
 import math;
@@ -17,7 +8,7 @@ import .assemble;
 import .post;
 
 let MAX_BUCKETS = 2000000;
-let INSIDE = 1.0e-6;    // the least barycentric coordinate of a point in a cell
+let INSIDE = 1.0e-6;
 
 var src_dim = 0;
 var src_order = 1;
@@ -34,8 +25,6 @@ var src_cells: i64[3] = [1, 1, 1];
 var bucket_start: i64[>..] = [];
 var bucket_items: i64[>..] = [];
 
-// Writes the mesh, the material and the solution of step `step` in the
-// directory `dir`. False if it cannot write a file.
 fn save_state(dir: const u8[:], step: const u8[:]) -> bool {
     guard sol.len == dof_total() else { abort("save_state: a solution of each dof"); }
     let sizes: i64[>..] = [dim, order, per_cell, ncomp];
@@ -53,14 +42,12 @@ fn bucket_at(p: f64[3]) -> i64 {
     return bucket_of(0, p[0]) + src_cells[0] * (bucket_of(1, p[1]) + src_cells[1] * bucket_of(2, p[2]));
 }
 
-// Puts each source cell in the buckets that its box of vertices meets.
 fn fill_buckets() {
     let cells = src_conn.len / src_per_cell;
     let buckets = src_cells[0] * src_cells[1] * src_cells[2];
     bucket_start.clear();
     for b in buckets + 1 { bucket_start.push(0); }
     var fill: i64[>..] = [];
-    // Pass 0 counts the cells of each bucket, and pass 1 puts them in.
     for pass in 2 {
         if pass == 1 {
             for b in buckets { bucket_start[b + 1] += bucket_start[b]; }
@@ -95,10 +82,6 @@ fn fill_buckets() {
     }
 }
 
-// Reads the state that save_state wrote for step `step` in `dir` as the
-// source. Each length and each value of the solution is multiplied by
-// `length_scale` and `value_scale`, and each modulus by `modulus_scale`,
-// into the units of this model. False if it cannot read the state.
 fn load_source(dir: const u8[:], step: const u8[:], length_scale: f64, value_scale: f64, modulus_scale: f64) -> bool {
     var sizes: i64[>..] = [];
     var law: f64[>..] = [];
@@ -125,7 +108,6 @@ fn load_source(dir: const u8[:], step: const u8[:], length_scale: f64, value_sca
             hi[t] = max(hi[t], src_coords[3 * n + t]);
         }
     }
-    // About one bucket for each cell.
     var volume = 1.0;
     for t in src_dim { volume *= max(hi[t] - src_lo[t], 1.0e-300); }
     let count = min(src_conn.len / src_per_cell, MAX_BUCKETS) as f64;
@@ -140,7 +122,6 @@ fn load_source(dir: const u8[:], step: const u8[:], length_scale: f64, value_sca
 
 fn source_node(c: i64, l: i64) -> i64 { return src_conn[src_per_cell * c + l]; }
 
-// The barycentric coordinates of p in source cell c, from its vertices.
 fn source_barycentric(c: i64, p: f64[3]) -> f64[4] {
     var e: f64[9] = [0.0; 9];
     var b: f64[3] = [0.0; 3];
@@ -154,7 +135,6 @@ fn source_barycentric(c: i64, p: f64[3]) -> f64[4] {
     let det = e[0] * (e[4] * e[8] - e[5] * e[7]) - e[1] * (e[3] * e[8] - e[5] * e[6]) + e[2] * (e[3] * e[7] - e[4] * e[6]);
     guard det != 0.0 else { return [-1.0, -1.0, -1.0, -1.0]; }
     var l: f64[4] = [1.0, 0.0, 0.0, 0.0];
-    // Cramer's rule: column r of e replaced by b.
     for r in src_dim {
         var m = e;
         for t in 3 { m[3 * t + r] = b[t]; }
@@ -165,9 +145,6 @@ fn source_barycentric(c: i64, p: f64[3]) -> f64[4] {
     return l;
 }
 
-// The source cell that holds p, its reference point, and whether p is in
-// it. A point a little outside the source mesh takes the cell of its
-// bucket that is nearest in barycentric terms.
 fn source_cell(p: f64[3]) -> i64, f64[3], bool {
     guard bucket_start.len > 1 else { abort("source_cell: load_source first"); }
     for t in src_dim {
@@ -190,8 +167,6 @@ fn source_cell(p: f64[3]) -> i64, f64[3], bool {
     return best, best_xi, best >= 0 && best_l >= -INSIDE;
 }
 
-// Component `comp` of the source field at p, and whether a source cell
-// holds p.
 fn source_value(comp: i64, p: f64[3]) -> f64, bool {
     guard comp >= 0 && comp < src_ncomp else { abort("source_value: a component of the source"); }
     let c, xi, inside = source_cell(p);
@@ -204,8 +179,6 @@ fn source_value(comp: i64, p: f64[3]) -> f64, bool {
     return v, inside;
 }
 
-// The stress of the elastic source at p: sigma[3 i + j], and whether a
-// source cell holds p.
 fn source_stress(p: f64[3]) -> f64[9], bool {
     guard src_ncomp == src_dim else { abort("source_stress: an elastic source"); }
     var s: f64[9] = [0.0; 9];
@@ -214,7 +187,6 @@ fn source_stress(p: f64[3]) -> f64[9], bool {
     var n: f64[20] = [0.0; 20];
     var dn: f64[60] = [0.0; 60];
     shape(src_dim, src_order, xi, n, dn);
-    // jac[3 r + t] = dx_t / dxi_r, and du[3 a + r] = du_a / dxi_r.
     var jac: f64[9] = [0.0; 9];
     var du: f64[9] = [0.0; 9];
     for l in src_per_cell {
@@ -226,7 +198,6 @@ fn source_stress(p: f64[3]) -> f64[9], bool {
     }
     if src_dim == 2 { jac[8] = 1.0; }
     let inv = inverse_3(jac);
-    // dx[3 a + t] = du_a / dx_t = Σr du_a/dxi_r dxi_r/dx_t
     var dx: f64[9] = [0.0; 9];
     for a in src_dim {
         for t in src_dim {
@@ -244,8 +215,6 @@ fn source_stress(p: f64[3]) -> f64[9], bool {
     return s, inside;
 }
 
-// The inverse of the 3×3 matrix m, with inv[3 t + r] = (m⁻¹)[t][r] for m
-// stored as m[3 r + t].
 fn inverse_3(m: f64[9]) -> f64[9] {
     let det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
     return [(m[4] * m[8] - m[5] * m[7]) / det, (m[2] * m[7] - m[1] * m[8]) / det, (m[1] * m[5] - m[2] * m[4]) / det,
@@ -253,8 +222,6 @@ fn inverse_3(m: f64[9]) -> f64[9] {
             (m[3] * m[7] - m[4] * m[6]) / det, (m[1] * m[6] - m[0] * m[7]) / det, (m[0] * m[4] - m[1] * m[3]) / det];
 }
 
-// Holds each component of the unknown at each node of the region at the
-// source value. It gives the number of nodes outside the source mesh.
 fn fix_region_source() -> i64 {
     guard physics >= 0 && src_ncomp == ncomp && dofs_sized() else { abort("fix_region_source: a physics with the components of the source"); }
     var outside = 0;
@@ -271,9 +238,6 @@ fn fix_region_source() -> i64 {
     return outside;
 }
 
-// The resultant force ∫ sigma n dA on part k of the region, with the stress
-// of this model and of the source, over the facets that have all vertices
-// on the part. n is the outward normal.
 fn part_resultants(k: i64) -> f64[3], f64[3] {
     guard physics == ELASTIC && src_ncomp == src_dim && k >= 0 && k < region.len else { abort("part_resultants: an elastic model and source, and a part"); }
     var own: f64[3] = [0.0; 3];
@@ -303,16 +267,12 @@ fn part_resultants(k: i64) -> f64[3], f64[3] {
                         for r in fd { tan[3 * r + t] += fdn[3 * l + r] * node_x(n, t); }
                     }
                 }
-                // The area normal: its size is the area of the facet per
-                // unit area of the reference facet.
                 var an: f64[3] = [tan[1], -tan[0], 0.0];
                 if fd == 2 { an = [tan[1] * tan[5] - tan[2] * tan[4], tan[2] * tan[3] - tan[0] * tan[5], tan[0] * tan[4] - tan[1] * tan[3]]; }
                 var out = 0.0;
                 for t in 3 { out += an[t] * (x[t] - centre[t]); }
                 if out < 0.0 { for t in 3 { an[t] = -an[t]; } }
                 let scale = w * (if fd == 1 { thickness } else { 1.0 });
-                // The reference point of x in the cell: the vertices of the
-                // facet are vertices of the cell.
                 var xi: f64[3] = [0.0; 3];
                 var lf: f64[3] = [1.0, fxi[0], fxi[1]];
                 for r in fd { lf[0] -= fxi[r]; }

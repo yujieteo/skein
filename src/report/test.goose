@@ -1,5 +1,3 @@
-// Tests of `skein report`. `./build.sh test` runs this program from the root
-// of the repository, and a non-zero exit status is a failure.
 import std;
 import os;
 import syntax from "../syntax";
@@ -20,16 +18,12 @@ fn expect_has(what: u8[:], got: u8[:], want: u8[:]) {
     print("FAIL ", what, ": no [", want, "] in [", got, "]");
 }
 
-// A source text cannot end the script element of the page.
 fn test_json() {
     var out: u8[>..] = [];
     report::json_string(out, "a \"b\"\n</script>\t");
     expect_text("json string", out, "\"a \\\"b\\\"\\n<\\/script>\\u0009\"");
 }
 
-// One tet10 becomes one tet4 with its 4 corner nodes and their point data.
-// The 6 mid-side nodes and their values go. The largest value 3 becomes
-// 32767 with the scale 3/32767.
 fn test_small_vtu() {
     var text: u8[>..] = [];
     text.append("""
@@ -58,8 +52,6 @@ fn test_case_count() {
     expect_text("no study", str(report::case_count("solve[1]{step}:\n")), "0");
 }
 
-// With `--no-run`, the report uses the table of a study run only if the run
-// wrote the hash of the current source.
 fn test_last_run() {
     let dir = ".skein/studies/report_test";
     report::make_dirs(dir);

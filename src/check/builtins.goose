@@ -1,5 +1,3 @@
-// The types of calls of the built-in functions (Appendix A, spec §7.3, §8,
-// §14.5, §15.1) and of the phase 1 gaps G6, G7 and G12.
 import std;
 namespace check;
 import syntax from "../syntax";
@@ -9,15 +7,13 @@ import .state;
 import .expr;
 import .results;
 
-// The arguments of a call. Only the first `MAX_ARGS` keep their type: the
-// geometry functions with more points check the others as they go.
 let MAX_ARGS = 8;
 
 struct Args {
     count: i64,
-    ty: Ty[8],
-    node: i64[8],    // the value
-    name: i64[8],    // the token of the argument name, or -1
+    ty: Ty[MAX_ARGS],
+    node: i64[MAX_ARGS],
+    name: i64[MAX_ARGS],
 }
 
 fn args_varying(a: Args) -> bool {
@@ -34,7 +30,6 @@ fn arity(tok: i64, name: u8[:], a: Args, lo: i64, hi: i64) -> bool {
     return false;
 }
 
-// A quantity of rank `rank`, or an error at argument `i`.
 fn want_rank(tok: i64, name: u8[:], a: Args, i: i64, rank: i64) -> bool {
     let t = a.ty[i];
     if is_any(t) || (is_num(t) && (t.rank == rank || t.zero)) { return true; }
@@ -53,7 +48,6 @@ fn want_geom(tok: i64, name: u8[:], a: Args, i: i64) -> bool {
     return false;
 }
 
-// A point: a vector of `Length` (or 0).
 fn want_point(name: u8[:], t: Ty, node: i64, i: i64) {
     if is_any(t) || t.zero { return; }
     if is_num(t) && t.rank == 1 && t.dim == LENGTH { return; }
@@ -79,25 +73,18 @@ fn want_dimless(tok: i64, name: u8[:], a: Args, i: i64) {
           "divide the argument by a reference value of its dimension");
 }
 
-// Checks one point argument after the first MAX_ARGS of a geometry function.
 fn extra_point(name: u8[:], t: Ty, node: i64, i: i64) {
     if name == "polygon" || name == "spline" { want_point(name, t, node, i); }
     if name == "nurbs" && !is_dimless_scalar(t) { want_point(name, t, node, i); }
     if name == "knots" { want_weight(name, t, node, i); }
 }
 
-// A dimensionless Real argument: a weight or a knot of nurbs.
 fn want_weight(name: u8[:], t: Ty, node: i64, i: i64) {
     if is_any(t) || is_dimless_scalar(t) { return; }
     error(first_tok(node), "type_mismatch", str("argument ", i + 1, " of ", name, " is ", ty_str(t), ", not a Real"),
           if name == "knots" { "give each knot as a Real, for example knots(0, 0, 0, 1, 1, 1)" } else { "give the weight of each point as a Real, for example (1, 0) mm, 0.7071" });
 }
 
-// nurbs(degree, [knots(k...),] p1, w1, ..., pn, wn) (spec §8.1): a
-// degree of 1 to 3, a point of Length and a weight above 0 for each
-// control point, and n + degree + 1 knots that do not fall. Without
-// knots, the knots are 0 (degree + 1 times), 1, 2, ..., n - degree
-// (degree + 1 times).
 fn nurbs_ty(tok: i64, name: u8[:], a: Args) -> Ty {
     space_2d(tok, name);
     guard arity(tok, name, a, 3, 100000) else { return any_ty(); }
@@ -121,6 +108,21 @@ fn nurbs_ty(tok: i64, name: u8[:], a: Args) -> Ty {
         error(first_tok(a.node[1]), "type_mismatch", str("nurbs of degree ", d as! i64, " with ", n, " points needs ", n + (d as! i64) + 1, " knots, not ", syntax::child_count(a.node[1]) - 1),
               "give n + degree + 1 knots");
     }
+    if knots {
+        var previous = 0.0;
+        var seen = false;
+        for i in 1..syntax::child_count(a.node[1]) {
+            let k = syntax::nodes[syntax::child(a.node[1], i)].first;
+            let v, ok = const_value(k);
+            guard ok else { continue; }
+            if seen && v < previous {
+                error(first_tok(k), "type_mismatch", "the knots of nurbs do not fall", "write the knots in rising order, for example knots(0, 0, 1, 2, 2)");
+                break;
+            }
+            previous = v;
+            seen = true;
+        }
+    }
     return geom_ty(1);
 }
 
@@ -138,8 +140,6 @@ fn space_3d(tok: i64, name: u8[:]) {
     }
 }
 
-// The extra exponent of Length in an integral over a region of a 2D model
-// with a thickness (spec §11.1, §14.5).
 fn depth() -> i64 { if space == 2 && thickness { 1 } else { 0 } }
 
 fn same(t: Ty, varying: bool) -> Ty {
@@ -157,7 +157,6 @@ fn real_scalar(a: Args) -> Ty {
     return r;
 }
 
-// The type of the call of the built-in `name` at token `tok`.
 fn builtin_ty(tok: i64, name: u8[:], a: Args) -> Ty {
     let v = args_varying(a);
     let t0 = if a.count > 0 { a.ty[0] } else { any_ty() };
@@ -166,8 +165,6 @@ fn builtin_ty(tok: i64, name: u8[:], a: Args) -> Ty {
     var table = -1;
     for i in min(a.count, MAX_ARGS) { listed = listed || a.ty[i].list; table = rows(table, a.ty[i].table); }
     var r = builtin_ty_inner(tok, name, a, t0, t1, v);
-    // laminate sums over the plies of its layup column (spec §4.3), sum
-    // over the rows of a table (§5.6), and interp reads its columns at x.
     if is_num(r) && name != "laminate" && name != "sum" && name != "interp" {
         r.list = r.list || listed;
         r.table = rows(r.table, table);
@@ -176,7 +173,6 @@ fn builtin_ty(tok: i64, name: u8[:], a: Args) -> Ty {
 }
 
 fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> Ty {
-    // Tensor algebra.
     if name == "sym" || name == "skew" || name == "dev" || name == "transpose" {
         guard arity(tok, name, a, 1, 1) && want_rank(tok, name, a, 0, 2) else { return any_ty(); }
         return same(t0, v);
@@ -291,7 +287,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         r.varying = v;
         return r;
     }
-    // Scalar functions (spec §6.1).
     if name == "abs" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) else { return any_ty(); }
         var r = same(t0, v);
@@ -335,7 +330,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
     if name == "min" || name == "max" {
         guard arity(tok, name, a, 2, MAX_ARGS) else { return any_ty(); }
         if a.count == 2 && t1.kind == K_GEOM {
-            // max(f, r): the largest value of `f` on region `r` (spec §14.5).
             return same(t0, false);
         }
         var r = t0;
@@ -348,7 +342,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         r.varying = v;
         return r;
     }
-    // Differential operators (spec §7.3).
     if name == "grad" || name == "div" || name == "curl" || name == "lap" || name == "ddt" || name == "ddt2" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) else { return any_ty(); }
         guard is_num(t0) else {
@@ -384,7 +377,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         if name == "ddt2" { r.dim = t0.dim - dim_pow(TIME, 2); }
         return r;
     }
-    // Shells and beams (spec §4.3).
     if name == "along" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }
         var r = same(t0, true);
@@ -425,7 +417,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return r;
     }
     if name == "argmax" {
-        // argmax(f, r): the point of the largest value of `f` on region `r` (spec §14.5).
         guard arity(tok, name, a, 2, 2) && want_geom(tok, name, a, 1) && !is_any(t0) else { return any_ty(); }
         if is_num(t0) && t0.rank != 0 {
             error(tok, "rank_mismatch", str("argmax takes a scalar, not ", ty_str(t0)), "take argmax of a scalar, for example norm(u)");
@@ -433,7 +424,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return num_ty(LENGTH, 1);
     }
     if name == "copy" {
-        // copy(r): the index of the copy of the pattern r nearest to the point (spec §8.1, gap G35).
         guard arity(tok, name, a, 1, 1) && want_geom(tok, name, a, 0) && !is_any(t0) else { return any_ty(); }
         guard t0.list else {
             error(first_tok(a.node[0]), "type_mismatch", "copy takes a geometry value made by pattern or pattern_polar",
@@ -445,13 +435,11 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return r;
     }
     if name == "rigid" || name == "moment" {
-        // check_bc reads both forms. Other places cannot use them (spec §12.1, gap G17).
         error(tok, "rigid_form", str(name, " stands only in a bc"),
               "write bc face: u = rigid(p), and bc p: moment(sigma*n) = M");
         return any_ty();
     }
     if name == "when" {
-        // when(f, value): the first time at which the scalar `f`, reduced over a region, gets to `value` (spec §14.5).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) else { return any_ty(); }
         if is_num(t0) && (t0.rank != 0 || t0.varying) {
             error(tok, "rank_mismatch", str("when takes a scalar reduced over a region, not ", ty_str(t0)),
@@ -471,7 +459,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return num_ty(TIME, 0);
     }
     if name == "radiation" {
-        // radiation(eps): the net gray diffuse radiation out of the faces of an enclosure (spec §12.1).
         guard arity(tok, name, a, 1, 1) else { return any_ty(); }
         want_dimless(tok, name, a, 0);
         if !in_natural {
@@ -485,14 +472,12 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return r;
     }
     if name == "wall_distance" {
-        // wall_distance(): the distance to the nearest wall, a boundary with v = 0 (spec §4.2).
         guard arity(tok, name, a, 0, 0) else { return any_ty(); }
         var r = num_ty(LENGTH, 0);
         r.varying = true;
         return r;
     }
     if name == "rms" {
-        // rms(f, psd): the root of the sum of |f|^2 psd over the frequencies of a harmonic step (spec §14.5, gap G2).
         guard arity(tok, name, a, 2, 2) && !is_any(t0) && !is_any(t1) && is_num(t0) && is_num(t1) else { return any_ty(); }
         if t0.rank != 0 || t0.varying || t1.rank != 0 || t1.varying {
             error(tok, "rank_mismatch", "rms takes a scalar at a point or reduced over a region, and a scalar PSD",
@@ -515,8 +500,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         return r;
     }
     if name == "far_field" {
-        // far_field(E, H, s, d): the radiation intensity, the power per solid angle, in the direction d, from E and H on
-        // the closed surface s by a near-to-far-field transform (spec §14.5, gap G13).
         guard arity(tok, name, a, 4, 4) && want_geom(tok, name, a, 2) && !is_any(t0) && !is_any(t1) && !is_any(a.ty[3]) else { return any_ty(); }
         let fields = is_num(t0) && is_num(t1) && t0.rank == 1 && t1.rank == 1 && t0.num == NS_COMPLEX && t1.num == NS_COMPLEX;
         let d = a.ty[3];
@@ -529,7 +512,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return num_ty(t0.dim + t1.dim + dim_pow(LENGTH, 2), 0);
     }
-    // Complex parts (gap G7).
     if name == "re" || name == "imag" || name == "arg" || name == "conj" {
         guard arity(tok, name, a, 1, 1) && !is_any(t0) && is_num(t0) else { return any_ty(); }
         var r = same(t0, v);
@@ -540,7 +522,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return r;
     }
-    // Reports (spec §14.5) and eigenvalues (gap G6).
     if name == "reaction" {
         guard arity(tok, name, a, 1, 1) && want_geom(tok, name, a, 0) else { return any_ty(); }
         var d = FORCE;
@@ -584,7 +565,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
         }
         return results_ty(tok, a.node[0], step, case);
     }
-    // Geometry (spec §8).
     if name == "boundary" {
         guard arity(tok, name, a, 1, 2) && want_geom(tok, name, a, 0) && !is_any(t0) else { return any_ty(); }
         if a.count == 2 && !is_any(t1) && t1.kind != K_BOOL && t1.kind != K_GEOM {
@@ -666,8 +646,6 @@ fn builtin_ty_inner(tok: i64, name: u8[:], a: Args, t0: Ty, t1: Ty, v: bool) -> 
        name == "move" || name == "rotate" || name == "scale" {
         let lo = if name == "pattern" || name == "pattern_polar" { 3 } else { 2 };
         guard arity(tok, name, a, lo, 3) && want_geom(tok, name, a, 0) else { return any_ty(); }
-        // A pattern keeps its copies: max(f, r) on it gives one value for
-        // each copy (spec §14.5).
         var r = t0;
         if name == "pattern" || name == "pattern_polar" { r.list = true; }
         return r;

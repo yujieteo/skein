@@ -1,34 +1,3 @@
-// The cell-centred finite volume method for a system of conservation laws,
-//
-//     ddt(U) + div(F(U)) = S(U, x, y, t)
-//
-// on triangles, with the explicit SSP Runge-Kutta scheme of order 3 (Shu
-// and Osher 1988). U holds the N components of the unknowns of all
-// equations, and F(U)·n is a function that the generated program gives
-// (`flux`), written from the flux of each `div` of the model. Nothing in
-// this file is the Euler equations: a model with any flux that is linear
-// in n runs here.
-//
-// The value of U on a side comes from the cell by a limited linear
-// reconstruction (MUSCL, van Leer 1979): the gradient of each component is
-// the Green-Gauss gradient, and the face value is
-// U_C + ψ(r) (U_D - U_C)/2 with r = 2 ∇U_C·d_CD/(U_D - U_C) - 1 and ψ the
-// limiter (the same as the fv method of src/grid/fv.goose). The numerical
-// flux is the Rusanov flux
-//
-//     F̂ = ((F(U_L) + F(U_R))·n - λ (U_R - U_L)) / 2
-//
-// with λ the larger spectral radius of dF·n/dU of the two cells. The
-// program gives F only, so the Jacobian of each cell is a forward
-// difference of F, and its spectral radius is the power iteration on its
-// square. Reason: a model of any physics can use it, and a table of the
-// wave speeds of each system would run the Euler equations only. The
-// iteration gives the radius from below, thus λ takes the factor 1.02.
-//
-// A side on the boundary has the mask of its conditions (mesh.goose). With
-// none, F̂ is F(U_C)·n (the flow leaves as it is). A condition on an unknown
-// gives the ghost state U_G with that component set, and F̂ is the Rusanov
-// flux of (U_C, U_G); a condition on a flux sets the component of F̂.
 import std;
 import math;
 import os;
@@ -36,16 +5,17 @@ namespace cons;
 import solvers from "../solvers";
 import .mesh;
 
-let CFL_ABORT = 2.0;            // dt × the rate of a cell: the Rusanov step is unstable above 2
-let STABLE_FRACTION = 0.75;     // dt: stable takes this fraction of the step above which the Rusanov step is unstable
+let CFL_ABORT = 2.0;
+let STABLE_FRACTION = 0.75;
+let ADVISED_FRACTION = 0.8;
 let RADIUS_SAFETY = 1.02;
 let POWER_STEPS = 8;
 let FD_RELATIVE = 1.0e-6;
 
-var grad: f64[>..] = [];        // 2 N for each cell
-var jac_x: f64[>..] = [];       // N × N for each cell: dF·(1, 0)/dU
+var grad: f64[>..] = [];
+var jac_x: f64[>..] = [];
 var jac_y: f64[>..] = [];
-var radius_side: f64[>..] = []; // the spectral radius at side k of cell c, 3 for each cell
+var radius_side: f64[>..] = [];
 var comp_scale: f64[>..] = [];
 var r: f64[>..] = [];
 var u1: f64[>..] = [];
@@ -54,7 +24,7 @@ var ul: f64[>..] = [];
 var ur: f64[>..] = [];
 var fa: f64[>..] = [];
 var fb: f64[>..] = [];
-var ff: f64[>..] = [];          // the numerical flux of a side
+var ff: f64[>..] = [];
 var pt: f64[>..] = [];
 var ug: f64[>..] = [];
 var pw: f64[>..] = [];
@@ -63,7 +33,7 @@ var jm: f64[>..] = [];
 
 var iterations = 0;
 var last_seconds = 0.0;
-var max_rate = 0.0;             // the largest of the sum of the lengths times the radius over the area
+var max_rate = 0.0;
 
 fn size_solver() {
     let n = comps;
@@ -88,15 +58,12 @@ fn size_solver() {
     solvers::zeros(jm, n * n);
 }
 
-// ψ(r) of the limiter.
 fn psi(q: f64) -> f64 {
     if limiter == MINMOD { return max(0.0, min(1.0, q)); }
     if limiter == VAN_LEER { return (q + abs(q)) / (1.0 + abs(q)); }
     return 0.5 * (1.0 + q);
 }
 
-// The Green-Gauss gradient of each component in each cell, in grad. A side
-// on the boundary has the value of the cell.
 fn gradients(u: f64[:]) {
     let n = comps;
     for c in cell_total {
@@ -113,7 +80,6 @@ fn gradients(u: f64[:]) {
     }
 }
 
-// The value of component k of the cell c on the side to the cell d.
 fn face_value(u: f64[:], c: i64, d: i64, k: i64) -> f64 {
     let n = comps;
     let uc = u[c * n + k];
@@ -124,7 +90,6 @@ fn face_value(u: f64[:], c: i64, d: i64, k: i64) -> f64 {
     return uc + 0.5 * psi(2.0 * g / du - 1.0) * du;
 }
 
-// The Jacobian of F·(1, 0) and F·(0, 1) of each cell, by forward differences.
 fn jacobians<FLUX>(u: f64[:]) {
     let n = comps;
     for k in n {
@@ -151,8 +116,6 @@ fn jacobians<FLUX>(u: f64[:]) {
     }
 }
 
-// The spectral radius of nx Jx + ny Jy of cell c, by the power iteration on
-// its square.
 fn spectral(c: i64, nx: f64, ny: f64) -> f64 {
     let n = comps;
     for i in n * n { jm[i] = nx * jac_x[c * n * n + i] + ny * jac_y[c * n * n + i]; }
@@ -181,7 +144,6 @@ fn spectral(c: i64, nx: f64, ny: f64) -> f64 {
     return RADIUS_SAFETY * sqrt(lam2);
 }
 
-// The radius at each side of each cell, and the largest rate.
 fn radii() {
     max_rate = 0.0;
     for c in cell_total {
@@ -198,8 +160,6 @@ fn radii() {
     }
 }
 
-// The Rusanov flux of the states ul and ur on a side with the unit normal
-// (nx, ny) and the radius lam, per unit of length, in out.
 fn rusanov<FLUX>(nx: f64, ny: f64, lam: f64, out: f64[:]) {
     let n = comps;
     FLUX(ul, nx, ny, fa);
@@ -207,8 +167,6 @@ fn rusanov<FLUX>(nx: f64, ny: f64, lam: f64, out: f64[:]) {
     for k in n { out[k] = 0.5 * (fa[k] + fb[k]) - 0.5 * lam * (ur[k] - ul[k]); }
 }
 
-// The flux through side s of cell c, times its length, added to the
-// residual of the cell and taken from the residual of the neighbour.
 fn side_flux<FLUX, GHOST, WALL>(u: f64[:], c: i64, s: i64, t: f64) {
     let n = comps;
     let lx = side_nx[3 * c + s];
@@ -245,8 +203,6 @@ fn side_flux<FLUX, GHOST, WALL>(u: f64[:], c: i64, s: i64, t: f64) {
     for k in n { r[c * n + k] += ff[k] * l; }
 }
 
-// The residual of each cell at time t, in r: the flux out less the source
-// times the area.
 fn residual<FLUX, SRC, GHOST, WALL>(u: f64[:], t: f64, refresh: bool) {
     let n = comps;
     if refresh {
@@ -265,7 +221,6 @@ fn residual<FLUX, SRC, GHOST, WALL>(u: f64[:], t: f64, refresh: bool) {
     }
 }
 
-// out = c0 u0 + c1 (v - dt R(v, t)/A), the stage of SSP-RK3.
 fn stage<FLUX, SRC, GHOST, WALL>(u0: f64[:], v: f64[:], t: f64, dt: f64, c0: f64, c1: f64, refresh: bool, out: f64[:]) {
     let n = comps;
     residual(v, t, refresh, FLUX, SRC, GHOST, WALL);
@@ -275,22 +230,15 @@ fn stage<FLUX, SRC, GHOST, WALL>(u0: f64[:], v: f64[:], t: f64, dt: f64, c0: f64
     }
 }
 
-// The length of each array of the state of the package. A solve grows none
-// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
 fn state_sizes() -> i64[12] {
     return [sol.len, grad.len, jac_x.len, jac_y.len, radius_side.len, r.len, u1.len, u2.len, ul.len, ur.len, ff.len, jm.len];
 }
 
-// Whether each value of the state is finite.
 fn finite() -> bool {
     for v in sol { if !(abs(v) < 1.0e300) { return false; } }
     return true;
 }
 
-// Integrates from the time of the state to `end` with the steps of dt. It
-// stops with a message, and gives false, if dt is above the step that the
-// radius allows (dt <= 0 takes the stable step), or if the state is not finite. It tells the time that the
-// whole run takes after the first steps.
 fn solve_transient<FLUX, SRC, GHOST, WALL>(end: f64, dt: f64) -> bool {
     guard comps >= 1 && end > time && sol.len == dof_count() else { abort("solve_transient: setup and an end after the time of the state"); }
     let sizes = state_sizes();
@@ -312,7 +260,7 @@ fn solve_transient<FLUX, SRC, GHOST, WALL>(end: f64, dt: f64) -> bool {
         stage(sol, sol, t, k, 0.0, 1.0, true, u1, FLUX, SRC, GHOST, WALL);
         if i == 0 && k * max_rate > CFL_ABORT {
             write_stderr(str("skein run: the step ", k, " s is above the stable step ", CFL_ABORT / max_rate,
-                             " s of the mesh and the waves of the initial state. Write a dt of ", 0.8 * CFL_ABORT / max_rate, " s or less.\n"));
+                             " s of the mesh and the waves of the initial state. Write a dt of ", ADVISED_FRACTION * CFL_ABORT / max_rate, " s or less.\n"));
             return false;
         }
         stage(sol, u1, t + k, k, 0.75, 0.25, false, u2, FLUX, SRC, GHOST, WALL);
@@ -320,7 +268,7 @@ fn solve_transient<FLUX, SRC, GHOST, WALL>(end: f64, dt: f64) -> bool {
         i++;
         if i == 10 { write_stderr(str("skein run: ", steps, " steps of ", cell_total, " cells take about ", (clock() - start) / 10.0 * steps, " s\n")); }
         if k * max_rate > CFL_ABORT && i % 100 == 0 {
-            write_stderr(str("skein run: at the time ", t, " s the step ", k, " s is above the stable step ", CFL_ABORT / max_rate, " s. Write a dt of ", 0.8 * CFL_ABORT / max_rate, " s or less.\n"));
+            write_stderr(str("skein run: at the time ", t, " s the step ", k, " s is above the stable step ", CFL_ABORT / max_rate, " s. Write a dt of ", ADVISED_FRACTION * CFL_ABORT / max_rate, " s or less.\n"));
             good = false;
         }
         if i % 100 == 0 && !finite() {

@@ -1,30 +1,16 @@
-// The geometry of the shell generator: the solids of spec §8.1 as a small
-// CSG tree with a distance function φ (φ < 0 inside), the user functions
-// that make them, and the grid of the shell with its cuts.
-//
-// The grid is a tensor grid of the patch x0..x1, t0..t1 of the cylinder.
-// Its lines hold each extent of the meshed surface, each frame ring (x
-// line) and each stringer (θ line). Between these lines the cells have the
-// size of the mesh, or a smaller size near a `refine` curve. A node near
-// the boundary of a cut (a solid that `-` or `&` takes from the shell) or
-// near the boundary of a material region moves onto it, so the cells fit
-// the cut. A node on a required line moves only along the line. A cell
-// with its centre out of the meshed surface is left out.
 import std;
 import math;
 namespace shells_gen;
 import syntax from "../syntax";
 
-// --- solids ----------------------------------------------------------------------
-
-let S_BOX = 0;          // p: lo, hi, the radius of the round edges
-let S_CYLINDER = 1;     // p: the base centre, the unit axis, r, h
-let S_MOVE = 2;         // a moved by p[0..3]
-let S_TURN = 3;         // a turned by p[3] about the unit axis p[0..3]
+let S_BOX = 0;
+let S_CYLINDER = 1;
+let S_MOVE = 2;
+let S_TURN = 3;
 let S_UNION = 4;
 let S_INTER = 5;
 let S_SUB = 6;
-let S_PATCH = 7;        // the patch of the shell, x0..x1 and t0..t1
+let S_PATCH = 7;
 
 struct Shape {
     kind: i64,
@@ -34,8 +20,6 @@ struct Shape {
 }
 
 var shapes: Shape[>..] = [];
-// With `open_patch`, the patch is everywhere, so φ of a surface is the φ
-// of its cuts only.
 var open_patch = false;
 var patch_shape = -1;
 
@@ -79,7 +63,6 @@ recursive fn phi(g: i64, q: f64[3]) -> f64 {
     return max(max(x0 - q[0], q[0] - x1), radius * max(t0 - t, t - t1));
 }
 
-// φ of shape g with the patch everywhere: the cuts only.
 fn cut_phi(g: i64, q: f64[3]) -> f64 {
     open_patch = true;
     let f = phi(g, q);
@@ -87,8 +70,6 @@ fn cut_phi(g: i64, q: f64[3]) -> f64 {
     return f;
 }
 
-// The user functions and the values of their parameters while a call is
-// open (`named` looks at the parameters first).
 var fn_names: u8[..64][>..] = [];
 var fn_nodes: i64[>..] = [];
 var bind_names: u8[..64][>..] = [];
@@ -100,8 +81,6 @@ fn user_fn(v: i64) -> i64 {
     return if i >= 0 { fn_nodes[i] } else { -1 };
 }
 
-// Binds the parameters of function f to the arguments of call v. Gives the
-// body, or -1 after an error.
 fn bind_call(v: i64, f: i64) -> i64 {
     var count = 0;
     var body = -1;
@@ -145,7 +124,6 @@ fn unbind(f: i64) {
     depth--;
 }
 
-// The value of a parameter of an open call, or -1.
 fn bound(word: u8[:]) -> i64 {
     for k in bind_names.len {
         let i = bind_names.len - 1 - k;
@@ -156,7 +134,6 @@ fn bound(word: u8[:]) -> i64 {
 
 let SOLID_FIX = "write the solid with box, cylinder, move, rotate, fillet of a box, |, & and -, or a fn that gives one";
 
-// The shape of the Solid or Surface expression v, or -1 after an error.
 recursive fn shape_of(v: i64) -> i64 {
     if kind(v) == syntax::N_NAME {
         let w = name(v);
@@ -240,8 +217,6 @@ recursive fn primitive(v: i64) -> i64 {
     return -1;
 }
 
-// Shape g with its box edges round to radius r: the fillet of a box, or
-// of a box that moves and turns.
 recursive fn rounded(g: i64, r: f64, at: i64) -> i64 {
     let s = shapes[g];
     if s.kind == S_MOVE || s.kind == S_TURN {
@@ -259,14 +234,12 @@ recursive fn rounded(g: i64, r: f64, at: i64) -> i64 {
     return add_shape(S_BOX, -1, -1, p);
 }
 
-// Whether v is a condition of x, y and z, not a geometry value.
 fn is_condition(v: i64) -> bool {
     if kind(v) != syntax::N_BINARY { return false; }
     let o = op(v);
     return o == "==" || o == ">=" || o == "<=" || o == ">" || o == "<" || o == "&&";
 }
 
-// Whether the condition holds at p, to tol for ==.
 fn holds(cond: i64, p: f64[3], tol: f64) -> bool {
     var parts: i64[>..] = [];
     if !terms(cond, parts) { return false; }
@@ -277,11 +250,6 @@ fn holds(cond: i64, p: f64[3], tol: f64) -> bool {
     return true;
 }
 
-// --- curves on the shell ----------------------------------------------------------
-
-
-// Whether v is a curve on the shell (a boundary of a Surface, or & - | of
-// these), and not a beam line.
 recursive fn shell_curve(v: i64) -> bool {
     if kind(v) == syntax::N_NAME {
         let r = find_region(v);
@@ -295,9 +263,6 @@ recursive fn shell_curve(v: i64) -> bool {
     return false;
 }
 
-// shape_of(v), made once for each node v: on_curve and edge_on ask it for
-// each point and each edge, and shape_of adds a shape for each unnamed
-// solid.
 fn node_shape(v: i64) -> i64 {
     for n, i in shape_nodes { if n == v { return shape_ids[i]; } }
     let g = shape_of(v);
@@ -306,7 +271,6 @@ fn node_shape(v: i64) -> i64 {
     return g;
 }
 
-// Whether the point p of the shell is on the curve v, to tol.
 recursive fn on_curve(v: i64, p: f64[3], tol: f64) -> bool {
     if kind(v) == syntax::N_NAME { return on_curve(regions[find_region(v)].node, p, tol); }
     if kind(v) == syntax::N_BINARY && op(v) == "|" { return on_curve(child(v, 0), p, tol) || on_curve(child(v, 1), p, tol); }
@@ -320,44 +284,39 @@ recursive fn on_curve(v: i64, p: f64[3], tol: f64) -> bool {
     return abs(phi(node_shape(c), p)) <= tol && phi(s, p) <= tol;
 }
 
-// --- the grid --------------------------------------------------------------------
-
-let GROW = 0.2;         // the growth of the cell size away from a refine curve
-let SNAP = 0.45;        // a node moves onto a cut nearer than SNAP cells
+let GROW = 0.2;
+let SNAP = 0.45;
 
 var order = 1;
-var xs: f64[>..] = [];          // the x of each corner line
-var ts: f64[>..] = [];          // the θ of each corner line
-var x_fixed: u8[>..] = [];      // 1 for a required x line
+var xs: f64[>..] = [];
+var ts: f64[>..] = [];
+var x_fixed: u8[>..] = [];
 var t_fixed: u8[>..] = [];
-var px_lat: f64[>..] = [];      // x and θ of each node of the lattice (fine for order 2)
+var px_lat: f64[>..] = [];
 var pt_lat: f64[>..] = [];
-var cell_mat: i64[>..] = [];    // the material of each cell (i + nx j), or -1
-var snaps: i64[>..] = [];       // the shapes whose boundaries the nodes move onto
+var cell_mat: i64[>..] = [];
+var snaps: i64[>..] = [];
 
-// The refine curves: the curve, the size, and the x and θ of points on it.
 var refine_nodes: i64[>..] = [];
 var refine_sizes: f64[>..] = [];
 var refine_x: f64[>..] = [];
 var refine_t: f64[>..] = [];
-var refine_of: i64[>..] = [];   // the refine curve of each point
+var refine_of: i64[>..] = [];
 
 fn nx_cells() -> i64 { return xs.len - 1; }
 fn nt_cells() -> i64 { return ts.len - 1; }
-fn lat_nx() -> i64 { return order * nx_cells(); }      // the lattice has lat_nx + 1 nodes along x
+fn lat_nx() -> i64 { return order * nx_cells(); }
 fn lat_nt() -> i64 { return order * nt_cells(); }
 fn lat(i: i64, j: i64) -> i64 { return i + (lat_nx() + 1) * j; }
 fn lat_point(k: i64) -> f64[3] { return shell_point(px_lat[k], pt_lat[k]); }
 
 fn geo_tol() -> f64 { return 1.0e-6 * max(x1 - x0, radius * (t1 - t0)); }
 
-// The extent of the meshed surface g in x and θ: a raster of the patch,
-// then a bisection at each side.
 fn extent(g: i64) -> f64[4] {
     let n = 400;
     var lo: f64[2] = [1.0e300, 1.0e300];
     var hi: f64[2] = [-1.0e300, -1.0e300];
-    var at: f64[4] = [0.0; 4];      // a raster point in g at each side
+    var at: f64[4] = [0.0; 4];
     for i in n {
         for j in n {
             let x = x0 + (x1 - x0) * (i + 0.5) / n;
@@ -374,7 +333,6 @@ fn extent(g: i64) -> f64[4] {
             edge_bisect(g, lo[1], t0, at[2], false), edge_bisect(g, hi[1], t1, at[3], false)];
 }
 
-// From c (in g) toward the patch side `side`: the last coordinate in g.
 fn edge_bisect(g: i64, c: f64, side: f64, other: f64, along_x: bool) -> f64 {
     let pt = if along_x { shell_point(side, other) } else { shell_point(other, side) };
     if phi(g, pt) < 0.0 { return side; }
@@ -388,8 +346,6 @@ fn edge_bisect(g: i64, c: f64, side: f64, other: f64, along_x: bool) -> f64 {
     return 0.5 * (a + b);
 }
 
-// The cell size at c along x (or along θ): the mesh size, or less near a
-// refine curve.
 fn spacing(c: f64, along_x: bool) -> f64 {
     var h = mesh_size;
     for k in refine_of.len {
@@ -399,7 +355,6 @@ fn spacing(c: f64, along_x: bool) -> f64 {
     return h;
 }
 
-// Appends the lines after a up to b, with the cell sizes of `spacing`.
 fn fill_lines(a: f64, b: f64, along_x: bool, out: f64[>..]&, fixed: u8[>..]&) {
     let steps = 256;
     let scale = if along_x { 1.0 } else { radius };
@@ -421,7 +376,6 @@ fn fill_lines(a: f64, b: f64, along_x: bool, out: f64[>..]&, fixed: u8[>..]&) {
     fixed.push(1);
 }
 
-// The sorted required values in lo..hi, with lo and hi.
 fn required(values: f64[:], lo: f64, hi: f64, tol: f64) -> f64[>..] {
     var out: f64[>..] = [lo, hi];
     for v in values {
@@ -434,8 +388,6 @@ fn required(values: f64[:], lo: f64, hi: f64, tol: f64) -> f64[>..] {
     return out;
 }
 
-// The points of each refine curve: a raster of the extent at a quarter of
-// the refine size.
 fn sample_refines(e: f64[4]) {
     for r in refine_nodes.len {
         let s = 0.25 * refine_sizes[r];
@@ -455,8 +407,6 @@ fn sample_refines(e: f64[4]) {
     }
 }
 
-// The lines of the grid, from the mesh surface g, the x of the rings and
-// the θ of the lines along x.
 fn make_lines(g: i64, ring_x: f64[:], line_t: f64[:]) {
     let e = extent(g);
     sample_refines(e);
@@ -475,12 +425,8 @@ fn make_lines(g: i64, ring_x: f64[:], line_t: f64[:]) {
     for k in rt.len - 1 { fill_lines(rt[k], rt[k + 1], false, ts, t_fixed); }
 }
 
-// --- the nodes, the cells and the cuts ---------------------------------------------
-
-// The corner node (i, j) is lattice node (order i, order j).
 fn corner(i: i64, j: i64) -> i64 { return lat(order * i, order * j); }
 
-// The size of the cells at corner node (i, j).
 fn local_size(i: i64, j: i64) -> f64 {
     var h = 1.0e300;
     if i > 0 { h = min(h, xs[i] - xs[i - 1]); }
@@ -490,8 +436,6 @@ fn local_size(i: i64, j: i64) -> f64 {
     return h;
 }
 
-// A root of φ of shape g on the segment from (xa, ta) to (xb, tb), where φ
-// changes sign; false if it does not.
 fn root_on(g: i64, xa: f64, ta: f64, xb: f64, tb: f64) -> f64, f64, bool {
     var fa = cut_phi(g, shell_point(xa, ta));
     let fb = cut_phi(g, shell_point(xb, tb));
@@ -507,7 +451,6 @@ fn root_on(g: i64, xa: f64, ta: f64, xb: f64, tb: f64) -> f64, f64, bool {
     return xa + m * (xb - xa), ta + m * (tb - ta), true;
 }
 
-// The nearest root of φ of g along x (or θ) within `reach` of (x, t).
 fn root_along(g: i64, x: f64, t: f64, reach: f64, along_x: bool) -> f64, f64, bool {
     let n = 16;
     let d = if along_x { reach / n } else { reach / (n * radius) };
@@ -527,8 +470,6 @@ fn root_along(g: i64, x: f64, t: f64, reach: f64, along_x: bool) -> f64, f64, bo
     return x, t, false;
 }
 
-// The point of φ = 0 of g near (x, t), by Newton steps on the gradient in
-// x and s = R θ.
 fn root_near(g: i64, x: f64, t: f64, h: f64) -> f64, f64, bool {
     var xc = x;
     var tc = t;
@@ -546,7 +487,6 @@ fn root_near(g: i64, x: f64, t: f64, h: f64) -> f64, f64, bool {
     return xc, tc, abs(cut_phi(g, shell_point(xc, tc))) <= 1.0e-9 * h;
 }
 
-// Moves corner node (i, j) onto the nearest cut. True if it moved.
 fn snap_corner(i: i64, j: i64) -> bool {
     if x_fixed[i] != 0 && t_fixed[j] != 0 { return false; }
     let k = corner(i, j);
@@ -580,7 +520,6 @@ fn snap_corner(i: i64, j: i64) -> bool {
     return true;
 }
 
-// The default place of lattice node (a, b): on the lines, or at the middle.
 fn default_place(a: i64, b: i64) -> f64, f64 {
     let i = a / order;
     let j = b / order;
@@ -589,8 +528,6 @@ fn default_place(a: i64, b: i64) -> f64, f64 {
     return x, t;
 }
 
-// The sine of the smallest corner angle of cell (i, j), in x and s, from
-// its corner nodes; <= 0 if the cell turns over.
 fn cell_quality(i: i64, j: i64) -> f64 {
     let ks = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)];
     var q = 1.0;
@@ -608,7 +545,6 @@ fn cell_quality(i: i64, j: i64) -> f64 {
     return q;
 }
 
-// The centre of cell (i, j) on the shell, from its corner nodes.
 fn cell_centre(i: i64, j: i64) -> f64[3] {
     var x = 0.0;
     var t = 0.0;
@@ -619,9 +555,6 @@ fn cell_centre(i: i64, j: i64) -> f64[3] {
     return shell_point(x, t);
 }
 
-// The lattice, the moves onto the cuts and the material of each cell.
-// `mesh_g` is the meshed surface, `mats` the surface of each material (or
-// -1 for the whole shell).
 fn make_cells(mesh_g: i64, mats: i64[:]) {
     px_lat.clear();
     pt_lat.clear();
@@ -637,7 +570,6 @@ fn make_cells(mesh_g: i64, mats: i64[:]) {
     for g in mats { if g >= 0 && position(snaps[..], g) < 0 { snaps.push(g); } }
     var moved: u8[>..] = [];
     for j in nt_cells() + 1 { for i in nx_cells() + 1 { moved.push(if snap_corner(i, j) { 1 } else { 0 }); } }
-    // A move that turns a cell over, or makes it too thin, goes back.
     for pass in 10 {
         var undone = 0;
         for j in nt_cells() {
@@ -672,8 +604,6 @@ fn make_cells(mesh_g: i64, mats: i64[:]) {
     if order == 2 { place_middles(); }
 }
 
-// The middle nodes of order 2: at the middle of the corners, and on the cut
-// when both corners are on it.
 fn place_middles() {
     for b in lat_nt() + 1 {
         for a in lat_nx() + 1 {
@@ -696,7 +626,6 @@ fn place_middles() {
             }
         }
     }
-    // The centre: the serendipity place from the sides and the corners.
     for b in lat_nt() {
         for a in lat_nx() {
             if a % 2 == 0 || b % 2 == 0 { continue; }
@@ -720,11 +649,6 @@ fn kept(i: i64, j: i64) -> bool {
     return i >= 0 && j >= 0 && i < nx_cells() && j < nt_cells() && cell_mat[i + nx_cells() * j] >= 0;
 }
 
-// --- the edges ---------------------------------------------------------------------
-
-// An edge of the boundary of the kept cells: the lattice nodes a, m (the
-// middle, or -1) and b, and the outward unit normal on the surface (along
-// x and along s).
 struct Edge {
     a: i64,
     m: i64,
@@ -740,14 +664,12 @@ fn make_edges() {
     for j in nt_cells() {
         for i in nx_cells() {
             if !kept(i, j) { continue; }
-            // The sides: below (j), right (i + 1), above (j + 1) and left (i).
             let sides = [[i, j, i + 1, j, 0, -1], [i + 1, j, i + 1, j + 1, 1, 0], [i + 1, j + 1, i, j + 1, 0, 1], [i, j + 1, i, j, -1, 0]];
             for s in sides {
                 if kept(i + s[4], j + s[5]) { continue; }
                 let a = corner(s[0], s[1]);
                 let b = corner(s[2], s[3]);
                 let m = if order == 2 { lat(s[0] + s[2], s[1] + s[3]) } else { -1 };
-                // The outward normal: the side turned clockwise, in x and s.
                 let dx = px_lat[b] - px_lat[a];
                 let ds = radius * (pt_lat[b] - pt_lat[a]);
                 let l = sqrt(dx * dx + ds * ds);
@@ -766,14 +688,11 @@ fn edge_length(e: Edge) -> f64 {
     return sqrt(sq(px_lat[e.b] - px_lat[e.a]) + sq(radius * (pt_lat[e.b] - pt_lat[e.a])));
 }
 
-// The outward normal of edge e in 3D, at its middle.
 fn edge_normal(e: Edge) -> f64[3] {
     let t = 0.5 * (pt_lat[e.a] + pt_lat[e.b]);
-    // d/ds of (x, R sin θ, R cos θ) is (0, cos θ, -sin θ).
     return [e.nx, e.ns * cos(t), -e.ns * sin(t)];
 }
 
-// Whether edge e is on the shell curve v.
 recursive fn edge_on(v: i64, e: Edge) -> bool {
     let tol = geo_tol();
     if kind(v) == syntax::N_NAME { return edge_on(regions[find_region(v)].node, e); }
@@ -786,9 +705,6 @@ recursive fn edge_on(v: i64, e: Edge) -> bool {
     if is_condition(c) {
         return holds(c, lat_point(e.a), tol) && holds(c, lat_point(e.b), tol) && holds(c, edge_mid(e), tol);
     }
-    // A node on a fixed line, or a node whose move went back, can stay up
-    // to a cell from the cut. Each edge here is on the boundary of the
-    // kept cells, so a cell of tolerance takes no other edge.
     let g = node_shape(c);
     let near = 1.0 * edge_length(e);
     return abs(phi(g, lat_point(e.a))) <= near && abs(phi(g, lat_point(e.b))) <= near && abs(phi(g, edge_mid(e))) <= near;

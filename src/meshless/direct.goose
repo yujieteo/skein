@@ -1,17 +1,3 @@
-// The direct solve: a profile (skyline) LU factorization without
-// pivoting, as COLSOL in K. J. Bathe, Finite Element Procedures, 1996,
-// §8.2.3, with a lower part for a matrix that is not symmetric.
-//
-// Reason: the rkpm matrix has a large condition number (the Nitsche
-// penalty and the wide supports), and on the plate of
-// samples/05_meshless_plate.skn CG with AMG and GMRES with ILU(0) take
-// thousands of iterations or do not converge. A direct solve does not
-// depend on it.
-//
-// The points take the reverse Cuthill-McKee order of the pattern, which
-// makes the profile small. Dof d of the pattern is row (and column)
-// renumber(d) of the profile. Column j holds the rows top[j]..j of U, and
-// row j the columns top[j]..j - 1 of L, at sky_start[j] + (i - top[j]).
 import std;
 import math;
 namespace meshless;
@@ -19,7 +5,7 @@ import .model;
 import .solve;
 import solvers from "../solvers";
 
-var position: i64[>..] = [];    // the position of each point in the order
+var position: i64[>..] = [];
 var top: i64[>..] = [];
 var sky_start: i64[>..] = [];
 var upper: f64[>..] = [];
@@ -27,12 +13,8 @@ var lower: f64[>..] = [];
 
 fn renumber(d: i64) -> i64 { return ncomp * position[d / ncomp] + d % ncomp; }
 
-// The points that couple with point p in the pattern.
 fn degree(p: i64) -> i64 { return (row_start[ncomp * p + 1] - row_start[ncomp * p]) / ncomp; }
 
-// Appends to seq the points of the component of root, in the Cuthill-McKee
-// order: by level from root, and in each level by degree. It marks each
-// with stamp, and gives the last point.
 fn cuthill(root: i64, stamp: i64, mark: i64[>..]&, seq: i64[>..]&) -> i64 {
     var head = seq.len;
     seq.push(root);
@@ -57,9 +39,6 @@ fn cuthill(root: i64, stamp: i64, mark: i64[>..]&, seq: i64[>..]&) -> i64 {
     return seq[seq.len - 1];
 }
 
-// The reverse Cuthill-McKee order of the points. Each component starts
-// from the last point of a first pass from its point of least degree: a
-// point near the end of the component.
 fn order_points() {
     let n = point_count();
     var mark: i64[>..] = [];
@@ -81,7 +60,6 @@ fn order_points() {
     for k in n { position[seq[k]] = n - 1 - k; }
 }
 
-// The order, the profile of the pattern and its storage.
 fn size_profile() {
     order_points();
     let n = dof_count();
@@ -104,16 +82,12 @@ fn size_profile() {
 
 fn profile_size() -> i64 { return sky_start[sky_start.len - 1]; }
 
-// The sum of a[k] b[k] for k from lo to hi - 1, with a and b at k from
-// their starts.
 fn span_dot(a: f64[:], a0: i64, b: f64[:], b0: i64, lo: i64, hi: i64) -> f64 {
     var s = 0.0;
     for k in lo..hi { s += a[a0 + k] * b[b0 + k]; }
     return s;
 }
 
-// A = L U in place (Crout). False if a pivot is 0 relative to its row: the
-// matrix is singular, or needs a pivot order.
 fn factor() -> bool {
     for &v in upper { v = 0.0; }
     for &v in lower { v = 0.0; }
@@ -124,10 +98,8 @@ fn factor() -> bool {
             if i <= j { upper[sky_start[j] + i - top[j]] = val[e]; } else { lower[sky_start[i] + j - top[i]] = val[e]; }
         }
     }
-    // A symmetric matrix has L(j, i) = U(i, j) / U(i, i): half the work.
     let symmetric = method == RKPM && (physics == ELASTIC || (ax == 0.0 && ay == 0.0));
     for j in dof_count() {
-        // U(i, j) and L(j, i) for i < j, then U(j, j).
         let uj = sky_start[j] - top[j];
         for i in top[j]..j {
             let ui = sky_start[i] - top[i];
@@ -143,7 +115,6 @@ fn factor() -> bool {
     return true;
 }
 
-// sol = A⁻¹ rhs with the factors: L y = b, then U x = y.
 fn substitute() {
     let n = dof_count();
     var x: f64[>..] = [];

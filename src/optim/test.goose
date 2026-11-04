@@ -1,16 +1,7 @@
-// Tests of the package optim. `./build.sh test` runs this program from
-// the root of the repository, and a non-zero exit status is a failure.
-//
-// - the patch test: a uniform tension gives the exact linear field;
-// - the adjoint: the derivatives of a point objective by the density of
-//   cells and by E, nu, t and the loads equal central finite differences;
-// - the half MBB beam of Andreassen et al. (2011), 60 x 20 cells: the
-//   loop gives the compliance c = 216.81 of their figure 3 within 0.2 %
-//   (femahoy validation/cases/topology-mbb-beam).
 import std;
 import math;
 import optim from "../optim";
-import solvers from "../solvers";   // optim imports it
+import solvers from "../solvers";
 
 var failures = 0;
 
@@ -23,9 +14,6 @@ fn near(what: u8[:], got: f64, want: f64, rel: f64) {
     if !(abs(got - want) <= rel * max(abs(want), 1.0e-300)) { fail(str(what, ": ", got, ", not ", want, " within ", rel)); }
 }
 
-// A plate of 4 x 2 cells of 2 x 1, fixed on x = 0 along x and at the
-// origin along y, with the traction s along x on x = 8: u = (s x / E,
-// -nu s y / E) in plane stress, at each node.
 fn test_patch() {
     optim::mesh_rect(0.0, 0.0, 8.0, 2.0, 4, 2);
     optim::elastic(200.0, 0.25, 1.0, optim::PLANE_STRESS);
@@ -47,9 +35,6 @@ fn test_patch() {
     if worst > 1.0e-12 { fail(str("the patch test is not exact: ", worst)); }
 }
 
-// A small design with densities that are not all equal, held as a
-// cantilever, a point load at the free end, and the objective u.x at an
-// inside point: not a compliance, so that λ is not u.
 fn small_design(E: f64, nu: f64, t: f64, fy: f64) {
     optim::mesh_rect(0.0, 0.0, 6.0, 3.0, 6, 3);
     optim::elastic(E, nu, t, optim::PLANE_STRESS);
@@ -78,8 +63,6 @@ fn test_adjoint() {
     var dc: f64[>..] = [];
     for c in optim::cell_count() { dc.push(optim::cell_sensitivity(c)); }
     let h = 1.0e-5;
-    // The error of a difference is 1e-6 of the largest sensitivity: a
-    // cell far from the load and the point has a small one.
     var largest = 0.0;
     for v in dc { largest = max(largest, abs(v)); }
     for c in [0, 5, 11, 17] {
@@ -92,10 +75,6 @@ fn test_adjoint() {
     near("dJ/dt", g[2], (objective_of(1.0, 0.3, 2.0 + h, -1.0, -1, 0.0) - objective_of(1.0, 0.3, 2.0 - h, -1.0, -1, 0.0)) / (2.0 * h), 1.0e-6);
 }
 
-// The half MBB beam: ux = 0 on the left edge (a plane of symmetry), uy =
-// 0 at the bottom right corner, and the force 1 down at the top left
-// corner. E = 1, nu = 0.3, plane stress, a volume of 0.5, p = 3 and the
-// filter radius 2.4. The objective is the compliance -u_y at the load.
 fn test_mbb() {
     optim::mesh_rect(0.0, 0.0, 60.0, 20.0, 60, 20);
     optim::elastic(1.0, 0.3, 1.0, optim::PLANE_STRESS);

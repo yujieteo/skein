@@ -1,29 +1,24 @@
-// The types of Skein values (spec §5) and the rules that join them (spec
-// §5.7, §6.1, §7.2).
 import std;
 namespace check;
 import .dims;
 
-// The kinds of a type.
-let K_ANY = 0;       // the type of a value after an error. It matches every type.
-let K_NUM = 1;       // a quantity: `Int`, `Real`, `Angle` or a dimension, of a rank
+let K_ANY = 0;
+let K_NUM = 1;
 let K_BOOL = 2;
 let K_STR = 3;
-let K_GEOM = 4;      // a geometry value: `geo` is its topological dimension
+let K_GEOM = 4;
 let K_MESH = 5;
 let K_POINTS = 6;
-let K_RESULTS = 7;   // `aux` is the index into `results`
-let K_WORD = 8;      // a word in a setting, for example `tet` or `newton`
-let K_RECORD = 9;    // `{ a: 1, b: 2 }`
-let K_LIST = 10;     // `[a, b]`
-let K_DECL = 11;     // a name that is not a value: a material, a physics, a step
+let K_RESULTS = 7;
+let K_WORD = 8;
+let K_RECORD = 9;
+let K_LIST = 10;
+let K_DECL = 11;
 
-// The scalar kind of a dimensionless quantity (spec §5.1).
 let B_REAL = 0;
 let B_INT = 1;
 let B_ANGLE = 2;
 
-// The number systems (spec §5.1).
 let NS_REAL = 0;
 let NS_COMPLEX = 1;
 let NS_NAMES = ["", "Complex"];
@@ -31,16 +26,16 @@ let NS_NAMES = ["", "Complex"];
 struct Ty {
     kind: i64,
     dim: i64[7],
-    rank: i64,        // 0, 1, 2 or 4 (spec §5.2)
-    num: i64,         // an NS_ constant
-    base: i64,        // a B_ constant
-    geo: i64,         // the topological dimension of a K_GEOM
-    aux: i64,         // the results index of a K_RESULTS, else -1
-    zero: bool,       // the literal 0 with no unit (spec §5.7, exception 1)
-    list: bool,       // a table column, or an expression of one (spec §5.6)
-    table: i64,       // the symbol of the table of a list, -1 for none, MIXED for more than one
-    varying: bool,    // depends on x, y, z, t or a field (spec §7.6)
-    percent: bool,    // a percent literal
+    rank: i64,
+    num: i64,
+    base: i64,
+    geo: i64,
+    aux: i64,
+    zero: bool,
+    list: bool,
+    table: i64,
+    varying: bool,
+    percent: bool,
 }
 
 let MIXED = -2;
@@ -83,7 +78,6 @@ fn is_dimless_scalar(t: Ty) -> bool { t.kind == K_NUM && t.rank == 0 && is_dimle
 
 let GEO_NAMES = ["Point", "Curve", "Surface", "Solid"];
 
-// Writes the type `t` as a Skein type, for example `Vector<Pressure>`.
 fn format_ty(out: u8[>..]&, t: Ty) {
     match t.kind {
         K_ANY => out.append("an unknown type"),
@@ -129,8 +123,6 @@ fn dim_str(d: i64[7]) -> u8[>..] {
     return s;
 }
 
-// The result of joining `a` and `b` in a value: the varying and list flags
-// of both.
 fn joined(t: Ty, a: Ty, b: Ty) -> Ty {
     var r = t;
     r.varying = a.varying || b.varying;
@@ -139,7 +131,6 @@ fn joined(t: Ty, a: Ty, b: Ty) -> Ty {
     return r;
 }
 
-// The table of a value that uses the columns of tables `a` and `b`.
 fn rows(a: i64, b: i64) -> i64 {
     if a == -1 || a == b { return b; }
     if b == -1 { return a; }

@@ -1,6 +1,3 @@
-// The simplex mesh of a shape of src/mesher/: the triangles or the
-// tetrahedra of its mesher, with its refine targets, and the parts of the
-// boundary on the surface of a shape.
 import std;
 import math;
 import dictionary;
@@ -10,14 +7,13 @@ import runtime from "../runtime";
 import .shape;
 import .mesh;
 
-var body_shape = -1;    // the shape of the mesh of mesh_shape, or -1
+let SNAP_MAX_MOVE = 0.1;
+let FOLD_RATIO = 0.2;
+let SNAP_PASSES = 8;
+var body_shape = -1;
 
-// |φ| of shape g at node n, the distance of the node to its surface.
 fn shape_gap(g: i64, n: i64) -> f64 { return abs(mesher::phi(g, node_x(n, 0), node_x(n, 1), node_x(n, 2))); }
 
-// Moves node m, the midpoint of the edge a b, onto the surface of shape g
-// by Newton steps along the gradient of φ. It stays if the move is more
-// than a tenth of the edge, for example across a cut corner of the shape.
 fn snap(g: i64, m: i64, a: i64, b: i64) {
     var l = 0.0;
     for t in 3 { l += (node_x(a, t) - node_x(b, t)) * (node_x(a, t) - node_x(b, t)); }
@@ -41,14 +37,10 @@ fn snap(g: i64, m: i64, a: i64, b: i64) {
     }
     var moved = 0.0;
     for t in 3 { moved += (q[t] - node_x(m, t)) * (q[t] - node_x(m, t)); }
-    guard sqrt(moved) <= 0.1 * l && abs(mesher::phi(g, q[0], q[1], q[2])) <= 1.0e-9 * l else { return; }
+    guard sqrt(moved) <= SNAP_MAX_MOVE * l && abs(mesher::phi(g, q[0], q[1], q[2])) <= 1.0e-9 * l else { return; }
     for t in 3 { coords[3 * m + t] = q[t]; }
 }
 
-// Meshes shape g with the mesher, P1 or P2 (ord) cells of size `size` in
-// dimension d, and smaller at its refine targets. For order 2, the
-// midpoint node of each edge on the surface of g moves onto the surface.
-// False if the mesher does not finish.
 fn build_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
     guard d == 2 || d == 3 else { abort("build_shape: d = 2 or 3"); }
     let done = if d == 3 { mesher::mesh_3d(g, size) } else { mesher::mesh_2d(g, size) };
@@ -61,10 +53,6 @@ fn build_shape(d: i64, ord: i64, g: i64, size: f64) -> bool {
     return true;
 }
 
-// Meshes shape g, a union of boxes, with the hexahedra of the grid of the
-// mesher (mesher::mesh_cells): a grid plane on each face of g and of each
-// box of `planes`, so that no hexahedron crosses a face of a region. False
-// if g is not a union of boxes, or the mesher does not finish.
 fn build_hex_shape(g: i64, size: f64, planes: i64[:]) -> bool {
     guard mesher::mesh_cells(g, 3, size, planes) && runtime::cell_count() > 0 else { return false; };
     guard runtime::cell_nodes.len == 8 * runtime::cell_count() else { return false; };
@@ -89,10 +77,6 @@ fn build_hex_shape(g: i64, size: f64, planes: i64[:]) -> bool {
     return true;
 }
 
-// Meshes each shape of `shapes` alone, as build_shape, so that two bodies
-// share no node: the bodies of a contact (contact.goose). Cell c is in
-// body cell_body[c]. g is the union of the shapes, the body of the
-// boundary planes. False if the mesher does not finish.
 fn build_bodies(d: i64, ord: i64, shapes: i64[:], g: i64, size: f64) -> bool {
     guard (d == 2 || d == 3) && shapes.len >= 2 else { abort("build_bodies: d = 2 or 3 and two shapes or more"); }
     var xyz: f64[>..] = [];
@@ -106,8 +90,6 @@ fn build_bodies(d: i64, ord: i64, shapes: i64[:], g: i64, size: f64) -> bool {
         for v in runtime::cell_nodes { vertices.push(base + v); }
         for c in runtime::cell_count() { owner.push(k); }
     }
-    // The mesh of the mesher holds the last body: it gets all of them, for
-    // mesh_quality.
     let t = runtime::cell_type[0];
     runtime::coords.clear();
     runtime::coords.append(xyz);
@@ -132,8 +114,6 @@ fn build_bodies(d: i64, ord: i64, shapes: i64[:], g: i64, size: f64) -> bool {
     return true;
 }
 
-// Moves the midpoint node of each edge on the surface of the body of its
-// cell onto that surface.
 fn snap_edges(d: i64) {
     let tol = geometry_tolerance();
     let edges = boundary_edges(d);
@@ -143,15 +123,11 @@ fn snap_edges(d: i64) {
         for e in edge_count(d) {
             let a = cell_node(c, edge_node(d, e, 0));
             let b = cell_node(c, edge_node(d, e, 1));
-            // An edge through the body, such as the third edge of a cell
-            // with two edges on a round side, stays straight.
             guard edges.get(min(a, b) * nv + max(a, b)) != null else { continue; }
             if shape_gap(g, a) <= tol && shape_gap(g, b) <= tol { snap(g, cell_node(c, d + 1 + e), a, b); }
         }
     }
-    // A snap across a corner of the shape can fold a cell: such a cell gets
-    // its straight edges back. A straight cell is never folded, so this ends.
-    for pass in 8 {
+    for pass in SNAP_PASSES {
         var changed = false;
         for c in cell_count() {
             guard folded(d, c) else { continue; }
@@ -162,8 +138,6 @@ fn snap_edges(d: i64) {
     }
 }
 
-// Whether the Jacobian of cell c at a vertex or at a quadrature point is
-// less than 0.2 times that of its straight cell.
 fn folded(d: i64, c: i64) -> bool {
     var lo = 1.0e300;
     var xi: f64[3] = [0.0, 0.0, 0.0];
@@ -179,7 +153,6 @@ fn folded(d: i64, c: i64) -> bool {
         var jac: f64[9] = [0.0; 9];
         lo = min(lo, cell_jacobian(c, jac));
     }
-    // the straight cell: the Jacobian at the centroid of its vertices
     shape(dim, 1, [0.0, 0.0, 0.0], shp, dref);
     var p1: f64[9] = [0.0; 9];
     for l in d + 1 {
@@ -189,17 +162,13 @@ fn folded(d: i64, c: i64) -> bool {
     }
     let det0 = if d == 2 { p1[0] * p1[4] - p1[1] * p1[3] } else {
         p1[0] * (p1[4] * p1[8] - p1[5] * p1[7]) - p1[1] * (p1[3] * p1[8] - p1[5] * p1[6]) + p1[2] * (p1[3] * p1[7] - p1[4] * p1[6]) };
-    return lo < 0.2 * det0;
+    return lo < FOLD_RATIO * det0;
 }
 
-// Puts midpoint node m back on the middle of a and b.
 fn straighten(m: i64, a: i64, b: i64) {
     for t in 3 { coords[3 * m + t] = 0.5 * (node_x(a, t) + node_x(b, t)); }
 }
 
-// The edges of the facets on the boundary of the mesh, each a key
-// min(a, b) * node_count() + max(a, b) of its vertices a and b. A facet on
-// the boundary is a facet of one cell.
 fn boundary_edges(d: i64) -> dictionary<i64, i64> {
     let nv = node_count();
     guard nv < 2000000 else { abort("boundary_edges: fewer than 2e6 nodes"); }
@@ -224,7 +193,6 @@ fn boundary_edges(d: i64) -> dictionary<i64, i64> {
     return edges;
 }
 
-// The key of facet f of cell c: its sorted vertices in base node_count().
 fn facet_key(d: i64, c: i64, f: i64) -> i64 {
     let nv = node_count();
     var v: i64[3] = [0, 0, 0];
@@ -234,9 +202,6 @@ fn facet_key(d: i64, c: i64, f: i64) -> i64 {
     return (v[0] * nv + v[1]) * nv + v[2];
 }
 
-// Quarter-point cells at the crack tip (x, y) (spec §9.1): on each edge of a
-// triangle that touches the tip, the mid-side node moves to a quarter of
-// the edge from the tip. It gives the number of edges that it moved.
 fn quarter_point(x: f64, y: f64) -> i64 {
     guard dim == 2 && order == 2 else { abort("quarter_point: P2 triangles"); }
     var count = 0;

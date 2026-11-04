@@ -1,12 +1,3 @@
-// The assembly and a direct solve: a skyline (profile) LDLᵀ factorization,
-// as COLSOL in K. J. Bathe, Finite Element Procedures, 1996, §8.2.3.
-//
-// A shell model with a small thickness has a stiffness matrix with a large
-// condition number (about (L/h)²), so CG with Jacobi converges slowly. A
-// direct solve does not depend on it.
-//
-// Column j holds the rows top[j]..j. A fixed dof keeps a 1 on the diagonal
-// and no other entry, with a load of 0.
 import std;
 import math;
 import os;
@@ -21,20 +12,17 @@ import .dissect;
 import solvers from "../solvers";
 
 var top: i64[>..] = [];
-var start: i64[>..] = [];      // the index in sky of the entry (top[j], j)
+var start: i64[>..] = [];
 var sky: f64[>..] = [];
 
 var last_seconds = 0.0;
-var singular_dof = -1;          // the first dof with no stiffness, or -1
+var singular_dof = -1;
 
-// The direct solves: the skyline (this file) or the nested dissection of
-// one grid (dissect.goose). AUTO takes the dissection for a grid of order
-// 2, which has a wide skyline, and the skyline for all else.
 let SOLVE_AUTO = 0;
 let SOLVE_SKYLINE = 1;
 let SOLVE_DISSECTION = 2;
 var solve_method = SOLVE_AUTO;
-var last_method = SOLVE_SKYLINE;    // the solve that solve() used last
+var last_method = SOLVE_SKYLINE;
 
 fn cell_dofs(c: i64, beam_cell: bool) -> i64[54], i64 {
     guard c >= 0 && c < (if beam_cell { beams.len } else { shells.len }) else { abort("cell_dofs: 0 <= c < the count of beams or of shells"); }
@@ -90,13 +78,11 @@ fn scatter(d: i64[54], m: i64, k: f64[:]) {
     }
 }
 
-// The stiffness of shell cell c: ke of MITC4 or ke9 of MITC9.
 fn cell_stiffness(c: i64) {
     guard c >= 0 && c < shells.len else { abort("cell_stiffness: 0 <= c < shells.len"); }
     if shells[c].count == 9 { mitc9_stiffness(c); } else { shell_stiffness(c); }
 }
 
-// Holds each dof of a node that no cell uses: a node in a cutout.
 fn fix_free_nodes() {
     var used: u8[>..] = [];
     for n in node_count() { used.push(0); }
@@ -124,7 +110,6 @@ fn assemble() {
     for j in dof_count() { if fixed[j] != 0 { sky[at(j, j)] = 1.0; } }
 }
 
-// sky = L D Lᵀ in place: the diagonal holds D, column j above it holds Lᵀ.
 fn factor() -> bool {
     guard top.len == dof_count() && start.len == top.len else { abort("factor: the profile has each dof"); }
     let n = dof_count();
@@ -174,8 +159,6 @@ fn substitute() {
     }
 }
 
-// Assembles and solves K u = f. Returns false if the matrix is singular:
-// a mechanism or a dof with no stiffness (singular_dof).
 fn solve() -> bool {
     let t0 = clock();
     let g = dissect_grid();
@@ -194,12 +177,12 @@ fn solve() -> bool {
     let ok = if dissect { dissect_factor(g) } else { factor() };
     if ok && dissect { dissect_substitute(); }
     if ok && !dissect { substitute(); }
+    disp_is_mode = false;
     guard state_sizes() == sizes else { abort("solve: a solve grows no array of the state (rule 3)"); }
     last_seconds = clock() - t0;
     return ok;
 }
 
-// K u - f on each dof, from each cell again.
 fn out_of_balance() -> f64[>..] {
     guard fixed.len == dof_count() && load.len == fixed.len && disp.len == fixed.len else { abort("out_of_balance: a fixed, load and solution value for each dof"); }
     var r: f64[>..] = [];
@@ -223,15 +206,12 @@ fn out_of_balance() -> f64[>..] {
     return r;
 }
 
-// The reaction forces: K u - f on the fixed dofs. Returns the reaction of
-// each dof (0 on a free dof).
 fn reactions() -> f64[>..] {
     var r = out_of_balance();
     for d in dof_count() { if fixed[d] == 0 { r[d] = 0.0; } }
     return r;
 }
 
-// |K u - f| / |f| on the free dofs: the check of a solve.
 fn relative_residual() -> f64 {
     let r = out_of_balance();
     var rr = 0.0;
@@ -244,7 +224,6 @@ fn relative_residual() -> f64 {
     return sqrt(rr / max(ff, 1.0e-300));
 }
 
-// The sum of the reaction forces r (from reactions) on the nodes.
 fn reaction_sum(r: f64[:], nodes: i64[:]) -> f64, f64, f64 {
     guard r.len == dof_count() else { abort("reaction_sum: r has each dof"); }
     var s: f64[3] = [0.0, 0.0, 0.0];
@@ -252,8 +231,6 @@ fn reaction_sum(r: f64[:], nodes: i64[:]) -> f64, f64, f64 {
     return s[0], s[1], s[2];
 }
 
-// The sizes of the loads and of the reactions, for the limit of the
-// equilibrium check.
 fn load_scale(r: f64[:]) -> f64 {
     guard r.len == load.len else { abort("load_scale: r and load have one size"); }
     var s = 0.0;
@@ -263,8 +240,6 @@ fn load_scale(r: f64[:]) -> f64 {
 
 fn profile_size() -> i64 { return sky.len; }
 
-// The length of each array of the state of the package. A solve grows none
-// of them (rule 3 of the Power of Ten, docs/tradeoffs.md §6).
 fn state_sizes() -> i64[27] {
     return [coords.len, directors.len, shells.len, beams.len, beam_sections.len, fixed.len, load.len,
             disp.len, grids.len, sections.len, plies.len, top.len, start.len, sky.len, grid_lines.len, grid_cells.len,

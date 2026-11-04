@@ -1,5 +1,3 @@
-// Tests of the code generator. `./build.sh test` runs this program from the
-// root of the repository, and a non-zero exit status is a failure.
 import std;
 import os;
 import syntax from "../syntax";
@@ -9,7 +7,7 @@ import .split;
 import .status;
 import .kernels;
 import .slots;
-import check from "../check";   // study.goose writes TOON with it
+import check from "../check";
 
 extern "libc.so.6" {
     fn system(command: const u8&) -> i32;
@@ -17,7 +15,6 @@ extern "libc.so.6" {
 
 var failures = 0;
 
-// Reads `text` and gives the generated program, or the first error.
 fn generate(text: u8[:]) -> u8[>..] {
     syntax::reset();
     let f = syntax::add_file("t.skn", text);
@@ -34,7 +31,6 @@ fn generate(text: u8[:]) -> u8[>..] {
     return out;
 }
 
-// The generated program for `text` holds each of `wants`.
 fn expect_lines(what: u8[:], text: u8[:], wants: const u8[:][:]) {
     let got = generate(text);
     for w in wants {
@@ -54,7 +50,6 @@ fn expect_error(what: u8[:], text: u8[:], want: u8[:]) {
     }
 }
 
-// The number of times `w` is in `s`.
 fn occurrences(s: u8[:], w: u8[:]) -> i64 {
     var n = 0;
     var at = 0;
@@ -67,7 +62,6 @@ fn occurrences(s: u8[:], w: u8[:]) -> i64 {
     return n;
 }
 
-// `s` with each `from` changed to `to`.
 fn replace(s: u8[:], from: u8[:], to: u8[:]) -> u8[>..] {
     var out: u8[>..] = [];
     for part, i in split(s, from) {
@@ -177,7 +171,6 @@ fn test_closed_cylinder() {
 }
 
 fn test_units() {
-    // 1 kN on 50 mm x 100 mm is 0.2 MPa, and in SI 200000 Pa.
     let load = """
         step load: static {
             bc root: u = 0
@@ -215,8 +208,6 @@ fn test_two_steps() {
         "fn step_two() {\n    // The supports of the first step stay.\n    runtime::clear_loads();\n    // bc tip: sigma*n = (0.0, 0.0, -2.0) MPa\n    face(runtime::traction(\"x1\", 0.0, 0.0, -2.0), \"tip\");",
         "    step_one();\n    step_two();\n",
     ]);
-    // G10: an expect of a step is checked at the end of the step, and an
-    // expect item after the last step.
     let expects = replace(steps, "-1) MPa\n", "-1) MPa\n    expect one_uz: u.z at (100, 5, 5) mm == -0.1 mm within 50%\n");
     let got = generate(model(MM, str(MESH, expects, "\nexpect last_uz: u.z at (100, 5, 5) mm == -0.2 mm within 50%\n")));
     let one = find(got, "expect(\"one_uz\", uz, -0.1,");
@@ -227,8 +218,6 @@ fn test_two_steps() {
     }
 }
 
-// Spec §12.2: a top-level bc holds in each step wherever it is in the
-// file, and a step bc holds from its step on.
 fn test_bc_scope() {
     let after = """
         step load: static {
@@ -262,7 +251,6 @@ fn test_bc_scope() {
     ]);
 }
 
-// The equilibrium check sums the reaction of each fixed node once.
 fn test_reaction() {
     let twice = """
         bc root: u = 0
@@ -277,8 +265,6 @@ fn test_reaction() {
         failures++;
         print("FAIL a face fixed twice: not one fix and one reaction in:\n", got);
     }
-    // Loads that cancel: the limit is 1e-6 of the largest load, 1 MPa on
-    // 100 mm x 10 mm, not of the resultant 0.
     expect_lines("loads that cancel", model(MM, str(MESH, """
         let bottom: Surface = boundary(beam, z == 0 mm)
         let top: Surface = boundary(beam, z == 10 mm)
@@ -323,14 +309,11 @@ fn test_reaction() {
                  "error unsupported 23:21 the face tip is not fixed in step load");
 }
 
-// The dispatch tables: a template or a procedure of a lane that has no
-// generator yet gives an error at its item.
 fn test_dispatch() {
     expect_error("the heat template", replace(model(MM, str(MESH, STEP)), "linear_elastic", "heat"),
                  "error unsupported 16:9 the template heat has no generator in this build");
     expect_error("a transient step", replace(model(MM, str(MESH, STEP)), "load: static", "load: transient"),
                  "error unsupported 19:12 the procedure transient has no generator in this build");
-    // The linear solver of a step: cg with amg (the default), cg with jacobi, or a pair of the solvers lane.
     let solve = "    solve { linear: cg, precond: jacobi }\n";
     expect_lines("cg with jacobi", model(MM, str(MESH, replace(STEP, "    output u\n", solve))),
                  ["solve(\"load\", \"cg\", \"jacobi\");"]);
@@ -362,8 +345,6 @@ fn test_unsupported() {
     expect_error("2d", model("model t: 2d, mm_N_MPa_s", str(MESH, STEP)), "error unsupported 1:10 this slice is 3d only");
 }
 
-// --- studies (spec §20) ---------------------------------------------------------
-
 let STUDY_MODEL = """
     model t: 3d, SI
 
@@ -378,8 +359,6 @@ let STUDY_MODEL = """
     expect e: a == 1 m within 1%
     """;
 
-// Reads the study `study` of `STUDY_MODEL` with the study item `item`. It
-// gives the cases as lines of the varied values, or the first error.
 fn cases(item: u8[:]) -> u8[>..] {
     let text = str(STUDY_MODEL, "\n", item);
     let prog = syntax::parse_model("t.skn", text);
@@ -417,7 +396,6 @@ fn test_study_cases() {
                 "error unsupported 13:11 a grid or a zip takes a list of values, not a range");
     expect_text("minimize", cases("study s: minimize(objective: r, method: bfgs, max_cases: 9) {\n    a: 1 m..2 m\n}\n"),
                 "error unsupported 12:10 minimize runs only with method: gradient or nelder_mead in this build");
-    // A gradient minimize has no case before its loop, and starts at the default.
     expect_text("minimize gradient", cases("study s: minimize(r, method: gradient) {\n    a: 0.5 m..4 m\n}\n"), "");
     expect_text("minimize start", str(codegen::range_start[0] * 3.5), "0.5");
     expect_text("minimize units", cases("study s: minimize(r, method: gradient) {\n    a: 50 cm..400 cm\n}\n"),
@@ -434,18 +412,14 @@ fn test_study_cases() {
                 "error procedure_args 13:5 the list of 'a' has no values");
     expect_text("a param twice", cases("study s: grid {\n    a: [1] m\n    a: [2] m\n}\n"),
                 "error study_param 14:5 the study varies 'a' twice");
-    // A bare number in a list takes the unit of the list, also after a `-`.
     expect_text("a negative value", cases("study s: grid {\n    a: [-1, 2] m\n}\n"), "-1 m\n2 m\n");
     expect_text("a unit with a power", cases("study s: grid {\n    a: [1, 2] m^-1*m^2\n}\n"), "1 m^-1*m^2\n2 m^-1*m^2\n");
-    // G10: each case appends the expects of the study, with its values.
     let text = str(STUDY_MODEL, "\nstudy s: grid {\n    a: [1, 2] m\n    expect e2: 2*a == [2, 4] m within [1%, 1 mm]\n    expect e3: a/1 m == 1 within 1e9\n}\n");
     let prog = syntax::parse_model("t.skn", text);
     codegen::study_cases(prog, codegen::find_study(prog, "s"));
     let source = codegen::case_source(text, 1);
     let want = "}\n\nexpect e2: 2*a == 4 m within 1 mm\n\nexpect e3: a/1 m == 1 within 1e9\n";
     expect_text("the expects of case 2", source[source.len - want.len..], want);
-    // A case of a sample is the value lo + t*(hi - lo), with t in [0, 1), in
-    // the unit of the range.
     for i in 0..SAMPLE_RANGES.len {
         let lo = SAMPLE_LOWS[i];
         let item = str("study s: sample(n: 4, method: lhs, seed: 7) {\n    a: ", SAMPLE_RANGES[i], "\n}\n");
@@ -459,7 +433,6 @@ fn test_study_cases() {
             }
         }
     }
-    // lhs and sobol: one t in each quarter.
     for method in ["lhs", "sobol"] {
         var seen = [false, false, false, false];
         for c in 0..4 {
@@ -471,7 +444,6 @@ fn test_study_cases() {
             print("FAIL ", method, ": the 4 points do not fill the 4 strata");
         }
     }
-    // The text of a case: each varied default in parentheses.
     let text = str(STUDY_MODEL, "\nstudy s: grid {\n    b: [3]\n    a: [2] m\n}\n");
     let prog = syntax::parse_model("t.skn", text);
     codegen::study_cases(prog, codegen::find_study(prog, "s"));
@@ -479,9 +451,6 @@ fn test_study_cases() {
     expect_text("the case text", case_text[..find(case_text, "let c")], "model t: 3d, SI\n\nparam a: Length = (2 m) in 0.5 m..4 m\nparam b: Real = (3)\n");
 }
 
-// The table of a study: a case that ran, a case whose expect fails, a case
-// that did not build, and a case that printed its records and stopped with
-// the exit status 1, for example when a solve does not converge.
 fn test_study_table() {
     let text = str(STUDY_MODEL, "\nstudy s: grid {\n    a: [1, 2, 3, 4] m\n}\n");
     let prog = syntax::parse_model("t.skn", text);
@@ -527,7 +496,6 @@ fn test_study_table() {
         failures++;
         print("FAIL the study table: exit status ", status, ", not 1");
     }
-    // A minimize study: only the best case sets the status.
     out.clear();
     toon.clear();
     let best = codegen::study_table("s", codegen::tok(codegen::find_study(prog, "s")), 1, prog, ends[..2], 0, "xtol", false, out, toon);
@@ -536,7 +504,6 @@ fn test_study_table() {
         failures++;
         print("FAIL the best case: exit status ", best, ", not 0");
     }
-    // G10: the columns of the expects of the steps and of the study.
     let two = str(replace(STUDY_MODEL, "reaction(c)\n", "reaction(c)\n    expect es: a == 1 m within 1%\n"),
                   "\nstudy s: grid {\n    a: [1, 2] m\n    expect ec: a == [1, 2] m within 1%\n}\n");
     let p2 = syntax::parse_model("t.skn", two);
@@ -546,26 +513,21 @@ fn test_study_table() {
     expect_text("the columns of the expects", names, "r es e ec ");
 }
 
-// The memory ledger of a study (spec §20.5): a case starts only if its
-// estimate fits beside the running cases, or if no case runs. A measured
-// peak takes the place of a smaller estimate.
 fn test_ledger() {
     var l = codegen::new_ledger(1.0e9);
     var got: u8[>..] = [];
-    // no case known: one at a time
     format(got, codegen::admits(l, codegen::case_need(l, 1000), 0), " ");
     l.used = codegen::case_need(l, 1000);
     format(got, codegen::admits(l, codegen::case_need(l, 1000), 1), " ");
-    l.per_dof = 1.0e5;   // 100 MB for 1000 dofs
+    l.per_dof = 1.0e5;
     l.used = 8.0e8;
     format(got, codegen::admits(l, codegen::case_need(l, 2000), 3), " ", codegen::admits(l, codegen::case_need(l, 3000), 3), " ");
     format(got, codegen::admits(l, codegen::case_need(l, 20000), 0), " ");
-    codegen::learn(l, 4, 1000, 5.0e7);   // a smaller peak does not replace the estimate
-    codegen::learn(l, 5, 1000, 2.0e8);   // a larger peak does
+    codegen::learn(l, 4, 1000, 5.0e7);
+    codegen::learn(l, 5, 1000, 2.0e8);
     format(got, l.per_dof, " ", l.source, " ");
-    l.budget = 0.0;   // no budget: --jobs only
+    l.budget = 0.0;
     format(got, codegen::admits(l, 1.0e12, 7), " ");
-    // more than one solve step: one case at a time until a measured peak
     var m = codegen::new_ledger(1.0e9);
     m.partial = true;
     m.per_dof = 1.0e3;
@@ -577,9 +539,6 @@ fn test_ledger() {
     expect_text("peak_mb", str(codegen::toon_number(toon, "peak_mb:"), " ", codegen::toon_number(toon, "none:")), "34.5 -1.0");
 }
 
-// skein verify convergence: the manufactured solutions of dg and of fv
-// with a limiter and ssprk3 converge with the order of their method, and
-// the faults of the command line stop it.
 fn test_convergence() {
     let runs = [
         ["../examples/grid/mms_dg_static.skn", "0"],
@@ -604,8 +563,6 @@ fn test_convergence() {
     }
 }
 
-// `skein run --study` of an example, and the command line errors. `./build.sh
-// test` builds build/skein first. The runs write .skein under build/.
 fn test_study_run() {
     let runs = [
         ["--study lengths --jobs 2", "0"],
@@ -636,8 +593,6 @@ fn test_study_run() {
         failures++;
         print("FAIL skein run --study: the heat of case 1 is not -20 W, or of case 3 not -40 W, in:\n", table);
     }
-    // lx reaches the mesh, so each case meshes. qv reaches only the physics:
-    // case 2 reads the mesh of case 1, and gives twice its heat.
     let studies = "build/.skein/studies/heated_bar_study_tet";
     if is_dir(str(studies, "/lengths/shared")) || !is_dir(str(studies, "/sources/shared")) {
         failures++;
@@ -645,7 +600,6 @@ fn test_study_run() {
     }
     table.clear();
     read_file(str(studies, "/sources.toon"), table);
-    // G10: the expect of the study holds in each case.
     for want in ["{case,qv,status,verify,heat_out,centre,centre_q,time_s}", "  2,2e7 W/m^3,ok,fail,-", " W,fail,pass,"] {
         if find(table, want) < 0 {
             failures++;
@@ -656,15 +610,12 @@ fn test_study_run() {
         failures++;
         print("FAIL skein run --study sources: the heat of case 1 is not -20 W, or of case 2 not -40 W, in:\n", table);
     }
-    // band reaches only the expect: case 2 reads the solution of case 1,
-    // so the study solves once, and the tolerance of case 2 is too small.
     table.clear();
     read_file(str(studies, "/bands.toon"), table);
     if !has_heat(table, "  1,0.0147 K,ok,pass,", 20) || !has_heat(table, "  2,1e-12 K,ok,fail,", 20) {
         failures++;
         print("FAIL skein run --study bands: the heat of case 1 or 2 is not -20 W in:\n", table);
     }
-    // The solve record of a case (command_line.md §6) has one row for each solve.
     for c in ["1", "2"] {
         var record: u8[>..] = [];
         read_file(str(studies, "/bands/", c, "/run.toon"), record);
@@ -676,10 +627,6 @@ fn test_study_run() {
     }
 }
 
-// A study of a model with a static step and a buckling step (spec §20.5):
-// the probe gives the estimate of the static step only, so the second case
-// starts only after a case ends. The length reaches the mesh, so the cases
-// share no stage.
 fn test_two_step_study() {
     var c: u8[>..] = [];
     format(c, "cd build && sed 's/^let L: Length/param L: Length/' ../examples/elements/buckling_column_tet.skn > two_steps.skn && ",
@@ -693,9 +640,6 @@ fn test_two_step_study() {
     }
 }
 
-// A run that does not fit in the memory budget (spec §20.5) stops before
-// its assembly, with exit status 1 and the estimate and the budget. A run
-// that fits only on 1 thread goes on with 1 thread.
 fn test_memory_stop() {
     var c: u8[>..] = [];
     format(c, "cd build && SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err; ",
@@ -705,8 +649,6 @@ fn test_memory_stop() {
         failures++;
         print("FAIL skein run with SKEIN_MEMORY_BUDGET=1000000 does not stop with the memory message");
     }
-    // The stop gives the 1-thread estimate, the least that the solve needs:
-    // the message on 16 threads is the same as on 1 thread.
     c.clear();
     format(c, "cd build && for t in 1 16; do SKEIN_THREADS=$t SKEIN_MEMORY_BUDGET=1000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory$t.err; ",
            "test $? = 1 || exit 1; done && cmp -s memory1.err memory16.err");
@@ -715,8 +657,6 @@ fn test_memory_stop() {
         failures++;
         print("FAIL skein run on 16 threads that does not fit does not stop with the 1-thread estimate");
     }
-    // 40 MB holds the solve on 1 thread (about 25 MB) and not on 16 threads
-    // (about 53 MB): the run goes on with 1 thread.
     c.clear();
     format(c, "cd build && SKEIN_THREADS=16 SKEIN_MEMORY_BUDGET=40000000 ./skein run ../examples/elements/heated_bar_tet.skn >/dev/null 2>memory.err && ",
            "grep -q 'the solve runs on 1 thread, since 16 threads need about' memory.err");
@@ -727,10 +667,6 @@ fn test_memory_stop() {
     }
 }
 
-// The threads of a case (spec §20.5): a run of a model on 1 thread and on
-// 4 threads gives the same reports and the same result files. The sed removes
-// the seconds of each solve and the memory of the run. One model of the runtime, one of the package
-// elements and one of the package flow.
 fn test_case_threads() {
     for m in [["examples/femahoy/grid_cantilever.skn", "grid_cantilever"], ["examples/elements/kirsch_plate_tri.skn", "kirsch_plate_tri"],
               ["examples/flow/cavity_coarse.skn", "cavity_coarse"]] {
@@ -746,15 +682,11 @@ fn test_case_threads() {
     }
 }
 
-// True if `table` has `row` and then the heat -w W, to the round-off of the
-// AMG solve: -w.0, -w.000000000001 or -(w - 1).999999999999.
 fn has_heat(table: u8[:], row: u8[:], w: i64) -> bool {
     return find(table, str(row, "-", w, ".0 W")) >= 0 || find(table, str(row, "-", w, ".00000000000")) >= 0 ||
            find(table, str(row, "-", w - 1, ".99999999999")) >= 0;
 }
 
-// The number of lines of the longest function of `program`, from its `fn`
-// line to its closing brace.
 fn longest_fn(program: u8[:]) -> i64 {
     var longest = 0;
     var start = -1;
@@ -768,14 +700,12 @@ fn longest_fn(program: u8[:]) -> i64 {
     return longest;
 }
 
-// `fn step_s() {` with the body lines `body`, after the splitter.
 fn split_step(body: u8[:]) -> u8[>..] {
     var program = str("import std;\nfn step_s() {\n", body, "}\n");
     codegen::split_long_functions(program);
     return program;
 }
 
-// `count` statements `    call_<i>();`.
 fn calls(from: i64, count: i64) -> u8[>..] {
     var out: u8[>..] = [];
     for i in from..from + count { format(out, "    call_", i, "();\n"); }
@@ -810,15 +740,12 @@ fn test_split() {
         failures++;
         print("FAIL split: a function of 60 lines changes");
     }
-    // 130 statements: parts of 58, 58 and 14, called in order.
     expect_split("130 calls", split_step(calls(0, 130)), [
         "fn part1_step_s() {\n    call_0();\n",
         "    call_57();\n}\nfn part2_step_s() {\n    call_58();\n",
         "    call_115();\n}\nfn part3_step_s() {\n    call_116();\n",
         "    call_129();\n}\nfn step_s() {\n    part1_step_s();\n    part2_step_s();\n    part3_step_s();\n}\n",
     ]);
-    // No cut between a local and its last use. A comment stays with the
-    // statement below it, and a block is one statement.
     let locals = str(calls(0, 50), "    let rx, ry = reaction();\n", calls(50, 10),
                      "    // the check\n    {\n        check(rx);\n    }\n", calls(60, 40));
     expect_split("a local", split_step(locals), [
@@ -845,8 +772,29 @@ fn test_unchecked_status() {
     }
 }
 
-// Each kernels.goose file holds what the emitter of the cell kernels writes.
-// With the argument `write`, it writes the files.
+fn test_gpu_constants_match_wgsl_and_js() {
+    var wgsl: u8[>..] = [];
+    var js: u8[>..] = [];
+    var goose: u8[>..] = [];
+    guard read_file("src/gpu/kernels.wgsl", wgsl) && read_file("src/gpu/gpu.js", js) && read_file("src/gpu/gpu.goose", goose) else {
+        failures++;
+        print("FAIL gpu constants: cannot read src/gpu");
+        return;
+    };
+    expect_gpu_text("gpu.goose WG", goose, "let WG = 64;");
+    expect_gpu_text("kernels.wgsl WG", wgsl, "const WG: u32 = 64u;");
+    expect_gpu_text("gpu.js WG", js, "Math.ceil(threads / 64)");
+    expect_gpu_text("gpu.goose ROW_GROUPS", goose, "let ROW_GROUPS = 65535;");
+    expect_gpu_text("gpu.js ROW_GROUPS", js, "Math.min(n, 65535)");
+}
+
+fn expect_gpu_text(name: u8[:], text: u8[:], want: u8[:]) {
+    if occurrences(text, want) == 0 {
+        failures++;
+        print("FAIL gpu constants: ", name, " lacks '", want, "'");
+    }
+}
+
 fn test_kernels(write: bool) {
     for f in codegen::KERNEL_FILES.len {
         let want = codegen::kernel_file(f);
@@ -866,8 +814,6 @@ fn test_kernels(write: bool) {
     }
 }
 
-// The literals of a program, and its slots for the page of skein build
-// --target wasm (slots.goose).
 fn test_slots() {
     let base = "fn f() {\n    // 9 in a comment\n    g(200.0, -2.5, x-1, \"3\", '4', a2, 7);\n}\n";
     let ls = codegen::literals(base);
@@ -890,7 +836,6 @@ fn test_slots() {
         failures++;
         print("FAIL slots: the values of the slots");
     }
-    // A change of a literal that is not a slot, or of the text, stops the run.
     let fixed = "fn f() {\n    // 9 in a comment\n    g(127.5, 3.0, x-2, \"3\", '4', a2, 12);\n}\n";
     let text = "fn f() {\n    // 9 in a comment\n    h(127.5, 3.0, x-1, \"3\", '4', a2, 12);\n}\n";
     if codegen::slot_values(base, slots, fixed, f, i) || codegen::slot_values(base, slots, text, f, i) {
@@ -899,9 +844,6 @@ fn test_slots() {
     }
 }
 
-// A thermal strain on a union of boxes of 2 materials, with a support at a
-// Point (spec §10.4), a material value from a table, and a report of a
-// difference of values at Points.
 fn test_thermal_union() {
     var text: u8[>..] = [];
     read_file("examples/femahoy/warpage_thick_copper.skn", text);
@@ -918,8 +860,6 @@ fn test_thermal_union() {
     ]);
     expect_error("a Point bc on a box", replace(replace(text, "si | cu", "si"), "copper on cu", "copper on si"),
                  "error unsupported 49:5 a bc on a Point needs a union of boxes");
-    // A material value from a table and a param, and a report of a difference
-    // of values at two Points.
     let t2 = replace(replace(replace(replace(text,
         "let dT: Temperature = 40 K", "let dT: Temperature = 40 K\nparam mat: Real = 1.5 in 1..2"),
         "material copper {\n    E: Pressure = 77500 MPa",
@@ -932,9 +872,6 @@ fn test_thermal_union() {
     ]);
 }
 
-// A Complex value of a harmonic step that the generator cannot write
-// stops the model in read, not in the program with a wrong value. A value
-// that holds only at omega > 0 solves.
 fn test_wave_values() {
     var text: u8[>..] = [];
     read_file("examples/elements/pml_duct_tri.skn", text);
@@ -967,9 +904,6 @@ fn test_wave_values() {
     }
 }
 
-// An expect of the model that fails at the start of a gradient minimize
-// does not stop its loop: the loop reaches E* = 10 MPa, where the expect
-// passes, and the study exits with 0.
 fn test_minimize_expect() {
     var c: u8[>..] = [];
     format(c, "cd build && sed '/^study best/i expect stretch: (u.x at (100 mm, 5 mm)) == 10 mm within 1%' ",
@@ -981,8 +915,6 @@ fn test_minimize_expect() {
     }
 }
 
-// topology refuses an objective that is not the compliance of its point
-// load: here the report has the sign of -compliance.
 fn test_topology_objective() {
     var text: u8[>..] = [];
     read_file("examples/femahoy/topology_mbb_beam.skn", text);
@@ -1026,6 +958,7 @@ fn main() {
     test_case_threads();
     test_split();
     test_unchecked_status();
+    test_gpu_constants_match_wgsl_and_js();
     test_slots();
     if failures > 0 {
         print(failures, " codegen tests failed");

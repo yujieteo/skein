@@ -1,18 +1,3 @@
-// The runtime expressions of the shell generator: a value of the model as
-// Goose code of the generated program.
-//
-// A field is a value at a node of the mesh, for example a let of the
-// physics. Its code uses the names of its field function in the program:
-// p (the point), w and th (the unknowns), tn and te (N and eps_m), and mat
-// (the material of the node). A global value is the value of a report or
-// an expect: `f at p`, `max(f, r)`, `min(f, r)`, `reaction(r)`,
-// `eigenvalue(k)`, and numbers, + - * / ^ and functions of these. A part
-// of an expression that is the same at each node is a number of the code.
-// `global.f`, with global the results value, is the field f on the model
-// of the results value.
-//
-// Each expression also has a dimension (the halves of length, mass and time
-// of codegen::Unit), for the unit of a report.
 import std;
 import math;
 namespace shells_gen;
@@ -37,7 +22,6 @@ let D_FORCE = Dim { l: 2, m: 2, t: -4 };
 let D_PRESSURE = Dim { l: -2, m: 2, t: -4 };
 let D_FREQUENCY = Dim { l: 0, m: 0, t: -2 };
 
-// The unit of dimension d in the unit system of the header.
 fn unit_text(d: Dim) -> u8[>..] {
     let sys = codegen::system;
     if same_dim(d, no_dim()) { return str(""); }
@@ -50,7 +34,6 @@ fn unit_text(d: Dim) -> u8[>..] {
     return str(sys.length, "^", d.l / 2.0, "*kg^", d.m / 2.0, "*s^", d.t / 2.0);
 }
 
-// The dimension of a declared type.
 recursive fn type_dim(t: i64) -> Dim {
     let k = kind(t);
     if k == syntax::N_DIM_MUL || k == syntax::N_DIM_DIV {
@@ -73,8 +56,6 @@ recursive fn type_dim(t: i64) -> Dim {
     return no_dim();
 }
 
-// The declared type of name `word`, or -1: a let of the physics, a
-// property of a shell material, or a let or param item.
 fn type_of_name(word: u8[:]) -> i64 {
     let i = find(let_names, word);
     if i >= 0 { return let_types[i]; }
@@ -85,12 +66,9 @@ fn type_of_name(word: u8[:]) -> i64 {
     return -1;
 }
 
-var eigen_modal = false;    // eigenvalue(k) is a frequency
-var eigen_step = false;     // the step is modal or buckling, with no field values
+var eigen_modal = false;
+var eigen_step = false;
 
-// --- what depends on the node ------------------------------------------------------
-
-// Whether expression v changes from node to node, or from solve to solve.
 recursive fn varies(v: i64) -> bool {
     let k = kind(v);
     if k == syntax::N_NAME {
@@ -119,8 +97,6 @@ recursive fn varies(v: i64) -> bool {
     return false;
 }
 
-// Whether expression v uses a property of a material. The global model can
-// have other materials, so global.f uses none.
 recursive fn uses_prop(v: i64) -> bool {
     if kind(v) == syntax::N_NAME || source_member(v) {
         let w = name(v);
@@ -143,16 +119,11 @@ recursive fn uses_prop(v: i64) -> bool {
     return false;
 }
 
-// --- the code ----------------------------------------------------------------------
-
 var node_mode = true;
 
-// The fields of the program: field k is the expression fields[k] at a node,
-// as an f64[9] (a scalar in [0], a vector in [0..3]).
 var fields: i64[>..] = [];
 var field_ranks: i64[>..] = [];
 
-// The part of out from `start`, which it removes from out.
 fn cut_tail(out: u8[>..]&, start: i64) -> u8[>..] {
     var t: u8[>..] = [];
     t.append(out[start..]);
@@ -167,8 +138,6 @@ fn field_index(v: i64) -> i64 {
     return fields.len - 1;
 }
 
-// The rank of the code of emit_rt for v: 1, 3 or 9. emit_rt reports the
-// faults.
 recursive fn rank_of(v: i64) -> i64 {
     if !varies(v) { return value(v).n; }
     let k = kind(v);
@@ -224,8 +193,6 @@ fn lit_val(out: u8[>..]&, x: Val) -> i64 {
 
 let RT_FIX = "write numbers, names, x, y, z, n, the unknowns, N, eps_m, lets of the physics, dot, cross, norm, sqrt, abs, sin, cos and + - * / ^ of these";
 
-// Appends the code of expression v. Gives its rank (1, 3 or 9) and its
-// dimension.
 recursive fn emit_rt(v: i64, out: u8[>..]&) -> i64, Dim {
     let d = dim_of(v);
     if !varies(v) {
@@ -295,7 +262,6 @@ recursive fn emit_rt(v: i64, out: u8[>..]&) -> i64, Dim {
     return 1, d;
 }
 
-// The code of name `w` at a node.
 recursive fn emit_word(w: u8[:], at: i64, out: u8[>..]&) -> i64 {
     if node_mode && axis_of(w) >= 0 {
         format(out, "p[", axis_of(w), "]");
@@ -333,8 +299,6 @@ recursive fn emit_word(w: u8[:], at: i64, out: u8[>..]&) -> i64 {
     return 1;
 }
 
-// A property of the materials of the shell: the value of the material of
-// the node.
 fn emit_prop(w: u8[:], at: i64, out: u8[>..]&) -> i64 {
     out.append("pick(mat, [");
     for m in shell_mats.len {
@@ -418,8 +382,6 @@ recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
         return if f == "dot" { 1 } else { 3 };
     }
     if count == 2 && f == "ddot" && kind(arg(v, 0)) == syntax::N_NAME && name(arg(v, 0)) == "Q_ply" {
-        // The stress of the ply with the strain: Q_ply is the reduced stiffness of a 0 deg ply in
-        // the section axis.
         for l in lams {
             if angles[l.first + l.count - 1] != 0.0 {
                 unsupported(tok(v), "Q_ply is the reduced stiffness of a 0 deg ply in the section axis, and the bottom ply of the layup is not at 0 deg",
@@ -452,11 +414,8 @@ recursive fn emit_call(v: i64, out: u8[>..]&) -> i64 {
     return 1;
 }
 
-// --- the global values ---------------------------------------------------------------
-
 let GLOBAL_FIX = "write f at p, max(f, r), reaction(r) or eigenvalue(k), and numbers and + - * / of these";
 
-// `f at p`, `max(f, r)`, `reaction(r)` and `eigenvalue(k)`.
 recursive fn emit_global(v: i64, out: u8[>..]&) -> i64 {
     if eigen_step && !is_call(v, "eigenvalue") {
         unsupported(tok(v), "a modal or a buckling step has eigenvalue(k) only", "report the values of the beams in a static step");
@@ -528,7 +487,6 @@ recursive fn emit_global(v: i64, out: u8[>..]&) -> i64 {
     return 1;
 }
 
-// Appends the code of global expression v. Gives its rank and dimension.
 fn emit_global_expr(v: i64, out: u8[>..]&) -> i64, Dim {
     node_mode = false;
     let r, d = emit_rt(v, out);
@@ -536,7 +494,6 @@ fn emit_global_expr(v: i64, out: u8[>..]&) -> i64, Dim {
     return r, d;
 }
 
-// The function of field k in the program: the field at node k of view v.
 fn emit_field_fn(out: u8[>..]&, k: i64) {
     var code: u8[>..] = [];
     let rank, d = emit_rt(fields[k], code);
@@ -545,8 +502,6 @@ fn emit_field_fn(out: u8[>..]&, k: i64) {
     out.append("    let tn = v_tn(v, k);\n    let te = v_te(v, k);\n    let tk = v_tk(v, k);\n    let mat = v_mat(v, k);\n");
     format(out, "    return pack", rank, "(", code, ");\n}\n\n");
 }
-
-// --- dimensions ----------------------------------------------------------------------
 
 recursive fn dim_of(v: i64) -> Dim {
     let k = kind(v);

@@ -1,14 +1,9 @@
-// Dimensions and units (spec §6). A dimension is a vector of seven
-// exponents over M, L, T, Θ, I, N and J (spec §6.1). Each exponent is a
-// multiple of 1/2, so a dimension stores the count of halves. The tables
-// below give whole exponents. named_dim and find_unit double them.
 import std;
 namespace check;
 import syntax from "../syntax";
 
 let BASE_DIMS = ["M", "L", "T", "Θ", "I", "N", "J"];
 
-// The named dimension types of spec §6.2. `Stress` is `Pressure`.
 let DIM_NAMES = [
     "Length", "Area", "Volume", "Mass", "Time", "Temperature", "Force", "Power",
     "KinViscosity", "SpecificHeat", "HeatFlux", "Current", "Velocity", "Acceleration",
@@ -27,8 +22,6 @@ let DIM_VALUES: i64[7][24] = [
 ];
 
 let NO_DIM: i64[7] = [0, 0, 0, 0, 0, 0, 0];
-// In a `nondim` model each quantity is `Real` (spec §6.5): set_nondim
-// makes these dimensions empty.
 var LENGTH: i64[7] = [0, 2, 0, 0, 0, 0, 0];
 var TIME: i64[7] = [0, 0, 2, 0, 0, 0, 0];
 var FORCE: i64[7] = [2, 2, -4, 0, 0, 0, 0];
@@ -41,7 +34,6 @@ fn set_nondim(on: bool) {
 
 fn is_dimless(d: i64[7]) -> bool { d == NO_DIM }
 
-// The dimension of a named dimension type, and true, or false.
 fn named_dim(name: u8[:]) -> i64[7], bool {
     for n, i in DIM_NAMES {
         if n == name { return dim_pow(DIM_VALUES[i], 2), true; }
@@ -55,8 +47,6 @@ fn dim_pow(d: i64[7], k: i64) -> i64[7] {
     return r;
 }
 
-// `d` to the power of `h` halves, and true, or false when an exponent is
-// not a multiple of 1/2.
 fn dim_pow_halves(d: i64[7], h: i64) -> i64[7], bool {
     var r = d;
     for i in 7 {
@@ -66,8 +56,6 @@ fn dim_pow_halves(d: i64[7], h: i64) -> i64[7], bool {
     return r, true;
 }
 
-// Writes a dimension: its name when it has one, else a product of base
-// dimensions such as `M L^-1 T^-1` or `M L^-0.5 T^-2`, or `1`.
 fn format_dim(out: u8[>..]&, d: i64[7]) {
     for n, i in DIM_NAMES {
         if dim_pow(DIM_VALUES[i], 2) == d { out.append(n); return; }
@@ -82,8 +70,6 @@ fn format_dim(out: u8[>..]&, d: i64[7]) {
         if d[i] != 2 { out.push('^'); syntax::format_halves(out, d[i]); }
     }
 }
-
-// --- units (spec §6.3) ------------------------------------------------------------
 
 let UNIT_NAMES = ["m", "g", "s", "K", "A", "mol", "cd", "N", "Pa", "J", "W", "Hz", "C", "V",
                   "rad", "deg", "L", "t", "min", "h", "bar", "degC"];
@@ -100,19 +86,17 @@ let UNIT_DIMS: i64[7][22] = [
 let UNIT_SCALES: f64[22] = [1.0, 0.001, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
                             1.0, 1.0, 1.0, 0.017453292519943295, 0.001, 1000.0, 60.0,
                             3600.0, 100000.0, 1.0];
-// The units that take an SI prefix (spec §6.3).
 let PREFIXED_UNITS = ["m", "g", "s", "N", "Pa", "J", "W", "Hz", "A", "V", "L"];
 let PREFIX_CHARS = "numckMG";
 let PREFIX_SCALES: f64[7] = [1e-9, 1e-6, 1e-3, 1e-2, 1e3, 1e6, 1e9];
 
 struct Unit {
-    dim: i64[7],    // in halves
-    scale: f64,     // the factor to SI
-    angle: bool,    // `rad` or `deg`
-    affine: bool,   // `degC`
+    dim: i64[7],
+    scale: f64,
+    angle: bool,
+    affine: bool,
 }
 
-// The unit with name `name`, and true, or false.
 fn find_unit(name: u8[:]) -> Unit, bool {
     for u, i in UNIT_NAMES {
         if u == name {
@@ -134,7 +118,6 @@ fn find_unit(name: u8[:]) -> Unit, bool {
     return none, false;
 }
 
-// True when `name` is one of `names`.
 fn contains_name(names: const u8[:][:], name: u8[:]) -> bool {
     for n in names {
         if n == name { return true; }

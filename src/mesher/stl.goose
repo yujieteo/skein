@@ -1,9 +1,3 @@
-// `skein export model.skn --geometry name --format stl` (docs/command_line.md
-// §7.1, spec §22): `check`, then the mesh of one `let` shape, and its
-// surface as ASCII STL on standard output, or as STEP AP242 with `--format step`. A Solid gives the boundary
-// faces of its tetrahedra, with the normals out of the solid. A 2D
-// Surface gives its triangles, in the plane z = 0. The coordinates are in
-// the length unit of the header, as for `skein verify`.
 import std;
 import os;
 import math;
@@ -20,8 +14,6 @@ import .verify;
 
 let EXPORT_USAGE = "usage: skein export <file.skn> --geometry <name> [--format stl|step] [--size <length>]\n";
 
-// A length option such as "2 mm" or "0.002m", in the length unit of the
-// header. 0 when it is not a number > 0 with a length unit.
 fn length_option(s: u8[:]) -> f64 {
     var i = 0;
     while i < s.len && (syntax::is_digit(s[i]) || s[i] == '.' || s[i] == 'e' || s[i] == '+' || s[i] == '-') { i++; }
@@ -35,7 +27,6 @@ fn length_option(s: u8[:]) -> f64 {
     return x * factors[position(prefixes, u[0])] * metre;
 }
 
-// The `size` of mesh block n, or 0 when it has none.
 fn block_size(n: i64) -> f64 {
     var s = syntax::nodes[syntax::child(n, 1)].first;
     while s >= 0 {
@@ -47,8 +38,6 @@ fn block_size(n: i64) -> f64 {
     return 0.0;
 }
 
-// The default size: the size of the first mesh block on `name`, else of
-// the first mesh block. 0 when the model has no mesh block.
 fn model_size(prog: i64, name: u8[:]) -> f64 {
     var first = -1;
     var item = syntax::nodes[prog].first;
@@ -62,15 +51,12 @@ fn model_size(prog: i64, name: u8[:]) -> f64 {
     return if first >= 0 { block_size(first) } else { 0.0 };
 }
 
-// Adds one triangle a, b, c to `tris`, three points for each triangle.
 fn facet(tris: f64[3][>..]&, a: f64[3], b: f64[3], c: f64[3]) {
     tris.push(a);
     tris.push(b);
     tris.push(c);
 }
 
-// Writes the triangle that starts at tris[3 * t] as one STL facet, with
-// the unit normal of the right-hand rule.
 fn write_facet(out: u8[>..]&, tris: f64[3][:], t: i64) {
     let a = tris[3 * t];
     let b = tris[3 * t + 1];
@@ -83,8 +69,6 @@ fn write_facet(out: u8[>..]&, tris: f64[3][:], t: i64) {
     out.append("    endloop\n  endfacet\n");
 }
 
-// The faces of the tetrahedra that are in one cell only, each with its
-// nodes in the order that turns its normal out of the cell.
 fn boundary_facets(out: f64[3][>..]&) {
     let n = point_count();
     fn key(c: i64, skip: i64) -> i64 {
@@ -117,7 +101,6 @@ fn boundary_facets(out: f64[3][>..]&) {
     }
 }
 
-// A real number of a STEP file: it has a point, and an exponent is E.
 fn step_real(out: u8[>..]&, x: f64) {
     let text = str(x);
     for ch in text {
@@ -126,10 +109,6 @@ fn step_real(out: u8[>..]&, x: f64) {
     }
 }
 
-// The STEP AP242 file of the triangles: one tessellated shell with one
-// triangulated face, in the length unit of the header. A 2D Surface and a
-// Solid use the same entities. Entity numbers: #1 to #25 are the product
-// and its units, #30 to #33 the geometry.
 fn write_step(out: u8[>..]&, name: u8[:], tris: f64[3][:]) {
     let unit = if metre == 1000.0 { ".MILLI." } else { "$" };
     format(out, "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('skein tessellated export'),'2;1');\n",
@@ -171,10 +150,7 @@ fn write_step(out: u8[>..]&, name: u8[:], tris: f64[3][:]) {
            "#34=SHAPE_DEFINITION_REPRESENTATION(#8,#33);\nENDSEC;\nEND-ISO-10303-21;\n");
 }
 
-// `skein export`, with the STL or STEP file in `out`. The result is the exit status
-// (command_line.md §10). A fault of the model goes to standard error.
 fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
-    // The index in args of the file, of the geometry and of the size.
     var at = -1;
     var geo = -1;
     var sized = -1;
@@ -259,9 +235,6 @@ fn export_stl(args: u8[:][:], out: u8[>..]&) -> i64 {
     return 0;
 }
 
-// Writes the diagnostics of the model to standard error, after the faults
-// of the reader when `take` is true. Standard output is for the STL only.
-// The result is the exit status 1.
 fn model_fault(take: bool) -> i64 {
     if take { check::take_syntax_errors(); }
     check::sort_diags();
