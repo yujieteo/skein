@@ -1,0 +1,54 @@
+// A graded stress with x in the let chain. The chain of the stress has only F in scope.
+model bar_release: 2d, SI
+
+let L: Length = 0.2 m
+let d: Length = 0.02 m
+let eps: Real = 0.001
+let rho_0: Density = 1000 kg/m^3
+let lam: Pressure = 2e6 Pa
+let mu: Pressure = 1e6 Pa
+let c_p: Velocity = sqrt((lam + 2*mu)/rho_0)
+
+scales L, c_p, rho_0
+
+let bar: Surface = rect((0, 0) m, (L, d))
+let left: Curve = boundary(bar, x == 0 m)
+let sides: Curve = boundary(bar, y == 0 m || y == d)
+
+material svk {
+    rho: Density = rho_0
+}
+
+points c on bar {
+    spacing: d/4
+}
+
+physics solid on bar solves u: Vector<Length> = (eps*x, 0 m) {
+    material svk
+    assume finite_strain
+    let F: Tensor2<Real> = defgrad(u)
+    let E: Tensor2<Real> = (transpose(F)*F - I)/2
+    let S: Tensor2<Pressure> = lam*tr(E)*I + 2*mu*E
+    let mu_x: Pressure = mu*(1 + x/L)
+    let P: Tensor2<Pressure> = F*S + mu_x*I
+    eq rho*ddt2(u) - div(P) = 0
+}
+
+method solid: rkpm {
+    points: c
+    basis: linear
+    support: 3
+    integrate: scni
+    bc: nitsche
+}
+
+let unloaded: Length = max(eps*x - u.x, bar)
+
+step unload: transient(end: 2 ms, dt: 10 us, scheme: central_difference) {
+    bc left: u.x = 0
+    bc sides: u.y = 0
+    output u every 50
+    report unloaded
+}
+
+expect wave_time: when(unloaded, 6e-5 m) == 6e-5 m/(eps*c_p) within 10%

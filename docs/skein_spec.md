@@ -2109,7 +2109,12 @@ the default `penalty: 2`. `roe` is `upwind` for one scalar.
 
 The current lowering (`src/meshless/`) takes one scalar unknown with
 `div(a*u) - d*div(grad(u)) = f` and static steps, and `rkpm` also takes 2D
-linear elasticity in plane stress or plane strain.
+linear elasticity in plane stress or plane strain. `rkpm` also takes the
+explicit total-Lagrangian step `rho*ddt2(u) - div(P) = rho*(bx, by)` with
+`transient(scheme: central_difference)`, a lumped mass and the penalty and
+traction terms of Nitsche (`src/meshless/gen.goose` and `dyn.goose`). The
+first Piola-Kirchhoff stress `P` comes from a `let` chain of the deformation
+gradient. The chain cannot use `x`, `y`, `t`, `u.x` or `u.y`.
 
 - `rkpm` has `basis: linear`, the cubic B-spline kernel and the support
   `support` (default 2.5) times the spacing of each point. The spacing of
