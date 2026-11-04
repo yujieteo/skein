@@ -61,6 +61,7 @@ examples/femahoy/cavity_devahldavis.skn
 examples/femahoy/cht_heated_channel.skn
 examples/femahoy/contact_cattaneo.skn
 examples/femahoy/contact_hertz.skn
+examples/femahoy/dam_break_vof.skn
 examples/femahoy/dynamics_bar_step.skn
 examples/femahoy/fracture_centre_crack.skn
 examples/femahoy/grid_cantilever.skn
@@ -112,6 +113,7 @@ examples/femahoy/topology_mbb_beam.skn
 examples/femahoy/warpage_thick_copper.skn
 examples/femahoy/wedge_oblique_shock.skn
 examples/flow/cavity_coarse.skn
+examples/flow/drop_transport.skn
 examples/flow/channel_sst_tri.skn
 examples/flow/poiseuille_stokes.skn
 examples/flow/turek_hron_fsi1_tri.skn

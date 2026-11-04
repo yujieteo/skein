@@ -256,10 +256,18 @@ gives the roadmap phase that closes the gap:
     total-Lagrangian explicit step (`central_difference`) with the Tait stress from a `let` chain,
     SCNI internal force for a nonlinear P(F), a lumped mass, explicit wall conditions and the
     `front` and `when` report. A free surface with SCNI can go unstable, and 7 % is not proven.
-  - dam_break_vof: it needs a transient two-phase solver on quads with a variable rho and mu, a
-    third unknown alpha with a compressive flux, CSF surface tension and Rhie-Chow, at dt 0.4 ms for
-    450 steps on 200 x 100 cells. The flow lane is P1/P2 finite elements on triangles, steady (plus
-    FSI), and the flow generator takes one Newtonian `sigma` let and one v, p pair.
+- dam_break_vof runs in the two-phase lane (`src/vof`, 21 s, estimate 44 MB). The front times
+  are 1.856, 2.571 and 3.199 against 1.83, 2.51 and 3.11 (+1.4 %, +2.4 %, +2.8 %). The limit is 5.5 %.
+  The lane takes a physics with a `Vector<Velocity>` unknown `v`, a `Pressure` unknown `p` and a
+  Real unknown `alpha`, in 2D on a rectangle with quad cells, with `gradient: green_gauss` only. The model gives `rho` and `mu` as any expression of `alpha`, the gravity and surface
+  tension terms, and the conditions on `v`. The alpha flux is HRIC with a Courant blend. The
+  momentum is explicit with a limited linear upwind face value. The pressure is an incremental
+  projection with a Rhie-Chow face flux. CG with an AMG V-cycle solves it. The curvature of the
+  surface force is `-div(grad(alpha)/norm(grad(alpha)))` of a smoothed alpha. A Courant number
+  above 1 stops the run with a message and a dt to use. Femahoy uses MULES, so the front times
+  of the two codes differ in the third digit.
+  [drop_transport.skn](../examples/flow/drop_transport.skn) tests an initial velocity and a
+  stream condition: a block moves 0.3 m in 0.3 s at 1 m/s (+2.5 %).
 - turek_hron_fsi1 runs in the flow lane (drag +0.02 %, lift -0.06 %, ux_a +0.1 %,
   uy_a -2.1 %). The flag is written out as St. Venant-Kirchhoff
   (`assume finite_strain`, `hooke` of `strain(u)`, `div(defgrad(u)*S) = 0`). It is solved by

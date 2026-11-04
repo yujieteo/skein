@@ -19,6 +19,7 @@ import shells.gen;     // skein-shells: the shell models
 import flow.gen;       // skein-flow: the flow models
 import grid.gen;       // skein-p4-grid: the fv and dg models
 import cons.gen;       // skein-fh-cfd: the systems of conservation laws with fv
+import vof.gen;        // skein-fh-vof: two fluids with a volume fraction
 import optim.gen;      // skein-p5-optim: the quad models of linear_elastic, and topology
 import ode.gen;        // skein-ode: the physics of global unknowns (ODE and DAE)
 import check from "../check";
@@ -62,6 +63,7 @@ let LANE_GRID = 4;
 let LANE_OPTIM = 5;
 let LANE_CONS = 6;
 let LANE_ODE = 7;
+let LANE_VOF = 8;
 
 // Reads program `prog` with the generator that claims it. It gives that
 // generator, or -1 on an error, and `syntax::errors` holds the errors.
@@ -69,6 +71,7 @@ let LANE_ODE = 7;
 // skein-shells: a shell model goes to src/shells/gen.goose.
 // skein-flow: a flow model goes to src/flow/gen.goose.
 // skein-fh-cfd: an fv model of a system of conservation laws goes to src/cons/gen.goose.
+// skein-fh-vof: a flow of two fluids with a volume fraction goes to src/vof/gen.goose, before flow claims a v and a p.
 // skein-p4-grid: an fv or dg model goes to src/grid/gen.goose.
 // skein-p5-optim: a quad model of linear_elastic goes to src/optim/gen.goose.
 // skein-ode: a physics of global unknowns goes to src/ode/gen.goose.
@@ -77,6 +80,7 @@ fn read_model(prog: i64) -> i64 {
     if shells_gen::claims(prog) { return if shells_gen::read(prog) { LANE_SHELL } else { -1 }; }
     // Edge and face elements go to the simplex generator, before flow claims a q and a p.
     if elements_gen::family_claims(prog) { return if elements_gen::read(prog) { LANE_SIMPLEX } else { -1 }; }
+    if vof_gen::claims(prog) { return if vof_gen::read(prog) { LANE_VOF } else { -1 }; }
     if flow_gen::claims(prog) { return if flow_gen::read(prog) { LANE_FLOW } else { -1 }; }
     if cons_gen::claims(prog) { return if cons_gen::read(prog) { LANE_CONS } else { -1 }; }
     if grid_gen::claims(prog) { return if grid_gen::read(prog) { LANE_GRID } else { -1 }; }
@@ -99,6 +103,7 @@ fn dof_estimate(lane: i64) -> i64 {
     if lane == LANE_FLOW { return flow_gen::dof_estimate(); }
     if lane == LANE_GRID { return grid_gen::dof_estimate(); }
     if lane == LANE_CONS { return cons_gen::dof_estimate(); }
+    if lane == LANE_VOF { return vof_gen::dof_estimate(); }
     if lane == LANE_OPTIM { return optim_gen::dof_estimate(); }
     if lane == LANE_ODE { return ode_gen::dof_estimate(); }
     if lane == LANE_SIMPLEX { return elements_gen::dof_estimate(); }
@@ -112,6 +117,7 @@ fn step_count(lane: i64) -> i64 {
     if lane == LANE_FLOW { return flow_gen::steps.len; }
     if lane == LANE_GRID { return grid_gen::steps.len; }
     if lane == LANE_CONS { return cons_gen::steps.len; }
+    if lane == LANE_VOF { return vof_gen::steps.len; }
     if lane == LANE_OPTIM { return optim_gen::steps.len; }
     if lane == LANE_ODE { return ode_gen::steps.len; }
     if lane == LANE_SIMPLEX { return elements_gen::steps.len; }
@@ -120,7 +126,7 @@ fn step_count(lane: i64) -> i64 {
 
 // Writes the program of the model that `read_model` read with generator
 // `lane`. The program puts its results in `results_dir`. In a study, it
-// writes or reads the stages of `share`. The shell, flow, grid and cons
+// writes or reads the stages of `share`. The shell, flow, grid, cons and vof
 // generators share none. For a flow model, it also meshes the domain and writes the
 // mesh in `results_dir` (src/flow/gen.goose). False, with an error on
 // stderr, if it cannot.
@@ -128,7 +134,7 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     // The skein executable is build/skein in the repository, so the runtime
     // is in src/runtime beside it.
     let runtime_path = str(resource_dir(), if lane == LANE_SHELL { "../src/shells" } else if lane == LANE_SIMPLEX { "../src/elements" }
-                                           else if lane == LANE_FLOW { "../src/flow" } else if lane == LANE_GRID { "../src/grid" } else if lane == LANE_CONS { "../src/cons" }
+                                           else if lane == LANE_FLOW { "../src/flow" } else if lane == LANE_GRID { "../src/grid" } else if lane == LANE_CONS { "../src/cons" } else if lane == LANE_VOF { "../src/vof" }
                                            else if lane == LANE_OPTIM { "../src/optim" } else if lane == LANE_ODE { "../src/ode" } else { "../src/runtime" });
     if lane == LANE_FLOW {
         guard flow_gen::write_mesh(results_dir) else { return false; }
@@ -136,6 +142,8 @@ fn write_program(lane: i64, results_dir: u8[:], share: Share, program: u8[>..]&)
     } else if lane == LANE_CONS {
         guard cons_gen::write_mesh(results_dir) else { return false; }
         cons_gen::generate(runtime_path, results_dir, program);
+    } else if lane == LANE_VOF {
+        vof_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_GRID {
         grid_gen::generate(runtime_path, results_dir, program);
     } else if lane == LANE_OPTIM {
@@ -557,7 +565,7 @@ fn run_study(path: u8[:], text: u8[:], study: u8[:], jobs: i64, json: bool) -> i
         };
         model.clear();
         model.append(model_name);
-        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW && lane != LANE_GRID && lane != LANE_CONS && lane != LANE_OPTIM && lane != LANE_ODE {
+        if c == 0 && lane != LANE_SHELL && lane != LANE_FLOW && lane != LANE_GRID && lane != LANE_CONS && lane != LANE_VOF && lane != LANE_OPTIM && lane != LANE_ODE {
             share.stages = check::STAGE_MESH - max(stage, check::STAGE_POST);
             format(share.dir, ".skein/studies/", model, "/", study, "/shared");
             shell(str("rm -rf ", shell_quoted(share.dir)));

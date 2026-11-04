@@ -1,0 +1,74 @@
+// A condition on the volume fraction. The two-phase lane does not run it.
+
+model drop_transport: 2d, SI
+
+let L: Length = 2 m
+let H: Length = 1 m
+
+scales H, 1 s, 1000 kg/m^3
+
+let tank: Surface = rect((0, 0) m, (L, H))
+let stream: Curve = boundary(tank, x < L)
+
+table blk_x{px: Length in m, s: Real}:
+    0, 0
+    0.3, 0
+    0.3, 1
+    0.6, 1
+    0.6, 0
+    2, 0
+
+table blk_y{py: Length in m, s: Real}:
+    0, 0
+    0.35, 0
+    0.35, 1
+    0.65, 1
+    0.65, 0
+    1, 0
+
+table wet{f: Real, s: Real}:
+    0, 0
+    0.5, 0
+    0.5, 1
+    1, 1
+
+material water_air {
+    rho_w: Density = 1000 kg/m^3
+    mu_w: DynViscosity = 1e-3 Pa*s
+    rho_a: Density = 1 kg/m^3
+    mu_a: DynViscosity = 1e-5 Pa*s
+}
+
+mesh m on tank {
+    size: H/40
+    cell: quad
+}
+
+physics flow on tank solves v: Vector<Velocity> = (1 m/s, 0 m/s), p: Pressure, alpha: Real = interp(blk_x.px, blk_x.s, x)*interp(blk_y.py, blk_y.s, y) {
+    material water_air
+    assume incompressible, newtonian, laminar
+    let rho: Density = alpha*rho_w + (1 - alpha)*rho_a
+    let mu: DynViscosity = alpha*mu_w + (1 - alpha)*mu_a
+    let sigma: Tensor2<Pressure> = -p*I + 2*mu*sym(grad(v))
+    eq rho*(ddt(v) + grad(v)*v) - div(sigma) = 0
+    eq div(v) = 0
+    eq ddt(alpha) + div(alpha*v) = 0
+}
+
+method flow: fv {
+    mesh: m
+    gradient: green_gauss
+    flux: linear_upwind
+    limiter: van_leer
+    pv_coupling: rhie_chow
+}
+
+let front: Length = max(x*interp(wet.f, wet.s, alpha), tank)
+
+step carry: transient(end: 0.4 s, dt: 5 ms, scheme: backward_euler) {
+    bc stream: v = (1 m/s, 0 m/s)
+    bc stream: alpha = 1
+    report front
+}
+
+expect front_time: when(front, 0.9 m) == 0.3 s within 4%

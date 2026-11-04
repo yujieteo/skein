@@ -113,6 +113,7 @@ The path of a model through the compiler, with the parts of `src/` that do each 
 | `src/transient/` | transient heat solver routines |
 | `src/flow/` | stabilized Stokes and Navier-Stokes solver routines with temperature coupling, plus code generation for 2D flow |
 | `src/cons/` | `fv` systems of conservation laws on triangles (the Euler equations), with a MUSCL limiter, a Rusanov flux and `ssprk3` |
+| `src/vof/` | 2D flow of two fluids with a volume fraction on quads: HRIC alpha flux, CSF surface tension and a Rhie-Chow projection |
 | `src/meshless/` | point clouds, `rkpm` and `gfd` for one scalar unknown and 2D elasticity, and their direct solve |
 | `src/optim/` | a Q4 grid of 2D elasticity with a band Cholesky solve, the adjoint of a point objective, the `topology` loop (SIMP, the sensitivity filter and the optimality criteria update), and the gradients of `minimize` |
 
