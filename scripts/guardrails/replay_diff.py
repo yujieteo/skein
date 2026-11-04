@@ -19,7 +19,7 @@ from pathlib import Path
 
 LARGE_CHANGE = 0.2
 SOURCE_LINE = re.compile(r"\b(gs_file\d+), (?:\d+|\(\w+\) \? \d+ : \d+)\)")
-NUMBER = re.compile(r"^\s*(-?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)\s*(.*)$")
+NUMBER = re.compile(r"^\s*((?:[A-Za-z_]\w*:\s*)?)(-?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)\s*(.*)$")
 TABLE = re.compile(r"^(\s*)([A-Za-z_]\w*)\[\d+\]\{([^}]*)\}:$")
 WITHIN = re.compile(r"within\s+(\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)\s*(%|\S*)")
 LEFT_OUT = ("seconds",)
@@ -32,7 +32,7 @@ def without_source_lines(c: str) -> str:
 
 def number_and_unit(field: str) -> tuple[float, str] | None:
     match = NUMBER.match(field)
-    return (float(match.group(1)), match.group(2)) if match else None
+    return (float(match.group(2)), match.group(1) + match.group(3)) if match else None
 
 
 def tolerance(row: dict[str, str], value: float) -> float:

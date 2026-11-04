@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "src"
 LIMITS = Path(__file__).with_name("limits.txt")
 
-OUTSIDE_LINK = re.compile(r"https?://")
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DECLARATION_KEYWORDS = ("fn", "let", "var", "struct", "type")
 
@@ -101,11 +100,7 @@ def relative(path: Path) -> str:
 def comment_counts(files: list[Path]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for path in files:
-        n = sum(
-            1
-            for t in lex(path.read_text())
-            if t.kind == "comment" and not OUTSIDE_LINK.search(t.text)
-        )
+        n = sum(1 for t in lex(path.read_text()) if t.kind == "comment")
         if n:
             counts[relative(path)] = n
     return counts
@@ -171,11 +166,11 @@ def dead_declarations(files: list[Path]) -> list[str]:
     return sorted(dead)
 
 
-def measure() -> tuple[int, int, dict[str, int]]:
+def measure() -> tuple[int, int]:
     files = source_files()
     biggest_file = max(len(p.read_text().splitlines()) for p in files)
     biggest_fn = max(size for p in files for _, _, size in function_sizes(p))
-    return biggest_file, biggest_fn, comment_counts(files)
+    return biggest_file, biggest_fn
 
 
 def round_up(value: int, step: int) -> int:
@@ -183,34 +178,30 @@ def round_up(value: int, step: int) -> int:
 
 
 def write() -> int:
-    biggest_file, biggest_fn, comments = measure()
+    biggest_file, biggest_fn = measure()
     lines = [
         f"max_file_lines {round_up(biggest_file, 100)}",
         f"max_function_lines {round_up(biggest_fn, 50)}",
     ]
-    lines += [f"comments {path} {n}" for path, n in sorted(comments.items())]
     LIMITS.write_text("\n".join(lines) + "\n")
-    print(f"wrote {relative(LIMITS)}: {lines[0]}, {lines[1]}, {len(comments)} files with comments")
+    print(f"wrote {relative(LIMITS)}: {lines[0]}, {lines[1]}")
     return 0
 
 
-def read_limits() -> tuple[int, int, dict[str, int]]:
+def read_limits() -> tuple[int, int]:
     max_file = max_fn = 0
-    comments: dict[str, int] = {}
     for row in LIMITS.read_text().splitlines():
         word = row.split()
         if word[0] == "max_file_lines":
             max_file = int(word[1])
         elif word[0] == "max_function_lines":
             max_fn = int(word[1])
-        elif word[0] == "comments":
-            comments[word[1]] = int(word[2])
-    return max_file, max_fn, comments
+    return max_file, max_fn
 
 
 def check() -> int:
     files = source_files()
-    max_file, max_fn, allowed = read_limits()
+    max_file, max_fn = read_limits()
     problems: list[str] = []
     for path in files:
         size = len(path.read_text().splitlines())
@@ -221,17 +212,8 @@ def check() -> int:
                 problems.append(
                     f"{relative(path)}:{line}: fn {name} has {fn_size} lines, the limit is {max_fn}"
                 )
-    found = comment_counts(files)
-    for path_name in sorted(set(found) | set(allowed)):
-        have, may = found.get(path_name, 0), allowed.get(path_name, 0)
-        if have > may:
-            problems.append(
-                f"{path_name}: {have} comments, {may} allowed. Give the code a name, a test or a check instead"
-            )
-        elif have < may:
-            problems.append(
-                f"{path_name}: {have} comments, limits.txt allows {may}. Run goose_source.py write"
-            )
+    for path_name, have in sorted(comment_counts(files).items()):
+        problems.append(f"{path_name}: {have} comments. Give the code a name, a test or a check instead")
     problems += dead_declarations(files)
     for problem in problems:
         print(f"FAIL {problem}")

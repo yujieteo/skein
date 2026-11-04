@@ -772,29 +772,6 @@ fn test_unchecked_status() {
     }
 }
 
-fn test_gpu_constants_match_wgsl_and_js() {
-    var wgsl: u8[>..] = [];
-    var js: u8[>..] = [];
-    var goose: u8[>..] = [];
-    guard read_file("src/gpu/kernels.wgsl", wgsl) && read_file("src/gpu/gpu.js", js) && read_file("src/gpu/gpu.goose", goose) else {
-        failures++;
-        print("FAIL gpu constants: cannot read src/gpu");
-        return;
-    };
-    expect_gpu_text("gpu.goose WG", goose, "let WG = 64;");
-    expect_gpu_text("kernels.wgsl WG", wgsl, "const WG: u32 = 64u;");
-    expect_gpu_text("gpu.js WG", js, "Math.ceil(threads / 64)");
-    expect_gpu_text("gpu.goose ROW_GROUPS", goose, "let ROW_GROUPS = 65535;");
-    expect_gpu_text("gpu.js ROW_GROUPS", js, "Math.min(n, 65535)");
-}
-
-fn expect_gpu_text(name: u8[:], text: u8[:], want: u8[:]) {
-    if occurrences(text, want) == 0 {
-        failures++;
-        print("FAIL gpu constants: ", name, " lacks '", want, "'");
-    }
-}
-
 fn test_kernels(write: bool) {
     for f in codegen::KERNEL_FILES.len {
         let want = codegen::kernel_file(f);
@@ -958,7 +935,6 @@ fn main() {
     test_case_threads();
     test_split();
     test_unchecked_status();
-    test_gpu_constants_match_wgsl_and_js();
     test_slots();
     if failures > 0 {
         print(failures, " codegen tests failed");

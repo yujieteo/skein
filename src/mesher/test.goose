@@ -252,6 +252,7 @@ fn test_lint() {
     expect_mesh_lints("fill of a line", strip(" - fill(line((0.5, 0.01) m, (0.52, 0.04) m))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of a nurbs", strip(" - fill(nurbs(2, (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "mesh_feature_small\n");
     expect_mesh_lints("fill of a nurbs with knots that fall", strip(" - fill(nurbs(1, knots(0, 0, 2, 1, 1), (0.5, 0.01) m, 1, (0.52, 0.04) m, 1, (0.48, 0.04) m, 1))", "2"), "type_mismatch\n");
+    expect_mesh_lints("fill of a nurbs with a first knot degree times", strip(" - fill(nurbs(2, knots(0, 0, 1, 2, 2, 2), (0.51, 0.025) m, 1, (0.5, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of a nurbs with an inner knot degree + 1 times", strip(" - fill(nurbs(2, knots(0, 0, 0, 1, 1, 1, 2, 2, 2), (0.51, 0.025) m, 1, (0.51, 0.035) m, 0.7071067811865476, (0.5, 0.035) m, 1, (0.5, 0.035) m, 1, (0.49, 0.035) m, 0.7071067811865476, (0.49, 0.025) m, 1))", "2"), "verify_unsupported\n");
     expect_mesh_lints("fill of 2 points", strip(" - fill(spline((0.5, 0.01) m, (0.52, 0.04) m, (0.5, 0.01) m))", "2"), "verify_unsupported\n");
     expect_mesh_lints("mesh_feature_small of a pattern", strip(" - pattern(circle((0.2, 0.025) m, 5 mm), (0.2, 0) m, 3)", "2"), "mesh_feature_small\n");

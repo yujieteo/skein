@@ -107,7 +107,7 @@ fn fill_nurbs(p: i64, knots: f64[:], xyw: f64[:]) -> i64 {
 fn check_knots(p: i64, knots: f64[:]) {
     let n = knots.len;
     guard knots[p] < knots[n - p - 1] else { abort("fill_nurbs: the knots must span a range"); }
-    for i in p {
+    for i in p + 1 {
         guard knots[i] == knots[0] && knots[n - 1 - i] == knots[n - 1] else {
             abort("fill_nurbs: the first and the last knot must each be p + 1 times");
         }

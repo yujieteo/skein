@@ -12,6 +12,7 @@
 #                       scripts/strict.sh (warnings are errors, goose format,
 #                       pyright strict), scripts/guardrails/goose_source.py
 #                       (comments, file and function size, dead code),
+#                       scripts/guardrails/test_*.py (python unittest),
 #                       scripts/sanitize.sh (the tests with ASan and UBSan),
 #                       scripts/replay.sh (the generated C and the results of
 #                       the models against origin/main).
@@ -70,6 +71,9 @@ run_tests() {
         status=1
     fi
     if ! python3 -I "$root/scripts/guardrails/goose_source.py" check; then
+        status=1
+    fi
+    if ! python3 -I -m unittest discover -q -s "$root/scripts/guardrails"; then
         status=1
     fi
     if ! "$root/scripts/sanitize.sh"; then
