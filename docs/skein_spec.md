@@ -895,8 +895,9 @@ points. A polygon through the points has a different boundary.
 points `pi`, each with its weight `wi` > 0 (a `Real`). The m = n + d + 1
 knots do not fall [`type_mismatch`]. The first and the last knot must each
 occur d + 1 times, and an inner knot d times or fewer [`verify_unsupported`].
-Without `knots`, the knots are 0 (d + 1 times), 1, 2, …, n − d (d + 1 times). `fill(nurbs(…))` closes the curve with a line
-from its end to its start, as for `spline`. A rational curve of degree 2
+Without `knots`, the knots are 0 (d + 1 times), 1, 2, …, n − d (d + 1
+times). `fill(nurbs(…))` closes the curve with a line from its end to its
+start, as for `spline`. A rational curve of degree 2
 is a conic, so a circle is exact:
 
 ```skein

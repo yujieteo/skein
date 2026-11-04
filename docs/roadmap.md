@@ -44,8 +44,8 @@ built-ins now. Later, the same cases also test the generic `physics` block.
 
 Static analysis and lint: Skein's own Goose code gets `/guardrails` level
 linting, and the tests run under ASan and UBSan builds. Both are done and
-run in `./build.sh test`. Goose is
-experimental, so the lint rules grow with the language.
+run in `./build.sh test`. Goose is experimental, so the lint rules grow
+with the language.
 
 Phases 7 and later mature the physics language and its standard library.
 The phase table above and the status sections below stay as the record of phases 0 to 6.
