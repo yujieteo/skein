@@ -20,7 +20,6 @@
 #                                fails.
 #   REPLAY_ACCEPT=1 ./build.sh test   the same for the whole test run.
 #
-# More than 20% of the models differing stops the replay as a large change.
 # Needs build/skein (./build.sh), and goose on PATH or in $GOOSE.
 set -eu
 

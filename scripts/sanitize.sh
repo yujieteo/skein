@@ -48,7 +48,7 @@ one() {
     rm -rf "$state"
 }
 
-parts=$(cd "$root/src" && ls -d */ | tr -d / | while read -r p; do [ -f "$root/src/$p/test.goose" ] && echo "$p"; done)
+parts=$(cd "$root/src" && ls -d */ | tr -d / | while read -r p; do if [ -f "$root/src/$p/test.goose" ]; then echo "$p"; fi; done)
 status=0
 pids=""
 for part in $parts; do

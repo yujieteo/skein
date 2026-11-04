@@ -5,10 +5,10 @@ import unittest
 from replay_diff import differences
 
 
-def results(value: str) -> str:
+def results(value: str, equilibrium: str = "2.0e-6 N") -> str:
     return (
         "verify[2]{stage,id,result,value,limit}:\n"
-        '  post,equilibrium,pass,"2.0e-6 N","2.0e-3 N"\n'
+        f'  post,equilibrium,pass,"{equilibrium}","2.0e-3 N"\n'
         f'  post,expect,pass,"{value}","300 MPa within 5%"\n'
     )
 
@@ -22,6 +22,11 @@ class ExpectTolerance(unittest.TestCase):
 
     def test_a_changed_name_fails(self) -> None:
         self.assertEqual(len(differences(results("kirsch: 301.2 MPa"), results("other: 301.2 MPa"))), 1)
+
+    def test_a_plain_limit_is_a_pass_threshold_not_a_drift(self) -> None:
+        self.assertEqual(
+            len(differences(results("kirsch: 301.2 MPa"), results("kirsch: 301.2 MPa", "1.9e-3 N"))), 1
+        )
 
 
 if __name__ == "__main__":

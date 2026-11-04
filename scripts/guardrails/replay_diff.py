@@ -35,13 +35,11 @@ def number_and_unit(field: str) -> tuple[float, str] | None:
 
 
 def tolerance(row: dict[str, str], value: float) -> float:
-    limit = row.get("limit", "")
-    within = WITHIN.search(limit)
-    if within:
-        amount = float(within.group(1))
-        return abs(value) * amount / 100 if within.group(2) == "%" else amount
-    plain = number_and_unit(limit)
-    return plain[0] if plain else 0.0
+    within = WITHIN.search(row.get("limit", ""))
+    if not within:
+        return 0.0
+    amount = float(within.group(1))
+    return abs(value) * amount / 100 if within.group(2) == "%" else amount
 
 
 def split_rows(text: str) -> list[tuple[dict[str, str], str]]:

@@ -13,8 +13,7 @@ goose=${GOOSE:-goose}
 status=0
 
 for entry in "$root"/src/skein.goose "$root"/src/*/test.goose; do
-    out=$("$goose" check -q --diagnostics json "$entry" 2>&1)
-    if [ "$out" != "[]" ]; then
+    if ! out=$("$goose" check -q --diagnostics json "$entry" 2>&1) || [ "$out" != "[]" ]; then
         echo "FAIL strict: goose check reports warnings or errors for ${entry#"$root"/}"
         echo "$out" | sed -n 's/.*"text": "\([^"]*\)".*/\1/p'
         status=1
