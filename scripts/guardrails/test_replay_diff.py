@@ -52,10 +52,6 @@ def steps(value: str) -> str:
     )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class NewModel(unittest.TestCase):
     def run_compare(self, base_names: list[str], head_names: list[str]) -> list[str]:
         with TemporaryDirectory() as tmp:
@@ -71,3 +67,7 @@ class NewModel(unittest.TestCase):
 
     def test_a_model_that_the_branch_cannot_build_is_reported(self) -> None:
         self.assertEqual(len(self.run_compare(["m.c"], ["m.fail"])), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
