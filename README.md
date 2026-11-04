@@ -65,7 +65,7 @@ Goose source tree at the same commit as the compiler.
 
 ```
 ./build.sh          # writes build/skein
-./build.sh test     # builds, then runs each src/<part>/test.goose and checks the generated C
+./build.sh test     # builds, then runs the tests, the generated-C check and the guardrails (the list is in build.sh)
 ```
 
 The C that Goose generates from each model that `skein run` can run is in
