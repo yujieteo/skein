@@ -287,6 +287,8 @@ recursive fn emit(out: u8[>..]&, n: i64) {
         out.push('(');
         lit(out, scalar_value(n));
         out.push(')');
+    } else if in_chain && ((k == syntax::N_NAME && (name(n) == "x" || name(n) == "y" || name(n) == "t")) || is_field_member(n)) {
+        unsupported(tok(n), str("'", source_of(n), "' is not in the let chain of the stress"), CHAIN_FIX);
     } else if k == syntax::N_NAME && (name(n) == "x" || name(n) == "y" || name(n) == "t") {
         out.append(name(n));
     } else if is_field_member(n) {
@@ -343,6 +345,8 @@ recursive fn emit_operation(out: u8[>..]&, n: i64) {
         format(out, "when_time(series_", aggregate_of(arg(n, 0)), ", ");
         emit(out, arg(n, 1));
         out.push(')');
+    } else if (is_call(n, "min") || is_call(n, "max") || is_call(n, "ln") || (k == syntax::N_CALL && kind(child(n, 0)) == syntax::N_NAME && position(FUNCTIONS, name(child(n, 0))) >= 0)) && arg_count(n) >= 1 && (kind_of(arg(n, 0)) == TENSOR || (arg_count(n) == 2 && kind_of(arg(n, 1)) == TENSOR)) {
+        unsupported(tok(n), str("'", source_of(n), "' is a scalar function of a tensor"), CHAIN_FIX);
     } else if (is_call(n, "min") || is_call(n, "max")) && arg_count(n) == 2 {
         format(out, name(child(n, 0)), "(");
         emit(out, arg(n, 0));

@@ -250,7 +250,6 @@ gives the roadmap phase that closes the gap:
   600 steps. At 10.12 deg cd is 0.0198 (want 0.01201 +- 0.002) and cl is 1.008 (want 1.0707 +- 0.0443),
   and the solve does not converge in 600 steps, nor in 2500 steps in 58 minutes. Turbulence runs
   on P1 cells only, and the next step is a P2 velocity or a finer nose.
-- Not run yet in the flow batch, each needs a new solver family and is left out of this batch:
 - [dam_break_martin_moyce.skn](../examples/femahoy/dam_break_martin_moyce.skn) runs in the explicit
   meshless lane (`src/meshless/gen.goose` and `dyn.goose`), but it does not meet its `expect`, so it
   has a `// blocked-by:` mark and is not in `scripts/generated_c.sh`. The lane takes a `points` cloud on
